@@ -26,13 +26,14 @@ test('the plugin ships only the Neutral output style, without forcing it', () =>
   }
 })
 
-test('the plugin ships the gentleman themes as valid theme JSON', () => {
-  for (const file of ['gentleman.json', 'gentleman-cute.json']) {
-    const theme = JSON.parse(readFileSync(join(pluginRoot, 'themes', file), 'utf8'))
-    assert.ok(typeof theme.name === 'string' && theme.name.length > 0)
-    assert.ok(['dark', 'light'].includes(theme.base))
-    assert.equal(typeof theme.overrides, 'object')
-  }
+test('the plugin ships a single odd theme as valid theme JSON', () => {
+  assert.deepEqual(readdirSync(join(pluginRoot, 'themes')), ['odd.json'])
+  const text = readFileSync(join(pluginRoot, 'themes', 'odd.json'), 'utf8')
+  const theme = JSON.parse(text)
+  assert.equal(theme.name, 'odd')
+  assert.ok(['dark', 'light'].includes(theme.base))
+  assert.ok(Object.keys(theme.overrides).length > 0)
+  assert.doesNotMatch(text, /gentleman/i)
 })
 
 test('the eval runner grants only the commands the cases need', () => {
