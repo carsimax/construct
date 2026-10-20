@@ -655,3 +655,14 @@ Push and PR creation remain the user's decision.
     - **F10 (R3, WARNING):** `odd-review mode status --scope X` silently ignored `--scope` and returned the effective mode. Silently ignoring an explicit option is a blocker class under the verify rules. Now `status --scope` reports that scope's own setting (`{scope, mode, set, effective}`); plain `status` is unchanged. The clone scope outside a repository is refused for `status` too.
     - **F9 (R1, SUGGESTION):** without `CLAUDE_PLUGIN_DATA`, gate reminders went to a predictable shared `/tmp/odd-skills`. They now go to `<tmpdir>/odd-skills-<uid>`, created with mode 0700. A directory that is not a real directory owned by the user with no group or other access is not trusted, and the gate fails open (silent).
   - Tests: RED first (3 behavior failures), then GREEN. `node --test tests/` gave `454 pass`; `validate --strict` passed.
+  - Independent `odd-verify` (opus) on slice 12: **pass, no blockers.**
+    - Plain `mode status` is byte-identical to the baseline in all three switch states.
+    - Scoped status reports only its scope.
+    - Every untrusted fallback leaves the gate silent and writes nothing: modes 777, 750, 705, and 701, symlinks (including dangling), and a regular file.
+    - With `CLAUDE_PLUGIN_DATA` set, behavior is unchanged. `454 pass`.
+  - Open advisories:
+    - A corrupt mode file reports the same as an unset one.
+    - The `odd-review` usage line does not describe the scoped status output.
+    - `process.getuid` does not exist on Windows, so the gate fails open there without `CLAUDE_PLUGIN_DATA`.
+    - The fallback dir is created on every Stop.
+    - A pre-created foreign `odd-skills-<uid>` silences the gate (accepted fail-open).
