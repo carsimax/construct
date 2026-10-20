@@ -2,6 +2,7 @@
 
 [![Claude Code](https://img.shields.io/badge/Claude_Code-2.1.304%2B-blue)](#requirements)
 [![Plugin version](https://img.shields.io/badge/version-0.9.1-informational)](plugins/construct/.claude-plugin/plugin.json)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 Construct is a Claude Code plugin that makes every request follow Organic Driven Development (ODD): authorize, explore, size, track, implement test-first, and close with evidence and a Risk line.
 
@@ -396,6 +397,8 @@ Setup, checks, and pull request rules are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 Current version: 0.9.1 (`plugins/construct/.claude-plugin/plugin.json`). Releases are tagged `vX.Y.Z`..
 
-## License notice
+## License
+
+Construct is released under the MIT License; see [`LICENSE`](LICENSE).
 
 Part of the agents and skills are adapted from MIT-licensed material (Gentle AI and agent-skills); see [`plugins/construct/NOTICE`](plugins/construct/NOTICE).

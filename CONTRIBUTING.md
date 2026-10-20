@@ -77,3 +77,7 @@ Many tests cross-check text against code, so a change in one place usually needs
 ## Third-party material
 
 Adapted content keeps its notice in [`plugins/construct/NOTICE`](plugins/construct/NOTICE). Add an entry there when you adapt material from another project.
+
+## License
+
+Contributions are accepted under the same [MIT License](LICENSE) as the project (inbound = outbound). Adapted third-party material keeps its notice in [`plugins/construct/NOTICE`](plugins/construct/NOTICE).
