@@ -207,7 +207,7 @@ Design consequences:
 | T6 | S1, S2 | `bin/odd-assess`: port `ClassifyRisk` with fixtures; differential check against `gentle-ai review assess` on the same diffs | delegated (`odd-worker`, sonnet): long-session context backstop | 2 (it decides whether review runs) | done | `feat: add odd-assess risk classifier` + `fix: match Go whitespace trimming in odd-assess` (slice 08) |
 | T7 | S1, S2 | `bin/odd-review`: frozen tree via temp index, inspect, capture validation, receipt and acknowledgement; plus F4 | delegated (`odd-worker`, sonnet): long-session context backstop | 1 and 2 (persisted receipts; it gates delivery confidence) | done | `feat: add odd-review lifecycle with receipts` + `fix: refute mixed severe findings and escalate unknown causality` (slice 09) |
 | T8 | S1, S2 | `rdd-review` skill, RDD switch, receipt boundary, `Stop` review gate, contract RDD section (workflows dropped, L29) | delegated: two parallel units (Writer trigger a) | 2 and 6 (review gate) | done | `feat: add the RDD switch, review boundary, and Stop gate` + `feat: add the rdd-review skill and contract section` + `fix: cover uncommitted reviews and boundary ordering` (slice 11) |
-| T9 | S1 | `secret-guard.sh` `PreToolUse` deny list; `Stop` prompt hook for the Risk line | inline | 2 | pending | — |
+| T9 | S1 | `secret-guard` `PreToolUse` deny list for file tools and Bash (Risk-line prompt hook dropped, L31) | delegated (`odd-worker`, sonnet): long-session context backstop | 2 | in progress | — |
 | T10 | S1 | Compaction re-injection and task sync hooks | inline | none | pending | — |
 | T11 | S1 | `.mcp.json` (context7, codegraph) and `codegraph` skill | inline | none | pending | — |
 | T12 | S2, S8 | Mod status panel: replica of the user's statusline (S8) plus ODD task progress and RDD state (experimental; must fail open) | inline | 6 | pending | — |
@@ -666,3 +666,26 @@ Push and PR creation remain the user's decision.
     - `process.getuid` does not exist on Windows, so the gate fails open there without `CLAUDE_PLUGIN_DATA`.
     - The fallback dir is created on every Stop.
     - A pre-created foreign `odd-skills-<uid>` silences the gate (accepted fail-open).
+- **L31 (2026-10-19, user):** "Sigue" (start T9)
+  - Branch `odd-skills/13-secret-guard`.
+  - **Finding:** the user's live `~/.claude/settings.json` has `permissions` `{allow: ["mcp__codegraph__*"], defaultMode: "bypassPermissions"}` and **no `deny` list**. The gentle-ai deny overlay is not in effect, so nothing currently stops an agent from reading secrets.
+  - **Scope change:** the Stop prompt hook for the Risk line is dropped.
+    - It would run a model on every Stop (cost, latency, false positives on replies without code).
+    - The contract plus the `small-inline` eval already enforce the Risk line (Δ +0.25).
+  - **T9 design:** `hooks/scripts/secret-guard.mjs` on `PreToolUse`, matcher `Read|Edit|Write|MultiEdit|NotebookEdit|Grep|Glob|Bash`, exec form.
+    - **Baseline list (gentle-ai's overlay):**
+      - Bash: `rm -rf /`, `sudo rm -rf /`, `rm -rf ~`, `sudo rm -rf ~`.
+      - Read and Edit: `.env`, `.env.*`, `.ssh/*`, `.credentials/*`, `Library/Keychains/*`, `.aws/credentials`, `.config/gh/hosts.yml`, `**/*.pem`, `**/*.key`, `**/secrets/*`.
+    - **Matching:** on the resolved absolute path, anywhere in the tree.
+      - Basename `.env` or `.env.<x>`.
+      - Any `.ssh` or `.credentials` segment.
+      - The `Library/Keychains` segment pair.
+      - Path ends `.aws/credentials` or `.config/gh/hosts.yml`.
+      - Extension `.pem` or `.key`.
+      - Any `secrets` directory segment.
+    - **Deliberate deviation:** `.env.example`, `.env.sample`, and `.env.template` are allowed. They are committed templates, and denying them blocks ordinary setup work.
+    - **Tool fields:** `file_path` (Read, Edit, Write, MultiEdit), `notebook_path`, and `path` (Grep, Glob). A Glob or Grep `pattern` aimed at a protected location (for example `**/.env`, or `path` `~/.ssh`) is also denied.
+    - **Bash:** tokenize the command (shell-word split, `~` and `$HOME` expansion) and deny when a token resolves to a protected path, or when the command matches the catastrophic `rm -rf` set: `rm` with recursive and force flags in any order or spelling, targeting `/`, `~`, `$HOME`, or `/*`.
+    - **Output:** `{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"…"}}`. The reason names the matched rule and says the user can do it manually.
+    - **Errors:** unparseable hook input → allow (exit 0, no output) with a short stderr note. An internal error while evaluating a path that matched a rule → deny. The guard must never block unrelated tools.
+    - **Must be confirmed live:** the deny holds under `--permission-mode bypassPermissions` and for subagent tool calls.
