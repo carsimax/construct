@@ -59,7 +59,7 @@ async function main() {
   if (!input || input.stop_hook_active === true || typeof input.cwd !== 'string') return
 
   const [{ repositoryRoot, createIsolation, freezeWorkingTree, resolveTree }, { assessSnapshotRisk }, { publicReasons, publicRisk },
-    { targetOf }, { receiptExists, atomicWrite }, { readMode }, { headCommit, reviewBoundary }] = await Promise.all([
+    { targetOf }, { receiptExists, atomicWrite, openLineageTargets }, { readMode }, { headCommit, reviewBoundary }] = await Promise.all([
     import('../../lib/assess/git.mjs'),
     import('../../lib/assess/classify.mjs'),
     import('../../lib/assess/output.mjs'),
@@ -99,6 +99,9 @@ async function main() {
   const working = freezeWorkingTree(root)
   if (working.baseTree !== working.candidateTree) candidates.push({ label: 'the uncommitted changes', verb: 'are', ...working })
 
+  // A target with a review already in flight is not reminded: the consented
+  // lineage will end in a receipt or an escalation.
+  const inFlight = candidates.length > 0 ? openLineageTargets(root) : new Set()
   for (const candidate of candidates) {
     const isolation = createIsolation(root)
     let assessment
@@ -109,7 +112,7 @@ async function main() {
     }
     if (assessment.changedPaths === 0 || publicRisk(assessment.level) !== 'high') continue
     const target = targetOf(candidate.baseTree, candidate.candidateTree, assessment.manifest)
-    if (receiptExists(root, target) || reminded.includes(target)) continue
+    if (receiptExists(root, target) || inFlight.has(target) || reminded.includes(target)) continue
 
     const reasons = publicReasons(assessment.reasons)
       .slice(0, MAX_REASONS)

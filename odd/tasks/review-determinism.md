@@ -15,7 +15,7 @@ Objective: move the RDD steps the orchestrator did by hand into code: lens selec
 | ID | Specs | Task | Route | Risk | Status | Commit |
 |---|---|---|---|---|---|---|
 | T1 | S1 | `start` lens and reason defaults in `lib/review/cli.mjs` and `commands.mjs`, tests in `tests/review/` | inline | none | done | see L3 |
-| T2 | S2 | Open-lineage scan in `lib/review/store.mjs`, used by `review-gate.mjs`; tests in `tests/gate/` | inline | 6 | pending | — |
+| T2 | S2 | Open-lineage scan in `lib/review/store.mjs`, used by `review-gate.mjs`; tests in `tests/gate/` | inline | 6 | done | see L4 |
 | T3 | S3, S4 | `hooks/scripts/review-context.mjs` (PreToolUse Agent) and `review-capture.mjs` (SubagentStop), wired in `hooks.json`; tests in `tests/review-hooks/` | inline | 2 | pending | — |
 | T4 | S5 | `rdd-review` skill, lifecycle reference, README | inline | none | pending | — |
 
@@ -24,3 +24,4 @@ Objective: move the RDD steps the orchestrator did by hand into code: lens selec
 - **L1 (2026-10-20, user):** "DAle con todos los cambios" — after the proposal: hooks 1–3 (SubagentStop capture, context injection on the Agent call, gate respects open lineages), lenses chosen by code, normalization rule in `rdd-review`.
 - **L2 (2026-10-20):** Evidence. Docs (code.claude.com/docs/en/hooks): the spawning tool is `Agent` (`prompt`, `description`, `subagent_type`, `model`); `updatedInput` replaces the whole input and combines with `allow` or `ask`; SubagentStop gets `stop_hook_active`, `agent_id`, `agent_type`, `agent_transcript_path`, `last_assistant_message`, and `decision: "block"` delivers `reason` to the subagent as its next instruction. Explorer map: lineages live at `<git-common-dir>/odd-review/transactions/<lineage>.json`, no list helper exists; `start` requires `--lenses` via `need()` (`cli.mjs:98`); `capture` is not idempotent (`lens_already_captured`, then `wrong_state`); the gate's `targetOf` equals the transaction `target` (`identity.mjs:17`); SubagentStop is not wired.
 - **L3 (2026-10-20):** T1 done. RED: the two new `start` tests failed with `odd-review: --lenses is required` (exit 2). GREEN: `node --test tests/review/` 104 pass. The old "start requires lenses and a reason" test now pins that explicit `--lenses` still needs a reason and a lone reason still needs lenses. Help text updated.
+- **L4 (2026-10-20):** T2 done. RED: two new gate tests (open lineage for uncommitted changes and for a committed range) blocked instead of staying silent. GREEN after `openLineageTargets` in `store.mjs` (skips `escalated` and `acknowledged`, includes `correction.target`) and the gate check. A lineage for an older target still lets a changed target block. `node --test tests/gate/ tests/review/`: 131 pass.
