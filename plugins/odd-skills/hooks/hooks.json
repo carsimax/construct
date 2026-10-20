@@ -1,3 +1,30 @@
 {
-  "modules": ["./register.js"]
+  "modules": ["./register.js"],
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/contract.mjs", "session"],
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/contract.mjs", "subagent"],
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
 }

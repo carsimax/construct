@@ -26,6 +26,18 @@ odd_skills is a Claude Code plugin for Organic Driven Development (ODD). It ship
 
    The install output ends with `(+ 1 dependency: engram)` when engram was not installed yet.
 
+## How the ODD contract loads
+
+A plugin cannot ship a `CLAUDE.md`, so odd_skills loads its rules in three layers:
+
+| Layer | Mechanism | Content |
+|---|---|---|
+| Session contract | `SessionStart` hook (startup, resume, clear, compact) | ODD protocol, task size, high-risk list, Risk line, and delegation triggers, under 8,000 characters |
+| Subagent contract | `SubagentStart` hook | Artifact language, edit surfaces, scratch, and the `## Key Learnings` closing block. JSON-only reviewers (`review-*`, `jd-judge-*`) get nothing |
+| Skills | Loaded on demand | `odd-workflow`, `odd-delegation`, `task-size-risk`, `lossless-prompts` |
+
+The contract texts live in `plugins/odd-skills/hooks/contract/`.
+
 ## Agents and model routing
 
 The plugin ships 13 agents. Each role's model and effort can be changed in `/config`, where every option appears as a row such as `ODD Worker model` or `RDD Risk effort`.
@@ -75,6 +87,14 @@ node --test tests/                       # repository consistency checks
 claude plugin test plugins/odd-skills    # mod tests (*.test.ts)
 ```
 
+Run the behavior evals (they spend real usage; each run is an isolated `claude -p` session):
+
+```bash
+cd plugins/odd-skills
+claude plugin eval . --scaffold --trust-plugin --runs 1 --model sonnet \
+  --allow-tools Write Edit "Bash(npm test*)" "Bash(node *)" "Bash(git *)" "Bash(mkdir *)" "Bash(ls *)" "Bash(cat *)"
+```
+
 ## Layout
 
 | Path | Contents |
@@ -84,6 +104,8 @@ claude plugin test plugins/odd-skills    # mod tests (*.test.ts)
 | `plugins/odd-skills/agents/` | The 13 role agents |
 | `plugins/odd-skills/skills/` | Delivery and review skills (`branch-pr`, `chained-pr`, `work-unit-commits`, `judgment-day`, ...) |
 | `plugins/odd-skills/hooks/` | `hooks.json`, the mod (`register.js`), and its routing helpers |
+| `plugins/odd-skills/hooks/contract/` | Session and subagent contract texts injected by hooks |
+| `plugins/odd-skills/evals/` | Behavior eval cases run by `claude plugin eval` |
 | `plugins/odd-skills/tests/` | Mod tests run by `claude plugin test` |
 | `tests/` | Repository tests run by `node --test` |
 | `odd/tasks/` | ODD feature documents (specs, tasks, log) |

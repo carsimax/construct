@@ -188,7 +188,7 @@ Design consequences:
 | T1 | S2, S3, S7 | `git init`, plugin skeleton, `plugin.json` with the `engram@engram` dependency, local marketplace, `claude plugin validate --strict` | inline | none (reassessed, L10) | done | `feat: scaffold odd-skills plugin and marketplace` |
 | T2 | S1, S4, S6, S7 | Port agents (`review-*`, `jd-*`); create `odd-explorer`, `odd-worker`, `odd-verify`, `review-validator`, `odd-general`; apply the S6 model and effort table as static frontmatter; declare `model_<role>` / `effort_<role>` `userConfig` options; mod `agent.spawn` + `turn.step` routing with `claude plugin test` coverage | inline | none | done | `feat: port review lens and judgment-day agents` (slice 02) + `feat: add ODD role agents with configurable model routing` (slice 03) |
 | T3 | S1, S4, S7 | Port skills; remove `gentle-ai` command references; drop `skill-registry` | inline | none | done | `feat: port delivery and review skills` (slice 04) |
-| T4 | S1, S2 | Split the orchestrator into the ≤8k session contract and the ODD skills; `SessionStart` and `SubagentStart` hooks; evals for small-inline, large-tracked, and Risk-line cases | inline | 6 | pending | — |
+| T4 | S1, S2 | Split the orchestrator into the ≤8k session contract and the ODD skills; `SessionStart` and `SubagentStart` hooks; evals for small-inline, large-tracked, and Risk-line cases | inline | none (reassessed, L15) | done | `feat: add ODD workflow, delegation, sizing, and prompt skills` (slice 05) + `feat: inject the ODD session and subagent contracts` (slice 06) |
 | T5 | S1, S4 | Output styles (Neutral, Gentleman), theme, `userConfig` | inline | none | pending | — |
 | T6 | S1, S2 | `bin/odd-assess`: port `ClassifyRisk` with fixtures; differential check against `gentle-ai review assess` on the same diffs | inline | 6 | pending | — |
 | T7 | S1, S2 | `bin/odd-review`: frozen tree via temp index, inspect, capture validation, receipt and acknowledgement | inline | 1 | pending | — |
@@ -222,6 +222,8 @@ main
 | 02 | `odd-skills/02-ported-agents` | T2 (ported agents) | `feat: port review lens and judgment-day agents` | 395 | within |
 | 03 | `odd-skills/03-role-routing` | T2 (new agents, userConfig, mod, tests, docs) | `feat: add ODD role agents with configurable model routing` | about 796 | `size:exception` recommended: 352 lines are the `userConfig` JSON generated from agent frontmatter; the mod cannot ship without its options |
 | 04 | `odd-skills/04-skills` | T3 | `feat: port delivery and review skills` | 1168 | over budget: about 1026 lines are verbatim skill ports; cohesive 3-way split possible (delivery 315, docs/comments + go-testing + judgment-day 395, skill authoring 316), `size:exception` accepted by the user (L14) |
+| 05 | `odd-skills/05-odd-skills` | T4 (skills) | `feat: add ODD workflow, delegation, sizing, and prompt skills` | about 465 | slightly over; best cohesive split (L15) |
+| 06 | `odd-skills/06-session-contract` | T4 (contract, hooks, evals) | `feat: inject the ODD session and subagent contracts` | about 500 | slightly over; best cohesive split (L15) |
 
 Push and PR creation remain the user's decision.
 
@@ -335,3 +337,37 @@ Push and PR creation remain the user's decision.
 - **L14 (2026-10-19, user):** "size:exception"
   - Slice 04 stays one PR with `size:exception`. Rationale: about 1026 of its 1168 lines are verbatim skill ports with low review cost.
   - Next step: T4 (session contract and ODD skills) on `odd-skills/05-session-contract`.
+- **L15 (2026-10-19, user):** "dale"
+  - Session contract:
+    - `hooks/contract/session.md` (5810 characters, under the 8000 target and the 10000 hook cap) is emitted by `hooks/scripts/contract.mjs session` on `SessionStart` (`startup|resume|clear|compact`), in exec form.
+    - It covers the ODD protocol 1–7, task size, the high-risk list, the Risk line, delegation triggers with the `odd-skills:` agents, work continuity, safety, and language.
+    - It is worded factually.
+  - Subagent contract:
+    - `hooks/contract/subagent.md` (1266 characters) is emitted on `SubagentStart`.
+    - JSON-only agents (`odd-skills:review-*`, `odd-skills:jd-judge-*`) get no output, because `## Key Learnings` would break their single-JSON contract.
+  - New skills:
+    - `odd-workflow` with references `feature-document`, `testing`, `delivery`, `persistence`, and `research`. `persistence` merges the shared persistence contract and the engram convention.
+    - `odd-delegation` with reference `handoffs`.
+    - `task-size-risk`.
+    - `lossless-prompts`, without the gentle-ai provider defect handoff.
+    - NOTICE lists them as condensed adaptations.
+  - RDD is deliberately absent from the contract until T8 ships `rdd-review` and `odd-assess`.
+  - Tests:
+    - `tests/contract.test.mjs` was RED first (9 failing with the extended skills list), then GREEN.
+    - One test was relaxed to case-insensitive anchors (`Concurrency`).
+    - `node --test tests/`: `18 pass, 0 fail`. `claude plugin test`: `7 pass`. `validate --strict`: passed.
+  - Live session with `--plugin-dir`:
+    - The main thread quoted `# odd_skills contract`.
+    - `odd-skills:review-risk` answered `NO` to having received the subagent contract.
+  - Evals: `plugins/odd-skills/evals/` has 3 cases (`small-inline`, `read-only`, `large-tracked`) with deterministic graders only.
+    - First run: `meanDelta: 0`. The init event showed `plugin_errors: dependency-unsatisfied — Dependency "engram@engram" is not installed`: isolated eval runs cannot resolve the engram dependency, so the plugin never loaded.
+    - Fix: `scripts/eval.sh` evaluates a temporary copy without `dependencies`. The real manifest is unchanged.
+    - Second run (sonnet, 1 run per arm, $0.51): `casesPassed 3/3`, `overallScore 1`, `meanDelta 0.42`.
+      - `large-tracked`: with 1.0, without 0.0 (Δ 1.0). Without the plugin, no `odd/tasks` document was created.
+      - `small-inline`: with 1.0, without 0.75 (Δ 0.25). Without the plugin, the `Risk:` line was missing.
+      - `read-only`: 1.0 in both arms (guard case).
+    - One run per arm is a smoke signal, not statistical confidence.
+  - Risk reassessed from item 6 to none: the evals now catch regressions in the contract's key behaviors.
+  - Engram mirror still pending (session-ended refusal).
+  - Delivery: one slicing pass gave slice 05 (skills, about 465 lines) and slice 06 (contract, hooks, evals, about 500 lines). Both are slightly over; no cohesive split fits.
+  - Next step: T5 (output styles, theme, persona userConfig).
