@@ -422,3 +422,28 @@ test('S8a: heredoc bodies are data unless an interpreter runs them', () => {
   // without a terminator nothing is proven to be data
   assertDeny(bash('cat > a.txt <<EOF\ncat .env'))
 })
+
+test('T13: a heredoc body is data only when every receiving command is a known data sink', () => {
+  const body = 'cat .env'
+  const denied = [
+    `timeout 30 bash <<'EOF'\n${body}\nEOF`,
+    `sudo -u root bash <<'EOF'\n${body}\nEOF`,
+    `nice bash <<'EOF'\n${body}\nEOF`,
+    `cat <<'EOF' | timeout 5 sh\n${body}\nEOF`,
+    `python3.12 - <<'EOF'\nprint(open('.env').read())\nEOF`,
+    `docker exec -i app sh <<'EOF'\n${body}\nEOF`,
+    `fish <<'EOF'\n${body}\nEOF`,
+    `env FOO=1 bash <<'EOF'\n${body}\nEOF`,
+    `unknown-tool <<'EOF'\n${body}\nEOF`,
+    `cat <<'EOF' | tee out.txt | timeout 5 sh\n${body}\nEOF`,
+    `echo hi # <<EOF\ncat .env\nEOF`,
+  ]
+  for (const c of denied) assertDeny(bash(c))
+  // data sinks, alone or chained, stay data
+  assertAllow(bash("cat <<'EOF' | tee notes.md\n.env\nEOF"))
+  assertAllow(bash("git tag -a v1 -F - <<'EOF'\n.env\nEOF"))
+  assertAllow(bash("git commit --file=- <<'EOF'\n.env\nEOF"))
+  assertAllow(bash("cat <<'EOF' > .gitignore ; ls\n.env\nEOF"))
+  // an unquoted delimiter still expands command substitution for sinks
+  assertDeny(bash('tee a.txt <<EOF\n$(cat .env)\nEOF'))
+})

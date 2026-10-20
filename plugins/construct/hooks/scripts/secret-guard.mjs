@@ -109,6 +109,8 @@ function splitCommands(input) {
   let has = false
   let redir = false
   let piped = false
+  let here = false
+  let comment = false
   const endWord = () => {
     if (has) words.push({ t: cur, r: redir })
     if (has) redir = false
@@ -120,10 +122,12 @@ function splitCommands(input) {
     redir = false
     if (words.length) {
       words.piped = piped
+      words.opensHeredoc = here
       commands.push(words)
     }
     words = []
     piped = false
+    here = false
   }
   for (let i = 0; i < input.length; i++) {
     const c = input[i]
@@ -148,6 +152,7 @@ function splitCommands(input) {
     } else if (';|&()`\n'.includes(c)) {
       endCommand()
       if (c === '\n') {
+        comment = false
         if (pending.length) {
           const last = takeHeredocs(input, i, pending, commands, lineStart)
           if (last >= 0) i = last
@@ -171,10 +176,13 @@ function splitCommands(input) {
       i += op.length - 1
       if (op === '<<' || op === '<<-') {
         const d = /^[ \t]*(?:'([^']*)'|"([^"]*)"|((?:\\.|[^\s;|&()<>'"])+))/.exec(input.slice(i + 1))
-        if (d) pending.push({ word: d[1] ?? d[2] ?? d[3].replace(/\\(.)/g, '$1'), strip: op === '<<-', expands: d[3] !== undefined })
+        // After an unquoted `#` that starts a word, `<<` is comment text, not a heredoc.
+        if (d && !comment) here = true
+        if (d && !comment) pending.push({ word: d[1] ?? d[2] ?? d[3].replace(/\\(.)/g, '$1'), strip: op === '<<-', expands: d[3] !== undefined })
       }
       redir = op !== '<<<' && !/&[0-9-]*$/.test(op) || /^[<>]&$/.test(op)
     } else {
+      if (c === '#' && !has) comment = true
       cur += c
       has = true
     }
@@ -205,7 +213,11 @@ function takeHeredocs(input, nl, pending, commands, lineStart) {
     if (!found) return -1
     bodies.push({ text: lines.join('\n'), expands })
   }
-  for (const c of commands.slice(lineStart)) c.heredoc = bodies
+  const line = commands.slice(lineStart)
+  for (const c of line) {
+    c.heredoc = bodies
+    c.heredocLine = line
+  }
   return pos - 1
 }
 
@@ -321,16 +333,43 @@ function pipedWordsVerdict(upstream, cwd, depth) {
   return null
 }
 
-// Interpreters that execute a heredoc body (or a script fed on stdin) rather than store it.
-const HEREDOC_RUNNERS = new Set([...STDIN_READERS, ...Object.keys(INTERPRETERS), 'awk', 'gawk', 'osascript', 'php', 'lua', 'sqlite3', 'ssh', 'su'])
+// A heredoc body is data only when every command that can receive it is a known data
+// sink (fail closed): anything else (wrappers such as timeout/nice/sudo/env/xargs/
+// docker/ssh, any interpreter, unknown programs) may execute or forward the body.
+// Allowlist, each entry stores or prints stdin and never executes it:
+//   cat  copies stdin to stdout or a file (its file arguments are checked as usual);
+//   tee  copies stdin to stdout and files (file arguments are checked as usual);
+//   git commit|tag ... -F - / --file=-  reads a message from stdin and stores it.
+// Leading VAR=value assignments are skipped; no other prefix word is.
+function isDataSink(texts) {
+  let i = 0
+  while (i < texts.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(texts[i])) i++
+  const cmd = texts[i]
+  if (cmd === 'cat' || cmd === 'tee') return true
+  if (cmd === 'git' && (texts[i + 1] === 'commit' || texts[i + 1] === 'tag')) {
+    return texts.some((w, j) => w === '--file=-' || (/^-[A-Za-z]*F$/.test(w) && texts[j + 1] === '-'))
+  }
+  return false
+}
 
-// heredocVerdict decides what a heredoc body means. Conservative rule: the body is data
-// (cat, tee, git commit -F -, ...) unless a word up to the command name is an
-// interpreter, in which case it is executed and checked as shell text (plus its quoted
-// literals, for python -c style bodies). Even for data, an unquoted delimiter lets bash
-// expand $(...) and backticks inside the body, so those are checked as commands.
-function heredocVerdict(bodies, head, cwd, depth) {
-  const runs = head.some((w) => HEREDOC_RUNNERS.has(basename(w)))
+// receivers: the commands of the opening line that can receive a heredoc body: those
+// that open one, plus every command piped from them (`cat <<EOF | sh`).
+function heredocReceivers(line) {
+  const out = []
+  let live = false
+  for (const w of line) {
+    live = w.opensHeredoc || (live && w.piped)
+    if (live) out.push(w.map((x) => x.t))
+  }
+  return out
+}
+
+// heredocVerdict decides what a heredoc body means. When every receiver is a data sink
+// the body is data; otherwise it is checked as shell text (plus its quoted literals, for
+// python -c style bodies). Even for data, an unquoted delimiter lets bash expand $(...)
+// and backticks inside the body, so those are checked as commands.
+function heredocVerdict(bodies, line, cwd, depth) {
+  const runs = !heredocReceivers(line).every(isDataSink)
   for (const { text, expands } of bodies) {
     if (runs) {
       const verdict = bashVerdict(text, cwd, depth + 1) ?? literalRule(text, cwd)
@@ -359,8 +398,8 @@ function bashVerdict(command, cwd, depth = 0) {
       const verdict = pipedWordsVerdict(upstream, cwd, depth)
       if (verdict) return verdict
     }
-    if (words.heredoc && depth < 3) {
-      const verdict = heredocVerdict(words.heredoc, texts.slice(0, ci + 1), cwd, depth)
+    if (words.heredoc && words.heredocLine[0] === words && depth < 3) {
+      const verdict = heredocVerdict(words.heredoc, words.heredocLine, cwd, depth)
       if (verdict) return verdict
     }
     if (DATA_COMMANDS.has(cmd)) upstream = words.filter((w, i) => i > ci && !w.r).map((w) => w.t)
