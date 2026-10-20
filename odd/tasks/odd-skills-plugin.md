@@ -370,4 +370,14 @@ Push and PR creation remain the user's decision.
   - Risk reassessed from item 6 to none: the evals now catch regressions in the contract's key behaviors.
   - Engram mirror still pending (session-ended refusal).
   - Delivery: one slicing pass gave slice 05 (skills, about 465 lines) and slice 06 (contract, hooks, evals, about 500 lines). Both are slightly over; no cohesive split fits.
-  - Next step: T5 (output styles, theme, persona userConfig).
+  - RDD after the slice 06 commit:
+    - `review assess --base-ref e639e15` on the whole open slice gave `high`, `review_due: true`. The cause is `plugins/odd-skills/evals/*/fixture.sh` (executable mode, process boundary, shell source).
+    - The user granted consent. START then failed with `lens_context_budget_exceeded`: the 3669-line candidate exceeds the reviewer context, and no authority was created.
+    - The scope was reduced to slice 06 alone (`--base-ref 27375ad`, 481 lines, high). The user granted consent again for this new candidate.
+    - Lenses `review-risk` and `review-reliability` ran in-process. Lineage `review-c7a4978d5b0d9539`: **approved**, then acknowledged (`gentle-ai.review-acknowledged/v1`).
+    - Advisory findings (non-blocking, tracked as follow-ups F1–F3):
+      - **F1 (R3, WARNING):** `contract.mjs:14` filters JSON-only agents only by the namespaced `odd-skills:` name. Also match un-namespaced `review-*` and `jd-judge-*`, and add a test.
+      - **F2 (R1, SUGGESTION):** narrow the `scripts/eval.sh` tool grants (`Bash(node *)`, `Bash(git *)`) to the commands the cases need.
+      - **F3 (R3, WARNING):** make the eval graders robust: let the Risk-line regex accept bold markers; the `file_exists` glob was already observed working in the second eval run.
+      - `R3-eval-results-ignore` needs no action: the reviewer itself concluded the rule behaves as intended.
+  - Next step: T5 (output styles, theme, persona userConfig), plus follow-ups F1–F3.
