@@ -140,12 +140,14 @@ function limitPiece(label, pct, resetsAt, nowMs) {
   return [dim(`${label} `), text(g.on, { color: pct >= 80 ? PALETTE.warn : PALETTE.main }), faint(g.off), dim(` ${Math.round(pct)}%${left ? ` ↻${left}` : ''}`)]
 }
 
-function mainCard({ main, usage, model, busy, compactions, width, nowMs }) {
+function mainCard({ main, usage, model, busy, compactions, branch, width, nowMs }) {
   const effort = main?.effort ?? null
   const meter = effortMeter(effort)
   const ctx = usage?.context
   const pct = isNum(ctx?.percent) ? Math.max(0, Math.min(100, ctx.percent)) : null
+  const name = stripControl(branch ?? '')
   const rows = [
+    name ? line(dim('⎇ '), text(fit(name, width - 4 - 2))) : null,
     line(
       dim('effort '),
       text(`${meter.on}${meter.off} `, { color: PALETTE.main }),
@@ -176,10 +178,10 @@ function mainCard({ main, usage, model, busy, compactions, width, nowMs }) {
     rows.push(line(parts.flatMap((p, i) => (i === 0 ? p : [text('   '), ...p]))))
   }
   return card({
-    title: `${model} · main`,
+    title: model,
     status: busy ? '● busy' : { text: '○ idle', color: PALETTE.dim },
     color: PALETTE.main,
-    children: rows,
+    children: rows.filter(Boolean),
     width,
   })
 }
@@ -464,7 +466,7 @@ export function buildPanel({ panel, usage, odd, rdd, nowMs, columns, rows, model
     if (el) children.push(el)
     return Boolean(el)
   }
-  push(mainCard({ main, usage, model: name, busy, compactions: state.compactions ?? 0, width, nowMs }))
+  push(mainCard({ main, usage, model: name, busy, compactions: state.compactions ?? 0, branch: git?.branch, width, nowMs }))
   const above = [oddCard(odd, width), reviewCard(rdd, width)].filter(Boolean)
   const gate = gateCard({ gate: state.gate, inline: state.inline, mode: state.main?.mode, width })
   if (above.length > 0) {

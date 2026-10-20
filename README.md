@@ -284,7 +284,7 @@ The mod draws one thing: a docked **panel** (a `Pane` with id `construct`) laid 
 
 **The panel, top to bottom.** A card with nothing to show takes no room.
 
-1. **main card** (always drawn, with or without a `statusLine`): `<Model> · main` and idle or busy; the effort meter (`▮▯`), the permission mode (from the main thread's spawns), and the main request count; the context gauge with tokens used and window; the session cost; the 5-hour and 7-day gauges (`▰▱`) with the time to each reset (`↻3h10m`, `↻4d2h`), omitted when the figure is missing, for example off a subscription.
+1. **main card** (always drawn, with or without a `statusLine`): `<Model>` (no suffix) and idle or busy; the current git branch (`⎇ <branch>`, hidden without one); the effort meter (`▮▯`), the permission mode (from the main thread's spawns), and the main request count; the context gauge with tokens used and window; the session cost; the 5-hour and 7-day gauges (`▰▱`) with the time to each reset (`↻3h10m`, `↻4d2h`), omitted when the figure is missing, for example off a subscription.
 2. **rail**: a connector between cards, animated while the main thread is busy on terminals that can draw `Client` elements, a static line otherwise.
 3. **ODD card** (only with an active feature): the feature (newest `odd/tasks/*.md` with an unfinished task, the rule of `feature-state.mjs`), the current task, one checkpoint per task (done filled, current highlighted) and the open count.
 4. **REVIEW card** (only when RDD is on): the state `review due`, `reviewed` or `clear` (a `root` boundary is not assessed).
