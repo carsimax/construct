@@ -21,7 +21,7 @@ User request for all specs: "Podemos seguir con los pendientes que tenemos?"
 | T3 | S3 | `install.sh`, `tests/install/`, README | odd-worker, parallel | 5 | done | `b5340cf` |
 | T4 | S4 | `hooks/scripts/review-context.mjs`, `tests/review-hooks/`, README | odd-worker, parallel | 2 | done | `ac46791` |
 | T6 | S4 | Drop the duplicate-lens deny (L5 B1); regression test for relaunch after an empty stop | odd-worker | 2 | done | see L6 |
-| T5 | S5 | `plugin.json` version | odd-worker, after T1-T4 | 5 | pending | — |
+| T5 | S5 | `plugin.json` version | odd-worker, after T1-T4 | 5 | done | see L7 |
 
 ## Log
 
@@ -31,3 +31,4 @@ User request for all specs: "Podemos seguir con los pendientes que tenemos?"
 - **L4 (2026-10-20, parent, live observation):** First live blocks of both Stop gates. The Risk line gate blocked a progress message because background workers had changed files during the turn; the review gate re-blocked on each new `install.sh` state while T3 was still writing (each byte change is a new target). Both behave as specified; the cost is a Risk line on progress messages and repeated review reminders while writers run in the background. Kept as an observation, not changed.
 - **L5 (2026-10-20, odd-verify):** S1 PASS, S2 PASS, S3 PASS, S4 FAIL. B1: `review-capture.mjs:72` returns on an empty reply before removing the pending record, and the new deny in `review-context.mjs:41-55` then refuses the relaunch for six hours (probe: spawn, SubagentStop with `last_assistant_message: ""`, spawn again → deny; baseline allows). Same cause, unverified live: a spawn declined at an ask/deny rule after the hook allowed it. Parent decision (user delegated flow decisions, L1 of `assess-js-extensions.md`): drop the duplicate-lens deny, keep the two-lineage deny; S4 rewritten, T6 opened. Advisories kept: S3 now refuses a deliberately read-only `settings.json` (spec-intended); a non-writable HOME without `~/.claude` still fails at the merge with a stack trace (baseline behavior).
 - **L6 (2026-10-20):** T6 done. RED: the relaunch-after-empty-stop test failed (17 pass, 1 fail); GREEN `tests/review-hooks/` 18 pass; `node --test tests/` 625 pass; plugin validate passed. Next: RDD review of the range (user consented: "si adelanet con la revision"), then T5.
+- **L7 (2026-10-20, RDD):** User consented ("si adelanet con la revision"). `odd-review start --base-ref 6a32414 --committed-only`: `high` (`process_boundary`, `shell_source` on `install.sh`), 12 paths, 440 lines, four lenses from the assessment. Lineage `review-8416cbf3256ba193`: no findings from any lens; `approved` and acknowledged. T5 done: version 0.7.1, both validates passed.
