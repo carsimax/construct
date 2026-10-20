@@ -26,6 +26,33 @@ odd_skills is a Claude Code plugin for Organic Driven Development (ODD). It ship
 
    The install output ends with `(+ 1 dependency: engram)` when engram was not installed yet.
 
+## Agents and model routing
+
+The plugin ships 13 agents. Each role's model and effort can be changed in `/config`, where every option appears as a row such as `ODD Worker model` or `RDD Risk effort`.
+
+| Role | Agent | Model | Effort |
+|---|---|---|---|
+| ODD Explorer | `odd-skills:odd-explorer` | haiku | default |
+| ODD Worker | `odd-skills:odd-worker` | sonnet | medium |
+| ODD Verify | `odd-skills:odd-verify` | opus | medium |
+| JD Judge A | `odd-skills:jd-judge-a` | opus | medium |
+| JD Judge B | `odd-skills:jd-judge-b` | sonnet | medium |
+| JD Fix Agent | `odd-skills:jd-fix-agent` | sonnet | medium |
+| RDD Risk | `odd-skills:review-risk` | opus | medium |
+| RDD Readability | `odd-skills:review-readability` | sonnet | medium |
+| RDD Reliability | `odd-skills:review-reliability` | sonnet | medium |
+| RDD Resilience | `odd-skills:review-resilience` | sonnet | medium |
+| RDD Refuter | `odd-skills:review-refuter` | opus | medium |
+| RDD Validator | `odd-skills:review-validator` | opus | medium |
+| General delegation | `odd-skills:odd-general` and the built-in `general-purpose` | sonnet | medium |
+
+How the routing works:
+
+- The plugin's mod (`hooks/register.js`) applies the configured model when a subagent spawns and the configured effort on each of its requests.
+- The configured model replaces any model passed for that agent at call time.
+- An effort of `default` keeps the model's own effort.
+- If the mod cannot run, each agent keeps the model and effort in its own frontmatter.
+
 ## Local development
 
 Load the plugin for one session without installing it:
@@ -41,12 +68,23 @@ claude plugin validate --strict .
 claude plugin validate --strict ./plugins/odd-skills
 ```
 
+Run the tests:
+
+```bash
+node --test tests/                       # repository consistency checks
+claude plugin test plugins/odd-skills    # mod tests (*.test.ts)
+```
+
 ## Layout
 
 | Path | Contents |
 |---|---|
 | `.claude-plugin/marketplace.json` | Local marketplace `odd-skills`; allows the cross-marketplace `engram` dependency |
 | `plugins/odd-skills/` | The plugin (manifest name `odd-skills`) |
+| `plugins/odd-skills/agents/` | The 13 role agents |
+| `plugins/odd-skills/hooks/` | `hooks.json`, the mod (`register.js`), and its routing helpers |
+| `plugins/odd-skills/tests/` | Mod tests run by `claude plugin test` |
+| `tests/` | Repository tests run by `node --test` |
 | `odd/tasks/` | ODD feature documents (specs, tasks, log) |
 
 ## Status

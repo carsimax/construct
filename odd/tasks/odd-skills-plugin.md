@@ -1,7 +1,7 @@
 # odd_skills — Claude Code plugin
 
 Objective: build **odd_skills**, one installable Claude Code plugin (technical id `odd-skills`) made only of plugin components (agents, skills, hooks, mods, workflows, output styles, MCP config, userConfig, evals). It reproduces the Claude Code result of gentle-ai v4.2.0, the reference baseline only, with engram kept as an independent instance.
-Branch: `feat/odd-skills-plugin` (from `main` root commit `e639e15`). Delivery strategy: `ask-on-risk`. Test runner: `claude plugin validate --strict`, `node --test` for scripts, `claude plugin test` for the mod, `claude plugin eval` for behavior. Script runtime: Node.js ESM, no dependencies (decided in T0).
+Tracker branch: `feat/odd-skills-plugin` (at `main` root commit `e639e15`). Delivery strategy: `ask-on-risk`; chain strategy: `feature-branch-chain` (L12). Test runner: `claude plugin validate --strict`, `node --test` for scripts, `claude plugin test` for the mod, `claude plugin eval` for behavior. Script runtime: Node.js ESM, no dependencies (decided in T0).
 
 ## Specs
 
@@ -186,7 +186,7 @@ Design consequences:
 |---|---|---|---|---|---|---|
 | T0 | S2, S6 | Spike: confirm each unverified capability with a throwaway plugin via `claude --plugin-dir`; choose the script runtime and test runner | inline | none | done | no commit (not a git repo); evidence in Design → Capability results and L9 |
 | T1 | S2, S3, S7 | `git init`, plugin skeleton, `plugin.json` with the `engram@engram` dependency, local marketplace, `claude plugin validate --strict` | inline | none (reassessed, L10) | done | `feat: scaffold odd-skills plugin and marketplace` |
-| T2 | S1, S4, S6 | Port agents (`review-*`, `jd-*`); create `odd-explorer`, `odd-worker`, `odd-verify`, `review-validator`, `odd-general`; apply the S6 model and effort table as static frontmatter; declare `model_<role>` / `effort_<role>` `userConfig` options; mod `agent.spawn` + `turn.step` routing with `claude plugin test` coverage | inline | none | pending | — |
+| T2 | S1, S4, S6, S7 | Port agents (`review-*`, `jd-*`); create `odd-explorer`, `odd-worker`, `odd-verify`, `review-validator`, `odd-general`; apply the S6 model and effort table as static frontmatter; declare `model_<role>` / `effort_<role>` `userConfig` options; mod `agent.spawn` + `turn.step` routing with `claude plugin test` coverage | inline | none | done | `feat: port review lens and judgment-day agents` (slice 02) + `feat: add ODD role agents with configurable model routing` (slice 03) |
 | T3 | S1 | Port skills; remove `gentle-ai` command references; drop `skill-registry` | inline | none | pending | — |
 | T4 | S1, S2 | Split the orchestrator into the ≤8k session contract and the ODD skills; `SessionStart` and `SubagentStart` hooks; evals for small-inline, large-tracked, and Risk-line cases | inline | 6 | pending | — |
 | T5 | S1, S4 | Output styles (Neutral, Gentleman), theme, `userConfig` | inline | none | pending | — |
@@ -202,6 +202,27 @@ Design consequences:
 Route evidence: no Writer trigger reason is known yet (units are sequential and depend on T0/T1); revisit if T6 and T7 run in parallel.
 
 Forecast: about 2,500–3,500 authored changed lines, above the 400-line budget. `ask-on-risk` will ask for the chain strategy before the first commit past the budget.
+
+### Delivery slices (feature-branch-chain)
+
+The tracker `feat/odd-skills-plugin` gets a draft, no-merge PR into `main`. Child PR 01 targets the tracker, and each later child targets its immediate parent.
+
+```
+main
+ └── feat/odd-skills-plugin (tracker, draft PR, no merge)
+      └── odd-skills/01-scaffold
+           └── odd-skills/02-ported-agents
+                └── odd-skills/03-role-routing
+                     └── odd-skills/04-... (T3 onward)
+```
+
+| Slice | Branch | Tasks | Commits | Changed lines | Budget |
+|---|---|---|---|---|---|
+| 01 | `odd-skills/01-scaffold` | T1 | `feat: scaffold odd-skills plugin and marketplace` | 338 | within |
+| 02 | `odd-skills/02-ported-agents` | T2 (ported agents) | `feat: port review lens and judgment-day agents` | 395 | within |
+| 03 | `odd-skills/03-role-routing` | T2 (new agents, userConfig, mod, tests, docs) | `feat: add ODD role agents with configurable model routing` | about 796 | `size:exception` recommended: 352 lines are the `userConfig` JSON generated from agent frontmatter; the mod cannot ship without its options |
+
+Push and PR creation remain the user's decision.
 
 ## Log
 
@@ -251,4 +272,44 @@ Forecast: about 2,500–3,500 authored changed lines, above the 400-line budget.
     - Isolated install without the engram marketplace: `Warning: dependency "engram@engram" was not installed ... "odd-skills" will not load without it`.
     - README install order verified by these two runs.
   - Risk reassessed from item 5 to none: only new files, which nothing consumes yet. No existing installer, dependency, or config is changed.
+  - Commit `8830919` assessed with `review assess --base-ref e639e15 --committed-only`: tier `medium`, `review_due: false`, reason `under_budget` (338 lines). It stays pending in the open slice.
   - Next step: T2 (agents, S6 `userConfig`, mod routing).
+- **L11 (2026-10-19, user):** "Si vamos con T2"
+  - Agents, all 13 under `plugins/odd-skills/agents/`:
+    - Ported from the installed copies: `review-{risk,readability,reliability,resilience,refuter}`, `jd-judge-{a,b}`, `jd-fix-agent`.
+      - Bodies were kept apart from four changes:
+        - The gentle-ai managed blocks (codegraph, artifact language, remote authorization) were removed. T4's `SubagentStart` contract replaces them.
+        - The input markers were renamed from `GENTLE_AI_REVIEW_*` to `ODD_REVIEW_*`. The context comes from `odd-review context` (T7).
+        - The `Skill Resolution` lines were dropped, since `skill-registry` is dropped.
+        - Engram tools were changed from `mcp__plugin_engram_engram__*` to `mcp__engram__*`. The plugin prefix does not exist, because engram's plugin ships no MCP server.
+      - The lenses, refuter, and validator gained `omitClaudeMd: true` and `maxTurns: 2`.
+    - New agents: `odd-explorer`, `odd-worker`, `odd-verify`, `odd-general`, and `review-validator` (targeted post-correction validator).
+  - `userConfig`: 26 options (`model_<role>`, `effort_<role>`), generated from the agent frontmatter. Model options are haiku, sonnet, opus, and fable. Effort options are `default` (no override), low, medium, high, xhigh, and max.
+  - Mod:
+    - `hooks/hooks.json` declares `modules: ["./register.js"]`.
+    - `hooks/routing.js` derives the role from the agent name, so there is no duplicated table. Built-in `general-purpose` maps to `odd_general`.
+    - `hooks/register.js` sets the model in `agent.spawn` and the effort in `turn.step` per subagent id. It fails open.
+  - Checks:
+    - `claude plugin validate --strict plugins/odd-skills`: `✔ Validation passed`. It reports the hooks `agent.spawn, turn.step`, `calls: nothing on $`, and the note `gating hook without .catch: agent.spawn` (fail-open by design).
+    - `claude plugin test plugins/odd-skills`: RED before the mod existed (`no hooks module to load`), then `7 pass, 0 fail`.
+    - Mutation check: making `modelFor` return null gave `4 pass, 3 fail`; restoring it gave `7 pass`.
+    - `node --test tests/`: 4 pass. This guard test over static data passed on first run, so no RED was observed.
+    - Real session (`claude -p --model haiku --plugin-dir`):
+      - Subagent metadata `{"agentType":"odd-skills:odd-explorer",...,"model":"haiku"}` and transcript model `claude-haiku-5-5`.
+      - `{"agentType":"general-purpose",...,"model":"sonnet"}` and `claude-sonnet-5-5`, overriding the haiku session model.
+      - Session transcripts were removed afterwards.
+  - Documented behavior: the configured role model replaces any per-invocation `model` passed for that agent.
+  - Commit `ac366d9` (later split into slices 02 and 03, L12).
+    - Generated `.atl/` files (written by the gentle-ai `skill-registry refresh` prompt hook) were removed from the commit and added to `.gitignore`.
+    - `review assess --base-ref e639e15 --committed-only` on the open slice: `medium`, `review_due: false`, `under_budget`, 1523 changed lines. Pending in the slice.
+  - The running count passed the 400-line delivery budget with this commit. Under `ask-on-risk`, the chain strategy must be asked before the next commit; it was not asked before this one.
+  - Engram mirror for L11 is **pending**: `mem_save` was refused with `Claude host session "2f435feb-..." already ended` (resumed session). Resync on the next working engram session.
+  - Next step: T3 (port skills) after the chain strategy answer.
+- **L12 (2026-10-19, user):** "feature-branch-chain"
+  - Chain strategy cached as `feature-branch-chain` (skill `chained-pr`).
+  - Branch restructure (local, unpushed; no commit lost):
+    - `odd-skills/01-scaffold` points at the T1 commit.
+    - The T2 commit was split in one slicing pass: `odd-skills/02-ported-agents` holds the 8 ported agents and the `.atl/` ignore (395 lines), and `odd-skills/03-role-routing` holds the rest.
+    - The tracker `feat/odd-skills-plugin` was moved back to `e639e15`.
+  - Slice 03 exceeds the budget. The `size:exception` rationale is in Delivery slices.
+  - Next step: T3 (port skills) on `odd-skills/04-skills`.
