@@ -1,7 +1,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { existsSync, readFileSync, readdirSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 const pluginRoot = new URL('../plugins/construct/', import.meta.url).pathname
@@ -125,5 +126,64 @@ test('every construct component a contract names exists in the plugin', () => {
       assert.ok(exists, `${kind} contract names missing construct:${name}`)
     }
     assert.doesNotMatch(text, /gentle[-_ ]?ai/i)
+  }
+})
+
+function project(...marks) {
+  const dir = mkdtempSync(join(tmpdir(), 'construct-contract-'))
+  for (const mark of marks) mkdirSync(join(dir, mark))
+  return dir
+}
+
+test('SessionStart notes a missing CodeGraph index for a git root, identically across sources', () => {
+  const dir = project('.git')
+  try {
+    const base = context('session', { ...SESSION, cwd: dir }).additionalContext
+    const plain = context('session', { ...SESSION, cwd: project() }).additionalContext
+    assert.ok(base.includes('CodeGraph:'))
+    assert.ok(base.includes(`\`${dir}\` has no \`.codegraph/\` index`))
+    assert.ok(base.includes(`! codegraph init ${dir}`))
+    assert.ok(base.startsWith(plain.trim().split('\n\nCodeGraph:')[0]))
+    assert.ok(base.length <= 8000, `length ${base.length}`)
+    for (const source of ['resume', 'clear', 'compact']) {
+      assert.equal(context('session', { ...SESSION, source, cwd: dir }).additionalContext, base)
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('SessionStart treats a .git file as a git root', () => {
+  const dir = project()
+  try {
+    writeFileSync(join(dir, '.git'), 'gitdir: elsewhere\n')
+    assert.ok(context('session', { ...SESSION, cwd: dir }).additionalContext.includes('CodeGraph:'))
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('SessionStart adds no CodeGraph line when the index exists or the directory is not a git root', () => {
+  const indexed = project('.git', '.codegraph')
+  const bare = project()
+  try {
+    assert.ok(!context('session', { ...SESSION, cwd: indexed }).additionalContext.includes('CodeGraph'))
+    assert.ok(!context('session', { ...SESSION, cwd: bare }).additionalContext.includes('CodeGraph'))
+  } finally {
+    rmSync(indexed, { recursive: true, force: true })
+    rmSync(bare, { recursive: true, force: true })
+  }
+})
+
+test('SubagentStart never carries the index notice and names the CodeGraph rule', () => {
+  const dir = project('.git')
+  try {
+    const out = context('subagent', { hook_event_name: 'SubagentStart', agent_type: 'construct:odd-worker', cwd: dir })
+    assert.ok(!out.additionalContext.includes('has no `.codegraph/` index'))
+    assert.ok(out.additionalContext.includes('mcp__codegraph__codegraph_explore'))
+    assert.ok(out.additionalContext.includes('codegraph explore'))
+    assert.ok(out.additionalContext.includes('.codegraph/'))
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
   }
 })
