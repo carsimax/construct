@@ -143,7 +143,11 @@ setup_mcp() {
     skipped "codegraph CLI (already installed)"
   else
     say "Installing the codegraph CLI"
-    run npm install -g "$CODEGRAPH_PACKAGE"
+    # Optional: a failure here must not stop the settings merge that follows.
+    if ! run npm install -g "$CODEGRAPH_PACKAGE"; then
+      warn "npm install -g $CODEGRAPH_PACKAGE failed, so the codegraph and context7 MCP servers were skipped; fix npm's global prefix and rerun, or rerun with --no-mcp"
+      return
+    fi
     installed "codegraph CLI"
   fi
   add_mcp codegraph codegraph serve --mcp
@@ -220,9 +224,14 @@ if (changed) {
     fs.copyFileSync(file, backup, fs.constants.COPYFILE_EXCL)
     lines.push(`backup ${backup}`)
   }
-  const temp = `${file}.construct-${process.pid}`
-  fs.writeFileSync(temp, JSON.stringify(settings, null, 2) + '\n')
-  fs.renameSync(temp, file)
+  // Write through a symlink to its target and keep the file's mode, so a
+  // dotfiles link or a 0600 file survives the atomic rename.
+  const target = text === null ? file : fs.realpathSync(file)
+  const mode = text === null ? 0o644 : fs.statSync(target).mode & 0o777
+  const temp = `${target}.construct-${process.pid}`
+  fs.writeFileSync(temp, JSON.stringify(settings, null, 2) + '\n', { mode })
+  fs.chmodSync(temp, mode)
+  fs.renameSync(temp, target)
 }
 console.log(lines.join('\n'))
 NODE

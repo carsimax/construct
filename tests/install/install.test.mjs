@@ -5,7 +5,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { scratchDir } from '../assess/helpers.mjs'
 
@@ -25,9 +25,12 @@ case "$1 $2" in
   "mcp add") echo "$5" >> "$STUB_STATE/mcps"; exit 0 ;;
 esac
 exit 0`,
+  engram: `
+if [ "$1 $2" = "setup claude-code" ]; then echo engram >> "$STUB_STATE/mcps"; echo "  ❯ engram@engram" >> "$STUB_STATE/plugins"; fi`,
   brew: `
 if [ "$1" = "install" ]; then cp "$STUB_STATE/engram-stub" "$(dirname "$0")/engram"; chmod +x "$(dirname "$0")/engram"; fi`,
   npm: `
+if [ -n "$STUB_NPM_FAIL" ]; then echo "npm error code EACCES" >&2; exit 243; fi
 if [ "$1 $2" = "install -g" ]; then cp "$STUB_STATE/codegraph-stub" "$(dirname "$0")/codegraph"; chmod +x "$(dirname "$0")/codegraph"; fi`,
 }
 
@@ -48,9 +51,9 @@ function sandbox({ engram = true, node = true, brew = true } = {}) {
   put(bin, 'claude', stub('claude', STUBS.claude))
   put(bin, 'npm', stub('npm', STUBS.npm))
   if (brew) put(bin, 'brew', stub('brew', STUBS.brew))
-  put(state, 'engram-stub', stub('engram', ''))
+  put(state, 'engram-stub', stub('engram', STUBS.engram))
   put(state, 'codegraph-stub', stub('codegraph', ''))
-  if (engram) put(bin, 'engram', stub('engram', ''))
+  if (engram) put(bin, 'engram', stub('engram', STUBS.engram))
   if (node) symlinkSync(process.execPath, join(bin, 'node'))
   return { root, bin, state, home, log: join(root, 'calls.log') }
 }
@@ -124,6 +127,37 @@ test('existing settings are merged, never overwritten, and backed up first', () 
   assert.match(run.stdout, new RegExp(backup.replace(/[.]/g, '\\.')))
 })
 
+test('a symlinked settings.json stays a link and its target gets the merge', () => {
+  const box = sandbox()
+  const target = join(box.root, 'dotfiles-settings.json')
+  writeFileSync(target, JSON.stringify({ model: 'opus' }))
+  mkdirSync(join(box.home, '.claude'))
+  symlinkSync(target, settingsPath(box))
+  const run = install(box)
+  assert.equal(run.status, 0, run.stderr)
+  assert.ok(lstatSync(settingsPath(box)).isSymbolicLink(), 'still a symlink')
+  assert.equal(JSON.parse(readFileSync(target, 'utf8')).theme, 'custom:construct:construct')
+  assert.equal(JSON.parse(readFileSync(target, 'utf8')).model, 'opus')
+})
+
+test('the merge keeps the file mode of settings.json', () => {
+  const box = sandbox()
+  writeSettings(box, { model: 'opus' })
+  chmodSync(settingsPath(box), 0o600)
+  const run = install(box)
+  assert.equal(run.status, 0, run.stderr)
+  assert.equal(statSync(settingsPath(box)).mode & 0o777, 0o600)
+})
+
+test('a failed codegraph install warns and still merges the settings', () => {
+  const box = sandbox()
+  const run = install(box, [], { STUB_NPM_FAIL: '1' })
+  assert.equal(run.status, 0, run.stderr)
+  assert.match(run.stderr, /codegraph.*--no-mcp/)
+  assert.deepEqual(run.calls.filter((c) => /^claude mcp add --scope user codegraph/.test(c)), [])
+  assert.equal(readSettings(box).theme, 'custom:construct:construct')
+})
+
 test('a different theme or output style is kept with a warning unless --force', () => {
   const box = sandbox()
   writeSettings(box, { theme: 'dark', outputStyle: 'Explanatory' })
@@ -146,7 +180,7 @@ test('a second run changes nothing and installs nothing', () => {
   const settings = readFileSync(settingsPath(box), 'utf8')
   const second = install(box)
   assert.equal(second.status, 0, second.stderr)
-  const writes = second.calls.filter((c) => /^(brew install|npm install|claude plugin (install|marketplace add)|claude mcp add)/.test(c))
+  const writes = second.calls.filter((c) => /^(brew install|npm install|engram setup|claude plugin (install|marketplace add)|claude mcp add)/.test(c))
   assert.deepEqual(writes, [])
   assert.equal(readFileSync(settingsPath(box), 'utf8'), settings)
   assert.deepEqual(backups(box), [])

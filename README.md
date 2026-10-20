@@ -21,8 +21,8 @@ The installer checks the requirements above and stops before changing anything i
 
 - Installs the engram binary through Homebrew when it is missing, and runs `engram setup claude-code`.
 - Adds the engram and construct marketplaces and installs `construct@construct`.
-- Installs the CodeGraph CLI and registers the codegraph and context7 MCP servers.
-- Merges into `~/.claude/settings.json`: `theme: "custom:construct:construct"`, `outputStyle: "construct:Neutral"`, and the `permissions.allow` rules `mcp__engram` and `mcp__plugin_engram_engram`. Other keys stay as they are, and the previous file is saved as `settings.json.bak-<timestamp>`.
+- Installs the CodeGraph CLI and registers the codegraph and context7 MCP servers. If `npm install -g` fails, it warns, skips both servers, and continues.
+- Merges into `~/.claude/settings.json`: `theme: "custom:construct:construct"`, `outputStyle: "construct:Neutral"`, and the `permissions.allow` rules `mcp__engram` and `mcp__plugin_engram_engram`. Other keys stay as they are, a symlinked file is written through to its target with its mode kept, and the previous file is saved as `settings.json.bak-<timestamp>`.
 
 Every step is skipped when it is already done, so running the installer again changes nothing. It never changes other permissions or your permission mode. A `theme` or `outputStyle` in `~/.claude/settings.local.json` still overrides the merged value.
 
