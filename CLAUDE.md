@@ -2,9 +2,11 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+Human contributors: see `CONTRIBUTING.md` for setup, checks, and pull request rules; this file is the agent-facing summary of the same material.
+
 ## What this repository is
 
-Construct: a Claude Code plugin (in `plugins/construct/`) plus its local marketplace (`.claude-plugin/marketplace.json`) and a curl installer (`install.sh`). The plugin implements Organic Driven Development (ODD): it injects an orchestration contract through hooks, ships role agents, skills, a mod (model/effort routing and a status band), an output style, and a theme. It depends on the separate `engram@engram` plugin for memory. There is no build step; everything is plain Node.js ESM (Node 20+) and Markdown.
+Construct: a Claude Code plugin (in `plugins/construct/`) plus its local marketplace (`.claude-plugin/marketplace.json`) and a curl installer (`install.sh`). The plugin implements Organic Driven Development (ODD): it injects an orchestration contract through hooks, ships role agents, skills, a mod (model/effort routing and a status panel), an output style, and a theme. It depends on the separate `engram@engram` plugin for memory. There is no build step; everything is plain Node.js ESM (Node 20+) and Markdown.
 
 ## Commands
 
@@ -33,7 +35,7 @@ A plugin cannot ship a `CLAUDE.md`, so the ODD rules load in layers:
 
 Other moving parts:
 
-- **Mod** (`hooks/register.js`, listed under `modules` in `hooks/hooks.json`): routes each agent role's model and effort from the plugin's `userConfig` (`model_<role>`, `effort_<role>`, where role is the agent name with dashes turned into underscores; see `hooks/routing.js`), and renders the status band (`hooks/status/`). Agent frontmatter is the fallback when the mod cannot run.
+- **Mod** (`hooks/register.js`, listed under `modules` in `hooks/hooks.json`): routes each agent role's model and effort from the plugin's `userConfig` (`model_<role>`, `effort_<role>`, where role is the agent name with dashes turned into underscores; see `hooks/routing.js`), and renders the status panel (`hooks/status/`, `hooks/panel/`). Agent frontmatter is the fallback when the mod cannot run.
 - **Command hooks** (`hooks/scripts/`): `secret-guard.mjs` (PreToolUse deny for protected paths and destructive commands), `review-context.mjs` / `review-capture.mjs` / `review-gate.mjs` (RDD review plumbing), `risk-line.mjs` (Risk-line gate: `mark` on UserPromptSubmit records the tree, `check` on Stop blocks once per turn when paths outside `odd/tasks/` changed and the reply has no Risk line; fails open), `subagent-count.mjs` (SubagentStart/SubagentStop record open agents so `review-gate.mjs` and `risk-line.mjs` stay silent while subagents run), all sharing `hook-io.mjs`. Hooks are registered in exec form (`command: "node"`, `args: [...]`), which tests check.
 - **CLIs on the PATH** (`plugins/construct/bin/`): thin entry points into `lib/`. `odd-assess` (`lib/assess/`) classifies a diff's risk from git stats, signals, and sinks; `odd-review` (`lib/review/`) runs the receipt-driven review lifecycle, its mode switch, and its store.
 - **Evals** (`plugins/construct/evals/<case>/`): `case.yaml`, `prompt.md`, `fixture.sh`, and Markdown graders, run by `claude plugin eval`.
