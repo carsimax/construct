@@ -1,0 +1,98 @@
+// Case table shared by the CLI tests: [name, base files, working-tree change,
+// [risk, reasons ("code:path" or "code"), changed lines]]. Cases are translated
+// from the original classifier's own tests.
+export const prose = (n) => 'Ordinary prose line.\n'.repeat(n)
+export const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from([0, 0, 0, 0])])
+
+export const DUE = { high: [true, 'high_risk'], medium: [false, 'under_budget'], passive: [false, 'passive'] }
+
+// expect: [risk, reasons ("code:path" or "code"), changedLines]
+export const CASES = [
+  // hot_path
+  ['hot path: auth directory', {}, { 'src/auth/login.go': 'package auth\n' }, ['high', ['hot_path:src/auth/login.go'], 1]],
+  ['hot path: security docs stay high', {}, { 'docs/security/guide.md': 'Guide\n' }, ['high', ['hot_path:docs/security/guide.md'], 1]],
+  ['hot path: webhook is security evidence', {}, { 'src/webhook/handler.go': 'package h\n' }, ['high', ['hot_path:src/webhook/handler.go'], 1]],
+  ['hot path: payments token', {}, { 'src/payments.ts': 'export const a = 1\n' }, ['high', ['hot_path:src/payments.ts'], 1]],
+  ['hot path: test file named auth_test.go is not hot', {}, { 'src/auth_test.go': 'package a\n' }, ['medium', ['executable_change:src/auth_test.go'], 1]],
+  ['hot path: __tests__ directory is not hot', {}, { '__tests__/auth.js': 'x\n' }, ['medium', ['executable_change:__tests__/auth.js'], 1]],
+  ['hot path: production code under tests/ stays high', {}, { 'tests/auth/login.go': 'package a\n' }, ['high', ['hot_path:tests/auth/login.go'], 1]],
+  ['hot path: update token is not high', {}, { 'src/update.go': 'package u\n' }, ['medium', ['executable_change:src/update.go'], 1]],
+  ['hot path: token must be a whole word', {}, { 'src/authority.go': 'package a\n' }, ['medium', ['executable_change:src/authority.go'], 1]],
+  // service_token
+  ['service_token: source file', {}, { 'src/service-token.go': 'package s\n' }, ['high', ['service_token:src/service-token.go'], 1]],
+  ['service_token: test file is exempt', {}, { 'src/service_token_test.go': 'package s\n' }, ['medium', ['executable_change:src/service_token_test.go'], 1]],
+  ['service_token: documentation is ineligible', {}, { 'docs/service-token.md': 'Doc\n' }, ['passive', ['non_executable_only'], 1]],
+  ['service_token: non-adjacent words', {}, { 'src/service-api-token.go': 'package s\n' }, ['medium', ['executable_change:src/service-api-token.go'], 1]],
+  // shell_source
+  ['shell_source: .sh script', {}, { 'scripts/build.sh': 'echo hi\n' }, ['high', ['shell_source:scripts/build.sh'], 1]],
+  ['shell_source: GitHub workflow', {}, { '.github/workflows/x.yml': 'name: x\n' }, ['high', ['shell_source:.github/workflows/x.yml'], 1]],
+  ['shell_source: other yaml is configuration only', {}, { 'config/x.yml': 'a: 1\n' }, ['medium', ['configuration_change:config/x.yml'], 1]],
+  ['shell_source: README-shaped script is ineligible by name', {}, { 'README-install.sh': 'echo hi\n' }, ['medium', ['executable_change:README-install.sh'], 1]],
+  // executable_mode
+  ['executable_mode: chmod +x on an existing file', { 'tools/run.txt': 'text\n' }, { 'tools/run.txt': { content: 'text\n', executable: true } }, ['high', ['executable_mode:tools/run.txt'], 0]],
+  ['executable_mode: executable markdown is not passive', { 'docs/guide.md': 'Guide\n' }, { 'docs/guide.md': { content: 'Guide\n', executable: true } }, ['high', ['executable_mode:docs/guide.md'], 0]],
+  ['executable_mode: new executable file', {}, { 'tools/new.txt': { content: 'x\n', executable: true } }, ['high', ['executable_mode:tools/new.txt'], 1]],
+  ['executable_mode: already-executable markdown edit is medium, never passive', { 'docs/guide.md': { content: 'Guide\n', executable: true } }, { 'docs/guide.md': { content: 'Guide 2\n', executable: true } }, ['medium', ['executable_change:docs/guide.md'], 2]],
+  // process_boundary
+  ['process_boundary: Python subprocess', {}, { 'tools/run.py': 'import subprocess\n\nsubprocess.run(argv)\n' }, ['high', ['process_boundary:tools/run.py'], 3]],
+  ['process_boundary: Go exec(', {}, { 'tools/runner.go': 'package tools\n\nfunc run() { exec(command) }\n' }, ['high', ['process_boundary:tools/runner.go'], 3]],
+  ['process_boundary: Go os/exec', {}, { 'internal/tools/run.go': 'package tools\n\nimport "os/exec"\n\nfunc run() error { return exec.Command("git").Run() }\n' }, ['high', ['process_boundary:internal/tools/run.go'], 5]],
+  ['process_boundary: Node child_process', {}, { 'src/run.js': 'const { execFile } = require("child_process");\n' }, ['high', ['process_boundary:src/run.js'], 1]],
+  ['process_boundary: Java Runtime exec', {}, { 'src/Run.java': 'class Run { void go() throws Exception { Runtime.getRuntime().exec("ls"); } }\n' }, ['high', ['process_boundary:src/Run.java'], 1]],
+  ['process_boundary: Python os.system', {}, { 'tools/run.py': 'import os\nos.system("ls")\n' }, ['high', ['process_boundary:tools/run.py'], 2]],
+  ['process_boundary: CMake execute_process', {}, { 'CMakeLists.txt': 'project(demo)\nexecute_process(COMMAND git rev-parse HEAD)\n' }, ['high', ['process_boundary:CMakeLists.txt'], 2]],
+  ['process_boundary: README-shaped script is still read', {}, { 'README-install.sh': '#!/bin/sh\nexec "$@"\n' }, ['high', ['process_boundary:README-install.sh'], 2]],
+  ['process_boundary: shebang in a .py file', {}, { 'tools/tool.py': '#!/usr/bin/env python3\nprint(1)\n' }, ['high', ['process_boundary:tools/tool.py'], 2]],
+  ['process_boundary: db.Exec( is not a spawn', {}, { 'internal/repo.go': 'package s\n\nfunc insert(db *sql.DB) error {\n\t_, err := db.Exec("INSERT")\n\treturn err\n}\n' }, ['medium', ['executable_change:internal/repo.go'], 6]],
+  ['process_boundary: regexp .exec( is not a spawn', {}, { 'src/parse.js': 'const match = /^(\\d+)/.exec(input);\n' }, ['medium', ['executable_change:src/parse.js'], 1]],
+  ['process_boundary: subprocessing prefix is not a spawn', {}, { 'tools/runner.py': 'def run(argv):\n    return subprocessing.run(argv)\n' }, ['medium', ['executable_change:tools/runner.py'], 2]],
+  ['process_boundary: executor prefix is not a spawn', {}, { 'tools/runner.ts': 'function run(c) {\n  return executor.run(c);\n}\n' }, ['medium', ['executable_change:tools/runner.ts'], 3]],
+  ['process_boundary: comment-only mention is skipped', {}, { 'tools/notes.py': '# This module will wrap subprocess.run later.\nVALUE = 1\n' }, ['medium', ['executable_change:tools/notes.py'], 2]],
+  ['process_boundary: comment skipping is language aware (// in Python is code)', {}, { 'tools/x.py': '// subprocess.run(argv)\n' }, ['high', ['process_boundary:tools/x.py'], 1]],
+  ['process_boundary: fixture directory is not scanned', {}, { 'fixtures/runner.py': 'import subprocess\nsubprocess.run(argv)\n' }, ['medium', ['executable_change:fixtures/runner.py'], 2]],
+  ['process_boundary: test file is not scanned', {}, { 'tools/runner_test.py': 'import subprocess\nsubprocess.run(argv)\n' }, ['medium', ['executable_change:tools/runner_test.py'], 2]],
+  ['process_boundary: documentation mention stays passive', {}, { 'docs/spawning.md': 'Call subprocess.run with an explicit argv list.\n' }, ['passive', ['non_executable_only'], 1]],
+  ['process_boundary: shebang only in the base side no longer counts', { 'tools/tool.py': '#!/usr/bin/env python3\nx = 1\n' }, { 'tools/tool.py': 'x = 2\n' }, ['medium', ['executable_change:tools/tool.py'], 3]],
+  ['process_boundary: unchanged spawn line stays medium', { 'tools/run.py': 'import subprocess\nsubprocess.run(a)\nx = 1\n' }, { 'tools/run.py': 'import subprocess\nsubprocess.run(a)\nx = 2\n' }, ['medium', ['executable_change:tools/run.py'], 2]],
+  ['process_boundary: requirements.txt comment mention', {}, { 'requirements.txt': '# installed via subprocess.run(pip)\nrequests==2.31.0\n' }, ['medium', ['executable_change:requirements.txt'], 2]],
+  // dangerous_sink
+  ['dangerous_sink: Go TLS bypass', { 'src/client.go': 'package client\nvar x = 1\n' }, { 'src/client.go': 'package client\nvar x = 1\nvar c = tls.Config{InsecureSkipVerify: true}\n' }, ['high', ['dangerous_sink:src/client.go'], 1]],
+  ['dangerous_sink: Python pickle', { 'src/load.py': 'v = 1\n' }, { 'src/load.py': 'v = 1\nv = pickle.loads(payload)\n' }, ['high', ['dangerous_sink:src/load.py'], 1]],
+  ['dangerous_sink: unsafe yaml.load after a safe one', { 'src/load.py': 'v = 1\n' }, { 'src/load.py': 'v = 1\nsafe = yaml.load(a, Loader=yaml.SafeLoader); unsafe = yaml.load(payload)\n' }, ['high', ['dangerous_sink:src/load.py'], 1]],
+  ['dangerous_sink: yaml.load with SafeLoader stays medium', { 'src/load.py': 'v = 1\n' }, { 'src/load.py': 'v = 1\nsafe = yaml.load(payload, Loader=yaml.SafeLoader)\n' }, ['medium', ['executable_change:src/load.py'], 1]],
+  ['dangerous_sink: checksum assigned to a token variable stays medium', { 'src/hash.py': 'v = 1\n' }, { 'src/hash.py': 'v = 1\ntoken = hashlib.md5(file_bytes).hexdigest()\n' }, ['medium', ['executable_change:src/hash.py'], 1]],
+  ['dangerous_sink: Ruby interpolated shell', {}, { 'src/run.rb': 'result = `echo #{name}`\n' }, ['high', ['dangerous_sink:src/run.rb'], 1]],
+  ['dangerous_sink: shell chmod 777', {}, { 'src/setup.sh': 'chmod -R 777 /data\n' }, ['high', ['dangerous_sink:src/setup.sh', 'shell_source:src/setup.sh'], 1]],
+  ['dangerous_sink: unchanged sink', { 'src/client.go': 'package client\nvar c = tls.Config{InsecureSkipVerify: true}\nvar x = 1\n' }, { 'src/client.go': 'package client\nvar c = tls.Config{InsecureSkipVerify: true}\nvar x = 2\n' }, ['medium', ['executable_change:src/client.go'], 2]],
+  ['dangerous_sink: removed sink', { 'src/client.go': 'package client\nvar c = tls.Config{InsecureSkipVerify: true}\n' }, { 'src/client.go': 'package client\n' }, ['medium', ['executable_change:src/client.go'], 1]],
+  ['dangerous_sink: test file', {}, { 'src/client_test.go': 'var c = tls.Config{InsecureSkipVerify: true}\n' }, ['medium', ['executable_change:src/client_test.go'], 1]],
+  ['dangerous_sink: fixtures directory', {}, { 'fixtures/client.go': 'var c = tls.Config{InsecureSkipVerify: true}\n' }, ['medium', ['executable_change:fixtures/client.go'], 1]],
+  ['dangerous_sink: process before sink reports both', { 'src/client.go': 'package client\n' }, { 'src/client.go': 'package client\nfunc run() { exec.Command("git") }\nvar c = tls.Config{InsecureSkipVerify: true}\n' }, ['high', ['dangerous_sink:src/client.go', 'process_boundary:src/client.go'], 2]],
+  // passive gate
+  ['passive: plain markdown', {}, { 'docs/guide.md': prose(900) }, ['passive', ['non_executable_only'], 900]],
+  ['passive: volume alone never selects a tier', {}, { 'docs/big.md': prose(5000) }, ['passive', ['non_executable_only'], 5000]],
+  ['passive: markdown with a shebang is medium', {}, { 'docs/guide.md': '#!/usr/bin/env bash\necho hello\n' }, ['medium', ['executable_change:docs/guide.md'], 2]],
+  ['passive: SKILL.md is operational', {}, { 'skills/go/SKILL.md': 'Skill\n' }, ['medium', ['executable_change:skills/go/SKILL.md'], 1]],
+  ['passive: .claude paths are operational', {}, { '.claude/notes.md': 'Notes\n' }, ['medium', ['executable_change:.claude/notes.md'], 1]],
+  ['passive: AGENTS.md is operational', {}, { 'AGENTS.md': 'Rules\n' }, ['medium', ['executable_change:AGENTS.md'], 1]],
+  ['passive: static mdx', {}, { 'book/chapter.mdx': '# Chapter\n\nStatic prose.\n' }, ['passive', ['non_executable_only'], 3]],
+  ['passive: mdx with an import', {}, { 'book/chapter.mdx': "import Widget from './widget'\n\nProse.\n" }, ['medium', ['executable_change:book/chapter.mdx'], 3]],
+  ['passive: mdx with a brace expression', {}, { 'book/chapter.mdx': 'Current value: {value}\n' }, ['medium', ['executable_change:book/chapter.mdx'], 1]],
+  ['passive: mdx with the code in a fence', {}, { 'book/chapter.mdx': '```tsx\nexport const X = <W />\n```\n' }, ['passive', ['non_executable_only'], 3]],
+  ['passive: fake png without its signature', {}, { 'assets/logo.png': 'prose\n' }, ['medium', ['executable_change:assets/logo.png'], 1]],
+  ['passive: real png signature', {}, { 'assets/logo.png': PNG }, ['passive', ['non_executable_only'], 0]],
+  ['passive: package.json is configuration', {}, { 'package.json': '{}\n' }, ['medium', ['configuration_change:package.json'], 1]],
+  ['passive: .env is configuration', {}, { '.env': 'A=1\n' }, ['medium', ['configuration_change:.env'], 1]],
+  ['passive: markdown plus configuration is medium', {}, { 'docs/a.md': 'a\n', 'config.toml': 'a = 1\n' }, ['medium', ['configuration_change:config.toml'], 2]],
+  ['passive: binary non-image file', {}, { 'assets/data.bin': Buffer.from([1, 2, 0, 3, 0, 0]) }, ['medium', ['executable_change:assets/data.bin'], 0]],
+  ['passive: markdown with a NUL byte', {}, { 'docs/guide.md': Buffer.from('prose\0more\n') }, ['medium', ['executable_change:docs/guide.md'], 0]],
+  ['passive: markdown with invalid UTF-8', {}, { 'docs/guide.md': Buffer.from([0x70, 0xff, 0xfe, 0x0a]) }, ['medium', ['executable_change:docs/guide.md'], 1]],
+  ['passive: empty file is empty_content, not an executable change', {}, { 'src/empty.go': '' }, ['medium', ['empty_content:src/empty.go'], 0]],
+  ['passive: content-bearing source is an executable change', {}, { 'src/real.go': 'package real\n' }, ['medium', ['executable_change:src/real.go'], 1]],
+  // line counting
+  ['lines: generated golden counts zero', {}, { 'x/testdata/golden/a.golden': prose(40), 'docs/a.md': prose(3) }, ['passive', ['non_executable_only'], 3]],
+  ['lines: deletions count', { 'docs/a.md': prose(10) }, { 'docs/a.md': null }, ['passive', ['non_executable_only'], 10]],
+  ['lines: additions plus deletions in one file', { 'docs/a.md': 'one\ntwo\n' }, { 'docs/a.md': 'one\nthree\nfour\n' }, ['passive', ['non_executable_only'], 3]],
+  ['lines: binary files count zero next to text', {}, { 'docs/a.md': prose(2), 'assets/logo.png': PNG }, ['passive', ['non_executable_only'], 2]],
+]
+

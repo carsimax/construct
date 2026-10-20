@@ -2,6 +2,13 @@
 
 odd_skills is a Claude Code plugin for Organic Driven Development (ODD). It ships orchestration rules, review lenses, and delivery skills as plugin components only: agents, skills, hooks, mods, workflows, and output styles. Engram stays an independent memory instance; this plugin depends on it.
 
+## Requirements
+
+- Claude Code with plugin support.
+- Node.js 20 or later for the plugin's scripts and hooks (`bin/odd-assess`, and the hook scripts as they land). Claude Code's native install does not bundle Node.js.
+- `git` on the PATH for `odd-assess`.
+- The engram binary and marketplace (see Quick path).
+
 ## Quick path
 
 1. Install the engram binary and register its MCP server:
@@ -66,6 +73,31 @@ How the routing works:
 - An effort of `default` keeps the model's own effort.
 - If the mod cannot run, each agent keeps the model and effort in its own frontmatter.
 
+## Risk assessment: odd-assess
+
+`bin/odd-assess` is a Node.js port of the deterministic risk classifier that decides whether a change needs review. The plugin's `bin/` directory is on the `PATH` of the Bash tool while the plugin is enabled.
+
+```bash
+odd-assess                                   # current working state against HEAD
+odd-assess --base-ref main --committed-only  # main..HEAD, committed changes only
+odd-assess --json                            # machine-readable result
+odd-assess --escalate-item 2 --escalate-reason "touches the login guard" --json
+```
+
+| Option | Meaning |
+|---|---|
+| `--cwd DIR` | Repository path (default: current directory) |
+| `--base-ref REF` | Assess `REF` to `HEAD`. Tracked files must be clean, or pass `--committed-only` to ignore them |
+| `--committed-only` | Acknowledge that `--base-ref` ignores dirty tracked changes |
+| `--escalate-item N`, `--escalate-reason TEXT` | Raise the tier to `high` by citing high-risk item 1 to 6 (reason at most 500 bytes). Both flags or neither; a tier is never lowered |
+| `--json` | Print the `odd-skills.review-assessment/v1` object instead of a short summary |
+
+Without `--base-ref`, the candidate is the working tree (tracked plus untracked, not ignored), frozen through a temporary index. Your real index is never changed.
+
+The JSON result has `risk` (`passive`, `medium`, `high`), `reasons`, `changed_paths`, `changed_lines`, `candidate`, `review_due`, `review_due_reason`, and `lenses` (empty for passive and medium, the four canonical lenses for high). Only `high` makes a review due; `medium` reports `under_budget` and `passive` reports `passive`.
+
+Exit codes: `0` for any successful assessment, including a fail-closed one (`risk: "high"` with one `unassessable` reason, for example when `--base-ref` names a missing ref); `2` for bad usage, with the message on stderr.
+
 ## Local development
 
 Load the plugin for one session without installing it:
@@ -84,7 +116,7 @@ claude plugin validate --strict ./plugins/odd-skills
 Run the tests:
 
 ```bash
-node --test tests/                       # repository consistency checks
+node --test tests/                       # repository checks and odd-assess tests
 claude plugin test plugins/odd-skills    # mod tests (*.test.ts)
 ```
 
@@ -106,6 +138,8 @@ scripts/eval.sh --case small-inline
 | `plugins/odd-skills/agents/` | The 13 role agents |
 | `plugins/odd-skills/skills/` | Delivery and review skills (`branch-pr`, `chained-pr`, `work-unit-commits`, `judgment-day`, ...) |
 | `plugins/odd-skills/hooks/` | `hooks.json`, the mod (`register.js`), and its routing helpers |
+| `plugins/odd-skills/bin/` | Executable scripts put on the `PATH` (`odd-assess`) |
+| `plugins/odd-skills/lib/assess/` | `odd-assess` modules: git, stats, passive, signals, sinks, content, classify, escalation, output |
 | `plugins/odd-skills/hooks/contract/` | Session and subagent contract texts injected by hooks |
 | `plugins/odd-skills/evals/` | Behavior eval cases run by `claude plugin eval` |
 | `plugins/odd-skills/tests/` | Mod tests run by `claude plugin test` |
