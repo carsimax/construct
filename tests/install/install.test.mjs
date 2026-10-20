@@ -193,7 +193,7 @@ test('--no-mcp leaves the MCP servers and the codegraph CLI alone', () => {
 
 test('preflight stops before any change when a requirement is missing or too old', () => {
   for (const [label, box, env, pattern] of [
-    ['old claude', sandbox(), { STUB_CLAUDE_VERSION: '2.1.200' }, /2\.1\.287/],
+    ['old claude', sandbox(), { STUB_CLAUDE_VERSION: '2.1.200' }, /2\.1\.304/],
     ['no node', sandbox({ node: false }), {}, /node/i],
     ['no brew without engram', sandbox({ engram: false, brew: false }), {}, /brew/i],
   ]) {

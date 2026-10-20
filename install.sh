@@ -9,7 +9,7 @@
 # Runs under the macOS system bash (3.2): no associative arrays, no ${x,,}.
 set -euo pipefail
 
-MIN_CLAUDE=2.1.287
+MIN_CLAUDE=2.1.304
 MIN_NODE=20
 ENGRAM_FORMULA=gentleman-programming/tap/engram
 ENGRAM_REPO=Gentleman-Programming/engram
