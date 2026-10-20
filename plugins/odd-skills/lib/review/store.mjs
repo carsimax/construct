@@ -81,26 +81,74 @@ const processAlive = (pid) => {
 
 const LOCK_ATTEMPTS = 5
 
-// inspectLock reads the holder of an existing lock, or null when the holder
-// released it meanwhile (ENOENT).
+// inspectLock reads the lock and its identity (device, inode, content, mtime), or
+// returns null when the holder released it meanwhile (ENOENT).
 function inspectLock(lock) {
   // Test-only fault seam: behave as if the holder released between the failed
   // open and the read. It does nothing unless the variable is set.
   if (process.env.ODD_REVIEW_TEST_FAULT === 'release-after-exists') rmSync(lock, { force: true })
   try {
-    const holder = Number.parseInt(readFileSync(lock, 'utf8'), 10)
-    return { holder: Number.isInteger(holder) ? holder : null, ageMs: Date.now() - statSync(lock).mtimeMs }
+    const stat = statSync(lock)
+    const text = readFileSync(lock, 'utf8')
+    const holder = Number.parseInt(text, 10)
+    return { holder: Number.isInteger(holder) ? holder : null, text, ino: stat.ino, dev: stat.dev, mtimeMs: stat.mtimeMs, ageMs: Date.now() - stat.mtimeMs }
   } catch (error) {
     if (error.code === 'ENOENT') return null
     throw error
   }
 }
 
-// withLock runs fn while holding the transaction's lock file. A second writer is
-// refused. A lock whose process is gone (or an empty one older than
-// EMPTY_LOCK_STALE_MS) is reclaimed by renaming it to a unique tombstone, so only
-// one contender wins; losing that rename means the lock is held. A lock released
-// while being inspected is simply acquired on the next bounded attempt.
+// reclaimStale removes the lock that was inspected as stale, but only while
+// holding the separate <lock>.reclaim lock, which serializes reclaimers, and only
+// if the lock still is the very file that was inspected (same device, inode,
+// content, and mtime). A live lock created by a winner after the inspection is a
+// different file, so it is never removed. It never waits: contention is
+// `locked`.
+function reclaimStale(lock, seen, locked) {
+  const guard = `${lock}.reclaim`
+  for (let attempt = 0; ; attempt++) {
+    try {
+      closeSync(openSync(guard, 'wx'))
+      break
+    } catch (error) {
+      if (error.code !== 'EEXIST') throw error
+      let age
+      try {
+        age = Date.now() - statSync(guard).mtimeMs
+      } catch (statError) {
+        if (statError.code === 'ENOENT') continue
+        throw statError
+      }
+      // A reclaim lock left by a crashed reclaimer is removed once, after 10 seconds.
+      if (attempt === 0 && age > EMPTY_LOCK_STALE_MS) {
+        rmSync(guard, { force: true })
+        continue
+      }
+      throw locked()
+    }
+  }
+  try {
+    // Test-only fault seam: a winner replaces the stale lock with a live one
+    // after the inspection. It does nothing unless the variable is set.
+    if (process.env.ODD_REVIEW_TEST_FAULT === 'reclaim-interleave') {
+      rmSync(lock, { force: true })
+      writeFileSync(lock, `${process.env.ODD_REVIEW_TEST_LIVE_PID}\n`, { flag: 'wx' })
+    }
+    const now = inspectLock(lock)
+    if (now === null) return // released meanwhile: the next attempt acquires it
+    if (now.ino !== seen.ino || now.dev !== seen.dev || now.text !== seen.text || now.mtimeMs !== seen.mtimeMs) throw locked()
+    unlinkSync(lock)
+  } finally {
+    rmSync(guard, { force: true })
+  }
+}
+
+// withLock runs fn while holding the transaction's lock file. Acquisition is
+// open(wx) plus the pid. A second writer is refused. A lock whose process is gone
+// (or an empty one older than EMPTY_LOCK_STALE_MS) is reclaimed through
+// reclaimStale, which verifies the file's identity under a reclaim lock, so a
+// live lock is never removed. A lock released while being inspected is acquired
+// on the next of a bounded number of attempts.
 export function withLock(root, lineage, fn) {
   const lock = transactionPath(root, lineage).replace(/\.json$/, '.lock')
   const locked = () => new Refusal('transaction_locked', `transaction ${lineage} is being written by another process; try again`)
@@ -118,13 +166,7 @@ export function withLock(root, lineage, fn) {
       if (seen === null) continue
       const stale = seen.holder === null ? seen.ageMs > EMPTY_LOCK_STALE_MS : !processAlive(seen.holder)
       if (!stale) throw locked()
-      const tombstone = `${lock}.stale-${randomBytes(6).toString('hex')}`
-      try {
-        renameSync(lock, tombstone)
-      } catch {
-        throw locked()
-      }
-      rmSync(tombstone, { force: true })
+      reclaimStale(lock, seen, locked)
     }
   }
   if (!acquired) throw locked()

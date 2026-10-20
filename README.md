@@ -131,7 +131,7 @@ odd-review/transactions/<lineage>.json   # one per review; <lineage>.lock while 
 odd-review/receipts/<target hex>.json    # written by acknowledge
 ```
 
-Writes are a temporary file plus a rename. A second writer on a locked transaction is refused (`transaction_locked`); a lock left by a dead process (or an empty one older than 10 seconds) is reclaimed by renaming it away, so only one contender wins. No command changes the index, `HEAD`, or the working tree.
+Writes are a temporary file plus a rename. A second writer on a locked transaction is refused (`transaction_locked`); a lock left by a dead process (or an empty one older than 10 seconds) is reclaimed under a separate `<lock>.reclaim` lock, and only if it is still the very file (same inode and content) that was inspected as stale, so a live lock is never removed. A contender that cannot reclaim does not wait; it gets `transaction_locked`. No command changes the index, `HEAD`, or the working tree.
 
 ## Local development
 

@@ -6,7 +6,7 @@ import { spawn } from 'node:child_process'
 import { existsSync, mkdirSync, utimesSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
-  applyFiles, capture, captureAll, finding, git, highRepo, lensResult, readTransaction, repoFingerprint, review,
+  REVIEW_BIN, applyFiles, capture, captureAll, finding, git, highRepo, lensResult, readTransaction, repoFingerprint, review,
   scratchDir, start, storeRoot, transactionFile, write,
 } from './helpers.mjs'
 
@@ -305,6 +305,56 @@ describe('store, locking and atomicity', () => {
     writeFileSync(`${transactionFile(repo, txn.lineage).replace(/\.json$/, '')}.lock`, `${child.pid}\n`)
     assert.equal(capture(repo, txn, 'review-risk', lensResult(hashOf(txn), txn.manifest)).status, 0)
     assert.deepEqual(readdirSync(join(storeRoot(repo), 'transactions')).filter((n) => n.includes('stale')), [])
+  })
+
+  test('reclaim never removes a live lock a winner created after the inspection', async () => {
+    const repo = highRepo()
+    const txn = start(repo)
+    const dead = spawn(process.execPath, ['-e', '0'])
+    await new Promise((resolve) => dead.on('exit', resolve))
+    const lock = `${transactionFile(repo, txn.lineage).replace(/\.json$/, '')}.lock`
+    writeFileSync(lock, `${dead.pid}\n`)
+    const r = review(repo, ['capture', '--lineage', txn.lineage, '--lens', 'risk', '--input', '-'], {
+      input: JSON.stringify(lensResult(hashOf(txn), txn.manifest)),
+      // The seam swaps the stale lock for a live one (this process) right after the inspection.
+      env: { ODD_REVIEW_TEST_FAULT: 'reclaim-interleave', ODD_REVIEW_TEST_LIVE_PID: String(process.pid) },
+    })
+    assert.equal(r.status, 1, r.stdout)
+    assert.equal(r.error.code, 'transaction_locked')
+    assert.equal(readFileSync(lock, 'utf8'), `${process.pid}\n`, 'the live lock is untouched')
+    assert.deepEqual(readTransaction(repo, txn.lineage).results, {})
+    assert.ok(!existsSync(`${lock}.reclaim`), 'the reclaim lock is released')
+  })
+
+  test('parallel captures over a dead-pid lock never lose or duplicate a capture', async () => {
+    const repo = highRepo()
+    const dead = spawn(process.execPath, ['-e', '0'])
+    await new Promise((resolve) => dead.on('exit', resolve))
+    const run = (txn, lens) =>
+      new Promise((resolve) => {
+        const child = spawn(
+          process.execPath,
+          [REVIEW_BIN, '--cwd', repo, 'capture', '--lineage', txn.lineage, '--lens', lens, '--input', '-'],
+          { stdio: ['pipe', 'pipe', 'pipe'] },
+        )
+        let err = ''
+        child.stderr.on('data', (chunk) => (err += chunk))
+        child.on('close', (status) => resolve({ lens, status, code: err ? JSON.parse(err).error.code : null }))
+        child.stdin.end(JSON.stringify(lensResult(txn.subjects[lens], txn.manifest)))
+      })
+    for (let trial = 0; trial < 50; trial++) {
+      const txn = start(repo)
+      writeFileSync(`${transactionFile(repo, txn.lineage).replace(/\.json$/, '')}.lock`, `${dead.pid}\n`)
+      const lenses = ['review-risk', 'review-reliability']
+      const outcomes = await Promise.all(Array.from({ length: 8 }, (_, i) => run(txn, lenses[i % 2])))
+      const stored = Object.keys(readTransaction(repo, txn.lineage).results).sort()
+      const won = outcomes.filter((o) => o.status === 0).map((o) => o.lens)
+      assert.deepEqual([...won].sort(), stored, `trial ${trial}: acknowledged captures must be persisted exactly once`)
+      assert.equal(new Set(won).size, won.length, `trial ${trial}: a lens was captured twice`)
+      for (const o of outcomes.filter((x) => x.status !== 0)) {
+        assert.ok(['transaction_locked', 'wrong_state', 'lens_already_captured'].includes(o.code), `trial ${trial}: ${o.code}`)
+      }
+    }
   })
 
   test('the lock is released after every command, including refusals', () => {
