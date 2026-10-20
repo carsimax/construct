@@ -152,9 +152,9 @@ test('Bash allows templates, look-alikes, and unrelated commands', () => {
 
 test('Bash: .env mentioned only inside a quoted multi-word string is allowed', () => {
   // A quoted string with spaces is one word and not a path, so prose that mentions
-  // .env does not trip the guard; a bare .env word does.
+  // .env does not trip the guard; a bare .env word given to a reader such as cat does.
   assertAllow(bash('echo "remember to add .env to the gitignore"'))
-  assertDeny(bash('echo .env'))
+  assertDeny(bash('cat .env'))
 })
 
 test('Bash denies every catastrophic rm -rf spelling', () => {
@@ -231,4 +231,98 @@ test('the guard never writes any file', () => {
   assert.deepEqual(readdirSync(dir).sort(), [...before, 'probe'].sort())
   assert.deepEqual(readdirSync(home), [])
   assert.doesNotMatch(readFileSync(SCRIPT, 'utf8'), /writeFile|appendFile|mkdir|createWriteStream|unlink|rmSync/)
+})
+
+test('B1: Grep glob and Glob pattern are globs that may match protected names', () => {
+  for (const glob of ['*.env*', '.e*', '{a,.env}', '**/*.env*', '*.pem', '**/.ss?/**', '.env.*', '*.[k]ey', 'secrets/**', '**/.aws/credentials']) {
+    assertDeny(call('Grep', { pattern: 'KEY', glob }))
+    assertDeny(call('Glob', { pattern: glob }))
+  }
+  for (const glob of ['*.ts', '**/*.json', '.env.example', '{a,b}/*.md', '**/*', 'src/**/*.tsx']) {
+    assertAllow(call('Grep', { pattern: 'KEY', glob }))
+    assertAllow(call('Glob', { pattern: glob }))
+  }
+})
+
+test('B2: search commands treat the pattern as data and check only the paths', () => {
+  for (const command of [
+    'rg ".env" src',
+    'grep -rn "\\.env" src',
+    'grep -r "secrets/" src',
+    'grep -rn -e ".env" src',
+    'egrep --regexp=.env src',
+    'git grep ".env" -- src',
+    'rg -A 3 ".env" src',
+    'ag ".env" src',
+  ]) {
+    assertAllow(bash(command))
+  }
+  assertDeny(bash('rg token .env'))
+  assertDeny(bash('grep -rn token ~/.ssh'))
+  assertDeny(bash('grep -e token .env'))
+  assertDeny(bash('git grep token -- .env'))
+  assertDeny(bash('rg -g "*.env*" KEY'))
+  assertDeny(bash('export $(grep -v ^# .env | xargs)'))
+})
+
+test('B2: inside double quotes a backslash is kept unless it escapes $ ` " \\ or newline', () => {
+  // bash keeps the backslash here, so the word is `\.env`, a different file from `.env`
+  assertAllow(bash('cat "\\.env"'))
+  assertDeny(bash('cat "\\$HOME/.x" "$HOME/.ssh/id_rsa"'))
+})
+
+test('B3: echo and printf arguments are data; only redirections are checked', () => {
+  for (const command of [
+    'echo .env >> .gitignore',
+    'echo ".env" >> .gitignore',
+    'printf "%s\\n" .env >> .gitignore',
+    'echo .env 2>&1',
+    'echo .env | cat',
+  ]) {
+    assertAllow(bash(command))
+  }
+  assertDeny(bash('echo x > .env'))
+  assertDeny(bash('echo x >> .env'))
+  assertDeny(bash('printf x &> .env'))
+  assertDeny(bash('cat < .env'))
+  assertDeny(bash('echo .env > .env'))
+})
+
+test('matching is case-insensitive, templates included', () => {
+  for (const path of ['/x/.ENV', '/x/.Env.local', '~/.SSH/id_rsa', '/x/A.PEM', '/x/Secrets/a']) {
+    assertDeny(call('Read', { file_path: path }))
+  }
+  assertAllow(call('Read', { file_path: '/x/.ENV.EXAMPLE' }))
+  assertDeny(bash('cat .ENV'))
+})
+
+test('rev:path tokens check the path part', () => {
+  assertDeny(bash('git show HEAD:.env'))
+  assertDeny(bash('git show origin/main:.env.local'))
+  assertDeny(bash('git show HEAD:config/secrets/db.yml'))
+  assertAllow(bash('git show HEAD:src/app.ts'))
+  assertAllow(bash('git log --format=%H:%s'))
+  assertAllow(bash('git show HEAD:.env.example'))
+})
+
+test('interpreter one-liners are scanned for protected string literals', () => {
+  assertDeny(bash('python3 -c "print(open(\'.env\').read())"'))
+  assertDeny(bash('python -c "open(\'~/.ssh/id_rsa\')"'))
+  assertDeny(bash('node -e "require(\'fs\').readFileSync(\'.env\')"'))
+  assertDeny(bash('perl -e \'open(F, "<.env")\''))
+  assertDeny(bash('ruby -e "puts File.read(\'.env\')"'))
+  assertAllow(bash('node -e "console.log(1)"'))
+  assertAllow(bash('python3 -c "print(\'hello world\')"'))
+  assertDeny(bash("python3 - <<'EOF'\nprint(open('.env').read())\nEOF"))
+})
+
+test('verifier probes', () => {
+  for (const command of [
+    'rm -rf / --no-preserve-root', '\\rm -rf /', 'command rm -rf /', 'rm -rf "$HOME"',
+    'scp h:~/.ssh/id_rsa .', 'cat --env-file=.env', 'node --env-file=.env app.js',
+  ]) {
+    assertDeny(bash(command))
+  }
+  for (const command of ['rm -rf ./', 'rm -rf ~/projects/old']) assertAllow(bash(command))
+  assertAllow(call('Edit', { file_path: 'config/keys/index.ts' }))
 })

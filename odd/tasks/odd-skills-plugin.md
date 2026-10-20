@@ -207,7 +207,7 @@ Design consequences:
 | T6 | S1, S2 | `bin/odd-assess`: port `ClassifyRisk` with fixtures; differential check against `gentle-ai review assess` on the same diffs | delegated (`odd-worker`, sonnet): long-session context backstop | 2 (it decides whether review runs) | done | `feat: add odd-assess risk classifier` + `fix: match Go whitespace trimming in odd-assess` (slice 08) |
 | T7 | S1, S2 | `bin/odd-review`: frozen tree via temp index, inspect, capture validation, receipt and acknowledgement; plus F4 | delegated (`odd-worker`, sonnet): long-session context backstop | 1 and 2 (persisted receipts; it gates delivery confidence) | done | `feat: add odd-review lifecycle with receipts` + `fix: refute mixed severe findings and escalate unknown causality` (slice 09) |
 | T8 | S1, S2 | `rdd-review` skill, RDD switch, receipt boundary, `Stop` review gate, contract RDD section (workflows dropped, L29) | delegated: two parallel units (Writer trigger a) | 2 and 6 (review gate) | done | `feat: add the RDD switch, review boundary, and Stop gate` + `feat: add the rdd-review skill and contract section` + `fix: cover uncommitted reviews and boundary ordering` (slice 11) |
-| T9 | S1 | `secret-guard` `PreToolUse` deny list for file tools and Bash (Risk-line prompt hook dropped, L31) | delegated (`odd-worker`, sonnet): long-session context backstop | 2 | in progress | — |
+| T9 | S1 | `secret-guard` `PreToolUse` deny list for file tools and Bash (Risk-line prompt hook dropped, L31) | delegated (`odd-worker`, sonnet): long-session context backstop | 2 | done | `feat: add a secret guard PreToolUse hook` + `fix: close secret guard glob leak and false positives` (slice 13) |
 | T10 | S1 | Compaction re-injection and task sync hooks | inline | none | pending | — |
 | T11 | S1 | `.mcp.json` (context7, codegraph) and `codegraph` skill | inline | none | pending | — |
 | T12 | S2, S8 | Mod status panel: replica of the user's statusline (S8) plus ODD task progress and RDD state (experimental; must fail open) | inline | 6 | pending | — |
@@ -245,6 +245,7 @@ main
 | 10 | `odd-skills/10-review-hardening` | F5–F8 | `fix: harden odd-review refuter binding, locks, and acknowledge` + `fix: serialize stale lock reclaim in odd-review` | see L28 | within |
 | 11 | `odd-skills/11-rdd-review` | T8 | the three T8 commits | about 1130 | over budget: two parallel units plus one correction batch; see L30 |
 | 12 | `odd-skills/12-gate-followups` | F9, F10 | `fix: scope mode status and protect the gate fallback dir` | 76 | within |
+| 13 | `odd-skills/13-secret-guard` | T9 | the two T9 commits | about 620 | slightly over; one unit plus one correction batch |
 
 Push and PR creation remain the user's decision.
 
@@ -696,3 +697,25 @@ Push and PR creation remain the user's decision.
     - Known limit: the guard is lexical, so obfuscation such as `$(echo .e)nv` or base64 is not caught.
   - **Live confirmation:** with a dummy `.env`, `claude -p --permission-mode bypassPermissions --plugin-dir …` refused the read, both directly and through a general-purpose subagent. The dummy value was never printed. Transcripts were removed.
   - **Parent correction (L31 spec error):** a Grep `pattern` is a content regex, not a location. Treating it as a path blocked legitimate searches such as `Grep "\.env"`. Only Grep `path` and `glob` are checked now; Glob `pattern` is still checked. RED, then GREEN. `node --test tests/` gave `472 pass`.
+  - Independent `odd-verify` (opus), about 190 adversarial probes against dummy secrets and a fake HOME:
+    - Realistic reads are denied: redirections, `cp`, `tar`, `source`, `export $(cat .env)`, heredocs, `bash -c`, `sh -c`, `eval`, `--env-file`, and `scp`.
+    - All `rm -rf` spellings are denied. Latency is about 25 ms.
+    - **Three blockers:**
+      - **B1:** a Grep `glob` of `*.env*` read `.env` contents, because ripgrep selects hidden `.env` files.
+      - **B2:** `rg ".env" src` was denied (a false positive), and the tokenizer dropped `\` inside double quotes.
+      - **B3:** `echo .env >> .gitignore` was denied (a false positive).
+  - One correction batch by the same worker:
+    - Grep `glob` and Glob `pattern` are matched as globs against the protected names.
+    - Search-command patterns and `echo`/`printf` arguments are data; only redirection targets count.
+    - Bash-correct backslash handling in double quotes.
+    - Plus three advisories: case-insensitive matching (templates still allowed), the `rev:path` part after `:`, and quoted literals in `python -c` and `node`/`perl`/`ruby -e`.
+    - RED: 6 of 26 tests failed first. Then `node --test tests/` gave `480 pass`.
+  - Verifier recheck: **B1, B2, and B3 resolved.** 74/74 probes match expectations, including 21 new probes on the new code paths, with no regressions and no new false positives.
+  - Documented known lexical limits:
+    - whole-directory searches (`grep -rn KEY .` includes `.env`);
+    - existing symlinks;
+    - unexpanded shell globs (`cat .en*`);
+    - obfuscation;
+    - heredoc bodies are scanned as commands (`git commit -F - <<EOF` mentioning `.env` may be denied; `-m` works);
+    - `**/*key*` is denied;
+    - secrets outside the list (`~/.netrc`, `~/.npmrc`, `~/.kube/config`, `~/.docker/config.json`, `.envrc`).

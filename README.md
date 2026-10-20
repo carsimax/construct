@@ -160,7 +160,20 @@ Protected, anywhere in the tree (paths resolve against `cwd`; `~` and `$HOME` ex
 - any `secrets` directory
 - `rm -rf` (any flag order or spelling, with or without `sudo`) aimed at `/`, `~`, `$HOME`, or `/*`
 
-Exception: `.env.example`, `.env.sample`, and `.env.template` are allowed, since they are committed templates. In `Bash`, a quoted multi-word string is prose and is not checked (unless a shell runs it, as in `bash -c "..."`); a bare word such as `.env` is. The denial says which rule matched and that the user can run the command manually. Unreadable hook input is allowed with a stderr note.
+Exception: `.env.example`, `.env.sample`, and `.env.template` are allowed, since they are committed templates. Matching ignores case (`.ENV`, `~/.SSH/id_rsa`), including for the templates.
+
+How each tool is read:
+
+- **Globs.** A `Glob` pattern and a `Grep` `glob` are treated as globs: each segment (with `*`, `?`, `[..]`, `{a,b}`) is tested against the protected names, so `*.env*`, `.e*`, `{a,.env}`, `*.pem`, and `**/.ss?/**` are denied while `*.ts` and `.env.example` pass. Wildcard-only segments (`*`, `**`) are not blocked. A `Grep` content `pattern` is never a path.
+- **Search commands.** For `grep`, `egrep`, `fgrep`, `rg`, `ag`, `ack`, and `git grep`, the pattern is data (`rg ".env" src` is allowed); only the path arguments and glob flags (`-g`, `--include`) are checked.
+- **`echo` and `printf`.** Their arguments are data (`echo .env >> .gitignore` is allowed). Only redirection targets and sources (`>`, `>>`, `<`, `&>`) are checked, so `echo x > .env` is denied.
+- **`rev:path` tokens.** For a token such as `HEAD:.env`, the part after `:` is also checked.
+- **Interpreter one-liners.** The `-c` argument of `python`/`python3` and the `-e` argument of `node`, `perl`, and `ruby` are scanned for quoted string literals that name a protected path; `bash -c` and `eval` strings are parsed as commands. Heredoc bodies are read as commands.
+- **Prose.** A quoted multi-word string given to another command is not checked.
+
+The denial says which rule matched and that the user can run the command manually. Unreadable hook input is allowed with a stderr note.
+
+Known lexical limits: the guard reads the command text and cannot see through whole-directory searches such as `grep -rn KEY .`, symlinks, shell globs (`cat .e*`), variables, or obfuscation (`cat $(echo .e)nv`, encoded payloads).
 
 ## Local development
 
