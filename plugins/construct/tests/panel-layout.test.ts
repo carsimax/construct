@@ -185,6 +185,19 @@ test('rows caps the output and no row exceeds the width at 80 and 120', async ()
   expect(rowsOf(buildPanel(args({ columns: 80, rows: 5 }))).length).toBeLessThanOrEqual(5)
 })
 
+test('a long directory and branch never make a row wider than its column', async () => {
+  const dir = '/Users/me/' + 'd'.repeat(60)
+  const longReplica = { usage, dir, home: '/Users/me', git: { branch: 'feat/' + 'b'.repeat(70), dirty: 2, ahead: 1 }, worktree: null, model: 'claude-opus-4', effort: 'high' }
+  for (const columns of [56, 120]) {
+    const tree = buildPanel(args({ columns, rows: 60, replica: longReplica }))
+    const cols = (tree.children as any[]).filter((c) => c.props?.flexDirection === 'column')
+    const limit = cols.length === 2 ? Math.floor(columns / 2) : columns
+    const all = cols.length === 2 ? cols.flatMap((c) => rowsOf(c)) : rowsOf(tree)
+    expect(all.length).toBeGreaterThan(0)
+    for (const r of all) expect(r.length).toBeLessThanOrEqual(limit)
+  }
+})
+
 // ---- summary -------------------------------------------------------------
 
 test('buildSummary is one row with ctx, running agents, ODD task id, RDD state, and inline alert', async () => {

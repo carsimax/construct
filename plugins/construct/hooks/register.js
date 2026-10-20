@@ -338,7 +338,7 @@ export function register(on, options) {
   // The permission verdict, whoever decided it.
   on('tool.check', async ($, e, next) => {
     const result = await next(e)
-    await feed($, (s) => onToolCheck(s, { tool: e.tool, input: e.input, agentId: e.agentId, decision: result?.decision }))
+    await feed($, (s) => onToolCheck(s, { tool: e.tool, input: e.input, agentId: e.agentId, decision: result?.decision, isQuery: typeof e.tool_use_id !== 'string' || e.tool_use_id === '' }))
     return result
   }).catch(($, e, next) => next(e))
 

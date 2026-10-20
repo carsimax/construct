@@ -150,12 +150,22 @@ test('a write under odd/tasks is not an inline write', async ($, on) => {
 
 test('a tool.check deny appears in the panel and passes the verdict through', async ($, on) => {
   await start($, on, { decision: 'deny' })
-  const verdict = await $.tool.check({ tool: 'Bash', input: { command: 'rm -rf x' } })
+  const verdict = await $.tool.check({ tool: 'Bash', input: { command: 'rm -rf x' }, tool_use_id: 'tu-1' })
   expect(verdict.decision).toBe('deny')
   await settle()
   const p = await pane($)
   await p.redraw()
   expect(await joined(p)).toContain('Bash')
+})
+
+test('a tool.check query without tool_use_id is not a gate cell', async ($, on) => {
+  await start($, on, { decision: 'deny' })
+  const verdict = await $.tool.check({ tool: 'Bash', input: { command: 'rm -rf x' } })
+  expect(verdict.decision).toBe('deny')
+  await settle()
+  const p = await pane($)
+  await p.redraw()
+  expect(await joined(p)).not.toContain('denied')
 })
 
 test('spawn makes a card and passes the spawn result through', async ($, on) => {

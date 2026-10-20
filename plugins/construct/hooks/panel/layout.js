@@ -65,13 +65,30 @@ const line = (id, children) => ({ type: 'Box', props: { key: id, flexDirection: 
 
 const compactionSegment = (n) => (isNum(n) && n > 0 ? segment('compactions', [text(`⟲${n}`, { color: 'inactive' })]) : null)
 
+// A node cut to `n` characters: leaves are kept from the left and the cut one ends in an ellipsis.
+function clip(node, n) {
+  if (lenOf(node) <= n) return node
+  if (typeof node === 'string') return fit(node, n)
+  if (!node || !Array.isArray(node.children)) return node
+  const kids = []
+  let left = n
+  for (const k of node.children) {
+    if (left <= 0) break
+    const w = lenOf(k)
+    kids.push(w <= left ? k : clip(k, left))
+    left -= Math.min(w, left)
+  }
+  return { ...node, children: kids }
+}
+
 // Segments joined by a faint rail and packed greedily into rows no wider than `width`.
 function pack(id, segments, width) {
   const parts = joinSegments(segments).filter((s) => !s.sep)
   const rows = []
   let cur = []
   let used = 0
-  for (const part of parts) {
+  for (const raw of parts) {
+    const part = clip(raw, width)
     const w = lenOf(part)
     if (cur.length > 0 && used + SEP_WIDTH + w > width) {
       rows.push(cur)

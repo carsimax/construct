@@ -169,6 +169,12 @@ test('each tool.check verdict adds a cell; a subagent verdict is sub', () => {
   expect(s.gate.lastDenied).toEqual({ tool: 'Bash', detail: 'rm -rf x' })
 })
 
+test('onToolCheck ignores a query that carries no tool_use_id when the wiring flags it', () => {
+  const s = onToolCheck(initialState(), { tool: 'Bash', decision: 'deny', input: { command: 'x' }, isQuery: true })
+  expect(s.gate.cells).toEqual([])
+  expect(s.gate.denied).toBe(0)
+})
+
 test('a denied verdict inside a subagent is still a deny', () => {
   const s = onToolCheck(initialState(), { tool: 'Bash', decision: 'deny', agentId: 'a1', input: { command: 'x' } })
   expect(s.gate.denied).toBe(1)
@@ -209,6 +215,24 @@ test('maskSecrets masks credential-like values and keeps plain text', () => {
   expect(maskSecrets('x ' + 'a1b2c3d4'.repeat(6) + ' y')).toBe('x *** y')
   expect(maskSecrets('git status --short')).toBe('git status --short')
   expect(maskSecrets(undefined as any)).toBe('')
+})
+
+test('maskSecrets masks Basic auth, URL userinfo, CLI passwords, cloud keys and glpat tokens', () => {
+  const cases: [string, string][] = [
+    ['Authorization: Basic dXNlcjpwYXNzd29yZA==', 'dXNlcjpwYXNzd29yZA'],
+    ['psql postgres://user:hunter2pass@host/db', 'hunter2pass'],
+    ['curl -u admin:s3cr3tP@ss https://x', 's3cr3tP@ss'],
+    ['mysql -u root -phunter2 db', 'hunter2'],
+    ['aws_access_key_id AKIAIOSFODNN7EXAMPLE', 'AKIAIOSFODNN7EXAMPLE'],
+    ['echo ASIAIOSFODNN7EXAMPLE', 'ASIAIOSFODNN7EXAMPLE'],
+    ['echo wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY', 'wJalrXUtnFEMI'],
+    ['glpat-' + 'x'.repeat(20), 'xxxxxxxx'],
+  ]
+  for (const [input, secret] of cases) expect(maskSecrets(input)).not.toContain(secret)
+  expect(maskSecrets('psql postgres://user:hunter2pass@host/db')).toContain('host/db')
+  expect(maskSecrets('mysql -u root -phunter2 db')).toContain('mysql -u root')
+  expect(maskSecrets('ls /Users/me/Desktop/odd_skills/plugins/construct/hooks/panel')).toBe('ls /Users/me/Desktop/odd_skills/plugins/construct/hooks/panel')
+  expect(maskSecrets('curl https://example.com/a/b?x=1')).toBe('curl https://example.com/a/b?x=1')
 })
 
 // ---- S5 receipt --------------------------------------------------------

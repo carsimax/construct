@@ -6,7 +6,7 @@ Construct is a Claude Code plugin for Organic Driven Development (ODD). It ships
 
 | Requirement | Why |
 |---|---|
-| Claude Code 2.1.287 or later, signed in | The panel and status band are a mod, and mods need 2.1.287. Tested on 2.1.304 |
+| Claude Code 2.1.304 or later, signed in | The panel and status band are a mod, and the panel needs 2.1.304. Tested on 2.1.304 |
 | Node.js 20 or later, with npm | The plugin's scripts and hooks (`odd-assess`, `odd-review`, the hook scripts). Claude Code's native install does not bundle Node.js |
 | `git` on the PATH | `odd-assess` and `odd-review` read the repository |
 | Homebrew (macOS or Linux) | Installs the engram binary |

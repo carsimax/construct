@@ -69,8 +69,15 @@ const SECRET_KEY = '[\\w-]*(?:token|key|secret|password|passwd|pwd|credential)[\
 const MASKS = [
   [/\bBearer\s+[\w.~+/=-]+/gi, 'Bearer ***'],
   [/\b(?:sk|pk|rk)-[A-Za-z0-9_-]{10,}/g, '***'],
+  [/(\bAuthorization["']?\s*[:=]\s*["']?Basic\s+)[A-Za-z0-9+/]+={0,2}/gi, '$1***'],
+  [/\b(?:AKIA|ASIA|AGPA|AIDA|AROA)[A-Z0-9]{16}\b/g, '***'],
+  [/\bglpat-[A-Za-z0-9_-]{20,}/g, '***'],
+  [/(\b[a-z][a-z0-9+.-]*:\/\/[^\s:@/]+:)[^\s@/]+(?=@)/gi, '$1***'],
+  [/(\bcurl\b[^|;&\n]*?\s-u\s+[^\s:]+:)[^\s"']+/g, '$1***'],
+  [/(\b(?:mysql|mysqldump|mysqladmin|mariadb)\b[^|;&\n]*?\s-p)(?!\s)[^\s"']+/g, '$1***'],
   [/\b(?:gh[pousr]|github_pat|xox[abprs])[-_][A-Za-z0-9_-]{16,}/g, '***'],
   [new RegExp(`\\b(${SECRET_KEY})(\\s*[:=]\\s*)("[^"]*"|'[^']*'|[^\\s&"']+)`, 'gi'), '$1$2***'],
+  [/\b(?=[A-Za-z0-9/+]*[A-Z])(?=[A-Za-z0-9/+]*[a-z])(?=[A-Za-z0-9/+]*\/)[A-Za-z0-9/+]{40}(?![A-Za-z0-9/+])/g, '***'],
   [/\b(?=[A-Za-z_-]*\d)[A-Za-z0-9+_-]{32,}={0,2}/g, '***'],
 ]
 
@@ -235,7 +242,7 @@ const detailOf = (input) => {
 export function onToolCheck(state, e) {
   const s = merge(state)
   const kind = CELL_OF[e?.decision]
-  if (!kind) return s
+  if (!kind || e?.isQuery) return s
   const cell = str(e?.agentId) ? 'sub' : kind
   const gate = s.gate
   const denied = kind === 'denied'
