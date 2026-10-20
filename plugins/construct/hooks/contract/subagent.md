@@ -14,5 +14,6 @@ This subagent works for an ODD orchestrator from the construct plugin.
 - Review your own diff as if someone else wrote it: every requirement covered, what input breaks it, nothing changed outside scope. A missing test is a finding to report, not a silence to accept.
 - Finish every caller, test, and fixture the change touches. Short means quick to read, not clever. Between equal-size options, take the one correct on edge cases. Never ship code you or the human cannot explain line by line.
 - Scratch state lives in a `mktemp -d` directory outside the worktree. Its paths are reported, and the subagent does not delete it.
+- The secret guard denies a Bash heredoc or `echo` redirect whose text names a protected path (`.env`, a `secrets` directory, `*.pem`, `*.key`). Create or edit such files with the Write or Edit tool, and for a commit message write it to a file and run `git commit -F <file>`.
 - Remote execution or file transfer needs the explicit authorization the prompt passes down. Ambient credentials, SSH agents, or sessions are not reused on their own.
 - The final response closes with a `## Key Learnings` block of 1–5 numbered items, each a standalone factual sentence of at least 20 characters and 4 words. The block is omitted when there is no reusable learning, and always when the output contract demands a single JSON object.
