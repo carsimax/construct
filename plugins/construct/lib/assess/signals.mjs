@@ -4,8 +4,8 @@
 import { compareBytes, isGeneratedGoldenPath } from './stats.mjs'
 
 export const SEMANTIC_SOURCE_EXTENSIONS = new Set([
-  '.c', '.cc', '.cpp', '.cs', '.go', '.h', '.hpp', '.java', '.js', '.jsx', '.kt', '.kts', '.php', '.py',
-  '.rb', '.rs', '.sh', '.bash', '.zsh', '.ts', '.tsx',
+  '.c', '.cc', '.cpp', '.cs', '.go', '.h', '.hpp', '.java', '.js', '.jsx', '.mjs', '.cjs', '.kt', '.kts', '.php', '.py',
+  '.rb', '.rs', '.sh', '.bash', '.zsh', '.ts', '.tsx', '.mts', '.cts',
 ])
 
 // Go path.Ext semantics: the suffix from the last dot of the final element, so
