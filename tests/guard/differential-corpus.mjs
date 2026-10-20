@@ -143,4 +143,8 @@ export const corpus = [
   ["s1-shell-c-newline", "sh -c \"echo it's\ncat ~/secrets/x\"", "allow", "a quoted span crossing a newline hid a protected path on a later line"],
   ["s1-python-heredoc", "python3 - <<'EOF'\n# it's here\nopen('@E@').read()\nEOF", "allow", "an apostrophe in the body hid the line that opens the protected file"],
   ["s1-echo-multiline", "echo \"it's\ncat @E@\"", "allow", "multi-line quoted text that names a protected path on a later line is now checked line by line"],
+  ["s1-commit-multiline", "git commit -m \"fix: gitignore\n\nadd @E@ to gitignore\"", "allow", "a multi-line commit message that names a protected path on a later line is now checked line by line"],
+  ["s1-gh-pr-body", "gh pr create --title x --body \"Adds checks.\n\nThe guard now denies @E@ reads.\"", "allow", "a multi-line pull request body that names a protected path on a later line is now checked line by line"],
+  ["s1-heredoc-crlf-apostrophe", "cat <<'EOF'\r\nit's here\r\nEOF\r\ncat @E@", "allow", "an apostrophe in a CRLF heredoc body hid the command that follows the terminator"],
+  ["s1-commit-multiline-clean", "git commit -m \"it's\nfine\nreally\"", "allow"],
 ]

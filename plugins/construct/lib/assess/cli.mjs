@@ -23,7 +23,7 @@ Print the deterministic risk tier of a candidate change.
 Signals that make a change high include verifier_weakening: an added suppression
 (@ts-ignore, @ts-expect-error, @ts-nocheck, eslint-disable, # noqa, # type: ignore,
 //nolint) in a source or test file, or an added skip/focus marker (.skip(, .only(,
-xit(, xdescribe(, test.todo(, { skip: } / { todo: }, @pytest.mark.skip, t.Skip()
+xit(, xdescribe(, test.todo(, { skip: } / { todo: } unless the value is a number, @pytest.mark.skip, t.Skip()
 in a test file.
 `
 

@@ -4,7 +4,7 @@
 import { after, describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawn, spawnSync } from 'node:child_process'
-import { existsSync, readdirSync, readFileSync, rmSync, utimesSync } from 'node:fs'
+import { chmodSync, existsSync, readdirSync, readFileSync, rmSync, utimesSync } from 'node:fs'
 import { join } from 'node:path'
 import { applyFiles, highRepo, makeRepo, scratchDir } from '../review/helpers.mjs'
 
@@ -131,6 +131,33 @@ describe('review gate waits for subagents', () => {
     startAgent(e, 'a1', 'other')
     assert.equal(gate(repo, e).json.decision, 'block')
   })
+
+  test('an entry aged 59 minutes still silences the gate, one aged 61 minutes does not', () => {
+    const e = envOf()
+    const repo = highRepo()
+    startAgent(e, 'a1')
+    const age = (minutes) => {
+      const at = new Date(Date.now() - minutes * 60 * 1000)
+      utimesSync(join(agentDir(e), 'a1'), at, at)
+    }
+    age(59)
+    silent(gate(repo, e))
+    age(61)
+    assert.equal(gate(repo, e).json.decision, 'block')
+  })
+
+  test('an unreadable state directory fails open to the gate running as today', (t) => {
+    if (process.getuid?.() === 0) return t.skip('root ignores directory permissions')
+    const e = envOf()
+    const repo = highRepo()
+    startAgent(e, 'a1')
+    chmodSync(agentDir(e), 0o000)
+    try {
+      assert.equal(gate(repo, e).json.decision, 'block')
+    } finally {
+      chmodSync(agentDir(e), 0o755)
+    }
+  })
 })
 
 describe('risk line check waits for subagents', () => {
@@ -167,6 +194,13 @@ describe('risk line check waits for subagents', () => {
 })
 
 describe('registration', () => {
+  test('the contract hook stays the first SubagentStart hook, ahead of the counter', () => {
+    const hooks = JSON.parse(readFileSync(join(PLUGIN, 'hooks/hooks.json'), 'utf8')).hooks
+    const first = hooks.SubagentStart[0].hooks[0]
+    assert.equal(first.command, 'node')
+    assert.deepEqual(first.args, ['${CLAUDE_PLUGIN_ROOT}/hooks/scripts/contract.mjs', 'subagent'])
+  })
+
   test('hooks.json registers start and stop in exec form for all agents', () => {
     const hooks = JSON.parse(readFileSync(join(PLUGIN, 'hooks/hooks.json'), 'utf8')).hooks
     const script = '${CLAUDE_PLUGIN_ROOT}/hooks/scripts/subagent-count.mjs'

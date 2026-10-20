@@ -2,8 +2,8 @@
 // worktree that no command ever touches.
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { spawn } from 'node:child_process'
-import { existsSync, mkdirSync, utimesSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
+import { spawn, spawnSync } from 'node:child_process'
+import { cpSync, existsSync, mkdirSync, utimesSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   REVIEW_BIN, applyFiles, capture, captureAll, finding, git, highRepo, lensResult, makeRepo, readTransaction, repoFingerprint, review,
@@ -91,6 +91,27 @@ describe('context', () => {
       assert.equal(other.status, 0)
       assert.ok(!other.stdout.includes('ODD_REVIEW_CHECKLIST'))
     }
+  })
+
+  test('without the checklist the risk lens refuses checklist_unavailable and another lens still succeeds', () => {
+    // A copy of bin and lib without skills/, so the checklist path resolves to nothing.
+    const copy = scratchDir('odd-review-nochecklist-')
+    const plugin = new URL('../../plugins/construct/', import.meta.url).pathname
+    for (const dir of ['bin', 'lib']) cpSync(join(plugin, dir), join(copy, dir), { recursive: true })
+    const bin = join(copy, 'bin/odd-review')
+    const repo = highRepo()
+    const txn = start(repo, { lenses: 'risk,reliability' })
+    const run = (lens) =>
+      spawnSync(bin, ['--cwd', repo, 'context', '--lineage', txn.lineage, '--lens', lens], {
+        encoding: 'utf8',
+        env: { ...process.env, XDG_CONFIG_HOME: scratchDir('odd-review-xdg-') },
+      })
+    const risk = run('review-risk')
+    assert.notEqual(risk.status, 0)
+    assert.equal(JSON.parse(risk.stderr).error.code, 'checklist_unavailable')
+    const other = run('review-reliability')
+    assert.equal(other.status, 0)
+    assert.ok(other.stdout.includes('ODD_REVIEW_CONTEXT_END'))
   })
 
   test('the default budget allows a normal change', () => {

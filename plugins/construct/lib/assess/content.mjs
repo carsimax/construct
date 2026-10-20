@@ -60,11 +60,11 @@ export function suppressionLine(path, line) {
   if (extension === '.go') return matchesOutsideStrings(GO_SUPPRESSION, line)
   return false
 }
-// An option object skips only with a literal: `{ skip: true }` or `{ skip: 'reason' }`.
-// `{ skip: 10 }` (a Prisma offset) and `{ skip: offset }` are data, not a skipped test.
+// An option object stops counting only when the value is a number literal: `{ skip: 10 }` (a Prisma
+// offset) is data. `true`, strings, identifiers and expressions (`{ skip: isWindows }`) still skip.
 export const TEST_SKIP_LINE = new RegExp(
   '(?<![\\w.$])(?:(?:test|it|describe|context|suite)(?:\\.\\w+)*\\.(?:skip|only|todo)(?:\\s*\\(|\\.)|x(?:it|describe|test)\\s*\\()' +
-    '|\\{\\s*(?:skip|todo)\\s*:\\s*(?:true\\b|[\'"`])|@pytest\\.mark\\.skip\\b|\\bt\\.Skip(?:f|Now)?\\s*\\(',
+    '|\\{\\s*(?:skip|todo)\\s*:(?!\\s*[-+]?(?:\\d[\\d_]*\\.?[\\d_]*|\\.\\d+)\\s*[,}])|@pytest\\.mark\\.skip\\b|\\bt\\.Skip(?:f|Now)?\\s*\\(',
   'g',
 )
 export const testSkipLine = (line) => matchesOutsideStrings(TEST_SKIP_LINE, line)
