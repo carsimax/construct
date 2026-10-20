@@ -719,3 +719,12 @@ Push and PR creation remain the user's decision.
     - heredoc bodies are scanned as commands (`git commit -F - <<EOF` mentioning `.env` may be denied; `-m` works);
     - `**/*key*` is denied;
     - secrets outside the list (`~/.netrc`, `~/.npmrc`, `~/.kube/config`, `~/.docker/config.json`, `.envrc`).
+- **RDD on slice 13** (`--base-ref 00eb957`, 745 lines):
+  - `odd-assess` said `medium`. The parent escalated with item 2 (security guard) → `high`.
+  - The user granted consent.
+  - Lenses `review-risk` and `review-reliability`, lineage `review-15478f8525622d1c`: **approved**, then acknowledged.
+  - Advisory findings tracked as follow-ups. F11–F13 are real bypasses, and all four are fixed in slice 14:
+    - **F11 (R1-002):** `echo .env | xargs cat` reads the file, because `echo`/`printf` arguments are data and each pipeline stage is evaluated separately. Data piped into `xargs`, `sh`, `bash`, or `source` must be checked as paths.
+    - **F12 (R3):** `grep -f .env target` takes `.env` as the pattern. Pattern-file flags (`grep -f`/`--file`, `rg -f`/`--file`) take a path value that must be checked.
+    - **F13 (R1-001):** `-T`/`-t` are shared in `ARG_FLAGS`, but take no value in GNU grep (`--initial-tab`) or ag (`--all-text`). This mis-assigns the pattern. Flag arity must be per command.
+    - **F14 (R3):** a malformed glob such as `[z-a]` throws in `segmentRegex`, and the catch allows unless keywords match. An invalid glob must be treated conservatively: deny when any segment could still match a protected name (a literal fallback), and never fail open on a glob error.
