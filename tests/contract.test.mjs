@@ -94,6 +94,20 @@ test('SubagentStart gives worker agents the subagent contract', () => {
   }
 })
 
+test('SubagentStart carries the S2 engineering rules for writers', () => {
+  const text = context('subagent', { hook_event_name: 'SubagentStart', agent_type: 'construct:odd-worker' }).additionalContext
+  assert.match(text, /never weaken a verifier/i)
+  assert.match(text, /suppress an error, widen a type, skip a test, or delete an assertion/)
+  assert.match(text, /root cause/i)
+  assert.match(text, /reproduce a bug before/i)
+  assert.match(text, /not needed.*already in the codebase.*standard library or platform.*installed dependency.*minimum new code/s)
+  assert.match(text, /no dependency for a few lines/i)
+  assert.match(text, /match the surrounding code/i)
+  assert.ok(text.includes('`shortcut: <the limit>, <when to upgrade>`'))
+  assert.match(text, /review your own diff as if someone else wrote it/i)
+  assert.match(text, /missing test is a finding/i)
+})
+
 test('SubagentStart injects nothing into agents that must return a single JSON object', () => {
   for (const agent of ['construct:review-risk', 'construct:review-refuter', 'construct:review-validator', 'construct:jd-judge-a', 'construct:jd-judge-b', 'review-risk', 'jd-judge-b']) {
     const { code, stdout } = run('subagent', { hook_event_name: 'SubagentStart', agent_type: agent })
