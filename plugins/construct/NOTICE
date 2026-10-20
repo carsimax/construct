@@ -54,6 +54,9 @@ Adapted material:
 - skills/judgment-day/references/decision-mode.md (skills/judgment-day/SKILL.md
   itself comes from the Gentle AI material above)
 - skills/rdd-review/references/security-checklist.md
+- agents/review-risk.md (the Checklist section)
+- evals/debugging-fires/**, evals/debugging-stays-quiet/** (adapted from the
+  upstream evals/plugin)
 - agents/odd-verify.md (the Definition of Done section)
 - skills/odd-workflow/references/testing.md (the stack discovery and Floor
   sections)

@@ -21,8 +21,10 @@ Print the deterministic risk tier of a candidate change.
   --json               print the construct.review-assessment/v1 JSON object
 
 Signals that make a change high include verifier_weakening: an added suppression
-comment (@ts-ignore, eslint-disable, # noqa, # type: ignore, //nolint) in source,
-or an added skip or focus marker (.skip(, .only(, xit(, t.Skip() in a test file.
+(@ts-ignore, @ts-expect-error, @ts-nocheck, eslint-disable, # noqa, # type: ignore,
+//nolint) in a source or test file, or an added skip/focus marker (.skip(, .only(,
+xit(, xdescribe(, test.todo(, { skip: } / { todo: }, @pytest.mark.skip, t.Skip()
+in a test file.
 `
 
 const OPTIONS = {

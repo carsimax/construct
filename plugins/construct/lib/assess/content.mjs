@@ -22,8 +22,8 @@ export const PROCESS_SPAWN_LINE = new RegExp(
 // not a decision.
 export const PERMISSION_DECISION_LINE = /(^|[^A-Za-z0-9_$])permissionDecision([^A-Za-z0-9_$]|$)/
 
-// Verifier weakening: an added suppression comment in source, or an added skip/focus marker in
-// a test file. A suppression is a comment, so it is matched where a comment opens (start of line
+// Verifier weakening: an added suppression comment in a source or test file, or an added
+// skip/focus marker in a test file. A suppression is a comment, so it is matched where a comment opens (start of line
 // or after whitespace/punctuation, never inside a quote). shortcut: a marker spelled across two
 // lines or built from a string is not seen, upgrade with a per-language tokenizer.
 const OPENER = '(?:^|[\\s;{}),])'
@@ -39,7 +39,7 @@ export function suppressionLine(path, line) {
   return false
 }
 export const TEST_SKIP_LINE =
-  /(?:^|[^\w.$])(?:(?:test|it|describe|context|suite)\.(?:skip|only|todo)\s*\(|x(?:it|describe|test)\s*\()|\{\s*(?:skip|todo)\s*:|@pytest\.mark\.skip\b|\bt\.Skip(?:f|Now)?\s*\(/
+  /(?:^|[^\w.$])(?:(?:test|it|describe|context|suite)(?:\.\w+)*\.(?:skip|only|todo)(?:\s*\(|\.)|x(?:it|describe|test)\s*\()|\{\s*(?:skip|todo)\s*:|@pytest\.mark\.skip\b|\bt\.Skip(?:f|Now)?\s*\(/
 const isSemanticSourcePath = (path) => SEMANTIC_SOURCE_EXTENSIONS.has(asciiLower(goExt(path)))
 
 const reason = (code, signal, path) => ({ code, signal, path })
@@ -51,9 +51,11 @@ const isRiskItemScanEligible = (stat) =>
   isContentScanEligible(stat) ||
   (isInspectableStat(stat) && !hasExcludedRiskSegment(stat.path) && isRiskItemContentPath(stat.path))
 
-// processBoundaryRiskReasons scans eligible non-test files: an interpreter
-// directive anywhere in a candidate file, and added lines that spawn a process,
-// set a hook permission decision, or call a dangerous sink. Both trees count toward the byte budget.
+// processBoundaryRiskReasons scans eligible files. Non-test files get every rule: an interpreter
+// directive anywhere in a candidate file, and added lines that spawn a process, set a hook
+// permission decision, or call a dangerous sink; both trees of those count toward the byte budget.
+// Test files are read only through their added lines (suppressions and skip/focus markers), so
+// their whole-file sizes are not budgeted; their diff stays bounded by the same output limit.
 export function processBoundaryRiskReasons(root, baseTree, candidateTree, stats) {
   // Test files join the scan only for verifier weakening; every other rule skips them below.
   const paths = stats.filter((stat) => isRiskItemScanEligible(stat)).map((stat) => stat.path)
@@ -62,7 +64,7 @@ export function processBoundaryRiskReasons(root, baseTree, candidateTree, stats)
   const reasons = []
   let scanned = 0
   for (const tree of [baseTree, candidateTree]) {
-    const blobs = treeBlobSizes(root, tree, paths)
+    const blobs = nonTest.size === 0 ? [] : treeBlobSizes(root, tree, [...nonTest])
     const treePaths = []
     for (const blob of blobs) {
       scanned += blob.size
@@ -128,7 +130,7 @@ export function processBoundaryRiskReasons(root, baseTree, candidateTree, stats)
         const isTest = !nonTest.has(currentPath)
         if (!weakSeen && isSemanticSourcePath(currentPath)) {
           // Suppressions are comments, so they ignore the comment-only skip; skips are code.
-          if (isTest ? code && TEST_SKIP_LINE.test(added) : suppressionLine(currentPath, added)) {
+          if (suppressionLine(currentPath, added) || (isTest && code && TEST_SKIP_LINE.test(added))) {
             reasons.push(reason('verifier_weakening', 'verifier_weakening', currentPath))
             weakSeen = true
           }

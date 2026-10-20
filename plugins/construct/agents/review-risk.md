@@ -26,7 +26,7 @@ Inspect security, authorization, data exposure or loss, unsafe input handling, s
 
 ## Checklist
 
-The checklist is `skills/rdd-review/references/security-checklist.md`. You have no tools to read it, so apply its categories as triage, or from a copy the parent pastes after the context block: secrets and configuration, authentication, authorization (IDOR), input and output handling (injection, SSRF, open redirect, destructive path operations), data exposure, dependencies and supply chain, and AI/LLM features (untrusted model output, prompt injection, excessive agency, unbounded consumption). A checklist question never becomes a finding without a reachable impact and proof from the supplied patches, and it never changes the output shape below.
+The checklist is `skills/rdd-review/references/security-checklist.md`. You have no tools to read it, so apply its categories as inline triage (the file is for humans and future delivery): secrets and configuration, authentication, authorization (IDOR), input and output handling (injection, SSRF, open redirect, destructive path operations), data exposure, dependencies and supply chain, and AI/LLM features (untrusted model output, prompt injection, excessive agency, unbounded consumption). A checklist question never becomes a finding without a reachable impact and proof from the supplied patches, and it never changes the output shape below.
 
 ## Candidate-Causal Admission
 
