@@ -18,7 +18,7 @@ Objective: <one line>. Branch: <feature branch>. Delivery strategy: <ask-on-risk
 
 | ID | Specs | Task | Route | Risk | Status | Commit |
 |---|---|---|---|---|---|---|
-| T1 | S1 | <one line> | inline | none | pending | — |
+| T1 | S1 | <one line> | odd-worker | none | pending | — |
 
 ## Log
 
@@ -34,7 +34,7 @@ Objective: <one line>. Branch: <feature branch>. Delivery strategy: <ask-on-risk
   - Never reword those fragments, and never add unrequested requirements.
   - Mark assumptions as assumptions.
 - **Tasks.**
-  - Give each task a stable ID, its linked `S#`, its route (inline or delegated, with the trigger evidence when delegated), its status, and its commit or RED/GREEN evidence.
+  - Give each task a stable ID, its linked `S#`, its route (`odd-worker`, and which units launch together), its status, and its commit or RED/GREEN evidence.
   - Plan about 400 authored changed lines per task as a heuristic only. It is not a cap, a stop, or a reason to split artificially.
 - **Log.**
   - `L1` is the original request, verbatim.

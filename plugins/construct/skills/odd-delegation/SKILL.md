@@ -13,9 +13,9 @@ Load this skill before launching any subagent for ODD work, or when deciding whe
 
 ## Hard Rules
 
-- The parent orchestrates and works inline by default. Delegate only for a named reason. Size, file count, a large task, or a price ratio is never a reason by itself.
-- A trigger holds only when its condition truly holds. When one holds, delegating is mandatory; continuing inline past it is a routing defect.
-- When in doubt, work inline.
+- The parent orchestrates and never writes code. Every write to repository code, tests, or docs goes to `construct:odd-worker`, whatever the size. The parent writes only the feature document and its engram mirror, and owns git.
+- Reads, explanations, planning, and read-only requests stay with the parent unless the mapping trigger holds.
+- A trigger holds only when its condition truly holds. When one holds, delegating is mandatory; writing code inline or continuing inline past a trigger is a routing defect.
 - Never pass these rules to child agents as permission to orchestrate. Children do not delegate.
 - Each role's model and effort come from the plugin configuration. The routing mod applies them, so prompts never choose a model.
 - Never delegate a writer without `## Allowed edit surfaces`. Never ask the human to author paths in free text.
@@ -24,12 +24,11 @@ Load this skill before launching any subagent for ODD work, or when deciding whe
 
 | Trigger | Condition | Agent |
 |---|---|---|
-| Evidence budget | Decide or verify within one parallel batch (at most 3 calls, about 10k tokens) | none: inline |
+| Evidence budget | Decide or verify within one parallel batch (at most 3 calls, about 10k tokens) | none: the parent reads |
 | Mapping | Needs more evidence than one batch, or more than about 5 sequential lookups | `construct:odd-explorer` (one), then re-evaluate task size |
-| Writer | (a) two or more independent units of behavior with disjoint edit surfaces, each several files or about 100+ lines, launched together; or (b) the long-session backstop (about 150k parent tokens) | `construct:odd-worker`, one per unit |
+| Writer | Any authorized write to repository code, tests, or docs | `construct:odd-worker`, one per unit; disjoint units launched together, dependent units one after another |
 | Verification | The change's Risk line names a high-risk item, after its own checks | `construct:odd-verify` (one) |
 | Per action | Long suites, builds, installs, broad research | `construct:odd-general` |
-| Small independent changes | Several, each about 100 lines or less | none: inline, one after another |
 
 A unit is one independent piece of behavior with its code, tests, and docs together. Never split one behavior into separate test, docs, and code writers. A delivery that depends on another is not independent.
 

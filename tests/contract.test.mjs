@@ -67,6 +67,19 @@ test('the session contract carries the ODD protocol, task size, risk line, and d
   }
 })
 
+test('code writes go to the worker while reads and answers stay with the parent', () => {
+  const text = context('session', SESSION).additionalContext
+  assert.ok(text.includes('Every write to repository code, tests, or docs goes to `construct:odd-worker`'))
+  assert.ok(!text.includes('works inline by default'))
+  const delegation = readFileSync(join(pluginRoot, 'skills/odd-delegation/SKILL.md'), 'utf8')
+  assert.ok(delegation.includes('Every write to repository code, tests, or docs goes to `construct:odd-worker`'))
+  assert.ok(!delegation.includes('When in doubt, work inline.'))
+  const sizing = readFileSync(join(pluginRoot, 'skills/task-size-risk/SKILL.md'), 'utf8')
+  assert.ok(!sizing.includes('No feature document, worker, or verifier'))
+  const grader = readFileSync(join(pluginRoot, 'evals/small-delegated/graders/worker-delegated.md'), 'utf8')
+  assert.match(grader, /tool: Agent\nmin: 1/)
+})
+
 test('SubagentStart gives worker agents the subagent contract', () => {
   for (const agent of ['construct:odd-worker', 'construct:odd-explorer', 'general-purpose']) {
     const out = context('subagent', { hook_event_name: 'SubagentStart', agent_type: agent })
