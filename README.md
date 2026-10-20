@@ -21,14 +21,14 @@ The installer checks the requirements above and stops before changing anything i
 
 - Installs the engram binary through Homebrew when it is missing, and runs `engram setup claude-code`.
 - Adds the engram and construct marketplaces and installs `construct@construct`.
-- Installs the CodeGraph CLI and registers the codegraph and context7 MCP servers. If `npm install -g` fails, it warns, skips both servers, and continues.
+- Installs the CodeGraph CLI and registers the codegraph MCP server. If `npm install -g` fails, it warns, skips the server, and continues.
 - Merges into `~/.claude/settings.json`: `theme: "custom:construct:construct"` and the `permissions.allow` rules `mcp__engram` and `mcp__plugin_engram_engram`. An empty `settings.json` counts as `{}`. Other keys stay as they are, a symlinked file is written through to its target with its mode kept, and the previous file is saved as `settings.json.bak-<timestamp>`.
 
 Every step is skipped when it is already done, so running the installer again changes nothing. It never changes other permissions or your permission mode. A `theme` in `~/.claude/settings.local.json` still overrides the merged value. The output style needs no setting: the plugin forces `Neutral`, and an `outputStyle` you already have stays in the file but has no effect while construct is enabled.
 
 | Option | Meaning |
 |---|---|
-| `--no-mcp` | Skip the CodeGraph CLI and the codegraph and context7 MCP servers |
+| `--no-mcp` | Skip the CodeGraph CLI and the codegraph MCP server |
 | `--force` | Replace an existing `theme`. Without it, a different value stays and the installer prints a warning |
 
 Pass options after `bash -s --`, for example `curl -fsSL <url> | bash -s -- --no-mcp`. To read the script before running it:
@@ -65,7 +65,7 @@ The manual steps the installer runs, for when you want to run them yourself:
 
    The install output ends with `(+ 1 dependency: engram)` when engram was not installed yet.
 
-4. Optional: install the CodeGraph CLI and register the codegraph and context7 MCP servers (see [MCP servers](#mcp-servers)).
+4. Optional: install the CodeGraph CLI and register the codegraph MCP server (see [MCP servers](#mcp-servers)).
 
 5. Inside Claude Code:
 
@@ -114,12 +114,11 @@ After a compaction or a resume, a second `SessionStart` hook (matcher `compact|r
 
 ## MCP servers
 
-The plugin ships no MCP servers, so it never duplicates servers you already registered (duplicates would load every tool twice). The agents and the `codegraph` skill expect these user-scope servers. Install the CodeGraph CLI, then register both servers once:
+The plugin ships no MCP servers, so it never duplicates servers you already registered (duplicates would load every tool twice). The agents and the `codegraph` skill expect this user-scope server. Install the CodeGraph CLI, then register the server once:
 
 ```bash
 npm install -g @colbymchenry/codegraph
 claude mcp add-json --scope user codegraph '{"type":"stdio","command":"codegraph","args":["serve","--mcp"],"alwaysLoad":true}'
-claude mcp add --scope user context7 -- npx -y --package=@upstash/context7-mcp@2.2.5 -- context7-mcp
 ```
 
 `alwaysLoad: true` keeps `codegraph_explore` loaded from the first prompt instead of deferred behind tool search (`claude mcp add` has no flag for it, hence `add-json`). To skip permission prompts, add `"mcp__codegraph__*"` to `permissions.allow` in `~/.claude/settings.json`. Indexing stays your decision: agents never run `codegraph init`, so run `codegraph init` in each project you want indexed, or opt in to automatic indexing with the plugin option `codegraph_auto_index` (boolean, default `false`). When it is on and a session starts in a git root with no `.codegraph/` and `codegraph` on the PATH, the SessionStart hook launches `codegraph init --yes <root>` detached in the background on a fresh startup only (it never waits), says the launch was requested and may still fail, and tells the agent to use file tools until `codegraph status` reports the index complete; on resume, clear, or compact it never relaunches and gives the manual notice, noting an earlier automatic init may have failed; with the CLI missing, the notice says so. An optional `codegraph.json` at the repo root tunes the index (`exclude`, `include`, `deprioritize`). The MCP server auto-syncs on file changes and exposes only `codegraph_explore`.

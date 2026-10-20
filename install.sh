@@ -1,6 +1,6 @@
 #!/bin/bash
 # Construct installer: sets up engram, the Construct plugin, the optional
-# codegraph and context7 MCP servers, and merges the Construct settings into
+# codegraph MCP server, and merges the Construct settings into
 # ~/.claude/settings.json. Safe to run again; a second run changes nothing.
 #
 #   curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v0.1.0/install.sh | bash
@@ -16,7 +16,6 @@ ENGRAM_REPO=Gentleman-Programming/engram
 CONSTRUCT_REPO=carsimax/construct
 CONSTRUCT_PLUGIN=construct@construct
 CODEGRAPH_PACKAGE=@colbymchenry/codegraph
-CONTEXT7_PACKAGE=@upstash/context7-mcp@2.2.5
 
 INSTALLED=""
 SKIPPED=""
@@ -26,7 +25,7 @@ usage() {
   cat <<'EOF'
 Usage: install.sh [--no-mcp] [--force]
 
-  --no-mcp  Skip the codegraph CLI and the codegraph and context7 MCP servers.
+  --no-mcp  Skip the codegraph CLI and the codegraph MCP server.
   --force   Replace an existing theme in ~/.claude/settings.json.
 EOF
 }
@@ -152,7 +151,7 @@ add_mcp() {
 
 setup_mcp() {
   if [ "$WITH_MCP" = 0 ]; then
-    skipped "codegraph and context7 MCP servers (--no-mcp)"
+    skipped "codegraph MCP server (--no-mcp)"
     return
   fi
   if has codegraph; then
@@ -161,13 +160,12 @@ setup_mcp() {
     say "Installing the codegraph CLI"
     # Optional: a failure here must not stop the settings merge that follows.
     if ! run npm install -g "$CODEGRAPH_PACKAGE"; then
-      warn "npm install -g $CODEGRAPH_PACKAGE failed, so the codegraph and context7 MCP servers were skipped; fix npm's global prefix and rerun, or rerun with --no-mcp"
+      warn "npm install -g $CODEGRAPH_PACKAGE failed, so the codegraph MCP server was skipped; fix npm's global prefix and rerun, or rerun with --no-mcp"
       return
     fi
     installed "codegraph CLI"
   fi
   add_mcp codegraph codegraph serve --mcp
-  add_mcp context7 npx -y "--package=$CONTEXT7_PACKAGE" -- context7-mcp
 }
 
 # settings_tool MODE: "check" only validates ~/.claude/settings.json; "merge"

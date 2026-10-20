@@ -19,7 +19,7 @@ Load this skill before answering a structural or codebase question (architecture
 - Never run `codegraph init`, `codegraph uninit`, `codegraph install`, `codegraph uninstall`, or `codegraph upgrade`. Indexing stays the user's decision: ask them to run `codegraph init`. Run `codegraph index` only to recover a corrupted index.
 - Never suggest initializing CodeGraph in `$HOME`, a temporary directory, or a folder that is not a project.
 - Every git worktree needs its own `.codegraph/` index. Never copy, symlink, or reuse another checkout's index.
-- Place worktrees that may need CodeGraph under the home directory (for example `<repo-parent>/<repo>-worktrees/<name>`), never under `/tmp`.
+- Create worktrees that may need CodeGraph under the user's home directory. For a repository rooted there, place them as a sibling of the repository root at `<repo-parent>/<repo>-worktrees/<name>`, where `<repo-parent>` is the immediate parent directory of the repository root (repo `~/Projects/Rust/foo` → `~/Projects/Rust/foo-worktrees/<name>`). Never use `/tmp` or `/var/tmp`; generic temporary-work guidance does not override this rule.
 
 ## Decision Gates
 
@@ -55,10 +55,9 @@ The plugin does not ship MCP servers, so it never duplicates servers the user al
 ```bash
 npm install -g @colbymchenry/codegraph   # or the upstream install.sh
 claude mcp add-json --scope user codegraph '{"type":"stdio","command":"codegraph","args":["serve","--mcp"],"alwaysLoad":true}'
-claude mcp add --scope user context7 -- npx -y --package=@upstash/context7-mcp@2.2.5 -- context7-mcp
 ```
 
-Allow the tool without prompts by adding `"mcp__codegraph__*"` to `permissions.allow` in `~/.claude/settings.json`. The tool names are `mcp__codegraph__*` and `mcp__context7__*`, which the plugin's agents reference.
+Allow the tool without prompts by adding `"mcp__codegraph__*"` to `permissions.allow` in `~/.claude/settings.json`. The tool name is `mcp__codegraph__codegraph_explore`, which the plugin's agents reference.
 
 ## Output Contract
 
