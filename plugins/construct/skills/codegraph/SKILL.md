@@ -14,10 +14,10 @@ Load this skill before answering a structural or codebase question (architecture
 ## Hard Rules
 
 - Use CodeGraph before broad Read, Glob, or Grep exploration for structural questions.
-- Prefer the `mcp__codegraph__codegraph_explore` MCP tool. It returns the relevant source, call paths, and blast radius in one call.
+- Prefer the `mcp__codegraph__codegraph_explore` MCP tool. It returns the relevant source, call paths, and blast radius in one call. It is the only CodeGraph tool the MCP server exposes (others stay unlisted unless `CODEGRAPH_MCP_TOOLS` is set).
 - Without the MCP tool, use the upstream CLI's read-only commands: `codegraph status`, `codegraph query`, `codegraph explore`, `codegraph node`, `codegraph files`, `codegraph callers`, `codegraph callees`, `codegraph impact`, `codegraph affected`.
-- Never run `codegraph uninit`, `codegraph install`, `codegraph uninstall`, or `codegraph upgrade`. Run `codegraph index` only to recover a corrupted index.
-- Never initialize CodeGraph in `$HOME`, a temporary directory, or a folder that is not a project.
+- Never run `codegraph init`, `codegraph uninit`, `codegraph install`, `codegraph uninstall`, or `codegraph upgrade`. Indexing stays the user's decision: ask them to run `codegraph init`. Run `codegraph index` only to recover a corrupted index.
+- Never suggest initializing CodeGraph in `$HOME`, a temporary directory, or a folder that is not a project.
 - Every git worktree needs its own `.codegraph/` index. Never copy, symlink, or reuse another checkout's index.
 - Place worktrees that may need CodeGraph under the home directory (for example `<repo-parent>/<repo>-worktrees/<name>`), never under `/tmp`.
 
@@ -25,30 +25,40 @@ Load this skill before answering a structural or codebase question (architecture
 
 | Situation | Action |
 |---|---|
-| `<project-root>/.codegraph/` exists | Use the MCP tool, or run `codegraph sync -q <project-root>` before CLI reads |
-| `.codegraph/` missing in a real git project | Run `codegraph init <project-root>` once, then continue |
-| Target directory is not a git root | Do not initialize; explain that `git -C <dir> init` would be needed and fall back to file tools |
+| `<project-root>/.codegraph/` exists | Use the MCP tool, or the CLI read commands. Run `codegraph sync -q <project-root>` only when the staleness banner or results show a stale index |
+| `.codegraph/` missing in a real git project | Do not initialize. Ask the user to run `! codegraph init <project-root>`, and use file tools meanwhile |
+| Target directory is not a git root | Do not suggest init; explain that `git -C <dir> init` would be needed and fall back to file tools |
+| Index looks stale (banner after edits) | Run `codegraph sync -q <project-root>` once, then retry |
 | `codegraph sync` fails | Do not trust the existing index; say so and fall back to file tools |
 | MCP tool and CLI both unavailable | Fall back to Read, Glob, and Grep, and say why |
 
 ## Execution Steps
 
-1. Resolve the project root. For an existing repository use `git rev-parse --show-toplevel`. For initialization, the agent's working directory is authoritative; never replace it with an enclosing repository.
+1. Resolve the project root. For an existing repository use `git rev-parse --show-toplevel`; otherwise the agent's working directory is authoritative.
 2. Check for `<project-root>/.codegraph/` before any broad file exploration.
-3. Initialize when missing (see Decision Gates), then query.
-4. For CLI reads, run `codegraph sync -q <project-root>` first, including after edits. The MCP server syncs only while its file watcher is running.
+3. If it is missing, ask the user to run `codegraph init` (see Decision Gates) and continue with file tools.
+4. Query. The MCP server and its daemon watch files and auto-sync (2 s debounce); results carry a staleness banner after edits. Sync manually only when that banner or the results show staleness.
 5. Answer from the returned source and call paths, citing `path:line`.
+
+## Index scope
+
+A `codegraph.json` at the repo root tunes what gets indexed (the user edits it; the agent only suggests):
+
+- `exclude`: gitignore-style patterns that drop committed vendored or generated directories.
+- `include`: forces gitignored source into the index.
+- `deprioritize`: stays indexed but ranks lower in results (for example `scripts/`).
 
 ## Setup
 
-The plugin does not ship MCP servers, so it never duplicates servers the user already registered. Register them once at user scope:
+The plugin does not ship MCP servers, so it never duplicates servers the user already registered. Install the CLI, then register once at user scope. CodeGraph needs `alwaysLoad: true` so `codegraph_explore` is available from the first prompt instead of deferred behind tool search. `claude mcp add` has no such flag, so use `add-json` (or edit `~/.claude.json`):
 
 ```bash
-claude mcp add --scope user codegraph -- codegraph serve --mcp
+npm install -g @colbymchenry/codegraph   # or the upstream install.sh
+claude mcp add-json --scope user codegraph '{"type":"stdio","command":"codegraph","args":["serve","--mcp"],"alwaysLoad":true}'
 claude mcp add --scope user context7 -- npx -y --package=@upstash/context7-mcp@2.2.5 -- context7-mcp
 ```
 
-The tool names are then `mcp__codegraph__*` and `mcp__context7__*`, which the plugin's agents reference.
+Allow the tool without prompts by adding `"mcp__codegraph__*"` to `permissions.allow` in `~/.claude/settings.json`. The tool names are `mcp__codegraph__*` and `mcp__context7__*`, which the plugin's agents reference.
 
 ## Output Contract
 

@@ -118,9 +118,11 @@ The plugin ships no MCP servers, so it never duplicates servers you already regi
 
 ```bash
 npm install -g @colbymchenry/codegraph
-claude mcp add --scope user codegraph -- codegraph serve --mcp
+claude mcp add-json --scope user codegraph '{"type":"stdio","command":"codegraph","args":["serve","--mcp"],"alwaysLoad":true}'
 claude mcp add --scope user context7 -- npx -y --package=@upstash/context7-mcp@2.2.5 -- context7-mcp
 ```
+
+`alwaysLoad: true` keeps `codegraph_explore` loaded from the first prompt instead of deferred behind tool search (`claude mcp add` has no flag for it, hence `add-json`). To skip permission prompts, add `"mcp__codegraph__*"` to `permissions.allow` in `~/.claude/settings.json`. Indexing stays your decision: agents never run `codegraph init`, so run `codegraph init` in each project you want indexed. An optional `codegraph.json` at the repo root tunes the index (`exclude`, `include`, `deprioritize`). The MCP server auto-syncs on file changes and exposes only `codegraph_explore`.
 
 Engram's MCP server comes from `engram setup claude-code` (see Quick path).
 
