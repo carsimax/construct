@@ -14,11 +14,13 @@ Branch `feat/force-output-style`, baseline `3a67768` (main).
 | ID | Specs | Task | Route | Risk | Status | Commit |
 |---|---|---|---|---|---|---|
 | T1 | S1, S2, S4 | Frontmatter, band style, `tests/styles.test.mjs`, README | inline | 3 | done | see L2 |
-| T2 | S3, S4 | `install.sh` merge, `tests/install/install.test.mjs`, README | inline | 5 | pending | |
+| T2 | S3, S4 | `install.sh` merge, `tests/install/install.test.mjs`, README | inline | 5 | done | see L4 |
 
 Route evidence: two small sequential units; no Writer trigger. Risk item 3: changes the style every existing user gets. Item 5: installer.
 
 ## Log
 
 - **L1 (2026-10-20, user):** "si apliquemos asi" — force the style, update installer and README.
-- **L2 (2026-10-20):** T1 done. RED: `tests/styles.test.mjs` failed on the missing `force-for-plugin`. GREEN after the frontmatter line. The band style is now the constant `construct:Neutral` in `collect` (`hooks/register.js`); `collect` has no unit test, so S2 rests on review (risk item 6). README drops the `/config` output style step.
+- **L2 (2026-10-20):** T1 done. RED: `tests/styles.test.mjs` failed on the missing `force-for-plugin`. GREEN after the frontmatter line. The band style is now the constant `construct:Neutral` in `collect` (`hooks/register.js`);  README drops the `/config` output style step.
+- **L3 (2026-10-20):** Correction to L2: `collect` is covered by the mod tests. `claude plugin test plugins/construct` failed 2 of 36 after T1 (`✎ Neutral` expected from settings; `✎` expected absent without settings). Tests now set `outputStyle: 'Explanatory'` and expect `✎ construct:Neutral` without `Explanatory`; the absent-style assertion is dropped because the style is always known. 36 pass. Commit `0de7f10`.
+- **L4 (2026-10-20):** T2 done. RED: 3 of 12 installer tests failed (two merges still wrote `outputStyle`, the warning test still named it). GREEN after `WANT` keeps only `theme` and the usage text drops `outputStyle`. `node --test tests/`: 557 pass; mod tests 36 pass; `claude plugin validate plugins/construct` passed. Existing users who already have `outputStyle` keep it in the file; it has no effect while construct is enabled.

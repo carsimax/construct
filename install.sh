@@ -27,7 +27,7 @@ usage() {
 Usage: install.sh [--no-mcp] [--force]
 
   --no-mcp  Skip the codegraph CLI and the codegraph and context7 MCP servers.
-  --force   Replace an existing theme or outputStyle in ~/.claude/settings.json.
+  --force   Replace an existing theme in ~/.claude/settings.json.
 EOF
 }
 
@@ -162,7 +162,7 @@ settings_tool() {
 const fs = require('node:fs')
 const path = require('node:path')
 const [mode, file, force] = process.argv.slice(2)
-const WANT = { theme: 'custom:construct:construct', outputStyle: 'construct:Neutral' }
+const WANT = { theme: 'custom:construct:construct' }
 const ALLOW = ['mcp__engram', 'mcp__plugin_engram_engram']
 
 let text = null

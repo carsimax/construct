@@ -22,14 +22,14 @@ The installer checks the requirements above and stops before changing anything i
 - Installs the engram binary through Homebrew when it is missing, and runs `engram setup claude-code`.
 - Adds the engram and construct marketplaces and installs `construct@construct`.
 - Installs the CodeGraph CLI and registers the codegraph and context7 MCP servers. If `npm install -g` fails, it warns, skips both servers, and continues.
-- Merges into `~/.claude/settings.json`: `theme: "custom:construct:construct"`, `outputStyle: "construct:Neutral"`, and the `permissions.allow` rules `mcp__engram` and `mcp__plugin_engram_engram`. Other keys stay as they are, a symlinked file is written through to its target with its mode kept, and the previous file is saved as `settings.json.bak-<timestamp>`.
+- Merges into `~/.claude/settings.json`: `theme: "custom:construct:construct"` and the `permissions.allow` rules `mcp__engram` and `mcp__plugin_engram_engram`. Other keys stay as they are, a symlinked file is written through to its target with its mode kept, and the previous file is saved as `settings.json.bak-<timestamp>`.
 
-Every step is skipped when it is already done, so running the installer again changes nothing. It never changes other permissions or your permission mode. A `theme` or `outputStyle` in `~/.claude/settings.local.json` still overrides the merged value.
+Every step is skipped when it is already done, so running the installer again changes nothing. It never changes other permissions or your permission mode. A `theme` in `~/.claude/settings.local.json` still overrides the merged value. The output style needs no setting: the plugin forces `Neutral`, and an `outputStyle` you already have stays in the file but has no effect while construct is enabled.
 
 | Option | Meaning |
 |---|---|
 | `--no-mcp` | Skip the CodeGraph CLI and the codegraph and context7 MCP servers |
-| `--force` | Replace an existing `theme` or `outputStyle`. Without it, a different value stays and the installer prints a warning |
+| `--force` | Replace an existing `theme`. Without it, a different value stays and the installer prints a warning |
 
 Pass options after `bash -s --`, for example `curl -fsSL <url> | bash -s -- --no-mcp`. To read the script before running it:
 
