@@ -1,6 +1,6 @@
 // Shared helpers for the command hooks: hook input from stdin and the plugin
 // data directory they keep small per-session state in.
-import { lstatSync, mkdirSync, readFileSync } from 'node:fs'
+import { lstatSync, mkdirSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -38,3 +38,31 @@ export const safeName = (value) => String(value || 'unknown').replace(/[^A-Za-z0
 // pendingFile is where review-context.mjs records the lineage of a spawned
 // review lens and review-capture.mjs finds it at SubagentStop.
 export const pendingFile = (session, agent) => join(dataDir(), 'review-hooks', safeName(session), `${safeName(agent)}.json`)
+
+// SUBAGENT_MAX_IDLE_MS is one hour, shorter than OPEN_LINEAGE_MAX_IDLE_MS (lib/review/store.mjs) because workers run minutes: an
+// open-agent entry older than this belongs to a crashed agent and is ignored.
+export const SUBAGENT_MAX_IDLE_MS = 3600 * 1000
+
+// subagentDir holds one file per open subagent of a session (written by
+// subagent-count.mjs). One file per agent means parallel starts and stops never
+// share a read-modify-write, so no update is lost.
+export const subagentDir = (session) => join(dataDir(), 'subagent-count', safeName(session))
+
+// hasOpenSubagents is true when the session has a subagent that started and has
+// not stopped within SUBAGENT_MAX_IDLE_MS. Missing or unreadable state is false,
+// so the Stop gates run as they would without the counter.
+export function hasOpenSubagents(session, now = Date.now()) {
+  try {
+    const dir = subagentDir(session)
+    return readdirSync(dir).some((name) => {
+      if (name.startsWith('.')) return false
+      try {
+        return now - statSync(join(dir, name)).mtimeMs <= SUBAGENT_MAX_IDLE_MS
+      } catch {
+        return false
+      }
+    })
+  } catch {
+    return false
+  }
+}

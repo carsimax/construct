@@ -4,7 +4,7 @@
 // Usage: node review-gate.mjs   (hook JSON on stdin: session_id, cwd, stop_hook_active)
 import { mkdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { dataDir, readInput, safeName } from './hook-io.mjs'
+import { dataDir, hasOpenSubagents, readInput, safeName } from './hook-io.mjs'
 
 const MAX_REASONS = 3
 
@@ -30,6 +30,9 @@ function readReminders(file) {
 async function main() {
   const input = readInput()
   if (!input || input.stop_hook_active === true || typeof input.cwd !== 'string') return
+  // Subagents may still be writing: every byte they change is a new target, so
+  // wait and let the first Stop after they finish run the check.
+  if (hasOpenSubagents(input.session_id)) return
 
   const [{ repositoryRoot, createIsolation, freezeWorkingTree, resolveTree }, { assessSnapshotRisk }, { publicReasons, publicRisk },
     { targetOf }, { receiptExists, atomicWrite, openLineageTargets }, { readMode }, { headCommit, reviewBoundary }] = await Promise.all([
