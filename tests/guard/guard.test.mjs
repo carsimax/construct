@@ -393,3 +393,32 @@ test('F14: a malformed glob never fails open', () => {
   assertAllow(call('Glob', { pattern: 'src/[z-a].ts' }))
   assertAllow(call('Glob', { pattern: 'src/[a-z].ts' }))
 })
+
+test('S8a: heredoc bodies are data unless an interpreter runs them', () => {
+  // data heredocs that only mention a protected name
+  assertAllow(bash('cat > .gitignore <<EOF\nnode_modules\n.env\nEOF'))
+  assertAllow(bash("cat >> .gitignore <<'EOF'\n.env\n*.log\nEOF"))
+  assertAllow(bash("git commit -F - <<'EOF'\nchore: ignore\n.env\nEOF"))
+  assertAllow(bash('cat > notes.md <<"EOF"\n.env\nEOF'))
+  assertAllow(bash('cat > notes.md <<-EOF\n\t.env\n\tEOF'))
+  assertAllow(bash('cat > notes.md <<EOF\n.env\nEOF\nls'))
+  // the line that opens the heredoc is still checked
+  assertDeny(bash('cat .env <<EOF\nhello\nEOF'))
+  assertDeny(bash('cat > .env <<EOF\nKEY=1\nEOF'))
+  assertDeny(bash("cat <<'EOF' > .env\nKEY=1\nEOF"))
+  // commands after the heredoc are still checked
+  assertDeny(bash('cat > a.txt <<EOF\nx\nEOF\ncat .env'))
+  // a heredoc fed to an interpreter is executed, so its body is checked
+  assertDeny(bash("bash <<'EOF'\ncat .env\nEOF"))
+  assertDeny(bash('sh <<EOF\ncat .env\nEOF'))
+  assertDeny(bash("sudo zsh <<'EOF'\ncat .env\nEOF"))
+  assertDeny(bash("source /dev/stdin <<'EOF'\ncat .env\nEOF"))
+  assertDeny(bash("cat <<'EOF' | bash\ncat .env\nEOF"))
+  assertAllow(bash("bash <<'EOF'\nls\nEOF"))
+  // an unquoted delimiter expands substitutions even for a data command
+  assertDeny(bash('cat > a.txt <<EOF\n$(cat .env)\nEOF'))
+  assertDeny(bash('cat > a.txt <<EOF\n`cat .env`\nEOF'))
+  assertAllow(bash("cat > a.txt <<'EOF'\n$(cat .env)\nEOF"))
+  // without a terminator nothing is proven to be data
+  assertDeny(bash('cat > a.txt <<EOF\ncat .env'))
+})

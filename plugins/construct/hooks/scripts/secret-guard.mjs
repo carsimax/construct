@@ -94,8 +94,16 @@ function globRule(glob) {
 // splitCommands is a small shell-word splitter: quotes and backslashes group a word,
 // unquoted ; | & ( ) ` newline end a command, and < > are dropped as separators so
 // `cat <.env` yields the word `.env`. Each returned word keeps whether it was quoted.
+//
+// Heredocs (`<<W`, `<<'W'`, `<<"W"`, `<<-W`): the body lines after the opening line
+// are data, not commands, so they are skipped here and attached to every command of
+// the opening line as `heredoc: [{ text, expands }]`; bashVerdict decides what to do
+// with them. The opening line itself is split and checked as usual. A heredoc with no
+// terminator line is not proven to be data, so its lines stay ordinary commands.
 function splitCommands(input) {
   const commands = []
+  let pending = []
+  let lineStart = 0
   let words = []
   let cur = ''
   let has = false
@@ -139,6 +147,14 @@ function splitCommands(input) {
       endWord()
     } else if (';|&()`\n'.includes(c)) {
       endCommand()
+      if (c === '\n') {
+        if (pending.length) {
+          const last = takeHeredocs(input, i, pending, commands, lineStart)
+          if (last >= 0) i = last
+        }
+        pending = []
+        lineStart = commands.length
+      }
       // `|` and `|&` feed the next command; `||` does not.
       if (c === '|') {
         if (input[i + 1] === '|') i++
@@ -153,6 +169,10 @@ function splitCommands(input) {
       // Operators: >> >| >&N <<EOF; a here-string (<<<) takes data, not a file.
       const op = /^(<<<|<<-?|>>|>\||>&[0-9-]*|<&[0-9-]*|[<>])/.exec(input.slice(i))[0]
       i += op.length - 1
+      if (op === '<<' || op === '<<-') {
+        const d = /^[ \t]*(?:'([^']*)'|"([^"]*)"|((?:\\.|[^\s;|&()<>'"])+))/.exec(input.slice(i + 1))
+        if (d) pending.push({ word: d[1] ?? d[2] ?? d[3].replace(/\\(.)/g, '$1'), strip: op === '<<-', expands: d[3] !== undefined })
+      }
       redir = op !== '<<<' && !/&[0-9-]*$/.test(op) || /^[<>]&$/.test(op)
     } else {
       cur += c
@@ -161,6 +181,32 @@ function splitCommands(input) {
   }
   endCommand()
   return commands
+}
+
+// takeHeredocs consumes the bodies of the heredocs opened on the current line. `nl` is
+// the index of the newline that ends it. It returns the index of the last consumed
+// character, or -1 (nothing consumed) when a terminator line is missing.
+function takeHeredocs(input, nl, pending, commands, lineStart) {
+  let pos = nl + 1
+  const bodies = []
+  for (const { word, strip, expands } of pending) {
+    const lines = []
+    let found = false
+    while (pos <= input.length) {
+      const end = input.indexOf('\n', pos)
+      const line = input.slice(pos, end === -1 ? input.length : end)
+      pos = end === -1 ? input.length + 1 : end + 1
+      if ((strip ? line.replace(/^\t+/, '') : line) === word) {
+        found = true
+        break
+      }
+      lines.push(line)
+    }
+    if (!found) return -1
+    bodies.push({ text: lines.join('\n'), expands })
+  }
+  for (const c of commands.slice(lineStart)) c.heredoc = bodies
+  return pos - 1
 }
 
 function isRootOrHome(target, cwd) {
@@ -275,6 +321,30 @@ function pipedWordsVerdict(upstream, cwd, depth) {
   return null
 }
 
+// Interpreters that execute a heredoc body (or a script fed on stdin) rather than store it.
+const HEREDOC_RUNNERS = new Set([...STDIN_READERS, ...Object.keys(INTERPRETERS), 'awk', 'gawk', 'osascript', 'php', 'lua', 'sqlite3', 'ssh', 'su'])
+
+// heredocVerdict decides what a heredoc body means. Conservative rule: the body is data
+// (cat, tee, git commit -F -, ...) unless a word up to the command name is an
+// interpreter, in which case it is executed and checked as shell text (plus its quoted
+// literals, for python -c style bodies). Even for data, an unquoted delimiter lets bash
+// expand $(...) and backticks inside the body, so those are checked as commands.
+function heredocVerdict(bodies, head, cwd, depth) {
+  const runs = head.some((w) => HEREDOC_RUNNERS.has(basename(w)))
+  for (const { text, expands } of bodies) {
+    if (runs) {
+      const verdict = bashVerdict(text, cwd, depth + 1) ?? literalRule(text, cwd)
+      if (verdict) return verdict
+    } else if (expands) {
+      for (const m of text.matchAll(/\$\(([^)]*)\)|`([^`]*)`/g)) {
+        const verdict = bashVerdict(m[1] ?? m[2], cwd, depth + 1)
+        if (verdict) return verdict
+      }
+    }
+  }
+  return null
+}
+
 function bashVerdict(command, cwd, depth = 0) {
   let upstream = []
   for (const words of splitCommands(command)) {
@@ -287,6 +357,10 @@ function bashVerdict(command, cwd, depth = 0) {
     if (!words.piped) upstream = []
     if (upstream.length && texts.slice(0, ci + 1).some((w) => STDIN_READERS.has(basename(w)))) {
       const verdict = pipedWordsVerdict(upstream, cwd, depth)
+      if (verdict) return verdict
+    }
+    if (words.heredoc && depth < 3) {
+      const verdict = heredocVerdict(words.heredoc, texts.slice(0, ci + 1), cwd, depth)
       if (verdict) return verdict
     }
     if (DATA_COMMANDS.has(cmd)) upstream = words.filter((w, i) => i > ci && !w.r).map((w) => w.t)
