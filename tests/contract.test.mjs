@@ -1,24 +1,27 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 const pluginRoot = new URL('../plugins/construct/', import.meta.url).pathname
 const script = join(pluginRoot, 'hooks/scripts/contract.mjs')
 
-function run(kind, input) {
-  const res = spawnSync('node', [script, kind], {
+function run(kind, input, extraEnv = {}) {
+  const base = { ...process.env, CLAUDE_PLUGIN_ROOT: pluginRoot }
+  // The auto-index option must default off, whatever the developer's shell exports
+  delete base.CLAUDE_PLUGIN_OPTION_CODEGRAPH_AUTO_INDEX
+  const res = spawnSync(process.execPath, [script, kind], {
     input: typeof input === 'string' ? input : JSON.stringify(input),
     encoding: 'utf8',
-    env: { ...process.env, CLAUDE_PLUGIN_ROOT: pluginRoot },
+    env: { ...base, ...extraEnv },
   })
   return { code: res.status, stdout: res.stdout, stderr: res.stderr }
 }
 
-function context(kind, input) {
-  const { code, stdout } = run(kind, input)
+function context(kind, input, extraEnv) {
+  const { code, stdout } = run(kind, input, extraEnv)
   assert.equal(code, 0)
   const out = JSON.parse(stdout)
   return out.hookSpecificOutput
@@ -186,4 +189,104 @@ test('SubagentStart never carries the index notice and names the CodeGraph rule'
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
+})
+
+// S5: opt-in background indexing through a fake `codegraph` CLI that records its argv
+function fakeCli() {
+  const bin = mkdtempSync(join(tmpdir(), 'construct-fakebin-'))
+  const marker = join(bin, 'marker.txt')
+  const exe = join(bin, 'codegraph')
+  writeFileSync(exe, `#!/bin/sh\nprintf '%s|%s' "$*" "$(pwd -P)" > "${marker}"\n`, { mode: 0o755 })
+  return { bin, marker }
+}
+
+function waitFor(path, ms = 2000) {
+  const end = Date.now() + ms
+  while (Date.now() < end) {
+    if (existsSync(path)) return true
+    spawnSync('sleep', ['0.05'])
+  }
+  return existsSync(path)
+}
+
+function autoEnv(bin, value = 'true') {
+  return { CLAUDE_PLUGIN_OPTION_CODEGRAPH_AUTO_INDEX: value, PATH: `${bin}:${process.env.PATH}` }
+}
+
+test('auto-index on: a git root without an index launches codegraph init --yes detached and says so', () => {
+  const dir = project('.git')
+  const { bin, marker } = fakeCli()
+  try {
+    const t0 = Date.now()
+    const text = context('session', { ...SESSION, cwd: dir }, autoEnv(bin)).additionalContext
+    assert.ok(Date.now() - t0 < 5000)
+    assert.ok(text.includes('indexing started in the background'))
+    assert.ok(text.includes('file tools'))
+    assert.ok(!text.includes('! codegraph init'))
+    assert.ok(waitFor(marker), 'fake codegraph never ran')
+    const [argv, cwd] = readFileSync(marker, 'utf8').split('|')
+    assert.equal(argv, `init --yes ${dir}`)
+    assert.equal(cwd, realpathSync(dir))
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+    rmSync(bin, { recursive: true, force: true })
+  }
+})
+
+test('auto-index off or unset: the S2 notice is unchanged and nothing is spawned', () => {
+  const dir = project('.git')
+  const { bin, marker } = fakeCli()
+  try {
+    const baseline = context('session', { ...SESSION, cwd: dir }).additionalContext
+    for (const value of ['false', '', undefined]) {
+      const env = autoEnv(bin, value)
+      if (value === undefined) delete env.CLAUDE_PLUGIN_OPTION_CODEGRAPH_AUTO_INDEX
+      assert.equal(context('session', { ...SESSION, cwd: dir }, env).additionalContext, baseline)
+    }
+    assert.ok(baseline.includes(`! codegraph init ${dir}`))
+    spawnSync('sleep', ['0.5'])
+    assert.ok(!existsSync(marker))
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+    rmSync(bin, { recursive: true, force: true })
+  }
+})
+
+test('auto-index on never spawns with an existing index, outside a git root, or for subagents', () => {
+  const indexed = project('.git', '.codegraph')
+  const bare = project()
+  const git = project('.git')
+  const { bin, marker } = fakeCli()
+  try {
+    const env = autoEnv(bin)
+    assert.ok(!context('session', { ...SESSION, cwd: indexed }, env).additionalContext.includes('CodeGraph:'))
+    assert.ok(!context('session', { ...SESSION, cwd: bare }, env).additionalContext.includes('CodeGraph:'))
+    context('subagent', { hook_event_name: 'SubagentStart', agent_type: 'construct:odd-worker', cwd: git }, env)
+    spawnSync('sleep', ['0.5'])
+    assert.ok(!existsSync(marker))
+  } finally {
+    for (const d of [indexed, bare, git, bin]) rmSync(d, { recursive: true, force: true })
+  }
+})
+
+test('auto-index on with the CLI missing keeps the fallback guidance and names the PATH problem', () => {
+  const dir = project('.git')
+  const empty = mkdtempSync(join(tmpdir(), 'construct-emptybin-'))
+  try {
+    const res = run('session', { ...SESSION, cwd: dir }, { CLAUDE_PLUGIN_OPTION_CODEGRAPH_AUTO_INDEX: 'true', PATH: empty })
+    assert.equal(res.code, 0)
+    const text = JSON.parse(res.stdout).hookSpecificOutput.additionalContext
+    assert.ok(text.includes('`codegraph` CLI is not on the PATH'))
+    assert.ok(text.includes('file tools'))
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+    rmSync(empty, { recursive: true, force: true })
+  }
+})
+
+test('plugin.json declares codegraph_auto_index as a boolean defaulting to false', () => {
+  const cfg = JSON.parse(readFileSync(join(pluginRoot, '.claude-plugin/plugin.json'), 'utf8')).userConfig
+  assert.equal(cfg.codegraph_auto_index?.type, 'boolean')
+  assert.equal(cfg.codegraph_auto_index?.default, false)
+  assert.ok(cfg.codegraph_auto_index.title && cfg.codegraph_auto_index.description)
 })

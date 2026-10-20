@@ -53,10 +53,13 @@ test('userConfig declares model and effort options whose defaults match each age
     assert.ok(cfg[`model_${role}`].options.includes(model))
     assert.ok(cfg[`effort_${role}`].options.includes('default'))
   }
-  // The panel's switch is the one key that is not a model or effort option
+  // The panel's switch is a key that is not a model or effort option
   assert.equal(cfg.panel_open_on_start?.type, 'boolean')
   assert.equal(cfg.panel_open_on_start?.default, true)
-  assert.equal(Object.keys(cfg).length, Object.keys(S6).length * 2 + 1)
+  // The CodeGraph auto-index switch is the other non-model/effort key (S5)
+  assert.equal(cfg.codegraph_auto_index?.type, 'boolean')
+  assert.equal(cfg.codegraph_auto_index?.default, false)
+  assert.equal(Object.keys(cfg).length, Object.keys(S6).length * 2 + 2)
 })
 
 test('no plugin agent references gentle-ai or a non-existent engram tool prefix', () => {

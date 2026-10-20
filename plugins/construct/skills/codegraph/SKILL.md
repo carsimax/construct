@@ -26,7 +26,7 @@ Load this skill before answering a structural or codebase question (architecture
 | Situation | Action |
 |---|---|
 | `<project-root>/.codegraph/` exists | Use the MCP tool, or the CLI read commands. Run `codegraph sync -q <project-root>` only when the staleness banner or results show a stale index |
-| `.codegraph/` missing in a real git project | Do not initialize. Ask the user to run `! codegraph init <project-root>`, and use file tools meanwhile |
+| `.codegraph/` missing in a real git project | Do not initialize. Ask the user to run `! codegraph init <project-root>`, and use file tools meanwhile. If the session notice says indexing started in the background (the user's opt-in `codegraph_auto_index` option), do not run init either: use file tools until `.codegraph/` appears |
 | Target directory is not a git root | Do not suggest init; explain that `git -C <dir> init` would be needed and fall back to file tools |
 | Index looks stale (banner after edits) | Run `codegraph sync -q <project-root>` once, then retry |
 | `codegraph sync` fails | Do not trust the existing index; say so and fall back to file tools |
