@@ -478,3 +478,24 @@ test('T16: process substitution on or around a heredoc opener hides the receiver
   assertDeny(bash("cat <<'EOF' && bash\n.env\nEOF"))
   assertAllow(bash("cat <<'EOF' > notes.md\n.env\nEOF"))
 })
+
+test('T19: keywords like `.`, source, exec, eval count only as the command word', () => {
+  // a `.` path argument is not the dot builtin, so the data heredoc stays data
+  assertAllow(bash("git add . && git commit -F - <<'EOF'\nfix: ignore .env\nEOF"))
+  assertAllow(bash("cd . && cat > .gitignore <<'EOF'\nnode_modules\n.env\nEOF"))
+  assertAllow(bash("ls . ; git commit -F - <<'EOF'\nfix: ignore .env\nEOF"))
+  // the same keywords in command position still make the body shell text
+  const body = 'cat .env'
+  const denied = [
+    `cat > x.sh <<'EOF'\n${body}\nEOF\n. ./x.sh`,
+    `cat > x <<'EOF'\n${body}\nEOF\n. x`,
+    `cat > x <<'EOF'\n${body}\nEOF\nsource x`,
+    `cat <<'EOF'\n${body}\nEOF\nexec bash`,
+    `cat <<'EOF'\n${body}\nEOF\neval "$x"`,
+    `alias cat=bash; cat <<EOF\n${body}\nEOF`,
+    `f(){ bash; }; cat <<'EOF'\n${body}\nEOF`,
+    `x=1 . ./x.sh; cat <<'EOF'\n${body}\nEOF`,
+    `coproc cat <<'EOF'\n${body}\nEOF`,
+  ]
+  for (const c of denied) assertDeny(bash(c))
+})
