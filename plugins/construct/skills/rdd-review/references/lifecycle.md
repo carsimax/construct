@@ -45,6 +45,6 @@ A refusal `target_already_acknowledged` means this exact target already has a re
 - Only the frozen trees are evidence. Reviewers never read the live worktree.
 - The correction is bounded in size by the transaction; stay inside the corroborated findings.
 - Only blocking findings (BLOCKER or CRITICAL, introduced by the candidate) hold a review. Other findings are advisory follow-ups.
-- Per-session Stop gate reminders do not change any of this; they only trigger the due check. The gate stays silent for a target with an open lineage.
+- Per-session Stop gate reminders do not change any of this; they only trigger the due check. The gate stays silent for a target with an open lineage that changed state in the last six hours.
 - Normalize first: formatters and rewriting hooks run before `start`. A byte, path, or mode change after `start` is a new candidate.
 - A review agent launched without a lineage id is denied by the PreToolUse hook; one whose context `odd-review` refuses is denied with that refusal.

@@ -5,7 +5,7 @@ import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { applyFiles, captureAll, commitAll, git, highRepo, makeRepo, review, scratchDir, start } from '../review/helpers.mjs'
+import { applyFiles, captureAll, commitAll, git, highRepo, makeRepo, readTransaction, review, scratchDir, start, transactionFile } from '../review/helpers.mjs'
 
 const PLUGIN = new URL('../../plugins/construct/', import.meta.url).pathname
 const GATE = join(PLUGIN, 'hooks/scripts/review-gate.mjs')
@@ -222,6 +222,15 @@ describe('blocking', () => {
     commitAll(repo, 'work')
     start(repo, { args: ['--base-ref', root, '--committed-only'] })
     silent(gate(repo, env()))
+  })
+
+  test('an open lineage idle for more than six hours no longer silences the gate', () => {
+    const repo = highRepo()
+    const txn = start(repo)
+    const stored = readTransaction(repo, txn.lineage)
+    stored.history = stored.history.map((entry) => ({ ...entry, at: new Date(Date.now() - 7 * 3600 * 1000).toISOString() }))
+    writeFileSync(transactionFile(repo, txn.lineage), JSON.stringify(stored))
+    assert.equal(gate(repo, env()).json.decision, 'block')
   })
 
   test('a lineage for an older target does not silence a changed one', () => {
