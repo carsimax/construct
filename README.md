@@ -69,7 +69,6 @@ The manual steps the installer runs, for when you want to run them yourself:
 
 5. Inside Claude Code:
 
-   - `/config` → **Output style** → `Neutral` (the plugin's style).
    - `/theme` → **Construct** (the Matrix theme).
    - Optionally, in `/config`, set each role's model and effort (rows such as `ODD Worker model`).
 
@@ -107,7 +106,7 @@ A plugin cannot ship a `CLAUDE.md`, so Construct loads its rules in three layers
 | Session contract | `SessionStart` hook (startup, resume, clear, compact) | ODD protocol, task size, high-risk list, Risk line, and delegation triggers, under 8,000 characters |
 | Subagent contract | `SubagentStart` hook | Artifact language, edit surfaces, scratch, and the `## Key Learnings` closing block. JSON-only reviewers (`review-*`, `jd-judge-*`) get nothing |
 | Skills | Loaded on demand | `odd-workflow`, `odd-delegation`, `task-size-risk`, `lossless-prompts` |
-| Output style | `/config` → Output style → `Neutral` | Reply tone, language, response length, verification, and working rules (no AI attribution in commits, one question at a time) |
+| Output style | Forced by the plugin (`force-for-plugin`), in every project | Reply tone, language, response length, verification, and working rules (no AI attribution in commits, one question at a time) |
 
 The contract texts live in `plugins/construct/hooks/contract/`.
 
@@ -288,7 +287,7 @@ Every line opens with a phosphor mark `▌`, and segments are joined by a faint 
 
 - The model is the id `$.session.model()` returns, not a display name.
 - Effort is the one seen on the main thread's last request, so it appears after the first turn.
-- Output style and agent come from your settings (`outputStyle`, `agent`), not from a flag.
+- The output style is the plugin's forced `construct:Neutral`; the agent comes from your settings (`agent`), not from a flag.
 - The worktree name comes from git.
 - Resets and meters are omitted when the figure is missing, for example off a subscription.
 

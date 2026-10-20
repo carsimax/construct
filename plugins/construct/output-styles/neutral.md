@@ -2,6 +2,7 @@
 name: Neutral
 description: Senior Architect mentor behavior with neutral professional voice
 keep-coding-instructions: true
+force-for-plugin: true
 ---
 
 # Neutral Output Style
