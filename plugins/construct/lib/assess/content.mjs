@@ -3,7 +3,7 @@
 // bounded; an over-budget scan fails closed into a process_scan_limit reason.
 import { GitOutputLimitError, batchLiteralPathspecs, git, grepInterpreterDirective, prefixLengthOf, stripLiteral, treeBlobSizes } from './git.mjs'
 import { SCAN_BYTE_LIMIT } from './passive.mjs'
-import { PRIVATE_KEY_HEADER, contentRiskItemReason, hasDestructiveSql, hasTokenLine, isRiskItemContentPath, isSqlPath, isTokenDotfilePath } from './items.mjs'
+import { PRIVATE_KEY_HEADER, contentRiskItemReason, hasDestructiveSql, hasTokenLine, isItemEvidencePath, isRiskItemContentPath, isSqlPath, isTokenDotfilePath } from './items.mjs'
 import { dangerousSinkLine, isCommentOnlySourceLine } from './sinks.mjs'
 import { SEMANTIC_SOURCE_EXTENSIONS, asciiLower, canonicalRiskReasons, goExt, isContentScanEligible, isInspectableStat, hasExcludedRiskSegment, isTestRiskPath } from './signals.mjs'
 
@@ -84,7 +84,7 @@ export function processBoundaryRiskReasons(root, baseTree, candidateTree, stats)
     let tokenSeen = false
     let sqlLines = []
     const flushSql = () => {
-      if (currentPath !== '' && isSqlPath(currentPath) && hasDestructiveSql(sqlLines)) {
+      if (currentPath !== '' && isSqlPath(currentPath) && isItemEvidencePath(currentPath) && hasDestructiveSql(sqlLines)) {
         reasons.push(contentRiskItemReason('destructive_sql', currentPath))
       }
       sqlLines = []
@@ -102,11 +102,11 @@ export function processBoundaryRiskReasons(root, baseTree, candidateTree, stats)
       } else if (inHunk && line.length > 0 && line[0] === '+') {
         const added = line.slice(1)
         const code = !isCommentOnlySourceLine(currentPath, added)
-        if (!keySeen && PRIVATE_KEY_HEADER.test(added)) {
+        if (!keySeen && PRIVATE_KEY_HEADER.test(added) && isItemEvidencePath(currentPath)) {
           reasons.push(contentRiskItemReason('private_key_content', currentPath))
           keySeen = true
         }
-        if (!tokenSeen && isTokenDotfilePath(currentPath) && code && hasTokenLine(added)) {
+        if (!tokenSeen && isTokenDotfilePath(currentPath) && isItemEvidencePath(currentPath) && code && hasTokenLine(added)) {
           reasons.push(contentRiskItemReason('credential_file', currentPath))
           tokenSeen = true
         }

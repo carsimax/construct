@@ -5,7 +5,7 @@
 // destructive SQL) are applied by content.mjs through the helpers below.
 // Tests, fixtures, and docs directories are never evidence: they only exercise
 // or describe these files. Binary files still count, since a key is often binary.
-import { asciiLower, goBase, goExt, hasExcludedRiskSegment, isTestRiskPath } from './signals.mjs'
+import { JS_TS_EXTENSIONS, asciiLower, goBase, goExt, hasExcludedRiskSegment, isTestRiskPath } from './signals.mjs'
 import { isGeneratedGoldenPath } from './stats.mjs'
 
 // item is the high-risk item number (the labels are HIGH_RISK_ITEMS in escalation.mjs).
@@ -13,10 +13,20 @@ const reason = (code, signal, item, path) => ({ code, signal, item, path })
 
 const DOCUMENT_EXTENSIONS = ['.md', '.mdx', '.rst', '.adoc']
 
-const MIGRATION_DIRECTORIES = ['migrations', 'migration', 'migrate']
+const MIGRATION_DIRECTORIES = ['migrations', 'migration']
+// Inside a migration directory only code, SQL, and tool configs count; a text
+// or document file there (upgrade notes, .txt, .rst, .adoc, .md) is prose.
+const MIGRATION_EXTENSIONS = [
+  '.sql', '.py', '.rb', ...JS_TS_EXTENSIONS, '.go', '.php', '.java', '.kt', '.kts', '.cs', '.ex', '.exs',
+  '.yaml', '.yml', '.json', '.xml',
+]
+// Plain test directories are never evidence for these item rules. The wider
+// isTestRiskPath is left alone because other classifier rules rely on it.
+const TEST_DIRECTORIES = ['test', 'tests', 'spec']
 const FLYWAY_NAME = /^[vur]\d+(?:[._]\d+)*__.+\.sql$/
 
 const KEY_BASENAME = /^id_(?:rsa|dsa|ecdsa|ed25519)(?:_.+)?$/
+const PUBLIC_KEY_EXTENSION = '.pub'
 const KEY_EXTENSIONS = ['.pem', '.key', '.p12', '.pfx', '.jks', '.keystore', '.ppk']
 const CREDENTIAL_BASENAMES = ['credentials.json', 'service-account.json']
 
@@ -33,15 +43,22 @@ export const TOKEN_DOTFILES = ['.npmrc', '.pypirc']
 const TOKEN_LINE = /(?:_authToken|_auth|_password|password|token)\s*=/i
 export const PRIVATE_KEY_HEADER = /-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY-----/
 
-const isSourceOfEvidence = (path) => !isGeneratedGoldenPath(path) && !isTestRiskPath(path) && !hasExcludedRiskSegment(path)
+const inTestDirectory = (path) => asciiLower(path).split('/').slice(0, -1).some((segment) => TEST_DIRECTORIES.includes(segment))
+
+// isItemEvidencePath: tests, test directories, docs, fixtures, and goldens never count.
+export const isItemEvidencePath = (path) =>
+  !isGeneratedGoldenPath(path) && !isTestRiskPath(path) && !hasExcludedRiskSegment(path) && !inTestDirectory(path)
 
 export function isMigrationPath(path) {
   const segments = asciiLower(path).split('/')
   const base = segments[segments.length - 1]
   if (DOCUMENT_EXTENSIONS.includes(goExt(base))) return false
   if (FLYWAY_NAME.test(base)) return true
+  if (!MIGRATION_EXTENSIONS.includes(goExt(base))) return false
   const dirs = segments.slice(0, -1)
   if (dirs.some((segment) => MIGRATION_DIRECTORIES.includes(segment))) return true
+  // Rails keeps migrations in db/migrate; a bare migrate directory is a CLI command.
+  if (dirs.some((segment, index) => segment === 'db' && dirs[index + 1] === 'migrate')) return true
   // Alembic keeps revisions in <env>/versions next to env.py.
   return dirs.some((segment, index) => segment === 'alembic' && dirs[index + 1] === 'versions')
 }
@@ -49,6 +66,7 @@ export function isMigrationPath(path) {
 // keyOrCredentialCode names a private key or credential file by path alone.
 export function keyOrCredentialCode(path) {
   const base = asciiLower(goBase(path))
+  if (goExt(base) === PUBLIC_KEY_EXTENSION) return null
   if (KEY_BASENAME.test(base) || KEY_EXTENSIONS.includes(goExt(base))) return 'private_key'
   if (CREDENTIAL_BASENAMES.includes(base)) return 'credential_file'
   if (base === 'credentials' && asciiLower(path).split('/').includes('.aws')) return 'credential_file'
@@ -74,7 +92,7 @@ export function isGitHookPath(path) {
 
 // pathRiskItemReasons: one reason per matching rule for one changed path.
 export function pathRiskItemReasons(path) {
-  if (!isSourceOfEvidence(path)) return []
+  if (!isItemEvidencePath(path)) return []
   const reasons = []
   if (isMigrationPath(path)) reasons.push(reason('database_migration', 'data_loss', 1, path))
   const keyCode = keyOrCredentialCode(path)

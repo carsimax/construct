@@ -48,6 +48,10 @@ const HIGH = [
   ['.husky directory', {}, { '.husky/pre-push': 'npm test\n' }, ['git_hook:.husky/pre-push']],
   ['lefthook.yml', {}, { 'lefthook.yml': 'pre-commit:\n' }, ['git_hook:lefthook.yml']],
   ['.pre-commit-config.yaml', {}, { '.pre-commit-config.yaml': 'repos: []\n' }, ['git_hook:.pre-commit-config.yaml']],
+  ['id_ed25519_work (suffix) is still a private key', {}, { 'deploy/id_ed25519_work': 'secret\n' }, ['private_key:deploy/id_ed25519_work']],
+  ['plain migrations/ .sql', {}, { 'migrations/0001.sql': DDL }, ['database_migration:migrations/0001.sql']],
+  ['migrations/ .py', {}, { 'migrations/0002_add.py': 'x = 1\n' }, ['database_migration:migrations/0002_add.py']],
+  ['db/migrate .rb', {}, { 'db/migrate/001.rb': 'class A; end\n' }, ['database_migration:db/migrate/001.rb']],
   ['a deleted lockfile still counts', { 'yarn.lock': 'a\n' }, { 'yarn.lock': null }, ['dependency_manifest:yarn.lock']],
 ]
 
@@ -91,6 +95,14 @@ describe('items 1, 2, 5 negatives keep their earlier tier', () => {
     ['a SQL comment naming DROP TABLE is not a statement', {}, { 'sql/seed.sql': '-- never DROP TABLE here\nINSERT INTO t VALUES (1);\n' }, 'medium', ['executable_change:sql/seed.sql']],
     ['a .sql under docs is excluded', {}, { 'docs/sql/drop.sql': 'DROP TABLE a;\n' }, 'medium', ['executable_change:docs/sql/drop.sql']],
     ['a public key is not a private key', {}, { 'keys/id_rsa.pub': 'ssh-rsa AAAA\n' }, 'medium', ['executable_change:keys/id_rsa.pub']],
+    ['a public key with a suffix is not a private key', {}, { 'deploy/id_ed25519_work.pub': 'ssh-ed25519 AAAA\n' }, 'medium', ['executable_change:deploy/id_ed25519_work.pub']],
+    ['a migrate directory outside db/ is not a migration', {}, { 'src/commands/migrate/index.js': 'export const a = 1\n' }, 'medium', ['executable_change:src/commands/migrate/index.js']],
+    ['a text file in a migrations directory is not a migration', {}, { 'guide/migrations/upgrade-v2.txt': 'Upgrade notes\n' }, 'medium', ['executable_change:guide/migrations/upgrade-v2.txt']],
+    ['an .rst file in a migrations directory is not a migration', {}, { 'guide/migrations/notes.rst': 'Notes\n' }, 'passive', ['non_executable_only']],
+    ['a test/ migration is test data', {}, { 'test/migrations/0001.sql': DDL }, 'medium', ['executable_change:test/migrations/0001.sql']],
+    ['a spec/ destructive SQL is test data', {}, { 'spec/sql/drop.sql': 'DROP TABLE a;\n' }, 'medium', ['executable_change:spec/sql/drop.sql']],
+    ['a tests/ PEM header is test data', {}, { 'tests/keys.py': `K = \"\"\"${PEM}\"\"\"\n` }, 'medium', ['executable_change:tests/keys.py']],
+    ['a test/ key file is test data', {}, { 'test/server.key': 'x\n' }, 'medium', ['executable_change:test/server.key']],
     ['.npmrc without a token stays medium', {}, { '.npmrc': 'registry=https://registry.example.com/\n' }, 'medium', ['executable_change:.npmrc']],
     ['a PEM public key header is not private', {}, { 'src/pub.py': 'K = """-----BEGIN PUBLIC KEY-----"""\n' }, 'medium', ['executable_change:src/pub.py']],
     ['a key file in a fixtures directory is test data', {}, { 'tests/fixtures/server.key': 'x\n' }, 'medium', ['executable_change:tests/fixtures/server.key']],
@@ -121,6 +133,11 @@ describe('path predicates', () => {
     assert.equal(isMigrationPath('db/migrate/1.rb'), true)
     assert.equal(isMigrationPath('src/migrations/readme.md'), false)
     assert.equal(isMigrationPath('src/migrate.go'), false)
+    assert.equal(isMigrationPath('src/commands/migrate/index.js'), false)
+    assert.equal(isMigrationPath('guide/migrations/upgrade-v2.txt'), false)
+    assert.equal(isMigrationPath('migrations/0001.sql'), true)
+    assert.equal(isMigrationPath('migrations/0003.ts'), true)
+    assert.equal(isMigrationPath('db/migrate/001.rb'), true)
     assert.equal(isMigrationPath('src/migrations_helper/a.go'), false)
   })
 })
