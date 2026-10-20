@@ -94,8 +94,8 @@ test('a clean machine gets every tool, in order, and the Construct settings', ()
     'claude plugin install construct@construct',
     'npm install -g @colbymchenry/codegraph',
     'claude mcp add --scope user codegraph -- codegraph serve --mcp',
-    'claude mcp add --scope user context7 -- npx -y --package=@upstash/context7-mcp@2.2.5 -- context7-mcp',
   ])
+  assert.ok(!run.calls.some((c) => /context7/.test(c)), 'context7 is never registered')
   assert.deepEqual(readSettings(box), {
     theme: 'custom:construct:construct',
     permissions: { allow: ['mcp__engram', 'mcp__plugin_engram_engram'] },
@@ -184,10 +184,11 @@ test('a second run changes nothing and installs nothing', () => {
   assert.match(second.stdout, /Skipped:/)
 })
 
-test('--no-mcp leaves the MCP servers and the codegraph CLI alone', () => {
+test('--no-mcp leaves the codegraph MCP server and CLI alone', () => {
   const box = sandbox()
   const run = install(box, ['--no-mcp'])
   assert.equal(run.status, 0, run.stderr)
+  assert.match(run.stdout, /codegraph MCP server \(--no-mcp\)/)
   assert.deepEqual(run.calls.filter((c) => /^(npm|claude mcp)/.test(c)), [])
 })
 
