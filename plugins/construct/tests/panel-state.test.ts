@@ -6,8 +6,13 @@ import {
   isOutsideTasks,
   maskSecrets,
   merge,
+  mainBusy,
   onAgentSpawn,
   onCompact,
+  onMainStep,
+  onPermissionMode,
+  onToolSettle,
+  bucketOf,
   onToolCall,
   onToolCheck,
   onTurnComplete,
@@ -300,4 +305,133 @@ test('odd input never throws', () => {
   expect(agentsView(null as any, NaN)).toEqual({ cards: [], rest: 0, running: 0 })
   expect(isOutsideTasks(5 as any, null as any)).toBe(false)
   expect(maskSecrets(5 as any)).toBe('')
+})
+
+// ---- S3 main vitals ------------------------------------------------------
+
+test('a main turn.step counts requests and keeps the latest model and effort', () => {
+  let s = onMainStep(initialState(), { model: 'opus', effort: 'high' })
+  s = onMainStep(s, { model: 'sonnet', effort: 'low' })
+  expect(s.main).toMatchObject({ steps: 2, model: 'sonnet', effort: 'low' })
+  s = onMainStep(s, { model: 'sonnet', effort: undefined })
+  expect(s.main).toMatchObject({ steps: 3, model: 'sonnet', effort: null })
+  expect(onMainStep(initialState(), { effort: 5 }).main.effort).toBe('5')
+})
+
+test('a subagent step never reaches main vitals', () => {
+  expect(onMainStep(initialState(), { agentId: 'a1', model: 'x' }).main.steps).toBe(0)
+})
+
+test('the permission mode is kept; an empty one leaves it', () => {
+  let s = onPermissionMode(initialState(), { mode: 'acceptEdits' })
+  expect(s.main.mode).toBe('acceptEdits')
+  s = onPermissionMode(s, { mode: undefined })
+  expect(s.main.mode).toBe('acceptEdits')
+  expect(onPermissionMode(s, { mode: 'plan' }).main.mode).toBe('plan')
+})
+
+test('mainBusy is true only while a main receipt is open', () => {
+  expect(mainBusy(initialState())).toBe(false)
+  const open = onTurnStart(initialState(), { turnId: 't', nowMs: 1 })
+  expect(mainBusy(open)).toBe(true)
+  expect(mainBusy(onTurnComplete(open, { turnId: 't', nowMs: 2 }))).toBe(false)
+  expect(mainBusy(null)).toBe(false)
+})
+
+// ---- S6 gate by decider and bucket ---------------------------------------
+
+test('bucketOf sorts tools into file, shell and other', () => {
+  expect(['Read', 'Edit', 'Write', 'NotebookEdit', 'Glob', 'Grep'].map(bucketOf)).toEqual(Array(6).fill('file'))
+  expect(['Bash', 'PowerShell'].map(bucketOf)).toEqual(['shell', 'shell'])
+  expect(['WebFetch', 'mcp__x__y', undefined].map(bucketOf as any)).toEqual(['other', 'other', 'other'])
+})
+
+test('verdicts count per decider and per bucket', () => {
+  let s = initialState()
+  s = onToolCheck(s, { tool: 'Read', decision: 'allow' })
+  s = onToolCheck(s, { tool: 'Bash', decision: 'ask' })
+  s = onToolCheck(s, { tool: 'Bash', decision: 'deny', input: { command: 'rm x' } })
+  s = onToolCheck(s, { tool: 'WebFetch', decision: 'allow', agentId: 'a1' })
+  expect(s.gate.verdicts).toEqual({ rule: 2, ask: 1, cleared: 0, deny: 1 })
+  expect(s.gate.buckets.file).toEqual({ rule: 1, ask: 0, cleared: 0, deny: 0 })
+  expect(s.gate.buckets.shell).toEqual({ rule: 0, ask: 1, cleared: 0, deny: 1 })
+  expect(s.gate.buckets.other).toEqual({ rule: 1, ask: 0, cleared: 0, deny: 0 })
+  // existing cells and counts are unchanged
+  expect(s.gate.counts).toEqual({ allowed: 1, asked: 1, denied: 1, sub: 1 })
+  expect(s.gate.cells).toEqual(['allowed', 'asked', 'denied', 'sub'])
+})
+
+test('a query adds no verdict or bucket count', () => {
+  const s = onToolCheck(initialState(), { tool: 'Read', decision: 'allow', isQuery: true })
+  expect(s.gate.verdicts).toEqual({ rule: 0, ask: 0, cleared: 0, deny: 0 })
+  expect(s.gate.buckets.file.rule).toBe(0)
+})
+
+test('an ask settles as cleared when the call ran and as deny when it did not', () => {
+  let s = onToolCheck(onToolCheck(initialState(), { tool: 'Bash', decision: 'ask' }), { tool: 'Bash', decision: 'ask' })
+  s = onToolSettle(s, { tool: 'Bash', didRun: true })
+  expect(s.gate.verdicts).toMatchObject({ ask: 1, cleared: 1, deny: 0 })
+  s = onToolSettle(s, { tool: 'Bash', didRun: false })
+  expect(s.gate.verdicts).toMatchObject({ ask: 0, cleared: 1, deny: 1 })
+  expect(s.gate.buckets.shell).toEqual({ rule: 0, ask: 0, cleared: 1, deny: 1 })
+  // nothing pending: unchanged
+  expect(onToolSettle(s, { tool: 'Bash', didRun: true })).toEqual(s)
+  expect(onToolSettle(s, { tool: 'Read', didRun: true })).toEqual(s)
+})
+
+test('an ask settles by its call id: a run of another call in the same bucket does not clear it', () => {
+  let s = onToolCheck(initialState(), { tool: 'Bash', decision: 'ask', callId: 'rm1' })
+  s = onToolCheck(s, { tool: 'Bash', decision: 'allow', callId: 'ls1' })
+  s = onToolSettle(s, { tool: 'Bash', didRun: true, callId: 'ls1' })
+  expect(s.gate.verdicts).toMatchObject({ rule: 1, ask: 1, cleared: 0, deny: 0 })
+  expect(s.gate.buckets.shell).toMatchObject({ ask: 1, cleared: 0 })
+  s = onToolSettle(s, { tool: 'Bash', didRun: false, callId: 'rm1' })
+  expect(s.gate.verdicts).toMatchObject({ rule: 1, ask: 0, cleared: 0, deny: 1 })
+  expect(s.gate.buckets.shell).toMatchObject({ ask: 0, deny: 1 })
+  // settled once: a repeat changes nothing
+  expect(onToolSettle(s, { tool: 'Bash', didRun: true, callId: 'rm1' })).toEqual(s)
+})
+
+test('an ask with a call id clears by that id; without an id the bucket fallback still works', () => {
+  let s = onToolCheck(initialState(), { tool: 'Bash', decision: 'ask', callId: 'a' })
+  s = onToolSettle(s, { tool: 'Bash', didRun: true, callId: 'a' })
+  expect(s.gate.verdicts).toMatchObject({ ask: 0, cleared: 1 })
+  s = onToolCheck(s, { tool: 'Bash', decision: 'ask' })
+  s = onToolSettle(s, { tool: 'Bash', didRun: true })
+  expect(s.gate.verdicts).toMatchObject({ ask: 0, cleared: 2 })
+})
+
+test('merge fills the new gate and main sections for a version 1 value', () => {
+  const old: any = { v: 1, agents: [], inline: { count: 1, last: 'a' }, gate: { cells: ['allowed'], counts: { allowed: 1, asked: 0, denied: 0, sub: 0 }, denied: 0, lastDenied: null }, receipt: null, compactions: 2 }
+  const m = merge(old)
+  expect(m.v).toBe(SCHEMA_VERSION)
+  expect(m.inline.count).toBe(1)
+  expect(m.gate.cells).toEqual(['allowed'])
+  expect(m.gate.verdicts).toEqual({ rule: 0, ask: 0, cleared: 0, deny: 0 })
+  expect(m.main).toEqual({ steps: 0, model: null, effort: null, mode: null })
+  expect('log' in m).toBe(false)
+  expect(merge({ ...initialState(), main: 3 })).toEqual(initialState())
+})
+
+
+test('the schema is version 3 and a stored version 2 value keeps its sections but drops the log', () => {
+  expect(SCHEMA_VERSION).toBe(3)
+  expect('log' in initialState()).toBe(false)
+  const v2: any = { ...initialState(), v: 2, compactions: 4, log: [{ atMs: 1, who: 'gate', what: 'x' }], main: { steps: 3, model: 'm', effort: null, mode: null } }
+  const m: any = merge(v2)
+  expect(m.v).toBe(3)
+  expect(m.compactions).toBe(4)
+  expect(m.main.steps).toBe(3)
+  expect('log' in m).toBe(false)
+  expect(merge({ ...v2, log: 'no' }).compactions).toBe(4)
+  expect(merge({ ...initialState(), v: 9 })).toEqual(initialState())
+})
+
+test('spawn, done, denied and inline write no longer touch a log', () => {
+  let s: any = spawn(initialState(), 'a1', { nowMs: 1000 })
+  s = onTurnComplete(s, { agentId: 'a1', nowMs: 66000 })
+  s = onToolCheck(s, { tool: 'Bash', decision: 'deny', input: { command: 'x' }, nowMs: 7 })
+  s = onToolCall(s, { tool: 'Edit', path: '/p/src/a.ts', cwd: '/p', nowMs: 9 })
+  expect('log' in s).toBe(false)
+  expect(s.inline).toEqual({ count: 1, last: '/p/src/a.ts' })
 })

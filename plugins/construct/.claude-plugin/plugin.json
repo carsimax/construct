@@ -1,7 +1,7 @@
 {
   "name": "construct",
   "displayName": "Construct",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Organic Driven Development orchestration, review lenses, and delivery skills for Claude Code",
   "author": {
     "name": "Maximiliano Carsi"
@@ -359,8 +359,8 @@
     "panel_open_on_start": {
       "type": "boolean",
       "title": "Open the Construct panel on start",
-      "description": "Open the docked Construct panel when a session starts; /construct opens it any time",
-      "default": false
+      "description": "Open the docked Construct panel when a session starts (on by default); /construct opens it any time and /construct close closes it",
+      "default": true
     }
   }
 }

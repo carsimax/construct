@@ -1,6 +1,6 @@
 import { atom, read, update } from 'claude-code'
 import { effortFor, modelFor, roleFor } from './routing.js'
-import { buildPanel, buildSummary } from './panel/layout.js'
+import { PANEL_COLUMNS, buildPanel } from './panel/layout.js'
 import {
   SCHEMA_VERSION,
   filePathOf,
@@ -8,26 +8,30 @@ import {
   merge,
   onAgentSpawn,
   onCompact,
+  onMainStep,
+  onPermissionMode,
   onToolCall,
   onToolCheck,
+  onToolSettle,
   onTurnComplete,
   onTurnStart,
   onTurnStep,
 } from './panel/state.js'
 import { activeWork } from './status/tasks.js'
-import { parseAssess, parseBoundary, parseGitStatus, parseMode, parseRevParse, reviewState } from './status/data.js'
+import { parseAssess, parseBoundary, parseGitStatus, parseMode, parseNumstat, parseRevParse, reviewState } from './status/data.js'
 
 // Role of each subagent this session spawned, keyed by agent id, so
 // turn.step can apply the role's effort to that subagent's requests
 const roleByAgent = new Map()
 
-// ---- status band ------------------------------------------------------------
-// What the band shows from outside the session (git, the plugin CLIs, the feature
+// ---- panel data -------------------------------------------------------------
+// What the panel shows from outside the session (git, the plugin CLIs, the feature
 // documents) is read only on session.start and turn.complete and kept here, so a
 // redraw never runs a command. A mod's `$` calls must be written in this file.
 
 const GIT_MS = 3000
 const CLI_MS = 8000
+const MAX_UNTRACKED = 20
 const status = { data: null, effort: null, running: false, again: false }
 
 // ---- panel state ------------------------------------------------------------
@@ -85,6 +89,33 @@ async function runText($, argv, cwd, timeoutMs) {
   }
 }
 
+// Line count of one untracked file: `git diff --no-index --numstat /dev/null <file>`. It exits 1 when the
+// file differs from /dev/null, which is its normal answer, so 0 and 1 both count. A binary file gives
+// `-` (no count); a failure gives null and the panel shows `new`.
+async function untrackedFile($, cwd, path) {
+  try {
+    const r = await $.process.run(['git', '--no-optional-locks', 'diff', '--no-index', '--numstat', '--', '/dev/null', path], { cwd, timeoutMs: GIT_MS })
+    if (r.exitCode !== 0 && r.exitCode !== 1) return { path, added: null, removed: null, untracked: true }
+    const row = parseNumstat(r.stdout)[0]
+    return { path, added: row?.added ?? null, removed: null, binary: row?.binary === true, untracked: true }
+  } catch {
+    return { path, added: null, removed: null, untracked: true }
+  }
+}
+
+// The files changed against HEAD (staged and unstaged, numstat) and the untracked ones from status.
+// Only the first MAX_UNTRACKED untracked files are counted (one short git call each, in parallel);
+// the rest, and any directory entry (`dir/`), show as `new` without a count, so a tree of untracked
+// files never costs more than a bounded number of processes.
+async function collectChanges($, cwd, git, numstatText) {
+  const tracked = parseNumstat(numstatText).map((f) => ({ ...f, untracked: false }))
+  const paths = git?.untracked ?? []
+  const counted = await Promise.all(
+    paths.map((path, i) => (i < MAX_UNTRACKED && !path.endsWith('/') ? untrackedFile($, cwd, path) : { path, added: null, removed: null, untracked: true })),
+  )
+  return [...tracked, ...counted]
+}
+
 async function readDocs($, root) {
   const docs = []
   try {
@@ -120,35 +151,24 @@ async function readRdd($, root) {
   return { mode, state: reviewState([parseAssess(dirty), parseAssess(range)]) }
 }
 
-// Gathers everything the band caches. Each source fails on its own: a gap leaves its segment out.
+// Gathers everything the panel caches. Each source fails on its own: a gap leaves its segment out.
 async function collect($) {
   // The plugin forces its output style, which overrides settings.outputStyle
-  const data = { hasStatusLine: false, style: 'construct:Neutral', agent: null, home: null, git: null, worktree: null, root: null, odd: null, rdd: null }
+  const data = { git: null, changes: [], root: null, odd: null, rdd: null }
   let cwd
   try {
     cwd = await $.session.cwd()
   } catch {
     // no directory known
   }
-  try {
-    const settings = await $.settings.read()
-    data.hasStatusLine = Boolean(settings?.statusLine)
-    data.agent = typeof settings?.agent === 'string' ? settings.agent : null
-  } catch {
-    // settings unreadable: treated as no statusLine
-  }
-  try {
-    data.home = (await $.env.get('HOME')) ?? null
-  } catch {
-    // no home known
-  }
-  const [gitText, revText] = await Promise.all([
+  const [gitText, revText, numstatText] = await Promise.all([
     runText($, ['git', '--no-optional-locks', 'status', '--porcelain=v2', '--branch'], cwd, GIT_MS),
     runText($, ['git', 'rev-parse', '--show-toplevel', '--git-dir', '--git-common-dir'], cwd, GIT_MS),
+    runText($, ['git', '--no-optional-locks', 'diff', '--numstat', '--no-renames', 'HEAD'], cwd, GIT_MS),
   ])
   data.git = parseGitStatus(gitText)
+  data.changes = data.git ? await collectChanges($, cwd, data.git, numstatText) : []
   const rev = parseRevParse(revText)
-  data.worktree = rev?.worktree ?? null
   const root = rev?.root ?? cwd
   data.root = root ?? null
   if (root) {
@@ -169,7 +189,8 @@ async function refresh($) {
   try {
     do {
       status.again = false
-      status.data = await collect($)
+      const next = await collect($)
+      status.data = next
       try {
         await $.ui.invalidate('ui.render')
       } catch {
@@ -209,42 +230,61 @@ async function readLive($) {
   return live
 }
 
-// The one-line summary above the prompt; the panel holds the rest.
-async function drawBand($, e, next) {
-  const data = status.data
-  if (e.props?.hasSurvey || !data) return next(e)
-  const live = await readLive($)
-  const panel = merge(await read($, PANEL))
-  // The context figure belongs to the replica: with a statusLine it would show twice.
-  const tree = buildSummary({ panel, usage: data.hasStatusLine ? null : live.usage, odd: data.odd, rdd: data.rdd, nowMs: live.nowMs })
-  return tree ?? next(e)
+// The engine reads a Client's `module` off this file's source, as a string literal relative to it, so the
+// Client elements are made here (`els.Client`) from the placeholders layout.js leaves ({ type: 'Client',
+// props.module './rail.tsx' | './elapsed.tsx' }). A Client may not sit inside a Text, so a row that holds
+// one becomes a row Box. Only reached when the surface has Client.
+function realize(node, els) {
+  if (!node || typeof node === 'string') return node
+  if (node.type === 'Client') {
+    const { module, ...rest } = node.props ?? {}
+    if (module === './rail.tsx') return els.Client({ ...rest, module: './panel/rail.tsx' })
+    if (module === './elapsed.tsx') return els.Client({ ...rest, module: './panel/elapsed.tsx' })
+    return node
+  }
+  if (!Array.isArray(node.children)) return node
+  const children = node.children.map((k) => realize(k, els))
+  const hasClient = node.type === 'Text' && node.children.some((k) => k?.type === 'Client')
+  return hasClient ? { type: 'Box', props: { flexDirection: 'row' }, children } : { ...node, children }
 }
+
+// The surfaces whose element table declares `Client` (index.d.ts, Elements).
+const CLIENT_SURFACES = ['terminal', 'desktop']
 
 // The docked panel body, drawn only for this plugin's pane (its requestId is the pane id).
 async function drawPane($, e, next) {
   const data = status.data
   if (e.requestId !== PANEL_ID) return next(e)
   const live = await readLive($)
+  let els = null
+  try {
+    // $.ui.resolve completes a table to every element name (index.d.ts, ElementName), so a `Client` key
+    // proves nothing; the surface's own table does (Elements: terminal and desktop declare Client,
+    // vscode and mobile do not). e.surface is what the client declared, a rendering fact.
+    if (CLIENT_SURFACES.includes(e.surface)) els = $.ui.resolve(e)
+  } catch {
+    // no element table: draw static
+  }
   const panel = merge(await read($, PANEL))
-  // The replica fills in for a statusLine the user has not set; with one, it would show everything twice.
-  const replica =
-    data && !data.hasStatusLine
-      ? { usage: live.usage, dir: live.dir, home: data.home, git: data.git, worktree: data.worktree, model: live.model, effort: status.effort, style: data.style, agent: data.agent }
-      : null
   const tree = buildPanel({
     panel,
-    replica,
+    usage: live.usage,
+    model: live.model,
+    effort: status.effort,
+    git: data?.git ?? null,
+    changes: data?.changes ?? [],
     odd: data?.odd ?? null,
     rdd: data?.rdd ?? null,
     nowMs: live.nowMs,
+    client: els !== null,
     columns: e.props?.bodyColumns,
     rows: e.props?.scroll?.bodyRows,
   })
-  return tree ?? next(e)
+  return tree ? (els ? realize(tree, els) : tree) : next(e)
 }
 
 async function openPane($) {
-  return $.ui.open({ id: PANEL_ID, title: 'Construct' })
+  return $.ui.open({ id: PANEL_ID, title: 'Construct', columns: PANEL_COLUMNS })
 }
 
 // /construct opens the pane, /construct close closes it.
@@ -276,6 +316,7 @@ export function register(on, options) {
     const result = await next(model ? { ...e, model } : e)
     if (role && result?.agentId) roleByAgent.set(result.agentId, role)
     await noteSpawn($, e, result, role, options)
+    if (!e.parentAgentId && e.permissionMode) await feed($, (s) => onPermissionMode(s, { mode: e.permissionMode }))
     return result
   })
 
@@ -284,11 +325,12 @@ export function register(on, options) {
     noteEffort(e)
     const effort = effortFor(roleByAgent.get(e.agentId), options)
     const result = yield* next(effort ? { ...e, effort } : e)
+    if (e.agentId === undefined) await feed($, (s) => onMainStep(s, { agentId: e.agentId, model: e.model, effort: e.effort }))
     if (e.agentId !== undefined) await feed($, (s) => onTurnStep(s, { agentId: e.agentId, usage: result?.usage }))
     return result
   })
 
-  // Fill the band's cache when the session starts. Detached, so the start is never held up.
+  // Fill the panel's cache when the session starts. Detached, so the start is never held up.
   on('session.start', async ($, e, next) => {
     const result = await next(e)
     void refresh($)
@@ -328,7 +370,11 @@ export function register(on, options) {
     const result = await next(e)
     try {
       const cwd = await projectRoot($)
-      await feed($, (s) => onToolCall(s, { tool: e.tool, path: filePathOf(e), cwd, agentId: e.agentId, isError: result?.isError === true }))
+      const at = await nowMs($)
+      const didRun = result?.deny === undefined
+      await feed($, (s) =>
+        onToolCall(onToolSettle(s, { tool: e.tool, didRun, callId: e.tool_use_id }), { tool: e.tool, path: filePathOf(e), cwd, agentId: e.agentId, isError: result?.isError === true, nowMs: at }),
+      )
     } catch {
       // observe only
     }
@@ -338,7 +384,8 @@ export function register(on, options) {
   // The permission verdict, whoever decided it.
   on('tool.check', async ($, e, next) => {
     const result = await next(e)
-    await feed($, (s) => onToolCheck(s, { tool: e.tool, input: e.input, agentId: e.agentId, decision: result?.decision, isQuery: typeof e.tool_use_id !== 'string' || e.tool_use_id === '' }))
+    const at = await nowMs($)
+    await feed($, (s) => onToolCheck(s, { tool: e.tool, callId: e.tool_use_id, input: e.input, agentId: e.agentId, decision: result?.decision, nowMs: at, isQuery: typeof e.tool_use_id !== 'string' || e.tool_use_id === '' }))
     return result
   }).catch(($, e, next) => next(e))
 
@@ -353,9 +400,6 @@ export function register(on, options) {
 
   // The docked panel.
   on('ui.render', { component: 'Pane' }, async ($, e, next) => drawPane($, e, next)).catch(($, e, next) => next(e))
-
-  // Draw the summary line above the prompt; any failure leaves the engine's own band.
-  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => drawBand($, e, next)).catch(($, e, next) => next(e))
 }
 
 // A subagent started: add its card. Observe only; the routing above has already run.

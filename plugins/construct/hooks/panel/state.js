@@ -1,9 +1,38 @@
+// Portions adapted from claude-flightdeck (github.com/scasella/claude-flightdeck), MIT License.
+//
+// MIT License
+//
+// Copyright (c) 2026 Stephen Casella
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+//
+// Adapted here: the file /
+// shell / other bucketing of tool calls and the allow / ask / cleared / deny tallies per bucket
+// (core.ts bucketOf, recordCheck, settleCheck), the main-thread request count and the permission
+// mode note (register.tsx turn.step, agent.spawn).
+//
 // Pure state for the Construct panel: one reducer per engine event the panel
 // observes, plus selectors. No `$` calls live here and nothing throws on odd
 // input, so these run (and test) in isolation. The wiring passes plain data
 // (ids, usage, a clock, a cost number); every reducer returns a new state.
 //
-// Stored shape (SCHEMA_VERSION 1):
+// Stored shape (SCHEMA_VERSION 3; version 3 dropped the session log, S9 as rewritten by L14):
 //   v            schema version
 //   agents[]     { id, role, type, description, model, effort, ctx, steps,
 //                  startedMs, endedMs, status: 'running' | 'done' }, oldest first, at most 20
@@ -15,25 +44,50 @@
 //   receipt      { turnId, startedMs, endedMs, agents, edits, errors, costStart, cost } | null (S5)
 //                endedMs null while the turn runs; cost is the cost added, null if unknown
 //   compactions  session.compact count
+//   main         { steps, model, effort, mode }  main-thread vitals (S3): steps counts main requests
+//                (turn.step without agentId, index.d.ts:14328-14354), model and effort are the latest
+//                request's, mode is the permission mode (agent.spawn permissionMode, index.d.ts:326,
+//                set only when the parent is main; classic hook permission_mode, index.d.ts:861)
+//   gate.verdicts { rule, ask, cleared, deny }  who decided (S6), subagents included. tool.check
+//                decision 'allow' | 'ask' | 'deny' (index.d.ts:13642): allow is a rule/allowed pass,
+//                ask went to the mode's decider and stays 'ask' until onToolSettle moves it to
+//                'cleared' (the call ran: classifier or approval) or 'deny' (it did not), deny is denied
+//   gate.pending  { [callId]: bucket }  asks not yet settled, by tool_use_id (capped at 100)
+//   gate.buckets { file, shell, other }  each { rule, ask, cleared, deny }
 
 import { roleFor } from '../routing.js'
 
-export const SCHEMA_VERSION = 1
+export const SCHEMA_VERSION = 3
 
 const MAX_AGENTS = 20
 const MAX_CELLS = 60
 const MAX_DETAIL = 80
+const MAX_PENDING = 100
+const FILE_TOOLS = ['Read', 'Edit', 'Write', 'NotebookEdit', 'MultiEdit', 'Glob', 'Grep']
+const SHELL_TOOLS = ['Bash', 'PowerShell']
 const WRITE_TOOLS = ['Edit', 'Write', 'MultiEdit', 'NotebookEdit']
 const CELL_OF = { allow: 'allowed', ask: 'asked', deny: 'denied' }
+
+const zeroVerdicts = () => ({ rule: 0, ask: 0, cleared: 0, deny: 0 })
+const zeroBuckets = () => ({ file: zeroVerdicts(), shell: zeroVerdicts(), other: zeroVerdicts() })
 
 export function initialState() {
   return {
     v: SCHEMA_VERSION,
     agents: [],
     inline: { count: 0, last: null },
-    gate: { cells: [], counts: { allowed: 0, asked: 0, denied: 0, sub: 0 }, denied: 0, lastDenied: null },
+    gate: {
+      cells: [],
+      counts: { allowed: 0, asked: 0, denied: 0, sub: 0 },
+      denied: 0,
+      lastDenied: null,
+      verdicts: zeroVerdicts(),
+      buckets: zeroBuckets(),
+      pending: {},
+    },
     receipt: null,
     compactions: 0,
+    main: { steps: 0, model: null, effort: null, mode: null },
   }
 }
 
@@ -41,25 +95,41 @@ const isObj = (x) => typeof x === 'object' && x !== null && !Array.isArray(x)
 const isNum = (x) => typeof x === 'number' && Number.isFinite(x)
 const str = (x) => (typeof x === 'string' && x !== '' ? x : null)
 
-// A stored value merged over the defaults; the defaults when the version differs or the shape is off.
+// A stored value merged over the defaults; the defaults when the version is unknown or the shape is off.
+// A version 1 value (no main, verdicts or buckets) is read with those sections defaulted; a version 2
+// value is read as is and its `log` section is dropped.
 export function merge(stored) {
   const base = initialState()
-  if (!isObj(stored) || stored.v !== SCHEMA_VERSION) return base
-  const { agents, inline, gate, receipt, compactions } = stored
+  if (!isObj(stored) || (stored.v !== SCHEMA_VERSION && stored.v !== 2 && stored.v !== 1)) return base
+  const { agents, inline, gate, receipt, compactions, main } = stored
   if (agents !== undefined && !Array.isArray(agents)) return base
   if (inline !== undefined && !isObj(inline)) return base
   if (gate !== undefined && !isObj(gate)) return base
   if (gate?.cells !== undefined && !Array.isArray(gate.cells)) return base
   if (gate?.counts !== undefined && !isObj(gate.counts)) return base
   if (receipt !== undefined && receipt !== null && !isObj(receipt)) return base
+  if (gate?.verdicts !== undefined && !isObj(gate.verdicts)) return base
+  if (gate?.buckets !== undefined && !isObj(gate.buckets)) return base
   if (compactions !== undefined && !isNum(compactions)) return base
+  if (main !== undefined && !isObj(main)) return base
+  const buckets = isObj(gate?.buckets) ? gate.buckets : {}
   return {
     v: SCHEMA_VERSION,
     agents: (agents ?? base.agents).filter(isObj),
     inline: { ...base.inline, ...inline },
-    gate: { ...base.gate, ...gate, counts: { ...base.gate.counts, ...gate?.counts } },
+    gate: {
+      ...base.gate,
+      ...gate,
+      pending: isObj(gate?.pending) ? gate.pending : {},
+      counts: { ...base.gate.counts, ...gate?.counts },
+      verdicts: { ...base.gate.verdicts, ...gate?.verdicts },
+      buckets: Object.fromEntries(
+        Object.keys(base.gate.buckets).map((k) => [k, { ...base.gate.buckets[k], ...(isObj(buckets[k]) ? buckets[k] : {}) }]),
+      ),
+    },
     receipt: receipt ?? null,
     compactions: compactions ?? 0,
+    main: { ...base.main, ...main },
   }
 }
 
@@ -120,6 +190,28 @@ export function isOutsideTasks(path, root) {
   if (!rootSegs) return !segs.some((s, i) => s === 'odd' && segs[i + 1] === 'tasks')
   const inside = rootSegs.every((s, i) => segs[i] === s)
   return !(inside && inTasks(segs.slice(rootSegs.length)))
+}
+
+// ---- main vitals (S3) ----------------------------------------------------
+
+// One request of the main loop: count it, keep its model and effort.
+export function onMainStep(state, e) {
+  const s = merge(state)
+  if (str(e?.agentId)) return s
+  const effort = str(e?.effort) ?? (isNum(e?.effort) ? String(e.effort) : null)
+  return { ...s, main: { ...s.main, steps: s.main.steps + 1, model: str(e?.model) ?? s.main.model, effort } }
+}
+
+// The main thread's permission mode, when one is given.
+export function onPermissionMode(state, e) {
+  const s = merge(state)
+  const mode = str(e?.mode)
+  return mode && mode !== s.main.mode ? { ...s, main: { ...s.main, mode } } : s
+}
+
+// Busy while a main turn's receipt is open.
+export function mainBusy(state) {
+  return isObj(state) && isObj(state.receipt) && state.receipt.endedMs === null
 }
 
 // ---- agents (S2) -------------------------------------------------------
@@ -190,7 +282,9 @@ export function onTurnComplete(state, e) {
   const s = merge(state)
   const nowMs = isNum(e?.nowMs) ? e.nowMs : 0
   const id = str(e?.agentId)
-  if (id) return patchAgent(s, id, (a) => ({ ...a, status: 'done', endedMs: nowMs }))
+  if (id) {
+    return patchAgent(s, id, (x) => ({ ...x, status: 'done', endedMs: nowMs }))
+  }
   const turnId = str(e?.turnId)
   if (turnId && s.receipt?.turnId && s.receipt.turnId !== turnId) return s
   return openReceipt(s, (r) => ({
@@ -238,6 +332,39 @@ const detailOf = (input) => {
   return shorten(maskSecrets(v))
 }
 
+export const bucketOf = (tool) => (FILE_TOOLS.includes(tool) ? 'file' : SHELL_TOOLS.includes(tool) ? 'shell' : 'other')
+
+const VERDICT_OF = { allow: 'rule', ask: 'ask', deny: 'deny' }
+
+const bump = (gate, bucket, from, to) => {
+  const b = gate.buckets[bucket]
+  const v = gate.verdicts
+  return {
+    verdicts: { ...v, ...(from ? { [from]: Math.max(0, v[from] - 1) } : {}), [to]: v[to] + 1 },
+    buckets: { ...gate.buckets, [bucket]: { ...b, ...(from ? { [from]: Math.max(0, b[from] - 1) } : {}), [to]: b[to] + 1 } },
+  }
+}
+
+// An ask settled by the call that followed it: it ran (cleared) or was refused (deny). The ask moves by
+// the call's id (`e.callId`, the tool_use_id both tool.check and tool.call carry): the check recorded
+// its bucket under that id, so a run of another call in the same bucket settles nothing here. With
+// no id the bucket is the fallback: one pending ask of the tool's bucket moves. Nothing pending
+// leaves the state as it is.
+export function onToolSettle(state, e) {
+  const s = merge(state)
+  const id = str(e?.callId)
+  let bucket = bucketOf(str(e?.tool))
+  let pending = s.gate.pending
+  if (id) {
+    if (!Object.hasOwn(pending, id)) return s
+    bucket = pending[id]
+    const { [id]: _, ...rest } = pending
+    pending = rest
+  }
+  if (!s.gate.buckets[bucket] || s.gate.buckets[bucket].ask < 1 || s.gate.verdicts.ask < 1) return { ...s, gate: { ...s.gate, pending } }
+  return { ...s, gate: { ...s.gate, pending, ...bump(s.gate, bucket, 'ask', e?.didRun === true ? 'cleared' : 'deny') } }
+}
+
 // One verdict: a cell (a subagent's is 'sub'), totals, and the last denied tool.
 export function onToolCheck(state, e) {
   const s = merge(state)
@@ -246,13 +373,21 @@ export function onToolCheck(state, e) {
   const cell = str(e?.agentId) ? 'sub' : kind
   const gate = s.gate
   const denied = kind === 'denied'
+  const detail = denied ? detailOf(e.input) : ''
+  const tool = str(e.tool) ?? 'tool'
+  const bucket = bucketOf(str(e.tool))
+  const callId = str(e.callId)
+  const pending = e.decision === 'ask' && callId ? Object.fromEntries([...Object.entries(gate.pending), [callId, bucket]].slice(-MAX_PENDING)) : gate.pending
   return {
     ...s,
     gate: {
+      ...gate,
+      pending,
+      ...bump(gate, bucket, null, VERDICT_OF[e.decision]),
       cells: [...gate.cells, cell].slice(-MAX_CELLS),
       counts: { ...gate.counts, [cell]: (gate.counts[cell] ?? 0) + 1 },
       denied: gate.denied + (denied ? 1 : 0),
-      lastDenied: denied ? { tool: str(e.tool) ?? 'tool', detail: detailOf(e.input) } : gate.lastDenied,
+      lastDenied: denied ? { tool, detail } : gate.lastDenied,
     },
   }
 }

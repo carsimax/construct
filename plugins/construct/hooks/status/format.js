@@ -87,18 +87,24 @@ export function meter(key, label, pct, resetText) {
   ])
 }
 
-// The budget line: context, then the 5h and 7d plan limits. A segment without data is left out.
-export function budgetSegments(usage, nowMs) {
+// The budget data: context, then the 5h and 7d plan limits, as { key, label, pct, reset }.
+// An entry without data is left out.
+export function budgetMeters(usage, nowMs) {
   const out = []
   const ctx = clampPct(usage?.context?.percent)
-  if (ctx !== null) out.push(meter('ctx', 'ctx', ctx, ''))
+  if (ctx !== null) out.push({ key: 'ctx', label: 'ctx', pct: ctx, reset: '' })
   for (const limit of Array.isArray(usage?.rateLimits) ? usage.rateLimits : []) {
     const pct = clampPct(limit?.percentUsed)
     if (pct === null) continue
-    if (limit.kind === 'five_hour') out.push(meter('h5', '5h', pct, formatReset5h(limit.resetsAt, nowMs)))
-    if (limit.kind === 'seven_day') out.push(meter('d7', '7d', pct, formatResetWeek(limit.resetsAt, nowMs)))
+    if (limit.kind === 'five_hour') out.push({ key: 'h5', label: '5h', pct, reset: formatReset5h(limit.resetsAt, nowMs) })
+    if (limit.kind === 'seven_day') out.push({ key: 'd7', label: '7d', pct, reset: formatResetWeek(limit.resetsAt, nowMs) })
   }
   return out
+}
+
+// The budget line: context, then the 5h and 7d plan limits. A segment without data is left out.
+export function budgetSegments(usage, nowMs) {
+  return budgetMeters(usage, nowMs).map((m) => meter(m.key, m.label, m.pct, m.reset))
 }
 
 export function gitSegment(git, worktree) {
