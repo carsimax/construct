@@ -585,3 +585,7 @@ Push and PR creation remain the user's decision.
     - Transactions in `refutation_required` from before this change have no refuter subject and fail closed.
     - Refuter mismatches use the code `subject_mismatch`; lens and validator mismatches use `invalid_result`.
     - A corrupt receipt blocks `acknowledge`.
+- **RDD on slice 10** (`--base-ref d703719`, 368 lines):
+  - Both classifiers said `medium`. The parent escalated with item 4 (concurrency: lock acquisition and stale-reclaim races) → `high`.
+  - The user granted consent.
+  - Lenses `review-resilience` and `review-reliability`, lineage `review-1c9649eb47e2068f`: **approved with no findings**, then acknowledged.
