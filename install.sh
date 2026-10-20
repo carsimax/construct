@@ -3,8 +3,8 @@
 # codegraph MCP server, and merges the Construct settings into
 # ~/.claude/settings.json. Safe to run again; a second run changes nothing.
 #
-#   curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v1.0.0/install.sh | bash
-#   curl -fsSL .../install.sh | bash -s -- --no-mcp --force
+#   curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v1.1.0/install.sh | bash
+#   curl -fsSL .../install.sh | bash -s -- --no-mcp
 #
 # Runs under the macOS system bash (3.2): no associative arrays, no ${x,,}.
 set -euo pipefail
@@ -26,7 +26,7 @@ usage() {
 Usage: install.sh [--no-mcp] [--force]
 
   --no-mcp  Skip the codegraph CLI and the codegraph MCP server.
-  --force   Replace an existing theme in ~/.claude/settings.json.
+  --force   Deprecated: has no effect and will be removed in a later release.
 EOF
 }
 
@@ -178,13 +178,14 @@ setup_mcp() {
 
 # settings_tool MODE: "check" only validates ~/.claude/settings.json; "merge"
 # prints one line per setting: "+ text" changed, "= text" already set,
-# "! text" kept a different value, "backup PATH" when the old file was saved.
+# and "backup PATH" when the old file was saved.
 settings_tool() {
-  node - "$1" "$HOME/.claude/settings.json" "$FORCE" <<'NODE'
+  node - "$1" "$HOME/.claude/settings.json" <<'NODE'
 const fs = require('node:fs')
 const path = require('node:path')
-const [mode, file, force] = process.argv.slice(2)
-const WANT = { theme: 'custom:construct:construct' }
+const [mode, file] = process.argv.slice(2)
+// Earlier versions set this theme; it is removed, and any other theme stays.
+const OLD_THEME = 'custom:construct:construct'
 const ALLOW = ['mcp__engram', 'mcp__plugin_engram_engram']
 
 let text = null
@@ -221,16 +222,10 @@ if (mode === 'check') process.exit(0)
 
 const lines = []
 let changed = false
-for (const [key, value] of Object.entries(WANT)) {
-  if (settings[key] === value) {
-    lines.push(`= ${key} is ${value}`)
-  } else if (settings[key] !== undefined && force !== '1') {
-    lines.push(`! ${key} stays ${JSON.stringify(settings[key])}; rerun with --force to use ${value}`)
-  } else {
-    settings[key] = value
-    changed = true
-    lines.push(`+ ${key} set to ${value}`)
-  }
+if (settings.theme === OLD_THEME) {
+  delete settings.theme
+  changed = true
+  lines.push(`+ theme ${OLD_THEME} removed`)
 }
 const missing = ALLOW.filter((rule) => !allow.includes(rule))
 if (missing.length) {
@@ -280,7 +275,6 @@ merge_settings() {
     case "$line" in
       "+ "*) installed "setting: ${line#+ }" ;;
       "= "*) skipped "setting: ${line#= }" ;;
-      "! "*) warn "${line#! }" ;;
       "backup "*) BACKUP=${line#backup } ;;
     esac
   done <<<"$out"
@@ -316,6 +310,9 @@ main() {
         ;;
     esac
   done
+  if [ "$FORCE" = 1 ]; then
+    warn "--force is deprecated and has no effect; the installer no longer sets a theme"
+  fi
   preflight
   setup_engram
   add_marketplace "$ENGRAM_REPO"
