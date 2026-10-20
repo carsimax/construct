@@ -87,7 +87,12 @@ preflight() {
   version_ge "$version" "$MIN_NODE" || fail "Node.js $version is too old; Construct needs $MIN_NODE or later"
   has git || fail "git is required and is not on the PATH"
   check_writable
-  settings_tool check || fail "nothing was installed"
+  local rc=0
+  settings_tool check || rc=$?
+  if [ "$rc" = 4 ]; then
+    fail "$HOME/.claude/settings.json is a symlink loop or a link through a path that is not a directory, so nothing was installed; fix the link and run the installer again"
+  fi
+  [ "$rc" = 0 ] || fail "nothing was installed"
   if ! has engram; then
     has brew || fail "engram is not installed and Homebrew (brew) is not available to install it. See https://brew.sh"
   fi
@@ -186,6 +191,9 @@ let text = null
 try {
   text = fs.readFileSync(file, 'utf8')
 } catch (error) {
+  if (error.code === 'ELOOP' || error.code === 'ENOTDIR') {
+    process.exit(4)
+  }
   if (error.code !== 'ENOENT') throw error
 }
 let settings = {}
