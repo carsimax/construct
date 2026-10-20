@@ -206,7 +206,7 @@ Design consequences:
 | T5 | S1, S4 | Output style (Neutral only, L16), single `odd` theme (L22), follow-ups F1–F3 | inline | none | done | `feat: add the Neutral output style and themes` (slice 07) |
 | T6 | S1, S2 | `bin/odd-assess`: port `ClassifyRisk` with fixtures; differential check against `gentle-ai review assess` on the same diffs | delegated (`odd-worker`, sonnet): long-session context backstop | 2 (it decides whether review runs) | done | `feat: add odd-assess risk classifier` + `fix: match Go whitespace trimming in odd-assess` (slice 08) |
 | T7 | S1, S2 | `bin/odd-review`: frozen tree via temp index, inspect, capture validation, receipt and acknowledgement; plus F4 | delegated (`odd-worker`, sonnet): long-session context backstop | 1 and 2 (persisted receipts; it gates delivery confidence) | done | `feat: add odd-review lifecycle with receipts` + `fix: refute mixed severe findings and escalate unknown causality` (slice 09) |
-| T8 | S1, S2 | `rdd-review` skill, `review-4lens` and `judgment-day` workflows, `Stop` review gate | inline | 6 | pending | — |
+| T8 | S1, S2 | `rdd-review` skill, RDD switch, receipt boundary, `Stop` review gate, contract RDD section (workflows dropped, L29) | delegated: two parallel units (Writer trigger a) | 2 and 6 (review gate) | in progress | — |
 | T9 | S1 | `secret-guard.sh` `PreToolUse` deny list; `Stop` prompt hook for the Risk line | inline | 2 | pending | — |
 | T10 | S1 | Compaction re-injection and task sync hooks | inline | none | pending | — |
 | T11 | S1 | `.mcp.json` (context7, codegraph) and `codegraph` skill | inline | none | pending | — |
@@ -589,3 +589,40 @@ Push and PR creation remain the user's decision.
   - Both classifiers said `medium`. The parent escalated with item 4 (concurrency: lock acquisition and stale-reclaim races) → `high`.
   - The user granted consent.
   - Lenses `review-resilience` and `review-reliability`, lineage `review-1c9649eb47e2068f`: **approved with no findings**, then acknowledged.
+- **L29 (2026-10-19, user):** "dale" (start T8)
+  - Branch `odd-skills/11-rdd-review`.
+  - **Scope change:** the `review-4lens` and `judgment-day` workflows are dropped.
+    - Workflow `agent()` documents only `{schema, label, model, stallMs}`, with no way to select a plugin agent type. Each lens prompt would have to be duplicated in the script.
+    - Workflows also need a `/config` opt-in on some plans.
+    - Parallel `Agent` calls from the skill give the same fan-out natively.
+  - **T8 design:**
+    - **Unit A (code) — the RDD switch, receipt boundary, and Stop gate:**
+      - `odd-review mode enable|disable|status [--scope global|clone]`.
+        - The global switch lives in `${XDG_CONFIG_HOME:-$HOME/.config}/odd-skills/rdd.json`. The clone switch lives in `<git-common-dir>/odd-review/mode.json`.
+        - Precedence: clone, then global, then default `on`.
+        - `status` is read-only and reports `{mode, source: clone|global|default}`.
+      - Receipts record `candidate_commit` (HEAD) for committed-mode reviews, plus `base_commit` when `--base-ref` names a commit.
+      - `odd-review boundary` prints the newest receipt whose `candidate_commit` is an ancestor of HEAD (the last reviewed boundary), or the merge-base with the default branch (`origin/HEAD`, else `main`, else `master`), or the root commit.
+      - `hooks/scripts/review-gate.mjs` runs on `Stop`.
+        - It does nothing when the mode is off, outside a git repo, or when `stop_hook_active` is true.
+        - Otherwise it runs the classification for the committed range `boundary..HEAD` and for uncommitted changes.
+        - If either is `high`, not consumed, and has not yet been reminded this session for that target, it prints `{"decision":"block","reason":"…"}` once. The reason names the range, the reasons, and the next step (load `odd-skills:rdd-review`).
+        - Per-session reminders live in `${CLAUDE_PLUGIN_DATA}/review-gate/<session_id>.json`.
+        - It fails open: on any error it prints nothing and exits 0.
+    - **Unit B (prompts) — the `rdd-review` skill and the contract section:**
+      - Skill `skills/rdd-review/SKILL.md` plus references:
+        - When to run: after each work-unit commit, `odd-assess --base-ref <boundary> --committed-only` (boundary from `odd-review boundary`).
+        - Due only on `high` or an explicit user request. The agent may raise the tier with `--escalate-item`, never lower it.
+        - Medium and passive: record the tier and continue.
+        - Consent, built by the orchestrator as a lossless prompt: headline, reason, risk evidence from `reasons`, and the choices "Review this change" or "Skip this time" with their effects. A decline is per candidate and not the kill switch.
+        - Lens selection by consequence (risk, resilience, readability, reliability), with a `--lenses-reason`.
+        - The lifecycle through `odd-review`:
+          - `start`;
+          - per lens, `context` piped as the prompt to `odd-skills:review-<lens>` (all lenses launched in one message), then `capture --input -` of the agent's raw JSON;
+          - refuter, correction (one bounded correction), validator, `acknowledge`.
+        - `context_budget_exceeded` → review smaller slices.
+        - Escalated means one **Needs your decision**.
+        - The switch: `odd-review mode`. When the user asks to stop RDD, run `disable` without arguing.
+        - Delivery stays human.
+      - Contract: a short RDD section in `hooks/contract/session.md` pointing to `odd-skills:rdd-review` and the switch. The contract must stay at or under 8000 characters.
+      - The NOTICE lists the skill as adapted.
