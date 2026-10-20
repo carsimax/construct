@@ -4,7 +4,8 @@
 // records the lineage for review-capture.mjs. A review agent without a lineage,
 // or one odd-review refuses, is denied with the reason; other agents and
 // prompts that start with a valid binding line pass through. A malformed binding
-// line, or one whose lineage differs from another in the prompt, is denied. A prompt naming two
+// line, or one whose lineage differs from another named outside the patch
+// blocks, is denied. A prompt naming two
 // distinct lineages is denied. A new spawn overwrites the lens's pending record.
 // Errors fail open.
 // Usage: node review-context.mjs   (hook JSON on stdin)
@@ -38,6 +39,24 @@ function bindingOf(prompt) {
   return { lineage }
 }
 
+// outsidePatches drops the ODD_REVIEW_PATH ... ODD_REVIEW_PATH_END blocks, which
+// carry patch text of the reviewed repository (it may mention any lineage id);
+// what remains is the context's own header plus any text around it.
+function outsidePatches(prompt) {
+  let inPatch = false
+  return prompt
+    .split('\n')
+    .filter((line) => {
+      if (/^ODD_REVIEW_PATH_END \d+$/.test(line)) {
+        inPatch = false
+        return false
+      }
+      if (/^ODD_REVIEW_PATH \{/.test(line)) inPatch = true
+      return !inPatch
+    })
+    .join('\n')
+}
+
 function main() {
   const input = readInput()
   const toolInput = input?.tool_input
@@ -51,7 +70,7 @@ function main() {
   // line): record its lineage, change nothing.
   const pasted = bindingOf(toolInput.prompt)
   if (pasted) {
-    const others = [...new Set(toolInput.prompt.match(LINEAGE) ?? [])].filter((id) => id !== pasted.lineage)
+    const others = [...new Set(outsidePatches(toolInput.prompt).match(LINEAGE) ?? [])].filter((id) => id !== pasted.lineage)
     const problem = pasted.error ?? (others.length > 0 ? `its lineage ${pasted.lineage} differs from ${others.join(', ')} named in the prompt` : null)
     if (problem) {
       decide('deny', {

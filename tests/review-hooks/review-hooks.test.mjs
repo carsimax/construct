@@ -156,6 +156,19 @@ describe('context hook binding validation', () => {
   })
 })
 
+describe('context hook pasted context with patch text', () => {
+  test('a real pasted context whose patch text mentions another lineage id is allowed and recorded', () => {
+    const { repo, txn, data } = lineage()
+    const out = spawnSync('node', [join(PLUGIN, 'bin/odd-review'), '--cwd', repo, 'context', '--lineage', txn.lineage, '--lens', 'risk'], { encoding: 'utf8' })
+    assert.equal(out.status, 0, out.stderr)
+    const pasted = out.stdout.replace('ODD_REVIEW_PATH_END 0', '+logged review-0123456789abcdef earlier\nODD_REVIEW_PATH_END 0')
+    assert.notEqual(pasted, out.stdout)
+    const r = hook(CONTEXT_HOOK, spawnInput(repo, pasted), data)
+    assert.equal(r.stdout, '')
+    assert.ok(existsSync(join(data, 'review-hooks', 's1', 'construct_review-risk.json')))
+  })
+})
+
 describe('context hook ambiguity', () => {
   const pendingPath = (data, agent = 'construct_review-risk') => join(data, 'review-hooks', 's1', `${agent}.json`)
 
