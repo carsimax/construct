@@ -13,8 +13,12 @@ const EXPECTED = [
   'comment-writer',
   'go-testing',
   'judgment-day',
+  'lossless-prompts',
+  'odd-delegation',
+  'odd-workflow',
   'skill-creator',
   'skill-improver',
+  'task-size-risk',
   'work-unit-commits',
 ]
 
@@ -30,7 +34,7 @@ function filesUnder(dir) {
     .filter((f) => statSync(f).isFile())
 }
 
-test('the plugin ships exactly the T3 skills', () => {
+test('the plugin ships exactly the expected skills', () => {
   assert.deepEqual(skillDirs().sort(), EXPECTED)
 })
 

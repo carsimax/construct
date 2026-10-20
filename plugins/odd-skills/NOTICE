@@ -7,6 +7,9 @@ Adapted material:
   jd-fix-agent.md
 - skills/branch-pr, chained-pr, cognitive-doc-design, comment-writer,
   go-testing, judgment-day, skill-creator, skill-improver, work-unit-commits
+- skills/odd-workflow, odd-delegation, task-size-risk, lossless-prompts and
+  hooks/contract/session.md, subagent.md (condensed from the orchestrator,
+  routing, research, and persistence guidance)
 
 The adapted files were modified for odd_skills: product-specific commands,
 registry references, and per-agent managed blocks were removed or replaced,
