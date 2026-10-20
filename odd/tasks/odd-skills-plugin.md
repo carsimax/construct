@@ -205,7 +205,7 @@ Design consequences:
 | T4 | S1, S2 | Split the orchestrator into the ≤8k session contract and the ODD skills; `SessionStart` and `SubagentStart` hooks; evals for small-inline, large-tracked, and Risk-line cases | inline | none (reassessed, L15) | done | `feat: add ODD workflow, delegation, sizing, and prompt skills` (slice 05) + `feat: inject the ODD session and subagent contracts` (slice 06) |
 | T5 | S1, S4 | Output style (Neutral only, L16), single `odd` theme (L22), follow-ups F1–F3 | inline | none | done | `feat: add the Neutral output style and themes` (slice 07) |
 | T6 | S1, S2 | `bin/odd-assess`: port `ClassifyRisk` with fixtures; differential check against `gentle-ai review assess` on the same diffs | delegated (`odd-worker`, sonnet): long-session context backstop | 2 (it decides whether review runs) | done | `feat: add odd-assess risk classifier` + `fix: match Go whitespace trimming in odd-assess` (slice 08) |
-| T7 | S1, S2 | `bin/odd-review`: frozen tree via temp index, inspect, capture validation, receipt and acknowledgement | inline | 1 | pending | — |
+| T7 | S1, S2 | `bin/odd-review`: frozen tree via temp index, inspect, capture validation, receipt and acknowledgement; plus F4 | delegated (`odd-worker`, sonnet): long-session context backstop | 1 and 2 (persisted receipts; it gates delivery confidence) | in progress | — |
 | T8 | S1, S2 | `rdd-review` skill, `review-4lens` and `judgment-day` workflows, `Stop` review gate | inline | 6 | pending | — |
 | T9 | S1 | `secret-guard.sh` `PreToolUse` deny list; `Stop` prompt hook for the Risk line | inline | 2 | pending | — |
 | T10 | S1 | Compaction re-injection and task sync hooks | inline | none | pending | — |
@@ -491,3 +491,40 @@ Push and PR creation remain the user's decision.
   - Decision: the plugin is named **Construct** (S9).
   - Collision check passed.
   - The rename is scheduled as the final task, T14.
+- **L26 (2026-10-19, user):** "continua entonces con lo que sigue"
+  - The killed background task was the final test run of the theme change. That change was already verified and committed (`468fb15`).
+  - T7 starts on `odd-skills/09-review`. T7 design (the native review lifecycle, without the Go binary):
+    - **Store:**
+      - Per repository, under `$(git rev-parse --git-common-dir)/odd-review/`, so nothing lands in the worktree and linked worktrees share it.
+      - Files: `transactions/<lineage>.json` and `receipts/<target>.json`.
+      - Atomic writes (temp file plus rename). A lock file per transaction stops concurrent writers.
+    - **Identity:**
+      - `target` = `sha256:` of `base_tree`, `candidate_tree`, and the sorted changed-path manifest.
+      - `lineage` = `review-` plus 16 random hex characters.
+      - `subject_hash` per lens = `sha256:` of `lineage`, `target`, `lens`, and the manifest digest.
+    - **Commands (`odd-review`, exit 0 with JSON on success, exit 2 for bad usage, exit 1 for refused transitions):**
+      - `start --base-ref B [--committed-only] --lenses <list> --lenses-reason TEXT`:
+        - Runs the odd-assess classification and freezes the base tree and the candidate tree (`freezeWorkingTree()` when there is no `--base-ref`).
+        - Refuses a target that already has a receipt (`target_already_acknowledged`).
+        - Writes the transaction in state `collecting` and prints `lineage`, `target`, and the per-lens `subject_hash`.
+      - `context --lineage L --lens <lens>`:
+        - Prints the `ODD_REVIEW_BINDING` line and the `ODD_REVIEW_CONTEXT` … `ODD_REVIEW_CONTEXT_END` block from the frozen trees only: name-status, numstat, and one verbatim patch per manifest path in order.
+        - Refuses with `context_budget_exceeded` above a byte budget (default 400 KB, configurable), naming the smaller-slice remedy.
+      - `capture --lineage L --lens <lens> --input <file|->`:
+        - Validates the lens result exactly as the agents' output contract states: required fields, no unknown fields, matching `subject_hash`, and `inspection.paths` equal to the manifest set when `completed`.
+        - Stores the result. When every lens is captured, it reduces them:
+          - Severe findings (BLOCKER or CRITICAL with `causal_disposition` `introduced`) with deterministic evidence → `correction_required`.
+          - Inferential severe findings → `refutation_required`.
+          - None → `approved`.
+          - Everything else is advisory.
+      - `capture-refuter --lineage L --input …`: takes the refuter results for the batch. Corroborated findings → `correction_required`; otherwise `approved`.
+      - `correct --lineage L [--base-ref …]`:
+        - Allowed once per lineage.
+        - Freezes the corrected candidate, checks that its changed lines stay within the correction budget (`min(200, ceil(n/2))` of the original), and moves to `validation_required`.
+        - `context --lens review-validator` then serves the corrected candidate.
+      - `capture-validation --lineage L --input …`: if every corroborated finding is `resolved` and there are no `regressions` → `approved`; otherwise → `escalated` (terminal, a human decision).
+      - `status --lineage L`: prints the state and the exact next command.
+      - `acknowledge --lineage L`: requires `approved`. It writes `receipts/<target>.json` (lineage, lenses, outcome, advisory findings, timestamps), marks the transaction `acknowledged`, and refuses a replay.
+    - **odd-assess integration:** `candidate.consumed` and `review_due_reason: already_reviewed` now come from the receipts store, closing the T6 deferral.
+    - **Consent stays in the T8 `rdd-review` skill.** `odd-review` has no consent step.
+    - **F4 is folded in:** `odd-assess --committed-only` without `--base-ref` becomes a usage error (exit 2).
