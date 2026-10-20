@@ -1,7 +1,7 @@
 {
   "name": "construct",
   "displayName": "Construct",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Organic Driven Development orchestration, review lenses, and delivery skills for Claude Code",
   "author": {
     "name": "Maximiliano Carsi"
@@ -361,6 +361,12 @@
       "title": "Open the Construct panel on start",
       "description": "Open the docked Construct panel when a session starts (on by default); /construct opens it any time and /construct close closes it",
       "default": true
+    },
+    "codegraph_auto_index": {
+      "type": "boolean",
+      "title": "Index with CodeGraph at session start",
+      "description": "When on, a session that starts in a git root with no .codegraph/ index runs codegraph init in the background (needs the codegraph CLI on the PATH). Off by default: indexing stays your decision",
+      "default": false
     }
   }
 }
