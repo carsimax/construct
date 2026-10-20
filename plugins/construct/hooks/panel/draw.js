@@ -1,4 +1,26 @@
-// Portions adapted from claude-flightdeck, Copyright (c) 2026 Stephen Casella, MIT License. See LICENSE-flightdeck.
+// Portions adapted from claude-flightdeck (github.com/scasella/claude-flightdeck), MIT License.
+//
+// MIT License
+//
+// Copyright (c) 2026 Stephen Casella
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 
 // Pure drawing primitives for the Construct panel: gauges, the effort meter, the
 // agent timeline geometry, the log row clamp and the bordered card. They return
@@ -77,8 +99,10 @@ export function laneBar(geo) {
   return { before: '·'.repeat(geo.before), bar: '━'.repeat(geo.bar), after: '·'.repeat(geo.after) }
 }
 
-// How many session log rows fit: what the other cards leave, never fewer than 4 nor more than 8.
-export const logRows = (bodyRows, used) => Math.max(4, Math.min(8, Math.floor(bodyRows - used - 3)))
+// How many session log rows fit: what the other cards leave less the log card's own frame (margin 1,
+// border 2, title 1 = 4 rows), at most 8 and 0 when not even one row fits (the caller drops the log).
+export const LOG_FRAME_ROWS = 4
+export const logRows = (bodyRows, used) => Math.max(0, Math.min(8, Math.floor(bodyRows - used - LOG_FRAME_ROWS)))
 
 // Largest-remainder split of `width` cells among `counts` (an array of numbers, in drawing order):
 // each non-zero count gets at least one cell and the cells sum to `width` (none when every count is 0

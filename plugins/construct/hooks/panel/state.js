@@ -1,5 +1,28 @@
-// Portions adapted from claude-flightdeck, Copyright (c) 2026 Stephen Casella, MIT License.
-// The full license text is in plugins/construct/LICENSE-flightdeck. Adapted here: the file /
+// Portions adapted from claude-flightdeck (github.com/scasella/claude-flightdeck), MIT License.
+//
+// MIT License
+//
+// Copyright (c) 2026 Stephen Casella
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+//
+// Adapted here: the file /
 // shell / other bucketing of tool calls and the allow / ask / cleared / deny tallies per bucket
 // (core.ts bucketOf, recordCheck, settleCheck), the main-thread request count and the permission
 // mode note (register.tsx turn.step, agent.spawn), and the session log.
@@ -29,6 +52,7 @@
 //                decision 'allow' | 'ask' | 'deny' (index.d.ts:13642): allow is a rule/allowed pass,
 //                ask went to the mode's decider and stays 'ask' until onToolSettle moves it to
 //                'cleared' (the call ran: classifier or approval) or 'deny' (it did not), deny is denied
+//   gate.pending  { [callId]: bucket }  asks not yet settled, by tool_use_id (capped at 100)
 //   gate.buckets { file, shell, other }  each { rule, ask, cleared, deny }
 //   log          [{ atMs, who, what }] session log ring, at most 50 rows, oldest first (S9)
 
@@ -40,6 +64,7 @@ const MAX_AGENTS = 20
 const MAX_CELLS = 60
 const MAX_DETAIL = 80
 const MAX_LOG = 50
+const MAX_PENDING = 100
 const FILE_TOOLS = ['Read', 'Edit', 'Write', 'NotebookEdit', 'MultiEdit', 'Glob', 'Grep']
 const SHELL_TOOLS = ['Bash', 'PowerShell']
 const WRITE_TOOLS = ['Edit', 'Write', 'MultiEdit', 'NotebookEdit']
@@ -60,6 +85,7 @@ export function initialState() {
       lastDenied: null,
       verdicts: zeroVerdicts(),
       buckets: zeroBuckets(),
+      pending: {},
     },
     receipt: null,
     compactions: 0,
@@ -98,6 +124,7 @@ export function merge(stored) {
     gate: {
       ...base.gate,
       ...gate,
+      pending: isObj(gate?.pending) ? gate.pending : {},
       counts: { ...base.gate.counts, ...gate?.counts },
       verdicts: { ...base.gate.verdicts, ...gate?.verdicts },
       buckets: Object.fromEntries(
@@ -363,13 +390,24 @@ const bump = (gate, bucket, from, to) => {
   }
 }
 
-// An ask settled by the call that followed it: it ran (cleared) or was refused (deny). One pending
-// ask of the tool's bucket moves; nothing pending leaves the state as it is.
+// An ask settled by the call that followed it: it ran (cleared) or was refused (deny). The ask moves by
+// the call's id (`e.callId`, the tool_use_id both tool.check and tool.call carry): the check recorded
+// its bucket under that id, so a run of another call in the same bucket settles nothing here. With
+// no id the bucket is the fallback: one pending ask of the tool's bucket moves. Nothing pending
+// leaves the state as it is.
 export function onToolSettle(state, e) {
   const s = merge(state)
-  const bucket = bucketOf(str(e?.tool))
-  if (s.gate.buckets[bucket].ask < 1 || s.gate.verdicts.ask < 1) return s
-  return { ...s, gate: { ...s.gate, ...bump(s.gate, bucket, 'ask', e?.didRun === true ? 'cleared' : 'deny') } }
+  const id = str(e?.callId)
+  let bucket = bucketOf(str(e?.tool))
+  let pending = s.gate.pending
+  if (id) {
+    if (!Object.hasOwn(pending, id)) return s
+    bucket = pending[id]
+    const { [id]: _, ...rest } = pending
+    pending = rest
+  }
+  if (!s.gate.buckets[bucket] || s.gate.buckets[bucket].ask < 1 || s.gate.verdicts.ask < 1) return { ...s, gate: { ...s.gate, pending } }
+  return { ...s, gate: { ...s.gate, pending, ...bump(s.gate, bucket, 'ask', e?.didRun === true ? 'cleared' : 'deny') } }
 }
 
 // One verdict: a cell (a subagent's is 'sub'), totals, and the last denied tool.
@@ -382,11 +420,15 @@ export function onToolCheck(state, e) {
   const denied = kind === 'denied'
   const detail = denied ? detailOf(e.input) : ''
   const tool = str(e.tool) ?? 'tool'
+  const bucket = bucketOf(str(e.tool))
+  const callId = str(e.callId)
+  const pending = e.decision === 'ask' && callId ? Object.fromEntries([...Object.entries(gate.pending), [callId, bucket]].slice(-MAX_PENDING)) : gate.pending
   const next = {
     ...s,
     gate: {
       ...gate,
-      ...bump(gate, bucketOf(str(e.tool)), null, VERDICT_OF[e.decision]),
+      pending,
+      ...bump(gate, bucket, null, VERDICT_OF[e.decision]),
       cells: [...gate.cells, cell].slice(-MAX_CELLS),
       counts: { ...gate.counts, [cell]: (gate.counts[cell] ?? 0) + 1 },
       denied: gate.denied + (denied ? 1 : 0),

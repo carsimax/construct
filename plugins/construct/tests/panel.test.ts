@@ -246,9 +246,10 @@ test('a spawn from main sets the permission mode; a nested spawn does not', asyn
 })
 
 test('a tool.call after an ask settles it as cleared, and the log rows carry real times', async ($, on) => {
-  await start($, on, { decision: 'ask' })
+  const seen: any = {}
+  await start($, on, { decision: 'ask', seen })
   await $.tool.check({ tool: 'Bash', input: { command: 'ls' }, tool_use_id: 'tu-1' })
-  await $.tool.call({ tool: 'Bash', command: 'ls' })
+  await $.tool.call({ tool: 'Bash', command: 'ls', tool_use_id: 'tu-1' } as any)
   await $.tool.call({ tool: 'Write', file_path: '/home/me/proj/src/a.js', content: 'x' })
   await settle()
   const p = await pane($)
@@ -258,6 +259,18 @@ test('a tool.call after an ask settles it as cleared, and the log rows carry rea
   expect(text).not.toContain('pending')
   expect(text).toMatch(/\d\d:\d\d:\d\d/)
   expect(text).toContain('inline write')
+})
+
+test('a refresh that loses the ODD task (a failed collect) logs no transition to none', async ($, on) => {
+  let doc = TASKS
+  await start($, on, { tasks: () => doc })
+  doc = ''
+  await $.turn.start({ text: 'go', turnId: 't2' })
+  await $.turn.complete({ answer: 'done', turnId: 't2' })
+  await settle()
+  const p = await pane($)
+  await p.redraw()
+  expect(await joined(p)).not.toContain('task none')
 })
 
 test('an ODD task change logs a row on refresh, not at first load', async ($, on) => {

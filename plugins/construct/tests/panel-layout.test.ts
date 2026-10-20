@@ -307,7 +307,7 @@ test('session log is empty-safe, colors odd and review rows, and its rows clamp 
   const panel = { ...full(), log }
   const count = (rows: number | undefined) => rowsOf({ panel, rows }).filter((r) => /^10:00:\d\d /.test(r)).length
   expect(count(200)).toBe(8)
-  expect(count(10)).toBe(4)
+  expect(count(10)).toBe(0)
   expect(count(undefined)).toBe(8)
   expect(rowsOf({ panel, rows: 200 }).filter((r) => /^10:00:\d\d /.test(r)).at(-1)).toContain('row 29')
   const tree = buildPanel(args({ panel, rdd: null }))
@@ -365,4 +365,48 @@ test('5h and 7d gauges show the time to reset from an ISO resetsAt', async () =>
   const none = { ...usage, rateLimits: [{ kind: 'five_hour', percentUsed: 4, resetsAt: 'soon' }, { kind: 'seven_day', percentUsed: 13, resetsAt: iso(-5) }] }
   const rows2 = rowsOf({ usage: none })
   expect(rows2[idx(rows2, '$104')]).toBe('$104   5h ▱▱▱▱▱ 4%   7d ▰▱▱▱▱ 13%')
+})
+
+// ---- review fixes ---------------------------------------------------------------
+
+// Rows a tree takes: Text and Client one, a column Box its children plus border and marginTop.
+function rowsHigh(node): number {
+  if (!node || typeof node === 'string') return 0
+  if (node.type !== 'Box' || node.props?.flexDirection !== 'column') return 1
+  return (node.props.borderStyle ? 2 : 0) + (node.props.marginTop ?? 0) + (node.children ?? []).reduce((n, k) => n + rowsHigh(k), 0)
+}
+
+test('the panel never takes more rows than the pane has: the log shrinks, then goes', async () => {
+  const log = Array.from({ length: 30 }, (_, i) => ({ atMs: at(10, 0, i), who: 'odd', what: `row ${i}` }))
+  const lean = { ...initialState(), log }
+  const logged = (rows: number) => rowsOf({ panel: lean, odd: null, rdd: null, rows }).filter((r) => /^10:00:\d\d /.test(r)).length
+  for (const rows of [20, 24, 26, 30, 60]) {
+    const tree = buildPanel(args({ panel: lean, odd: null, rdd: null, rows }))
+    expect(rowsHigh(tree)).toBeLessThanOrEqual(rows)
+  }
+  expect(logged(26)).toBe(8)
+  expect(logged(12)).toBe(0)
+  expect(rowsHigh(buildPanel(args({ panel: lean, odd: null, rdd: null, rows: 12 })))).toBeLessThanOrEqual(12)
+  expect(rowsHigh(buildPanel(args({ panel: lean, odd: null, rdd: null, rows: 13 })))).toBeLessThanOrEqual(13)
+  // a full panel on a short pane: the log goes, the other cards stay
+  for (const rows of [20, 24, 26]) {
+    const tree = buildPanel(args({ panel: { ...full(), log }, rows }))
+    expect(textOf(tree).includes('session log')).toBe(false)
+    expect(textOf(tree).includes('last turn')).toBe(true)
+  }
+})
+
+test('GATE masks the inline write path', async () => {
+  const panel = { ...full(), inline: { count: 1, last: '/home/me/proj/token=abcdef123456/register.js' } }
+  const text = textOf(buildPanel(args({ panel })))
+  expect(text).not.toContain('abcdef123456')
+})
+
+test('a running turn at 40 columns holds no row wider than the card interior', async () => {
+  const panel = { ...full(), receipt: { turnId: 't', startedMs: NOW - 17_000, endedMs: null, agents: 123456, edits: 123456, errors: 123456, costStart: 1, cost: null } }
+  const tree = buildPanel(args({ panel, columns: 40, client: true }))
+  const clock = (tree.children as any[]).find((c) => c.props?.borderStyle && rowsHigh(c) === 3 && flat(c).includes('turn'))
+  const row = clock.children[0]
+  const width = (n: any): number => (typeof n === 'string' ? n.length : n.type === 'Client' ? 6 : (n.children ?? []).map(width).reduce((a: number, b: number) => a + b, 0))
+  expect(width(row)).toBeLessThanOrEqual(40 - 4)
 })

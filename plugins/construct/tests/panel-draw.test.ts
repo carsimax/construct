@@ -63,11 +63,12 @@ test('laneBar draws · padding around a ━ run', () => {
 
 // ---- log clamp ---------------------------------------------------------------
 
-test('logRows leaves what other cards use, between 4 and 8 rows', () => {
+test('logRows leaves what other cards use and the log card frame (4 rows), up to 8, 0 when none fit', () => {
   expect(logRows(40, 10)).toBe(8)
-  expect(logRows(20, 10)).toBe(7)
-  expect(logRows(14, 10)).toBe(4)
-  expect(logRows(0, 30)).toBe(4)
+  expect(logRows(20, 10)).toBe(6)
+  expect(logRows(15, 10)).toBe(1)
+  expect(logRows(14, 10)).toBe(0)
+  expect(logRows(0, 30)).toBe(0)
 })
 
 // ---- card --------------------------------------------------------------------

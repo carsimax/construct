@@ -381,6 +381,28 @@ test('an ask settles as cleared when the call ran and as deny when it did not', 
   expect(onToolSettle(s, { tool: 'Read', didRun: true })).toEqual(s)
 })
 
+test('an ask settles by its call id: a run of another call in the same bucket does not clear it', () => {
+  let s = onToolCheck(initialState(), { tool: 'Bash', decision: 'ask', callId: 'rm1' })
+  s = onToolCheck(s, { tool: 'Bash', decision: 'allow', callId: 'ls1' })
+  s = onToolSettle(s, { tool: 'Bash', didRun: true, callId: 'ls1' })
+  expect(s.gate.verdicts).toMatchObject({ rule: 1, ask: 1, cleared: 0, deny: 0 })
+  expect(s.gate.buckets.shell).toMatchObject({ ask: 1, cleared: 0 })
+  s = onToolSettle(s, { tool: 'Bash', didRun: false, callId: 'rm1' })
+  expect(s.gate.verdicts).toMatchObject({ rule: 1, ask: 0, cleared: 0, deny: 1 })
+  expect(s.gate.buckets.shell).toMatchObject({ ask: 0, deny: 1 })
+  // settled once: a repeat changes nothing
+  expect(onToolSettle(s, { tool: 'Bash', didRun: true, callId: 'rm1' })).toEqual(s)
+})
+
+test('an ask with a call id clears by that id; without an id the bucket fallback still works', () => {
+  let s = onToolCheck(initialState(), { tool: 'Bash', decision: 'ask', callId: 'a' })
+  s = onToolSettle(s, { tool: 'Bash', didRun: true, callId: 'a' })
+  expect(s.gate.verdicts).toMatchObject({ ask: 0, cleared: 1 })
+  s = onToolCheck(s, { tool: 'Bash', decision: 'ask' })
+  s = onToolSettle(s, { tool: 'Bash', didRun: true })
+  expect(s.gate.verdicts).toMatchObject({ ask: 0, cleared: 2 })
+})
+
 test('merge fills the new gate and main sections for a version 1 value', () => {
   const old: any = { v: 1, agents: [], inline: { count: 1, last: 'a' }, gate: { cells: ['allowed'], counts: { allowed: 1, asked: 0, denied: 0, sub: 0 }, denied: 0, lastDenied: null }, receipt: null, compactions: 2 }
   const m = merge(old)

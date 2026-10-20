@@ -157,7 +157,15 @@ async function noteChanges($, prev, next) {
   try {
     const at = await nowMs($)
     const rddWord = (d) => (d?.rdd ? (d.rdd.state ?? d.rdd.mode ?? null) : null)
-    await feed($, (s) => noteRddState(noteOddTask(s, prev.odd?.task ?? null, next.odd?.task ?? null, at), rddWord(prev), rddWord(next), at))
+    // A side that is null may be a collect that failed, not a real change: no row for it.
+    const [t0, t1] = [prev.odd?.task ?? null, next.odd?.task ?? null]
+    const [r0, r1] = [rddWord(prev), rddWord(next)]
+    await feed($, (s) => {
+      let out = s
+      if (t0 !== null && t1 !== null) out = noteOddTask(out, t0, t1, at)
+      if (r0 !== null && r1 !== null) out = noteRddState(out, r0, r1, at)
+      return out
+    })
   } catch {
     // observe only
   }
@@ -235,6 +243,9 @@ function realize(node, els) {
   return hasClient ? { type: 'Box', props: { flexDirection: 'row' }, children } : { ...node, children }
 }
 
+// The surfaces whose element table declares `Client` (index.d.ts, Elements).
+const CLIENT_SURFACES = ['terminal', 'desktop']
+
 // The docked panel body, drawn only for this plugin's pane (its requestId is the pane id).
 async function drawPane($, e, next) {
   const data = status.data
@@ -242,8 +253,10 @@ async function drawPane($, e, next) {
   const live = await readLive($)
   let els = null
   try {
-    const table = $.ui.resolve(e)
-    if ('Client' in table) els = table
+    // $.ui.resolve completes a table to every element name (index.d.ts, ElementName), so a `Client` key
+    // proves nothing; the surface's own table does (Elements: terminal and desktop declare Client,
+    // vscode and mobile do not). e.surface is what the client declared, a rendering fact.
+    if (CLIENT_SURFACES.includes(e.surface)) els = $.ui.resolve(e)
   } catch {
     // no element table: draw static
   }
@@ -353,7 +366,7 @@ export function register(on, options) {
       const at = await nowMs($)
       const didRun = result?.deny === undefined
       await feed($, (s) =>
-        onToolCall(onToolSettle(s, { tool: e.tool, didRun }), { tool: e.tool, path: filePathOf(e), cwd, agentId: e.agentId, isError: result?.isError === true, nowMs: at }),
+        onToolCall(onToolSettle(s, { tool: e.tool, didRun, callId: e.tool_use_id }), { tool: e.tool, path: filePathOf(e), cwd, agentId: e.agentId, isError: result?.isError === true, nowMs: at }),
       )
     } catch {
       // observe only
@@ -365,7 +378,7 @@ export function register(on, options) {
   on('tool.check', async ($, e, next) => {
     const result = await next(e)
     const at = await nowMs($)
-    await feed($, (s) => onToolCheck(s, { tool: e.tool, input: e.input, agentId: e.agentId, decision: result?.decision, nowMs: at, isQuery: typeof e.tool_use_id !== 'string' || e.tool_use_id === '' }))
+    await feed($, (s) => onToolCheck(s, { tool: e.tool, callId: e.tool_use_id, input: e.input, agentId: e.agentId, decision: result?.decision, nowMs: at, isQuery: typeof e.tool_use_id !== 'string' || e.tool_use_id === '' }))
     return result
   }).catch(($, e, next) => next(e))
 

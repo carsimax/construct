@@ -1,4 +1,26 @@
-// Portions adapted from claude-flightdeck, Copyright (c) 2026 Stephen Casella, MIT License. See LICENSE-flightdeck.
+// Portions adapted from claude-flightdeck (github.com/scasella/claude-flightdeck), MIT License.
+//
+// MIT License
+//
+// Copyright (c) 2026 Stephen Casella
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 
 // Pure layout for the Construct panel: flightdeck's card layout with the ODD cycle.
 //
@@ -309,7 +331,7 @@ function gateCard({ gate, inline, mode, width }) {
     rows.push(line(text(`✗ ${maskSecrets(`${last.tool}${last.detail ? `: ${last.detail}` : ''}`)}`, { color: PALETTE.warn })))
   }
   if (hasInline) {
-    const where = inline.last ? ` · ${shortPath(inline.last)}` : ''
+    const where = inline.last ? ` · ${shortPath(maskSecrets(inline.last))}` : ''
     rows.push(line(text(`⚠ ${plural(inline.count, 'inline write')}${where}`, { color: PALETTE.warn })))
   }
   return card({ title: 'GATE · permissions', status: { text: `${total} checks`, dim: true }, color: PALETTE.gate, children: rows, width })
@@ -357,15 +379,20 @@ function agentsRows(panel, nowMs, width, client) {
 
 // ---- last turn (S8) ----------------------------------------------------------------
 
+const TURN_LABEL = '◐ turn '
+const CLOCK_ROOM = 6 // m:ss up to 59:59, XhYY after
+
 function turnCard(receipt, nowMs, width, client) {
   if (!receipt) return null
   const running = receipt.endedMs === null || receipt.endedMs === undefined
   const counts = ` · ${plural(receipt.agents ?? 0, 'agent')} · ${plural(receipt.edits ?? 0, 'edit')} · ${plural(receipt.errors ?? 0, 'error')}`
   const body = running
     ? line(
-        text('◐ turn ', { color: PALETTE.main }),
+        text(TURN_LABEL, { color: PALETTE.main }),
         clockPiece('turn-clock', receipt.startedMs, null, PALETTE.main, nowMs, client),
-        dim(counts),
+        // The row loses `wrap: 'truncate'` when it holds a Client (register.js realize), so its static
+        // parts are sized here: the card interior less the label and the clock's room.
+        dim(client ? fit(counts, Math.max(0, width - 4 - TURN_LABEL.length - CLOCK_ROOM)) : counts),
       )
     : line(
         text('✓ ', { color: PALETTE.gate }),
@@ -388,6 +415,7 @@ function whoColor(who) {
 
 function logCard({ log, bodyRows, used, width, tzOffsetMin }) {
   const n = logRows(isNum(bodyRows) && bodyRows > 0 ? bodyRows : Infinity, used)
+  if (n < 1) return null
   const rows = (Array.isArray(log) ? log : []).slice(-n)
   const body = rows.map((r) =>
     row([
@@ -450,6 +478,6 @@ export function buildPanel({ panel, usage, odd, rdd, nowMs, columns, rows, model
   children.push(...agentsRows(state, nowMs, width, showClient))
   push(turnCard(state.receipt, nowMs, width, showClient))
   const used = children.reduce((n, k) => n + height(k), 0)
-  children.push(logCard({ log: state.log, bodyRows: rows, used, width, tzOffsetMin }))
+  push(logCard({ log: state.log, bodyRows: rows, used, width, tzOffsetMin }))
   return { type: 'Box', props: { flexDirection: 'column', width }, children }
 }
