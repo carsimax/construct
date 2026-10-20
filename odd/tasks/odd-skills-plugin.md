@@ -864,3 +864,10 @@ Push and PR creation remain the user's decision.
     - Advisories recorded per slice.
   - Engram mirror: still pending, refused for the ended host session.
   - Delivery: 19 chained slices on `odd-skills/01-…` to `odd-skills/19-construct`. The tracker `feat/odd-skills-plugin` is still at `e639e15`. Push, PR creation, and merge are the user's decisions.
+- **L38 (2026-10-20, user):** "Vamos con ello crea el repo privado y manda todo a main"; repository name chosen: "construct (Recommended)".
+  - Remote operation authorized by the user: destination `carsimax/construct` (new, private), operations create the repository and push `main`, credential the user's authenticated `gh` (account `carsimax`).
+  - Pre-push checks: the working tree was clean; `main` was an ancestor of `odd-skills/19-construct`; the secret scan of 123 tracked files found no tokens or private keys.
+  - `main` was fast-forwarded to `5fa8aeb` (46 commits, no merge commit). `gh repo create carsimax/construct --private --source . --remote origin`, then `git push -u origin main`.
+  - Verified: https://github.com/carsimax/construct, visibility `PRIVATE`, default branch `main`.
+  - The install docs now use `claude plugin marketplace add carsimax/construct`.
+  - Only `main` was pushed; the 19 slice branches and the tracker stay local.

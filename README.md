@@ -27,7 +27,7 @@ Construct is a Claude Code plugin for Organic Driven Development (ODD). It ships
 3. Add this marketplace and install the plugin:
 
    ```bash
-   claude plugin marketplace add <path-or-repo-of-odd_skills>
+   claude plugin marketplace add carsimax/construct
    claude plugin install construct@construct
    ```
 

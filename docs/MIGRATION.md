@@ -57,7 +57,7 @@ Both rule sets are active in this session, which is fine for a trial. Check that
 ### 3. Install the plugin
 
 ```bash
-claude plugin marketplace add <path-or-repo-of-odd_skills>
+claude plugin marketplace add carsimax/construct
 claude plugin install construct@construct
 ```
 
