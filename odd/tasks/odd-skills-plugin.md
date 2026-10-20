@@ -47,6 +47,12 @@ Tracker branch: `feat/odd-skills-plugin` (at `main` root commit `e639e15`). Deli
   - Data sources: `$.session.usage()` (context, rate limits with `resetsAt`, cost), `$.session.model()`, `$.session.cwd()`, and git through `$.process.run`.
   - Unverified: where lines added/removed and the active output style come from. T12 must confirm them or report the gap.
 
+- **S9 — Plugin name: Construct.** "Me gusta Construct" (L25).
+  - The plugin, its manifest name, and its component prefix become `construct` (for example `construct:odd-worker`). The marketplace name is `construct`, so the install id is `construct@construct`.
+  - ODD stays the name of the methodology; agent and skill names such as `odd-worker` and `odd-workflow` keep it.
+  - The rename is applied once, as the final task (T14), across the manifest, marketplace, `odd-skills:` prefixes, the routing mod's prefix, the contract's JSON-only filter, tests, evals, and docs. This supersedes the plugin-name part of S7.
+  - Collision check (2026-10-19): no `construct` plugin in the official or other added marketplaces; `claude plugin validate --strict` passes for the name; no matching Claude Code plugin repository on GitHub.
+
 ## Design
 
 ### Fidelity summary
@@ -206,6 +212,7 @@ Design consequences:
 | T11 | S1 | `.mcp.json` (context7, codegraph) and `codegraph` skill | inline | none | pending | — |
 | T12 | S2, S8 | Mod status panel: replica of the user's statusline (S8) plus ODD task progress and RDD state (experimental; must fail open) | inline | 6 | pending | — |
 | T13 | S1, S3, S4 | Migration runbook and README: back up `~/.claude`, remove `gentle-ai:*` blocks and gentle-ai hooks, run side by side with `--plugin-dir`, then `gentle-ai uninstall` keeping engram | inline | 5 | pending | — |
+| T14 | S9 | Rename the plugin from `odd-skills` to `construct` (manifest, marketplace, prefixes, mod, contract filter, tests, evals, docs) | inline | 3 (component prefix changes) | pending | — |
 
 Route evidence: no Writer trigger reason is known yet (units are sequential and depend on T0/T1); revisit if T6 and T7 run in parallel.
 
@@ -480,3 +487,7 @@ Push and PR creation remain the user's decision.
   - The user granted consent. The candidate fit the reviewer budget.
   - Lenses `review-risk` and `review-reliability`, lineage `review-a9203826f6a28e9f`: **approved**, then acknowledged.
   - Advisory finding, tracked as follow-up **F4** (R3, WARNING): `--committed-only` without `--base-ref` is silently ignored (`lib/assess/cli.mjs:42`). Make it a usage error (exit 2) with a test.
+- **L25 (2026-10-19, user):** "me gusta matrix la pelicual algun nombre basado en esa peli?" then "Me gusta Construct"
+  - Decision: the plugin is named **Construct** (S9).
+  - Collision check passed.
+  - The rename is scheduled as the final task, T14.
