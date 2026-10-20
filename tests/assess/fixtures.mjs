@@ -78,7 +78,7 @@ export const CASES = [
   ['process_boundary: documentation mention stays passive', {}, { 'docs/spawning.md': 'Call subprocess.run with an explicit argv list.\n' }, ['passive', ['non_executable_only'], 1]],
   ['process_boundary: shebang only in the base side no longer counts', { 'tools/tool.py': '#!/usr/bin/env python3\nx = 1\n' }, { 'tools/tool.py': 'x = 2\n' }, ['medium', ['executable_change:tools/tool.py'], 3]],
   ['process_boundary: unchanged spawn line stays medium', { 'tools/run.py': 'import subprocess\nsubprocess.run(a)\nx = 1\n' }, { 'tools/run.py': 'import subprocess\nsubprocess.run(a)\nx = 2\n' }, ['medium', ['executable_change:tools/run.py'], 2]],
-  ['process_boundary: requirements.txt comment mention', {}, { 'requirements.txt': '# installed via subprocess.run(pip)\nrequests==2.31.0\n' }, ['medium', ['executable_change:requirements.txt'], 2]],
+  ['process_boundary: requirements.txt comment mention', {}, { 'requirements.txt': '# installed via subprocess.run(pip)\nrequests==2.31.0\n' }, ['high', ['dependency_manifest:requirements.txt'], 2]],
   // dangerous_sink
   ['dangerous_sink: Go TLS bypass', { 'src/client.go': 'package client\nvar x = 1\n' }, { 'src/client.go': 'package client\nvar x = 1\nvar c = tls.Config{InsecureSkipVerify: true}\n' }, ['high', ['dangerous_sink:src/client.go'], 1]],
   ['dangerous_sink: Python pickle', { 'src/load.py': 'v = 1\n' }, { 'src/load.py': 'v = 1\nv = pickle.loads(payload)\n' }, ['high', ['dangerous_sink:src/load.py'], 1]],
@@ -105,7 +105,7 @@ export const CASES = [
   ['passive: mdx with the code in a fence', {}, { 'book/chapter.mdx': '```tsx\nexport const X = <W />\n```\n' }, ['passive', ['non_executable_only'], 3]],
   ['passive: fake png without its signature', {}, { 'assets/logo.png': 'prose\n' }, ['medium', ['executable_change:assets/logo.png'], 1]],
   ['passive: real png signature', {}, { 'assets/logo.png': PNG }, ['passive', ['non_executable_only'], 0]],
-  ['passive: package.json is configuration', {}, { 'package.json': '{}\n' }, ['medium', ['configuration_change:package.json'], 1]],
+  ['passive: package.json is a dependency manifest (item 5)', {}, { 'package.json': '{}\n' }, ['high', ['dependency_manifest:package.json'], 1]],
   ['passive: .env is configuration', {}, { '.env': 'A=1\n' }, ['medium', ['configuration_change:.env'], 1]],
   ['passive: markdown plus configuration is medium', {}, { 'docs/a.md': 'a\n', 'config.toml': 'a = 1\n' }, ['medium', ['configuration_change:config.toml'], 2]],
   ['passive: binary non-image file', {}, { 'assets/data.bin': Buffer.from([1, 2, 0, 3, 0, 0]) }, ['medium', ['executable_change:assets/data.bin'], 0]],

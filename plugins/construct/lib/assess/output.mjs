@@ -1,4 +1,6 @@
 // The construct.review-assessment/v1 envelope and its human summary.
+import { HIGH_RISK_ITEMS } from './escalation.mjs'
+
 export const SCHEMA = 'construct.review-assessment/v1'
 
 export const CANONICAL_LENSES = ['review-risk', 'review-resilience', 'review-readability', 'review-reliability']
@@ -15,6 +17,7 @@ export function publicReasons(reasons) {
   return reasons.map((reason) => {
     const detail = []
     if (reason.signal) detail.push(`signal: ${reason.signal}`)
+    if (reason.item) detail.push(`high-risk item ${reason.item} (${HIGH_RISK_ITEMS[reason.item]})`)
     if (reason.oldMode || reason.newMode) detail.push(`mode ${reason.oldMode ?? ''} -> ${reason.newMode ?? ''}`)
     const out = { code: reason.code }
     if (reason.path) out.path = reason.path

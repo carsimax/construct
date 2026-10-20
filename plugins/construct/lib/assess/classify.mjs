@@ -1,6 +1,7 @@
 // Deterministic risk tier from one immutable tree boundary. Evidence alone picks
 // the tier; change volume, file count, model, and effort are never inputs.
 import { processBoundaryRiskReasons } from './content.mjs'
+import { pathRiskItemReasons } from './items.mjs'
 import { activePassiveContentPaths, isPassiveContentCandidateStat } from './passive.mjs'
 import {
   canonicalRiskReasons, deriveSnapshotRiskReasons, isConfigurationReviewPath, removeFallbackRiskReasons,
@@ -8,7 +9,7 @@ import {
 } from './signals.mjs'
 import { collectDiffStats, countChangedLines, isGeneratedGoldenPath } from './stats.mjs'
 
-const VALID_SIGNALS = ['auth', 'update', 'security', 'payments', 'data_exposure', 'data_loss', 'permissions', 'shell_process', 'dangerous_sink']
+const VALID_SIGNALS = ['auth', 'update', 'security', 'payments', 'data_exposure', 'data_loss', 'permissions', 'shell_process', 'dangerous_sink', 'delivery']
 
 // classifyRisk: high on any signal or hot path, low when every path is proven
 // passive and none is configuration, otherwise medium. Counting still runs so
@@ -40,8 +41,10 @@ export function assessSnapshotRisk({ root, baseTree, candidateTree, isolation })
   const activeContent = activePassiveContentPaths(root, baseTree, candidateTree, stats)
   let reasons = deriveSnapshotRiskReasons(stats, activeContent, isPassiveContentCandidateStat)
   const processReasons = processBoundaryRiskReasons(root, baseTree, candidateTree, stats)
-  if (processReasons.length > 0) {
-    reasons = canonicalRiskReasons([...removeFallbackRiskReasons(reasons), ...processReasons])
+  // Items 1, 2, and 5: migrations, keys and credentials, dependencies, git hooks.
+  const itemReasons = stats.flatMap((stat) => pathRiskItemReasons(stat.path))
+  if (processReasons.length > 0 || itemReasons.length > 0) {
+    reasons = canonicalRiskReasons([...removeFallbackRiskReasons(reasons), ...processReasons, ...itemReasons])
   }
   let onlyPassiveContentChanges = true
   let touchesConfiguration = false
