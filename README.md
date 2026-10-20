@@ -124,6 +124,19 @@ States: `collecting` to `approved`, `refutation_required`, or `correction_requir
 - The refuter result must carry the `subject_hash` from its `ODD_REVIEW_BINDING`, which binds it to the lineage, target, and batch (`subject_mismatch` otherwise).
 - `acknowledge` accepts only `approved` and refuses a replay. If a crash left the receipt written but the transaction still `approved`, running it again completes the transaction and reports `recovered: true`; a receipt of another lineage is refused as `target_already_acknowledged`. `start` refuses a candidate that already has a receipt.
 
+### The RDD switch, the boundary, and the Stop gate
+
+```bash
+odd-review mode status                      # {"mode":"on","source":"default"}; read-only
+odd-review mode disable                     # global scope (default); enable turns it back on
+odd-review mode enable --scope clone        # this clone only
+odd-review boundary                         # {"commit":"<sha>","source":"receipt|merge-base|root"}
+```
+
+- The switch is on by default. Precedence is the clone file (`<git-common-dir>/odd-review/mode.json`), then the global file (`${XDG_CONFIG_HOME:-$HOME/.config}/odd-skills/rdd.json`), then the default. An unreadable file is skipped. Writes are atomic.
+- `boundary` is the start of the next committed range: the newest receipt whose `candidate_commit` is an ancestor of (or equal to) `HEAD`, else the merge-base with the default branch (`origin/HEAD`, `main`, or `master`, skipping one that equals `HEAD`), else the root commit. Receipts of committed-mode reviews record `candidate_commit` (and `base_commit` when `--base-ref` names a commit); older receipts without them stay valid and are ignored by `boundary`.
+- The plugin's `Stop` hook (`hooks/scripts/review-gate.mjs`) assesses any uncommitted changes, and `boundary..HEAD` when the boundary comes from a receipt or a merge-base. A root boundary (for example the default branch of an existing repository with no receipts) never opens a committed range, so the gate does not review a whole history. When one is `high`, has no receipt, and was not yet reminded in this session, it blocks the stop once with the range, up to three reasons, and the next step (load `odd-skills:rdd-review`, ask for consent, or skip). Reminders are kept per session under `${CLAUDE_PLUGIN_DATA}/review-gate/`. It does nothing when the switch is off, outside a repository, in a repository without commits, or when `stop_hook_active` is set, and it fails open on any error.
+
 Store: `$(git rev-parse --git-common-dir)/odd-review/`, so nothing is written into the worktree and linked worktrees share it.
 
 ```

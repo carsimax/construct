@@ -4,9 +4,13 @@ import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { applyFiles, git, makeRepo } from '../assess/helpers.mjs'
+import { applyFiles, git, makeRepo, scratchDir } from '../assess/helpers.mjs'
 
 export { applyFiles, assessJson, commitAll, git, makeRepo, scratchDir, sh, write } from '../assess/helpers.mjs'
+
+// Every CLI run gets a scratch XDG_CONFIG_HOME so no test can read or write the
+// real home configuration; a test that needs its own passes env.
+const DEFAULT_XDG = scratchDir('odd-review-xdg-')
 
 export const REVIEW_BIN = new URL('../../plugins/odd-skills/bin/odd-review', import.meta.url).pathname
 export const LENSES = ['review-risk', 'review-resilience', 'review-readability', 'review-reliability']
@@ -25,7 +29,7 @@ export function review(repo, args, { input, env } = {}) {
   const result = spawnSync(REVIEW_BIN, ['--cwd', repo, ...args], {
     encoding: 'utf8',
     input,
-    env: { ...process.env, ...env },
+    env: { ...process.env, XDG_CONFIG_HOME: DEFAULT_XDG, ...env },
   })
   return {
     status: result.status,

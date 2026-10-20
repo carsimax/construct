@@ -7,10 +7,11 @@
 // Every function returns the JSON to print; a refusal throws a Refusal.
 import { readFileSync } from 'node:fs'
 import { resolveCandidate } from '../assess/cli.mjs'
-import { createIsolation, freezeWorkingTree, resolveTree } from '../assess/git.mjs'
+import { createIsolation, freezeWorkingTree, git, resolveTree } from '../assess/git.mjs'
 import { assessSnapshotRisk } from '../assess/classify.mjs'
 import { publicRisk } from '../assess/output.mjs'
 import { collectDiffStats, countChangedLines } from '../assess/stats.mjs'
+import { headCommit } from './boundary.mjs'
 import { buildContext, DEFAULT_CONTEXT_BYTES } from './evidence.mjs'
 import { Refusal } from './errors.mjs'
 import { REFUTER, VALIDATOR, newLineage, refuterSubjectHashOf, subjectHashOf, targetOf, manifestDigest, canonicalLens } from './identity.mjs'
@@ -93,6 +94,20 @@ function requireState(transaction, ...states) {
   }
 }
 
+// commitFields records the commits of a committed-mode review: the HEAD it ran
+// on and, when --base-ref names a commit, that commit. Working-tree reviews have
+// neither, and older transactions and receipts without them stay valid.
+function commitFields(root, candidate) {
+  if (candidate.kind !== 'base-diff') return {}
+  const fields = { candidate_commit: headCommit(root) }
+  try {
+    fields.base_commit = git(root, ['rev-parse', '--verify', '-q', `${candidate.baseRef}^{commit}`]).toString('utf8').trim()
+  } catch {
+    // The base ref names a tree, not a commit.
+  }
+  return fields
+}
+
 // start freezes the candidate and opens a transaction in state collecting.
 export function start({ root, cwd, baseRef, committedOnly, lenses, lensesReason }) {
   let isolation = null
@@ -118,6 +133,7 @@ export function start({ root, cwd, baseRef, committedOnly, lenses, lensesReason 
       state: 'collecting',
       target,
       mode: candidate.kind === 'base-diff' ? { kind: 'committed', base_ref: candidate.baseRef } : { kind: 'working' },
+      ...commitFields(root, candidate),
       base_tree: candidate.baseTree,
       candidate_tree: candidate.candidateTree,
       manifest: assessment.manifest,
@@ -309,6 +325,7 @@ export function correct({ root, cwd, lineage, baseRef }) {
       const target = targetOf(transaction.base_tree, candidateTree, manifest)
       transaction.correction = {
         candidate_tree: candidateTree,
+        ...(transaction.mode.kind === 'committed' || (baseRef ?? '').trim() !== '' ? { candidate_commit: headCommit(root) } : {}),
         target,
         manifest,
         manifest_digest: manifestDigest(manifest),
@@ -353,6 +370,14 @@ export function status({ root, cwd, lineage }) {
 
 // acknowledge consumes an approved review: it writes the receipt for the final
 // reviewed candidate (the corrected one after a correction) exactly once.
+function commitsOfReceipt(transaction, fix) {
+  const out = {}
+  const candidate = fix ? fix.candidate_commit : transaction.candidate_commit
+  if (candidate) out.candidate_commit = candidate
+  if (transaction.base_commit) out.base_commit = transaction.base_commit
+  return out
+}
+
 function readReceiptLineage(root, target) {
   try {
     return JSON.parse(readFileSync(receiptPath(root, target), 'utf8')).lineage
@@ -379,6 +404,7 @@ export function acknowledge({ root, cwd, lineage }) {
       corrected: Boolean(fix),
       base_tree: transaction.base_tree,
       candidate_tree: fix ? fix.candidate_tree : transaction.candidate_tree,
+      ...commitsOfReceipt(transaction, fix),
       lenses: transaction.lenses,
       lenses_reason: transaction.lenses_reason,
       outcome: 'approved',

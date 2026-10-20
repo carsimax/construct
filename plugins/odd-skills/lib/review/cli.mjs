@@ -8,6 +8,8 @@ import { requireBaseRefForCommittedOnly } from '../assess/cli.mjs'
 import { UsageError } from '../assess/escalation.mjs'
 import { goTrimSpace } from '../assess/text.mjs'
 import * as commands from './commands.mjs'
+import { reviewBoundary } from './boundary.mjs'
+import { readMode, writeMode } from './mode.mjs'
 import { DEFAULT_CONTEXT_BYTES } from './evidence.mjs'
 import { Refusal } from './errors.mjs'
 import { canonicalLenses } from './identity.mjs'
@@ -29,6 +31,9 @@ in the worktree. Each command prints JSON that names the exact next command.
   capture-validation --lineage L --input FILE|-
   status --lineage L
   acknowledge --lineage L                    needs approved; writes the receipt
+  boundary                                   last reviewed boundary: {commit, source}
+  mode enable|disable|status [--scope global|clone]
+        the RDD switch (clone, then global, then default on)
 
 Exit codes: 0 success, 1 refused transition (JSON on stderr), 2 bad usage.
 `
@@ -43,6 +48,7 @@ const OPTIONS = {
   'committed-only': { type: 'boolean' },
   input: { type: 'string' },
   'max-bytes': { type: 'string' },
+  scope: { type: 'string' },
   help: { type: 'boolean', short: 'h' },
 }
 
@@ -56,6 +62,8 @@ const ACCEPTS = {
   'capture-validation': ['lineage', 'input'],
   status: ['lineage'],
   acknowledge: ['lineage'],
+  boundary: [],
+  mode: ['scope'],
 }
 
 const need = (values, ...names) => {
@@ -66,6 +74,16 @@ function parseBytes(value) {
   if (value === undefined) return DEFAULT_CONTEXT_BYTES
   if (!/^\d+$/.test(value) || Number(value) === 0) throw new UsageError('--max-bytes must be a positive integer')
   return Number(value)
+}
+
+function modeCommand(action, values, root) {
+  const scope = values.scope ?? 'global'
+  if (!['global', 'clone'].includes(scope)) throw new UsageError('--scope must be global or clone')
+  if (!['enable', 'disable', 'status'].includes(action)) throw new UsageError('mode needs enable, disable, or status')
+  if (action === 'status') return { json: readMode(root) }
+  if (scope === 'clone' && !root) throw new Refusal('not_a_repository', 'the clone scope needs a git repository')
+  const file = writeMode(scope, action === 'enable' ? 'on' : 'off', { root })
+  return { json: { ...readMode(root), scope, file } }
 }
 
 function dispatch(command, values, root) {
@@ -95,6 +113,8 @@ function dispatch(command, values, root) {
     case 'capture-validation':
       need(values, 'lineage', 'input')
       return { json: commands.captureValidation({ ...common, input: values.input }) }
+    case 'boundary':
+      return { json: reviewBoundary(root) }
     case 'status':
       need(values, 'lineage')
       return { json: commands.status(common) }
@@ -122,7 +142,11 @@ export function run(argv, { stdout = process.stdout, stderr = process.stderr } =
     if (!command || !Object.hasOwn(ACCEPTS, command)) {
       throw new UsageError(command ? `unknown command ${JSON.stringify(command)}` : 'a command is required')
     }
-    if (rest.length > 0) throw new UsageError(`unexpected argument ${JSON.stringify(rest[0])}`)
+    if (command === 'mode') {
+      if (rest.length > 1) throw new UsageError(`unexpected argument ${JSON.stringify(rest[1])}`)
+    } else if (rest.length > 0) {
+      throw new UsageError(`unexpected argument ${JSON.stringify(rest[0])}`)
+    }
     for (const name of Object.keys(values)) {
       if (name !== 'cwd' && !ACCEPTS[command].includes(name)) throw new UsageError(`--${name} does not apply to ${command}`)
     }
@@ -130,9 +154,11 @@ export function run(argv, { stdout = process.stdout, stderr = process.stderr } =
     try {
       root = repositoryRoot(values.cwd ?? '.')
     } catch (error) {
-      throw new Refusal('not_a_repository', error.message)
+      // The global switch works anywhere; every other command needs a repository.
+      if (command !== 'mode') throw new Refusal('not_a_repository', error.message)
+      root = null
     }
-    const out = dispatch(command, values, root)
+    const out = command === 'mode' ? modeCommand(rest[0], values, root) : dispatch(command, values, root)
     stdout.write(out.text ?? `${JSON.stringify(out.json, null, 2)}\n`)
     return 0
   } catch (error) {
