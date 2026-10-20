@@ -71,13 +71,14 @@ async function main() {
   // receipt and merge-base boundaries open a committed range.
   if (boundary.source !== 'root' && boundary.commit !== head) {
     candidates.push({
-      label: `committed range ${boundary.commit.slice(0, 12)}..${head.slice(0, 12)}`,
+      label: `the committed range ${boundary.commit.slice(0, 12)}..${head.slice(0, 12)}`,
+      verb: 'is',
       baseTree: resolveTree(root, boundary.commit),
       candidateTree: resolveTree(root, 'HEAD'),
     })
   }
   const working = freezeWorkingTree(root)
-  if (working.baseTree !== working.candidateTree) candidates.push({ label: 'uncommitted changes', ...working })
+  if (working.baseTree !== working.candidateTree) candidates.push({ label: 'the uncommitted changes', verb: 'are', ...working })
 
   for (const candidate of candidates) {
     const isolation = createIsolation(root)
@@ -95,7 +96,7 @@ async function main() {
       .slice(0, MAX_REASONS)
       .map((reason) => (reason.path ? `${reason.code} (${reason.path})` : reason.code))
     const reason =
-      `Review due: the ${candidate.label} is high risk and has no review receipt. ` +
+      `Review due: ${candidate.label} ${candidate.verb} high risk and ${candidate.verb === 'are' ? 'have' : 'has'} no review receipt. ` +
       `Reasons: ${reasons.join(', ')}. ` +
       'Next step: load the odd-skills:rdd-review skill, ask the user for consent, or skip this review.'
     mkdirSync(dir, { recursive: true })

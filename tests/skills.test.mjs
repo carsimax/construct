@@ -100,3 +100,13 @@ test('every odd-review command and CLI flag named in rdd-review exists in the CL
   assert.ok(usedFlags.length > 5, 'the skill names flags')
   for (const flag of new Set(usedFlags)) assert.ok(known.has(flag), `--${flag} is not implemented`)
 })
+
+test('rdd-review covers the working-tree candidate, the root boundary rule, and the correction budget', () => {
+  const text = filesUnder(join(skillsRoot, 'rdd-review')).map((f) => readFileSync(f, 'utf8')).join('\n')
+  const lines = text.split('\n')
+  assert.ok(lines.some((l) => /odd-review start/.test(l) && !/--base-ref/.test(l)), 'working-tree odd-review start')
+  assert.ok(lines.some((l) => /odd-assess --json/.test(l) && !/--base-ref/.test(l)), 'working-tree odd-assess --json')
+  assert.match(text, /`root`/)
+  assert.match(text, /correction_budget_exceeded/)
+  assert.doesNotMatch(text, /`next` is `/)
+})

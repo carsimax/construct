@@ -46,14 +46,29 @@ function receiptCandidates(root) {
   return found.sort((a, b) => String(b.acknowledged_at).localeCompare(String(a.acknowledged_at)))
 }
 
+// closestReceipt picks, among receipts whose commit is an ancestor of (or equal to)
+// HEAD, the one every other candidate is an ancestor of, so a review of an older
+// commit acknowledged later never moves the boundary backward. Receipts arrive
+// newest-acknowledged first, which breaks ties (the same commit, or commits that
+// are not ordered by ancestry).
+function closestReceipt(root, head) {
+  let best = null
+  for (const receipt of receiptCandidates(root)) {
+    const commit = resolveCommit(root, receipt.candidate_commit)
+    if (!commit || !spawnStatus(root, commit, head)) continue
+    if (best === null || (commit !== best && spawnStatus(root, best, commit))) best = commit
+  }
+  return best
+}
+
+const DEFAULT_BRANCH_REFS = ['origin/HEAD', 'main', 'master', 'origin/main', 'origin/master']
+
 export function reviewBoundary(root) {
   const head = headCommit(root)
   if (!head) throw new Refusal('no_commits', 'the repository has no commits')
-  for (const receipt of receiptCandidates(root)) {
-    const commit = resolveCommit(root, receipt.candidate_commit)
-    if (commit && spawnStatus(root, commit, head)) return { commit, source: 'receipt' }
-  }
-  for (const ref of ['origin/HEAD', 'main', 'master']) {
+  const receipt = closestReceipt(root, head)
+  if (receipt) return { commit: receipt, source: 'receipt' }
+  for (const ref of DEFAULT_BRANCH_REFS) {
     const tip = resolveCommit(root, ref)
     if (!tip || tip === head) continue
     const base = text(git(root, ['merge-base', head, tip], { okStatuses: [0, 1] }))

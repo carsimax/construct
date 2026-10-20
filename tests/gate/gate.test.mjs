@@ -104,7 +104,7 @@ describe('blocking', () => {
     const r = gate(repo, e)
     assert.equal(r.status, 0)
     assert.equal(r.json.decision, 'block')
-    assert.match(r.json.reason, /uncommitted changes/)
+    assert.match(r.json.reason, /the uncommitted changes are high risk/)
     assert.match(r.json.reason, /shell_source \(scripts\/build\.sh\)/)
     assert.match(r.json.reason, /odd-skills:rdd-review/)
     assert.match(r.json.reason, /consent/)
@@ -136,6 +136,7 @@ describe('blocking', () => {
     assert.equal(r.json.decision, 'block')
     assert.ok(r.json.reason.includes(`${root.slice(0, 12)}..${head(repo).slice(0, 12)}`), r.json.reason)
     assert.doesNotMatch(r.json.reason, /uncommitted/)
+    assert.match(r.json.reason, /the committed range \S+ is high risk/)
   })
 
   test('the second Stop in the same session does not block again for the same target', () => {
@@ -206,6 +207,13 @@ describe('blocking', () => {
     const r = gate(repo, e)
     assert.equal(r.json.decision, 'block')
     assert.ok(r.json.reason.includes(`${head(repo).slice(0, 12)}`))
+  })
+
+  test('the reason agrees in number for uncommitted changes', () => {
+    const e = env()
+    const repo = highRepo()
+    const r = gate(repo, e)
+    assert.match(r.json.reason, /the uncommitted changes are high risk and have no review receipt/)
   })
 
   test('a corrupt reminder file fails open and is left alone', () => {

@@ -1,6 +1,6 @@
 # Review lifecycle reference
 
-State lives under the git common directory (`odd-review/`), never in the worktree. Every command prints JSON with a `next` field naming the exact command to run. Exit codes: 0 success, 1 refused transition (JSON on stderr), 2 bad usage.
+State lives under the git common directory (`odd-review/`), never in the worktree. Every command prints JSON with a `state` field and a `next` list of the exact commands to run. Exit codes: 0 success, 1 refused transition (JSON on stderr), 2 bad usage.
 
 ## Commands
 
@@ -10,7 +10,8 @@ State lives under the git common directory (`odd-review/`), never in the worktre
 | `odd-review mode disable [--scope global\|clone]` | Turn RDD off (user request only) |
 | `odd-review mode enable [--scope global\|clone]` | Turn RDD on (only when the user asks) |
 | `odd-review boundary` | Last reviewed commit, or the branch point: `{commit, source}` |
-| `odd-review start --base-ref B --committed-only --lenses LIST --lenses-reason TEXT` | Freeze the candidate and open a transaction; prints `lineage`, `target`, per-lens `subject_hash` |
+| `odd-review start --base-ref B --committed-only --lenses LIST --lenses-reason TEXT` | Freeze a committed range and open a transaction; prints `lineage`, `target`, per-lens `subject_hash` |
+| `odd-review start --lenses LIST --lenses-reason TEXT` | Same for the uncommitted changes (no `--base-ref`) |
 | `odd-review context --lineage L --lens LENS` | Binding and frozen evidence for one lens, the refuter, or the validator |
 | `odd-review capture --lineage L --lens LENS --input -` | Store one lens result; reduces when all lenses are in |
 | `odd-review capture-refuter --lineage L --input -` | Store the refuter result |
@@ -19,9 +20,9 @@ State lives under the git common directory (`odd-review/`), never in the worktre
 | `odd-review status --lineage L` | Read the transaction state |
 | `odd-review acknowledge --lineage L` | Write the receipt; needs `approved` |
 
-`LIST` is a comma-separated subset of `risk,resilience,readability,reliability`. `odd-assess` takes `--base-ref`, `--committed-only`, `--escalate-item`, `--escalate-reason`, and `--json`.
+`LIST` is a comma-separated subset of `risk,resilience,readability,reliability`. `odd-assess --json` assesses the uncommitted changes. For a committed range add `--base-ref B --committed-only`. It takes `--base-ref`, `--committed-only`, `--escalate-item`, `--escalate-reason`, and `--json`.
 
-## States and the `next` action
+## States and what to run
 
 | State | Meaning | Action |
 |---|---|---|
@@ -32,7 +33,11 @@ State lives under the git common directory (`odd-review/`), never in the worktre
 | `approved` | No blocking findings | `acknowledge` |
 | `escalated` | Blockers remain after the one correction | **Needs your decision** with the findings |
 
-A refusal `context_budget_exceeded` means the evidence is over the byte budget: split the range into smaller commit slices. A refusal `target_already_acknowledged` means this exact target already has a receipt; no review is needed.
+A refusal `context_budget_exceeded` means the evidence is over the byte budget: split the range into smaller commit slices. A refusal `correction_budget_exceeded` means the correction is larger than min(200, ceil(n/2)) of the reviewed lines; it does not consume the single correction. Make a smaller fix or escalate. A one-line candidate cannot fit any correction.
+
+A `root` boundary source means no receipt and no default branch to diff against; do not review the whole history.
+
+A refusal `target_already_acknowledged` means this exact target already has a receipt; no review is needed.
 
 ## Rules
 
