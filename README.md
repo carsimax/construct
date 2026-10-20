@@ -1,6 +1,22 @@
 # Construct
 
-Construct is a Claude Code plugin for Organic Driven Development (ODD). It ships orchestration rules, review lenses, and delivery skills as plugin components only: agents, skills, hooks, mods, workflows, and output styles. Engram stays an independent memory instance; this plugin depends on it.
+[![Claude Code](https://img.shields.io/badge/Claude_Code-2.1.304%2B-blue)](#requirements)
+[![Plugin version](https://img.shields.io/badge/version-1.0.0-informational)](plugins/construct/.claude-plugin/plugin.json)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+
+Construct is a Claude Code plugin that makes every request follow Organic Driven Development (ODD): authorize, explore, size, track, implement test-first, and close with evidence and a Risk line.
+
+## What you get
+
+- **ODD workflow.** A session contract, injected by hooks, that Claude follows on every request without being asked.
+- **Role agents with model routing.** 13 agents (explorer, worker, verifier, judges, review lenses). You choose each role's model and effort in `/config`.
+- **Skills.** Procedures that load on demand: workflow, delegation, task sizing, debugging, quality bar, migrations, branches and pull requests, and more.
+- **Receipt-driven review.** `odd-assess` classifies risk and `odd-review` runs a bounded outside review of high-risk changes, with your consent.
+- **Secret guard.** A hook that denies reads and writes of credentials and destructive commands, including under `bypassPermissions`.
+- **Status panel.** A docked panel with the model, context, cost, plan limits, active feature, review state, permission gate, agents, and changes. Open it with `/construct`.
+- **Theme and output style.** The Matrix-style **Construct** theme and the `Principal Engineer` output style.
+
+Memory comes from the separate `engram@engram` plugin, which Construct depends on.
 
 ## Requirements
 
@@ -11,13 +27,15 @@ Construct is a Claude Code plugin for Organic Driven Development (ODD). It ships
 | `git` on the PATH | `odd-assess` and `odd-review` read the repository |
 | Homebrew (macOS or Linux) | Installs the engram binary |
 
-## One-command install
+## Install
+
+### One command
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v0.1.0/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v1.0.0/install.sh | bash
 ```
 
-The installer checks the requirements above and stops before changing anything if one is missing, or if `~/.claude` or `~/.claude/settings.json` is not writable, or if `settings.json` is a directory. Then it runs the Quick path below for you:
+The installer checks the requirements above and stops before changing anything if one is missing, or if `~/.claude` or `~/.claude/settings.json` is not writable, or if `settings.json` is a directory. Then it runs the manual steps below for you:
 
 - Installs the engram binary through Homebrew when it is missing, and runs `engram setup claude-code`.
 - Adds the engram and construct marketplaces and installs `construct@construct`.
@@ -34,12 +52,12 @@ Every step is skipped when it is already done, so running the installer again ch
 Pass options after `bash -s --`, for example `curl -fsSL <url> | bash -s -- --no-mcp`. To read the script before running it:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v0.1.0/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v1.0.0/install.sh -o install.sh
 less install.sh
 bash install.sh
 ```
 
-## Quick path
+### Manual install
 
 The manual steps the installer runs, for when you want to run them yourself:
 
@@ -79,6 +97,20 @@ The manual steps the installer runs, for when you want to run them yourself:
    - Ask Claude to run `odd-review mode status`; it prints `{"mode":"on","source":"default"}`. The plugin's `bin/` is on the PATH of Claude's Bash tool only, not your own shell.
    - After a turn ends, the panel shows the RDD state (`clear`, `review due` or `reviewed`); `/construct` opens it.
 
+## First session
+
+Open Claude Code in a git repository and make a request. Construct applies the same steps each time:
+
+1. **Authorize.** Questions, reviews, and planning stay read-only. Files change only when you explicitly ask for a change.
+2. **Explore.** Claude reads the existing code first, in proportion to the task.
+3. **Size.** A task is small or large. Small work goes to one worker agent. Large work is tracked in `odd/tasks/<feature>.md` (specs, tasks, log) before the first source write.
+4. **Implement test-first.** A worker writes a failing test, makes it pass, then refactors, inside the edit surfaces it was given.
+5. **Close with evidence.** One report: what was verified, what failed or was skipped, the next step, and a Risk line (`Risk: none` or `Risk: item N (reason)`).
+
+Commit, push, pull request, and merge stay your decisions. For a high-risk change, Construct offers a review and asks for your consent first. `odd-review mode disable` turns the review off.
+
+To confirm the install works, see step 6 of [Manual install](#manual-install).
+
 ## Update
 
 Construct and engram update through Claude Code's plugin commands. Running `install.sh` again does not update them: it skips every step that is already done.
@@ -97,55 +129,19 @@ brew upgrade engram
 engram setup claude-code
 ```
 
-## How the ODD contract loads
+## Configuration
 
-A plugin cannot ship a `CLAUDE.md`, so Construct loads its rules in three layers:
+Options are plugin settings, edited in `/config`:
 
-| Layer | Mechanism | Content |
-|---|---|---|
-| Session contract | `SessionStart` hook (startup, resume, clear, compact) | ODD protocol, task size, high-risk list, Risk line, and delegation triggers, under 8,000 characters |
-| Subagent contract | `SubagentStart` hook | Artifact language, edit surfaces, scratch, and the `## Key Learnings` closing block. JSON-only reviewers (`review-*`, `jd-judge-*`) get nothing |
-| Skills | Loaded on demand | `odd-workflow`, `odd-delegation`, `task-size-risk`, `lossless-prompts`, `debugging`, `constraint-driven` |
-| Output style | Forced by the plugin (`force-for-plugin`), in every project | Reply tone, language, response length, verification, and working rules (no AI attribution in commits, one question at a time) |
-
-The contract texts live in `plugins/construct/hooks/contract/`.
-
-After a compaction or a resume, a second `SessionStart` hook (matcher `compact|resume`) re-injects the active feature state. It reads `odd/tasks/*.md` under the project root and, for up to three documents with unfinished tasks (newest first), emits the path, title, branch line, unfinished task rows, and the last `Next step:` from the log, in at most 2,500 characters. It is read-only and prints nothing when no document is active. Task-to-document sync hooks were dropped: native tasks have no link to the document's `T#` rows, so a hook could corrupt the feature document. The orchestrator keeps the document current, and the re-injection tells it where it was.
-
-## MCP servers
-
-The plugin ships no MCP servers, so it never duplicates servers you already registered (duplicates would load every tool twice). The agents and the `codegraph` skill expect this user-scope server. Install the CodeGraph CLI, then register the server once:
-
-```bash
-npm install -g @colbymchenry/codegraph
-claude mcp add-json --scope user codegraph '{"type":"stdio","command":"codegraph","args":["serve","--mcp"],"alwaysLoad":true}'
-```
-
-`alwaysLoad: true` keeps `codegraph_explore` loaded from the first prompt instead of deferred behind tool search (`claude mcp add` has no flag for it, hence `add-json`). To skip permission prompts, add `"mcp__codegraph__*"` to `permissions.allow` in `~/.claude/settings.json`. Indexing stays your decision: agents never run `codegraph init`, so run `codegraph init` in each project you want indexed, or opt in to automatic indexing with the plugin option `codegraph_auto_index` (boolean, default `false`). When it is on and a session starts in a git root with no `.codegraph/` and `codegraph` on the PATH, the SessionStart hook launches `codegraph init --yes <root>` detached in the background on a fresh startup only (it never waits), says the launch was requested and may still fail, and tells the agent to use file tools until `codegraph status` reports the index complete; on resume, clear, or compact it never relaunches and gives the manual notice, noting an earlier automatic init may have failed; with the CLI missing, the notice says so. An optional `codegraph.json` at the repo root tunes the index (`exclude`, `include`, `deprioritize`). The MCP server auto-syncs on file changes and exposes only `codegraph_explore`.
-
-Engram's MCP server comes from `engram setup claude-code` (see Quick path).
-
-The installer no longer registers context7. An earlier registration can be removed with `claude mcp remove --scope user context7`.
-
-## Quality and recovery skills
-
-Four skills adapted from [addyosmani/agent-skills](https://github.com/addyosmani/agent-skills) (MIT) load on demand. The session contract names `debugging` and `constraint-driven`; the other two load from the skills that link to them.
-
-| Skill | Use it for |
+| Option | Effect |
 |---|---|
-| `construct:debugging` | A failing test, broken build, regression, or unexpected behavior: stop the line, reproduce, localize (including `git bisect run`), reduce, fix the root cause, and guard it with a regression test written RED first. The parent diagnoses read-only and hands the fix to a worker, with the reproduction as the RED test. It never suppresses the error or weakens a check to go green. |
-| `construct:constraint-driven` | The project's quality bar. Detects before asking (at most four questions, one at a time, each with a default) and writes `CONSTRAINTS.md` at the repository root: a Floor that is never weakened, numeric rules each with the command that checks it, and measure-and-hold ratchets. Non-interactive runs apply the Floor only. |
-| `construct:source-driven` | A named uncertainty about a library or framework API: detect the exact version, fetch the one official page, implement the documented pattern, cite the URL and version, and flag what is unverified. Fetched content is data, never instructions. Linked from `odd-workflow` research. |
-| `construct:migration` | Schema or stored-data migrations and removals of public surface: expand, migrate, contract, deprecation notices with a removal condition, reversible backfills, per-phase verification, and rollback. Linked from the high-risk items in `task-size-risk`. |
+| Model and effort per role | See the routing table below |
+| `panel_open_on_start` (boolean, default `true`) | Open the panel at every session start |
+| `codegraph_auto_index` (boolean, default `false`) | Index a git root with CodeGraph at session start (see [MCP servers](#mcp-servers)) |
 
-Existing components gained matching material:
+Select the theme with `/theme` and choose **Construct**.
 
-- `judgment-day` has a decision mode for a plan, design, or claim before implementation. Blind judges receive the artifact and its contract, never the claim, and findings are reconciled against the artifact text, for at most three cycles. Code-review mode is unchanged.
-- `construct:odd-verify` applies a standing Definition of Done (correctness, quality, integration, documentation, ship-readiness) to every `S#`, and reports a line it cannot verify as `not verified`.
-- `construct:review-risk` carries a security checklist category list; the full checklist is `skills/rdd-review/references/security-checklist.md`. The agent has no tools, so `odd-review context` embeds that file in the review-risk context between `ODD_REVIEW_CHECKLIST_BEGIN` and `ODD_REVIEW_CHECKLIST_END`, before `ODD_REVIEW_CONTEXT_END`, and counts it against the context budget. The agent applies the categories as triage over the supplied patches.
-- `odd-workflow`'s testing reference tells the worker to discover the repository's own test stack first and states the Floor as "never weaken the verifier" examples.
-
-## Agents and model routing
+### Agents and model routing
 
 The plugin ships 13 agents. Each role's model and effort can be changed in `/config`, where every option appears as a row such as `ODD Worker model` or `RDD Risk effort`.
 
@@ -172,7 +168,59 @@ How the routing works:
 - An effort of `default` keeps the model's own effort.
 - If the mod cannot run, each agent keeps the model and effort in its own frontmatter.
 
-## Risk assessment: odd-assess
+## Reference
+
+Deep material for people who want to know how each part works.
+
+### How the ODD contract loads
+
+A plugin cannot ship a `CLAUDE.md`, so Construct loads its rules in layers:
+
+| Layer | Mechanism | Content |
+|---|---|---|
+| Session contract | `SessionStart` hook (startup, resume, clear, compact) | ODD protocol, task size, high-risk list, Risk line, and delegation triggers, under 8,000 characters |
+| Subagent contract | `SubagentStart` hook | Artifact language, edit surfaces, scratch, and the `## Key Learnings` closing block. JSON-only reviewers (`review-*`, `jd-judge-*`) get nothing |
+| Skills | Loaded on demand | `odd-workflow`, `odd-delegation`, `task-size-risk`, `lossless-prompts`, `debugging`, `constraint-driven` |
+| Output style | Forced by the plugin (`force-for-plugin`), in every project | Reply tone, language, response length, verification, and working rules (no AI attribution in commits, one question at a time) |
+
+The contract texts live in `plugins/construct/hooks/contract/`.
+
+After a compaction or a resume, a second `SessionStart` hook (matcher `compact|resume`) re-injects the active feature state. It reads `odd/tasks/*.md` under the project root and, for up to three documents with unfinished tasks (newest first), emits the path, title, branch line, unfinished task rows, and the last `Next step:` from the log, in at most 2,500 characters. It is read-only and prints nothing when no document is active. Task-to-document sync hooks were dropped: native tasks have no link to the document's `T#` rows, so a hook could corrupt the feature document. The orchestrator keeps the document current, and the re-injection tells it where it was.
+
+### MCP servers
+
+The plugin ships no MCP servers, so it never duplicates servers you already registered (duplicates would load every tool twice). The agents and the `codegraph` skill expect this user-scope server. Install the CodeGraph CLI, then register the server once:
+
+```bash
+npm install -g @colbymchenry/codegraph
+claude mcp add-json --scope user codegraph '{"type":"stdio","command":"codegraph","args":["serve","--mcp"],"alwaysLoad":true}'
+```
+
+`alwaysLoad: true` keeps `codegraph_explore` loaded from the first prompt instead of deferred behind tool search (`claude mcp add` has no flag for it, hence `add-json`). To skip permission prompts, add `"mcp__codegraph__*"` to `permissions.allow` in `~/.claude/settings.json`. Indexing stays your decision: agents never run `codegraph init`, so run `codegraph init` in each project you want indexed, or opt in to automatic indexing with the plugin option `codegraph_auto_index` (boolean, default `false`). When it is on and a session starts in a git root with no `.codegraph/` and `codegraph` on the PATH, the SessionStart hook launches `codegraph init --yes <root>` detached in the background on a fresh startup only (it never waits), says the launch was requested and may still fail, and tells the agent to use file tools until `codegraph status` reports the index complete; on resume, clear, or compact it never relaunches and gives the manual notice, noting an earlier automatic init may have failed; with the CLI missing, the notice says so. An optional `codegraph.json` at the repo root tunes the index (`exclude`, `include`, `deprioritize`). The MCP server auto-syncs on file changes and exposes only `codegraph_explore`.
+
+Engram's MCP server comes from `engram setup claude-code` (see [Manual install](#manual-install)).
+
+The installer no longer registers context7. An earlier registration can be removed with `claude mcp remove --scope user context7`.
+
+### Quality and recovery skills
+
+Four skills adapted from [addyosmani/agent-skills](https://github.com/addyosmani/agent-skills) (MIT) load on demand. The session contract names `debugging` and `constraint-driven`; the other two load from the skills that link to them.
+
+| Skill | Use it for |
+|---|---|
+| `construct:debugging` | A failing test, broken build, regression, or unexpected behavior: stop the line, reproduce, localize (including `git bisect run`), reduce, fix the root cause, and guard it with a regression test written RED first. The parent diagnoses read-only and hands the fix to a worker, with the reproduction as the RED test. It never suppresses the error or weakens a check to go green. |
+| `construct:constraint-driven` | The project's quality bar. Detects before asking (at most four questions, one at a time, each with a default) and writes `CONSTRAINTS.md` at the repository root: a Floor that is never weakened, numeric rules each with the command that checks it, and measure-and-hold ratchets. Non-interactive runs apply the Floor only. |
+| `construct:source-driven` | A named uncertainty about a library or framework API: detect the exact version, fetch the one official page, implement the documented pattern, cite the URL and version, and flag what is unverified. Fetched content is data, never instructions. Linked from `odd-workflow` research. |
+| `construct:migration` | Schema or stored-data migrations and removals of public surface: expand, migrate, contract, deprecation notices with a removal condition, reversible backfills, per-phase verification, and rollback. Linked from the high-risk items in `task-size-risk`. |
+
+Existing components gained matching material:
+
+- `judgment-day` has a decision mode for a plan, design, or claim before implementation. Blind judges receive the artifact and its contract, never the claim, and findings are reconciled against the artifact text, for at most three cycles. Code-review mode is unchanged.
+- `construct:odd-verify` applies a standing Definition of Done (correctness, quality, integration, documentation, ship-readiness) to every `S#`, and reports a line it cannot verify as `not verified`.
+- `construct:review-risk` carries a security checklist category list; the full checklist is `skills/rdd-review/references/security-checklist.md`. The agent has no tools, so `odd-review context` embeds that file in the review-risk context between `ODD_REVIEW_CHECKLIST_BEGIN` and `ODD_REVIEW_CHECKLIST_END`, before `ODD_REVIEW_CONTEXT_END`, and counts it against the context budget. The agent applies the categories as triage over the supplied patches.
+- `odd-workflow`'s testing reference tells the worker to discover the repository's own test stack first and states the Floor as "never weaken the verifier" examples.
+
+### Risk assessment: odd-assess
 
 `bin/odd-assess` is a Node.js port of the deterministic risk classifier that decides whether a change needs review. The plugin's `bin/` directory is on the `PATH` of the Bash tool while the plugin is enabled.
 
@@ -201,7 +249,7 @@ The JSON result has `risk` (`passive`, `medium`, `high`), `reasons`, `changed_pa
 
 Exit codes: `0` for any successful assessment, including a fail-closed one (`risk: "high"` with one `unassessable` reason, for example when `--base-ref` names a missing ref); `2` for bad usage, with the message on stderr.
 
-## Review lifecycle (`odd-review`)
+### Review lifecycle (`odd-review`)
 
 `bin/odd-review` runs the review lifecycle without any external binary: it freezes the candidate, serves immutable evidence to the review agents, validates their results, drives one bounded correction, and records a receipt. It never asks for consent; that belongs to the review skill.
 
@@ -229,7 +277,7 @@ States: `collecting` to `approved`, `refutation_required`, or `correction_requir
 - The refuter result must carry the `subject_hash` from its `ODD_REVIEW_BINDING`, which binds it to the lineage, target, and batch (`subject_mismatch` otherwise).
 - `acknowledge` accepts only `approved` and refuses a replay. If a crash left the receipt written but the transaction still `approved`, running it again completes the transaction and reports `recovered: true`; a receipt of another lineage is refused as `target_already_acknowledged`. `start` refuses a candidate that already has a receipt.
 
-### The RDD switch, the boundary, and the Stop gate
+#### The RDD switch, the boundary, and the Stop gate
 
 ```bash
 odd-review mode status                      # {"mode":"on","source":"default"}; read-only
@@ -244,7 +292,7 @@ odd-review boundary                         # {"commit":"<sha>","source":"receip
 - The plugin's `Stop` hook (`hooks/scripts/review-gate.mjs`) assesses any uncommitted changes, and `boundary..HEAD` when the boundary comes from a receipt or a merge-base. A root boundary (for example the default branch of an existing repository with no receipts) never opens a committed range, so the gate does not review a whole history. When one is `high`, has no receipt, and was not yet reminded in this session, it blocks the stop once with the range, up to three reasons, and the next step (load `construct:rdd-review`, ask for consent, or skip). Reminders are kept per session under `${CLAUDE_PLUGIN_DATA}/review-gate/`; without `CLAUDE_PLUGIN_DATA` they go to a private `construct-<uid>` directory in the system temp dir, which must be owned by the user with no group or other access (otherwise the gate stays silent). It does nothing when the switch is off, outside a repository, in a repository without commits, or when `stop_hook_active` is set, stays silent for a target that has an open lineage (any state but `escalated` and `acknowledged`, with a transition in the last six hours; an older one counts as abandoned), and fails open on any error. While a subagent of the session is open (`hooks/scripts/subagent-count.mjs` records each start on `SubagentStart` and removes it on `SubagentStop`, one file per agent id under `${CLAUDE_PLUGIN_DATA}/subagent-count/`, and an entry older than one hour counts as abandoned, and a stop whose id was never recorded closes the oldest entry that has no id), the gate stays silent and records nothing, so the check runs at the first `Stop` after the agents finish; missing or unreadable state means the gate runs as usual.
 - The Risk line gate (`hooks/scripts/risk-line.mjs`) has two hooks. `mark` runs on `UserPromptSubmit`, records the working-state tree for the session under `${CLAUDE_PLUGIN_DATA}/risk-line/`, and prints nothing. `check` runs on `Stop`: when paths outside `odd/tasks/` changed since the mark and the final message has no `Risk: none` or `Risk: item N` (N 1-6) line, it blocks the stop once per turn, naming up to three changed paths and the expected form. The line may start with a list marker (`-`, `*`, `+`, `1.`, `1)`) and may wrap the label or the value in Markdown emphasis (`**Risk**: none`, `Risk: **none**`, `` Risk: `none` ``), with or without a space after the colon; `risk: none`, `Risk: None`, a quote or heading prefix, and the phrase mid-sentence do not count. The record stores the repository root, and a record from another repository, or an old one without a root, is ignored. It fails open on a missing record, no repository, no commits, `stop_hook_active`, a missing final message, or any error. While a subagent of the session is open (see the review gate above), `check` stays silent and leaves the turn's record unspent, so it runs at the first `Stop` after the agents finish.
 
-### Review hooks: context in, results out
+#### Review hooks: context in, results out
 
 Two hooks move the hand-offs between the orchestrator and the lens agents into code. The orchestrator launches each lens with only the lineage id as its prompt (for example `Review lineage review-0123456789abcdef`).
 
@@ -262,7 +310,7 @@ odd-review/receipts/<target hex>.json    # written by acknowledge
 
 Writes are a temporary file plus a rename. A second writer on a locked transaction is refused (`transaction_locked`); a lock left by a dead process (or an empty one older than 10 seconds) is reclaimed under a separate `<lock>.reclaim` lock, and only if it is still the very file (same inode and content) that was inspected as stale, so a live lock is never removed. A contender that cannot reclaim does not wait; it gets `transaction_locked`. No command changes the index, `HEAD`, or the working tree.
 
-## Secret guard
+### Secret guard
 
 A `PreToolUse` hook (`hooks/scripts/secret-guard.mjs`) denies tool calls that touch secrets. It replaces a `permissions.deny` list, which a plugin cannot set. It covers `Read`, `Edit`, `Write`, `MultiEdit`, `NotebookEdit`, `Grep`, `Glob`, and `Bash`, in the main session and in subagents, and holds under `bypassPermissions`.
 
@@ -293,7 +341,7 @@ The denial says which rule matched and that the user can run the command manuall
 
 Known lexical limits: the guard reads the command text and cannot see through whole-directory searches such as `grep -rn KEY .`, symlinks, shell globs (`cat .e*`), variables, or obfuscation (`cat $(echo .e)nv`, encoded payloads).
 
-## Construct panel (mod)
+### Construct panel (mod)
 
 The mod draws one thing: a docked **panel** (a `Pane` with id `construct`) laid out as [claude-flightdeck](https://github.com/scasella/claude-flightdeck) cards and adapted to the ODD flow: one column at any width, no header or legend, `round` bordered cards, the bold title on the left and the status on the right. The band above the prompt is not drawn. It needs Claude Code 2.1.304 or later and does not appear in `claude -p` runs, which draw no interface.
 
@@ -318,63 +366,39 @@ The mod draws one thing: a docked **panel** (a `Pane` with id `construct`) laid 
 
 **Credit.** The drawing code (gauges, effort meter, timeline geometry, the animated rail and the elapsed clock) is adapted from [claude-flightdeck](https://github.com/scasella/claude-flightdeck) by Stephen Casella, MIT License. The copyright and permission notice are in [`plugins/construct/LICENSE-flightdeck`](plugins/construct/LICENSE-flightdeck) and at the top of each adapted file.
 
-## Theme: Construct
+### Theme: Construct
 
 The plugin ships one color theme, **Construct**, in the style of *The Matrix*: phosphor green `#00FF41` for the accent, success, permissions, and the usage meter; deeper greens for borders, hints, and backgrounds; pale green text on near-black. Errors stay red and warnings yellow, so they still stand out. Select it with `/theme` (it is listed as from this plugin); the panel turns matrix green with it, since it colors with theme keys.
 
-## Local development
-
-Load the plugin for one session without installing it:
-
-```bash
-claude --plugin-dir ./plugins/construct
-```
-
-Validate the marketplace and the plugin:
-
-```bash
-claude plugin validate --strict .
-claude plugin validate --strict ./plugins/construct
-```
-
-Run the tests:
-
-```bash
-node --test tests/                       # repository checks, odd-assess and odd-review tests
-claude plugin test plugins/construct    # mod tests (*.test.ts)
-```
-
-Run the behavior evals (they spend real usage; each run is an isolated `claude -p` session):
-
-```bash
-scripts/eval.sh                 # all cases, 1 run per arm, sonnet
-scripts/eval.sh --case small-delegated
-```
-
-`scripts/eval.sh` evaluates a temporary copy of the plugin without the `engram@engram` dependency, because isolated eval runs cannot resolve it and the plugin would not load.
-
-## Layout
+### Layout
 
 | Path | Contents |
 |---|---|
 | `.claude-plugin/marketplace.json` | Local marketplace `construct`; allows the cross-marketplace `engram` dependency |
-| `install.sh` | One-command installer (see [One-command install](#one-command-install)) |
+| `install.sh` | One-command installer (see [One command](#one-command)) |
 | `plugins/construct/` | The plugin (manifest name `construct`) |
 | `plugins/construct/agents/` | The 13 role agents |
 | `plugins/construct/skills/` | Delivery and review skills (`branch-pr`, `chained-pr`, `work-unit-commits`, `judgment-day`, `debugging`, `constraint-driven`, ...) |
-| `plugins/construct/hooks/` | `hooks.json`, the mod (`register.js`), its routing helpers, the status modules (`status/`), the panel modules (`panel/`), and the command hooks (`scripts/`: contract, feature state, secret guard, review gate, review context and capture) |
-| `plugins/construct/bin/` | Executable scripts put on the `PATH` (`odd-assess`) |
+| `plugins/construct/hooks/` | `hooks.json`, the mod (`register.js`), its routing helpers, the status modules (`status/`), the panel modules (`panel/`), and the command hooks (`scripts/`: contract, feature state, secret guard, review gate, Risk line gate, subagent count, review context and capture) |
+| `plugins/construct/bin/` | Executable scripts put on the `PATH` (`odd-assess`, `odd-review`) |
 | `plugins/construct/lib/assess/` | `odd-assess` modules: git, stats, passive, signals, sinks, content, classify, escalation, output |
+| `plugins/construct/lib/review/` | `odd-review` modules: the review lifecycle, its mode switch, and its store |
 | `plugins/construct/hooks/contract/` | Session and subagent contract texts injected by hooks |
 | `plugins/construct/evals/` | Behavior eval cases run by `claude plugin eval` |
 | `plugins/construct/tests/` | Mod tests run by `claude plugin test` |
 | `tests/` | Repository tests run by `node --test` |
 | `odd/tasks/` | ODD feature documents (specs, tasks, log) |
 
-## License notice
+## Contributing
 
-Part of the agents and skills are adapted from MIT-licensed material (Gentle AI and agent-skills); see [`plugins/construct/NOTICE`](plugins/construct/NOTICE).
+Setup, checks, and pull request rules are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Status
 
-Work in progress. The plan and task list live in [`odd/tasks/odd-skills-plugin.md`](odd/tasks/odd-skills-plugin.md).
+Current version: 1.0.0 (`plugins/construct/.claude-plugin/plugin.json`), the first complete release. Releases are tagged `vX.Y.Z`.
+
+## License
+
+Construct is released under the MIT License; see [`LICENSE`](LICENSE).
+
+Part of the agents and skills are adapted from MIT-licensed material (Gentle AI and agent-skills); see [`plugins/construct/NOTICE`](plugins/construct/NOTICE).

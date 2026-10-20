@@ -3,7 +3,7 @@
 # codegraph MCP server, and merges the Construct settings into
 # ~/.claude/settings.json. Safe to run again; a second run changes nothing.
 #
-#   curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v0.1.0/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v1.0.0/install.sh | bash
 #   curl -fsSL .../install.sh | bash -s -- --no-mcp --force
 #
 # Runs under the macOS system bash (3.2): no associative arrays, no ${x,,}.
