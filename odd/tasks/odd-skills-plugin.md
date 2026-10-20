@@ -871,3 +871,16 @@ Push and PR creation remain the user's decision.
   - Verified: https://github.com/carsimax/construct, visibility `PRIVATE`, default branch `main`.
   - The install docs now use `claude plugin marketplace add carsimax/construct`.
   - Only `main` was pushed; the 19 slice branches and the tracker stay local.
+- **L39 (2026-10-20, user):** "Ahora solo algunos ajustes visuales me gustaría que la parte visual fuera más como el tema visual de matrix eso puedes ajustarlo en el tema y en los mods visuales?"
+  - Branch `style/matrix-theme`.
+  - The `odd` theme is replaced by `themes/construct.json`, named "Construct", in a Matrix palette:
+    - phosphor `#00FF41` for the accent, success, permissions, and the usage meter;
+    - deeper greens for borders, hints, and backgrounds;
+    - pale green text;
+    - errors kept red (`#FF3B3B`) and warnings yellow (`#E6F53B`) so they still signal.
+    - Only documented tokens are used: Claude Code ignores unknown tokens silently, so a test pins every token against the documented list.
+  - The status band now colors with theme keys instead of fixed names (`success`, `warning`, `error`, `claude`, `suggestion`, `inactive`, `subtle`), so it follows the active theme. Every line opens with a `▌` mark, and segments are joined by a faint `┊`.
+  - Tests: RED first (8 behavior failures across the mod and the style tests), then GREEN. `claude plugin test`: `36 pass`. `node --test tests/`: `504 pass`. Commit `085d949`.
+- **L40 (2026-10-20, user):** "Y quita la documentación de la migración esto se asume que estará en máquinas limpias"
+  - `docs/MIGRATION.md`, `tests/migration.test.mjs`, and the README "Migrating from gentle-ai" section are removed. The plugin is assumed to install on clean machines, and the README Quick path covers that.
+  - T13 is superseded by this decision.
