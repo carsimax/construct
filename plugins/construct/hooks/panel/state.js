@@ -1,9 +1,15 @@
+// Portions adapted from claude-flightdeck, Copyright (c) 2026 Stephen Casella, MIT License.
+// The full license text is in plugins/construct/LICENSE-flightdeck. Adapted here: the file /
+// shell / other bucketing of tool calls and the allow / ask / cleared / deny tallies per bucket
+// (core.ts bucketOf, recordCheck, settleCheck), the main-thread request count and the permission
+// mode note (register.tsx turn.step, agent.spawn), and the session log.
+//
 // Pure state for the Construct panel: one reducer per engine event the panel
 // observes, plus selectors. No `$` calls live here and nothing throws on odd
 // input, so these run (and test) in isolation. The wiring passes plain data
 // (ids, usage, a clock, a cost number); every reducer returns a new state.
 //
-// Stored shape (SCHEMA_VERSION 1):
+// Stored shape (SCHEMA_VERSION 2):
 //   v            schema version
 //   agents[]     { id, role, type, description, model, effort, ctx, steps,
 //                  startedMs, endedMs, status: 'running' | 'done' }, oldest first, at most 20
@@ -15,51 +21,93 @@
 //   receipt      { turnId, startedMs, endedMs, agents, edits, errors, costStart, cost } | null (S5)
 //                endedMs null while the turn runs; cost is the cost added, null if unknown
 //   compactions  session.compact count
+//   main         { steps, model, effort, mode }  main-thread vitals (S3): steps counts main requests
+//                (turn.step without agentId, index.d.ts:14328-14354), model and effort are the latest
+//                request's, mode is the permission mode (agent.spawn permissionMode, index.d.ts:326,
+//                set only when the parent is main; classic hook permission_mode, index.d.ts:861)
+//   gate.verdicts { rule, ask, cleared, deny }  who decided (S6), subagents included. tool.check
+//                decision 'allow' | 'ask' | 'deny' (index.d.ts:13642): allow is a rule/allowed pass,
+//                ask went to the mode's decider and stays 'ask' until onToolSettle moves it to
+//                'cleared' (the call ran: classifier or approval) or 'deny' (it did not), deny is denied
+//   gate.buckets { file, shell, other }  each { rule, ask, cleared, deny }
+//   log          [{ atMs, who, what }] session log ring, at most 50 rows, oldest first (S9)
 
 import { roleFor } from '../routing.js'
 
-export const SCHEMA_VERSION = 1
+export const SCHEMA_VERSION = 2
 
 const MAX_AGENTS = 20
 const MAX_CELLS = 60
 const MAX_DETAIL = 80
+const MAX_LOG = 50
+const FILE_TOOLS = ['Read', 'Edit', 'Write', 'NotebookEdit', 'MultiEdit', 'Glob', 'Grep']
+const SHELL_TOOLS = ['Bash', 'PowerShell']
 const WRITE_TOOLS = ['Edit', 'Write', 'MultiEdit', 'NotebookEdit']
 const CELL_OF = { allow: 'allowed', ask: 'asked', deny: 'denied' }
+
+const zeroVerdicts = () => ({ rule: 0, ask: 0, cleared: 0, deny: 0 })
+const zeroBuckets = () => ({ file: zeroVerdicts(), shell: zeroVerdicts(), other: zeroVerdicts() })
 
 export function initialState() {
   return {
     v: SCHEMA_VERSION,
     agents: [],
     inline: { count: 0, last: null },
-    gate: { cells: [], counts: { allowed: 0, asked: 0, denied: 0, sub: 0 }, denied: 0, lastDenied: null },
+    gate: {
+      cells: [],
+      counts: { allowed: 0, asked: 0, denied: 0, sub: 0 },
+      denied: 0,
+      lastDenied: null,
+      verdicts: zeroVerdicts(),
+      buckets: zeroBuckets(),
+    },
     receipt: null,
     compactions: 0,
+    main: { steps: 0, model: null, effort: null, mode: null },
+    log: [],
   }
 }
 
 const isObj = (x) => typeof x === 'object' && x !== null && !Array.isArray(x)
 const isNum = (x) => typeof x === 'number' && Number.isFinite(x)
+const isLogRow = (r) => isObj(r) && isNum(r.atMs) && typeof r.who === 'string' && typeof r.what === 'string'
 const str = (x) => (typeof x === 'string' && x !== '' ? x : null)
 
-// A stored value merged over the defaults; the defaults when the version differs or the shape is off.
+// A stored value merged over the defaults; the defaults when the version is unknown or the shape is off.
+// A version 1 value (no main, log, verdicts or buckets) is read with those sections defaulted.
 export function merge(stored) {
   const base = initialState()
-  if (!isObj(stored) || stored.v !== SCHEMA_VERSION) return base
-  const { agents, inline, gate, receipt, compactions } = stored
+  if (!isObj(stored) || (stored.v !== SCHEMA_VERSION && stored.v !== 1)) return base
+  const { agents, inline, gate, receipt, compactions, main, log } = stored
   if (agents !== undefined && !Array.isArray(agents)) return base
   if (inline !== undefined && !isObj(inline)) return base
   if (gate !== undefined && !isObj(gate)) return base
   if (gate?.cells !== undefined && !Array.isArray(gate.cells)) return base
   if (gate?.counts !== undefined && !isObj(gate.counts)) return base
   if (receipt !== undefined && receipt !== null && !isObj(receipt)) return base
+  if (gate?.verdicts !== undefined && !isObj(gate.verdicts)) return base
+  if (gate?.buckets !== undefined && !isObj(gate.buckets)) return base
   if (compactions !== undefined && !isNum(compactions)) return base
+  if (main !== undefined && !isObj(main)) return base
+  if (log !== undefined && !Array.isArray(log)) return base
+  const buckets = isObj(gate?.buckets) ? gate.buckets : {}
   return {
     v: SCHEMA_VERSION,
     agents: (agents ?? base.agents).filter(isObj),
     inline: { ...base.inline, ...inline },
-    gate: { ...base.gate, ...gate, counts: { ...base.gate.counts, ...gate?.counts } },
+    gate: {
+      ...base.gate,
+      ...gate,
+      counts: { ...base.gate.counts, ...gate?.counts },
+      verdicts: { ...base.gate.verdicts, ...gate?.verdicts },
+      buckets: Object.fromEntries(
+        Object.keys(base.gate.buckets).map((k) => [k, { ...base.gate.buckets[k], ...(isObj(buckets[k]) ? buckets[k] : {}) }]),
+      ),
+    },
     receipt: receipt ?? null,
     compactions: compactions ?? 0,
+    main: { ...base.main, ...main },
+    log: (log ?? base.log).filter(isLogRow).slice(-MAX_LOG),
   }
 }
 
@@ -122,6 +170,65 @@ export function isOutsideTasks(path, root) {
   return !(inside && inTasks(segs.slice(rootSegs.length)))
 }
 
+// ---- session log (S9) ---------------------------------------------------
+
+const addLog = (state, atMs, who, what) => ({
+  ...state,
+  log: [...state.log, { atMs: isNum(atMs) ? atMs : 0, who, what }].slice(-MAX_LOG),
+})
+
+function duration(ms) {
+  const sec = Math.max(0, Math.floor(ms / 1000))
+  return sec < 60 ? `${sec}s` : `${Math.floor(sec / 60)}m${String(sec % 60).padStart(2, '0')}s`
+}
+
+// A task or state as one label: a string, or { id, title } joined; null for anything empty.
+function labelOf(x) {
+  if (typeof x === 'string') return str(x)
+  if (!isObj(x)) return null
+  const id = str(x.id)
+  const title = str(x.title)
+  return id && title ? `${id} ${title}` : (id ?? title)
+}
+
+// ODD task changed (called with the previous and next task; a row only when the label differs).
+export function noteOddTask(state, prev, next, nowMs) {
+  const s = merge(state)
+  const a = labelOf(prev)
+  const b = labelOf(next)
+  return a === b ? s : addLog(s, nowMs, 'odd', `task ${b ?? 'none'}`)
+}
+
+// RDD state changed (previous and next state words; a row only when they differ).
+export function noteRddState(state, prev, next, nowMs) {
+  const s = merge(state)
+  const a = labelOf(prev)
+  const b = labelOf(next)
+  return a === b ? s : addLog(s, nowMs, 'review', `rdd ${a ?? 'none'} → ${b ?? 'none'}`)
+}
+
+// ---- main vitals (S3) ----------------------------------------------------
+
+// One request of the main loop: count it, keep its model and effort.
+export function onMainStep(state, e) {
+  const s = merge(state)
+  if (str(e?.agentId)) return s
+  const effort = str(e?.effort) ?? (isNum(e?.effort) ? String(e.effort) : null)
+  return { ...s, main: { ...s.main, steps: s.main.steps + 1, model: str(e?.model) ?? s.main.model, effort } }
+}
+
+// The main thread's permission mode, when one is given.
+export function onPermissionMode(state, e) {
+  const s = merge(state)
+  const mode = str(e?.mode)
+  return mode && mode !== s.main.mode ? { ...s, main: { ...s.main, mode } } : s
+}
+
+// Busy while a main turn's receipt is open.
+export function mainBusy(state) {
+  return isObj(state) && isObj(state.receipt) && state.receipt.endedMs === null
+}
+
 // ---- agents (S2) -------------------------------------------------------
 
 const patchAgent = (state, id, fn) => {
@@ -152,7 +259,7 @@ export function onAgentSpawn(state, e) {
     status: 'running',
   }
   const agents = [...s.agents.filter((a) => a.id !== id), card].slice(-MAX_AGENTS)
-  return openReceipt({ ...s, agents }, (r) => ({ ...r, agents: r.agents + 1 }))
+  return addLog(openReceipt({ ...s, agents }, (r) => ({ ...r, agents: r.agents + 1 })), card.startedMs, card.role, 'spawned')
 }
 
 // One request of a subagent: count the step, ctx is the request's whole input.
@@ -190,7 +297,12 @@ export function onTurnComplete(state, e) {
   const s = merge(state)
   const nowMs = isNum(e?.nowMs) ? e.nowMs : 0
   const id = str(e?.agentId)
-  if (id) return patchAgent(s, id, (a) => ({ ...a, status: 'done', endedMs: nowMs }))
+  if (id) {
+    const a = s.agents.find((x) => x.id === id)
+    const next = patchAgent(s, id, (x) => ({ ...x, status: 'done', endedMs: nowMs }))
+    if (!a || a.status === 'done') return next
+    return addLog(next, nowMs, a.role ?? 'agent', `done in ${duration(isNum(a.startedMs) ? nowMs - a.startedMs : 0)}`)
+  }
   const turnId = str(e?.turnId)
   if (turnId && s.receipt?.turnId && s.receipt.turnId !== turnId) return s
   return openReceipt(s, (r) => ({
@@ -225,7 +337,7 @@ export function onToolCall(state, e) {
   if (e?.isError === true) s = openReceipt(s, (r) => ({ ...r, errors: r.errors + 1 }))
   const path = str(e?.path)
   if (isWrite && !str(e?.agentId) && path && isOutsideTasks(path, e?.cwd)) {
-    s = { ...s, inline: { count: s.inline.count + 1, last: path } }
+    s = addLog({ ...s, inline: { count: s.inline.count + 1, last: path } }, e?.nowMs, 'main', `inline write ${shorten(maskSecrets(path))}`)
   }
   return s
 }
@@ -238,6 +350,28 @@ const detailOf = (input) => {
   return shorten(maskSecrets(v))
 }
 
+export const bucketOf = (tool) => (FILE_TOOLS.includes(tool) ? 'file' : SHELL_TOOLS.includes(tool) ? 'shell' : 'other')
+
+const VERDICT_OF = { allow: 'rule', ask: 'ask', deny: 'deny' }
+
+const bump = (gate, bucket, from, to) => {
+  const b = gate.buckets[bucket]
+  const v = gate.verdicts
+  return {
+    verdicts: { ...v, ...(from ? { [from]: Math.max(0, v[from] - 1) } : {}), [to]: v[to] + 1 },
+    buckets: { ...gate.buckets, [bucket]: { ...b, ...(from ? { [from]: Math.max(0, b[from] - 1) } : {}), [to]: b[to] + 1 } },
+  }
+}
+
+// An ask settled by the call that followed it: it ran (cleared) or was refused (deny). One pending
+// ask of the tool's bucket moves; nothing pending leaves the state as it is.
+export function onToolSettle(state, e) {
+  const s = merge(state)
+  const bucket = bucketOf(str(e?.tool))
+  if (s.gate.buckets[bucket].ask < 1 || s.gate.verdicts.ask < 1) return s
+  return { ...s, gate: { ...s.gate, ...bump(s.gate, bucket, 'ask', e?.didRun === true ? 'cleared' : 'deny') } }
+}
+
 // One verdict: a cell (a subagent's is 'sub'), totals, and the last denied tool.
 export function onToolCheck(state, e) {
   const s = merge(state)
@@ -246,15 +380,20 @@ export function onToolCheck(state, e) {
   const cell = str(e?.agentId) ? 'sub' : kind
   const gate = s.gate
   const denied = kind === 'denied'
-  return {
+  const detail = denied ? detailOf(e.input) : ''
+  const tool = str(e.tool) ?? 'tool'
+  const next = {
     ...s,
     gate: {
+      ...gate,
+      ...bump(gate, bucketOf(str(e.tool)), null, VERDICT_OF[e.decision]),
       cells: [...gate.cells, cell].slice(-MAX_CELLS),
       counts: { ...gate.counts, [cell]: (gate.counts[cell] ?? 0) + 1 },
       denied: gate.denied + (denied ? 1 : 0),
-      lastDenied: denied ? { tool: str(e.tool) ?? 'tool', detail: detailOf(e.input) } : gate.lastDenied,
+      lastDenied: denied ? { tool, detail } : gate.lastDenied,
     },
   }
+  return denied ? addLog(next, e.nowMs, 'gate', shorten(`denied ${tool}${detail ? ` ${detail}` : ''}`)) : next
 }
 
 // ---- session -------------------------------------------------------------

@@ -6,8 +6,15 @@ import {
   isOutsideTasks,
   maskSecrets,
   merge,
+  noteOddTask,
+  noteRddState,
+  mainBusy,
   onAgentSpawn,
   onCompact,
+  onMainStep,
+  onPermissionMode,
+  onToolSettle,
+  bucketOf,
   onToolCall,
   onToolCheck,
   onTurnComplete,
@@ -300,4 +307,156 @@ test('odd input never throws', () => {
   expect(agentsView(null as any, NaN)).toEqual({ cards: [], rest: 0, running: 0 })
   expect(isOutsideTasks(5 as any, null as any)).toBe(false)
   expect(maskSecrets(5 as any)).toBe('')
+})
+
+// ---- S3 main vitals ------------------------------------------------------
+
+test('a main turn.step counts requests and keeps the latest model and effort', () => {
+  let s = onMainStep(initialState(), { model: 'opus', effort: 'high' })
+  s = onMainStep(s, { model: 'sonnet', effort: 'low' })
+  expect(s.main).toMatchObject({ steps: 2, model: 'sonnet', effort: 'low' })
+  s = onMainStep(s, { model: 'sonnet', effort: undefined })
+  expect(s.main).toMatchObject({ steps: 3, model: 'sonnet', effort: null })
+  expect(onMainStep(initialState(), { effort: 5 }).main.effort).toBe('5')
+})
+
+test('a subagent step never reaches main vitals', () => {
+  expect(onMainStep(initialState(), { agentId: 'a1', model: 'x' }).main.steps).toBe(0)
+})
+
+test('the permission mode is kept; an empty one leaves it', () => {
+  let s = onPermissionMode(initialState(), { mode: 'acceptEdits' })
+  expect(s.main.mode).toBe('acceptEdits')
+  s = onPermissionMode(s, { mode: undefined })
+  expect(s.main.mode).toBe('acceptEdits')
+  expect(onPermissionMode(s, { mode: 'plan' }).main.mode).toBe('plan')
+})
+
+test('mainBusy is true only while a main receipt is open', () => {
+  expect(mainBusy(initialState())).toBe(false)
+  const open = onTurnStart(initialState(), { turnId: 't', nowMs: 1 })
+  expect(mainBusy(open)).toBe(true)
+  expect(mainBusy(onTurnComplete(open, { turnId: 't', nowMs: 2 }))).toBe(false)
+  expect(mainBusy(null)).toBe(false)
+})
+
+// ---- S6 gate by decider and bucket ---------------------------------------
+
+test('bucketOf sorts tools into file, shell and other', () => {
+  expect(['Read', 'Edit', 'Write', 'NotebookEdit', 'Glob', 'Grep'].map(bucketOf)).toEqual(Array(6).fill('file'))
+  expect(['Bash', 'PowerShell'].map(bucketOf)).toEqual(['shell', 'shell'])
+  expect(['WebFetch', 'mcp__x__y', undefined].map(bucketOf as any)).toEqual(['other', 'other', 'other'])
+})
+
+test('verdicts count per decider and per bucket', () => {
+  let s = initialState()
+  s = onToolCheck(s, { tool: 'Read', decision: 'allow' })
+  s = onToolCheck(s, { tool: 'Bash', decision: 'ask' })
+  s = onToolCheck(s, { tool: 'Bash', decision: 'deny', input: { command: 'rm x' } })
+  s = onToolCheck(s, { tool: 'WebFetch', decision: 'allow', agentId: 'a1' })
+  expect(s.gate.verdicts).toEqual({ rule: 2, ask: 1, cleared: 0, deny: 1 })
+  expect(s.gate.buckets.file).toEqual({ rule: 1, ask: 0, cleared: 0, deny: 0 })
+  expect(s.gate.buckets.shell).toEqual({ rule: 0, ask: 1, cleared: 0, deny: 1 })
+  expect(s.gate.buckets.other).toEqual({ rule: 1, ask: 0, cleared: 0, deny: 0 })
+  // existing cells and counts are unchanged
+  expect(s.gate.counts).toEqual({ allowed: 1, asked: 1, denied: 1, sub: 1 })
+  expect(s.gate.cells).toEqual(['allowed', 'asked', 'denied', 'sub'])
+})
+
+test('a query adds no verdict or bucket count', () => {
+  const s = onToolCheck(initialState(), { tool: 'Read', decision: 'allow', isQuery: true })
+  expect(s.gate.verdicts).toEqual({ rule: 0, ask: 0, cleared: 0, deny: 0 })
+  expect(s.gate.buckets.file.rule).toBe(0)
+})
+
+test('an ask settles as cleared when the call ran and as deny when it did not', () => {
+  let s = onToolCheck(onToolCheck(initialState(), { tool: 'Bash', decision: 'ask' }), { tool: 'Bash', decision: 'ask' })
+  s = onToolSettle(s, { tool: 'Bash', didRun: true })
+  expect(s.gate.verdicts).toMatchObject({ ask: 1, cleared: 1, deny: 0 })
+  s = onToolSettle(s, { tool: 'Bash', didRun: false })
+  expect(s.gate.verdicts).toMatchObject({ ask: 0, cleared: 1, deny: 1 })
+  expect(s.gate.buckets.shell).toEqual({ rule: 0, ask: 0, cleared: 1, deny: 1 })
+  // nothing pending: unchanged
+  expect(onToolSettle(s, { tool: 'Bash', didRun: true })).toEqual(s)
+  expect(onToolSettle(s, { tool: 'Read', didRun: true })).toEqual(s)
+})
+
+test('merge fills the new gate and main sections for a version 1 value', () => {
+  const old: any = { v: 1, agents: [], inline: { count: 1, last: 'a' }, gate: { cells: ['allowed'], counts: { allowed: 1, asked: 0, denied: 0, sub: 0 }, denied: 0, lastDenied: null }, receipt: null, compactions: 2 }
+  const m = merge(old)
+  expect(m.v).toBe(SCHEMA_VERSION)
+  expect(m.inline.count).toBe(1)
+  expect(m.gate.cells).toEqual(['allowed'])
+  expect(m.gate.verdicts).toEqual({ rule: 0, ask: 0, cleared: 0, deny: 0 })
+  expect(m.main).toEqual({ steps: 0, model: null, effort: null, mode: null })
+  expect(m.log).toEqual([])
+  expect(merge({ ...initialState(), log: 'no' })).toEqual(initialState())
+  expect(merge({ ...initialState(), main: 3 })).toEqual(initialState())
+})
+
+// ---- S9 session log -------------------------------------------------------
+
+test('spawn and done append log rows, done with the duration', () => {
+  let s = spawn(initialState(), 'a1', { nowMs: 1000 })
+  expect(s.log).toEqual([{ atMs: 1000, who: 'odd_worker', what: 'spawned' }])
+  s = onTurnComplete(s, { agentId: 'a1', nowMs: 66000 })
+  expect(s.log[1]).toEqual({ atMs: 66000, who: 'odd_worker', what: 'done in 1m05s' })
+  s = onTurnComplete(s, { agentId: 'a1', nowMs: 67000 })
+  expect(s.log).toHaveLength(2)
+  expect(onTurnComplete(initialState(), { agentId: 'zz', nowMs: 5 }).log).toEqual([])
+  s = onTurnComplete(spawn(initialState(), 'b', { nowMs: 0 }), { agentId: 'b', nowMs: 4500 })
+  expect(s.log[1].what).toBe('done in 4s')
+})
+
+test('a denied tool logs masked; an allow or a query does not', () => {
+  let s = onToolCheck(initialState(), { tool: 'Bash', decision: 'deny', input: { command: 'curl -H "Authorization: Bearer abc123def456ghi789"' }, nowMs: 7 })
+  expect(s.log).toHaveLength(1)
+  expect(s.log[0]).toMatchObject({ atMs: 7, who: 'gate' })
+  expect(s.log[0].what).toContain('denied Bash')
+  expect(s.log[0].what).not.toContain('abc123def456ghi789')
+  s = onToolCheck(s, { tool: 'Read', decision: 'allow' })
+  s = onToolCheck(s, { tool: 'Bash', decision: 'deny', isQuery: true })
+  expect(s.log).toHaveLength(1)
+})
+
+test('an inline write logs its path; odd/tasks and subagent writes do not', () => {
+  let s = onToolCall(initialState(), { tool: 'Edit', path: '/p/src/a.ts', cwd: '/p', nowMs: 9 })
+  expect(s.log).toEqual([{ atMs: 9, who: 'main', what: 'inline write /p/src/a.ts' }])
+  s = onToolCall(s, { tool: 'Edit', path: '/p/odd/tasks/x.md', cwd: '/p', nowMs: 10 })
+  s = onToolCall(s, { tool: 'Edit', path: '/p/b.ts', cwd: '/p', agentId: 'a1', nowMs: 11 })
+  expect(s.log).toHaveLength(1)
+})
+
+test('the log is a ring of the latest 50 rows', () => {
+  let s = initialState()
+  for (let i = 0; i < 60; i++) s = onToolCall(s, { tool: 'Edit', path: `/p/f${i}.ts`, cwd: '/p', nowMs: i })
+  expect(s.log).toHaveLength(50)
+  expect(s.log[0].atMs).toBe(10)
+  expect(s.log[49].atMs).toBe(59)
+})
+
+test('an ODD task change appends one row only when it differs', () => {
+  let s = noteOddTask(initialState(), { id: 'T1', title: 'one' }, { id: 'T2', title: 'two' }, 5)
+  expect(s.log).toEqual([{ atMs: 5, who: 'odd', what: 'task T2 two' }])
+  expect(noteOddTask(s, { id: 'T2', title: 'two' }, { id: 'T2', title: 'two' }, 6)).toEqual(s)
+  expect(noteOddTask(s, 'T2', 'T2', 6)).toEqual(s)
+  expect(noteOddTask(s, null, null, 6)).toEqual(s)
+  expect(noteOddTask(s, { id: 'T2' }, null, 7).log[1]).toEqual({ atMs: 7, who: 'odd', what: 'task none' })
+})
+
+test('an RDD state change appends one row only when it differs', () => {
+  let s = noteRddState(initialState(), 'clear', 'due', 5)
+  expect(s.log).toEqual([{ atMs: 5, who: 'review', what: 'rdd clear → due' }])
+  expect(noteRddState(s, 'due', 'due', 6)).toEqual(s)
+  expect(noteRddState(s, undefined, undefined, 6)).toEqual(s)
+  expect(noteRddState(s, null, 'on', 7).log[1].what).toBe('rdd none → on')
+})
+
+test('log rows from odd input stay well formed', () => {
+  const s = noteRddState(noteOddTask(initialState(), {}, { id: 3, title: {} } as any, undefined as any), 5 as any, 'x', 'y' as any)
+  for (const r of s.log) {
+    expect(typeof r.atMs).toBe('number')
+    expect(typeof r.who).toBe('string')
+    expect(typeof r.what).toBe('string')
+  }
 })
