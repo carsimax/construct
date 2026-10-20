@@ -4,7 +4,7 @@
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { finding, highRepo, lensResult, readTransaction, scratchDir, start } from '../review/helpers.mjs'
 
@@ -123,6 +123,55 @@ describe('context hook', () => {
     const r = hook(CONTEXT_HOOK, spawnInput(repo, `lineage ${txn.lineage}`, 'construct:review-readability'), data)
     assert.equal(r.json.hookSpecificOutput.permissionDecision, 'deny')
     assert.match(r.json.hookSpecificOutput.permissionDecisionReason, /lens_not_selected/)
+  })
+})
+
+describe('context hook ambiguity', () => {
+  const pendingPath = (data, agent = 'construct_review-risk') => join(data, 'review-hooks', 's1', `${agent}.json`)
+
+  test('a prompt naming two distinct lineages is denied with a message to name one', () => {
+    const { repo, txn, data } = lineage()
+    const r = hook(CONTEXT_HOOK, spawnInput(repo, `Review ${txn.lineage} and review-0123456789abcdef`), data)
+    assert.equal(r.json.hookSpecificOutput.permissionDecision, 'deny')
+    assert.match(r.json.hookSpecificOutput.permissionDecisionReason, /exactly one lineage/)
+    assert.equal(existsSync(pendingPath(data)), false)
+  })
+
+  test('the same lineage named twice is allowed and gets the context', () => {
+    const { repo, txn, data } = lineage()
+    const r = hook(CONTEXT_HOOK, spawnInput(repo, `Review ${txn.lineage} (again: ${txn.lineage})`), data)
+    assert.equal(r.json.hookSpecificOutput.permissionDecision, 'allow')
+    assert.match(r.json.hookSpecificOutput.updatedInput.prompt, /^ODD_REVIEW_BINDING /)
+  })
+
+  test('a second spawn of the same lens with a fresh pending record is denied and keeps the record', () => {
+    const { repo, txn, data } = lineage()
+    const first = hook(CONTEXT_HOOK, spawnInput(repo, `Review ${txn.lineage}`), data)
+    assert.equal(first.json.hookSpecificOutput.permissionDecision, 'allow')
+    const before = readFileSync(pendingPath(data), 'utf8')
+    const second = hook(CONTEXT_HOOK, spawnInput(repo, `Review ${txn.lineage}`), data)
+    assert.equal(second.json.hookSpecificOutput.permissionDecision, 'deny')
+    assert.match(second.json.hookSpecificOutput.permissionDecisionReason, /wait/i)
+    assert.equal(readFileSync(pendingPath(data), 'utf8'), before)
+  })
+
+  test('a pending record older than six hours is abandoned: the spawn is allowed and the record overwritten', () => {
+    const { repo, txn, data } = lineage()
+    hook(CONTEXT_HOOK, spawnInput(repo, `Review ${txn.lineage}`), data)
+    writeFileSync(pendingPath(data), `${JSON.stringify({ lineage: 'review-ffffffffffffffff', lens: 'review-risk', cwd: repo, attempts: 0 })}\n`)
+    const old = new Date(Date.now() - 6 * 3600 * 1000 - 60_000)
+    utimesSync(pendingPath(data), old, old)
+    const r = hook(CONTEXT_HOOK, spawnInput(repo, `Review ${txn.lineage}`), data)
+    assert.equal(r.json.hookSpecificOutput.permissionDecision, 'allow')
+    assert.equal(JSON.parse(readFileSync(pendingPath(data), 'utf8')).lineage, txn.lineage)
+  })
+
+  test('a pending record of another lens does not block this lens', () => {
+    const { repo, txn, data } = lineage()
+    const first = hook(CONTEXT_HOOK, spawnInput(repo, `Review ${txn.lineage}`), data)
+    assert.equal(first.json.hookSpecificOutput.permissionDecision, 'allow')
+    const other = hook(CONTEXT_HOOK, spawnInput(repo, `Review ${txn.lineage}`, 'construct:review-reliability'), data)
+    assert.equal(other.json.hookSpecificOutput.permissionDecision, 'allow')
   })
 })
 
