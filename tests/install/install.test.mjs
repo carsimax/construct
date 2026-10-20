@@ -97,9 +97,9 @@ test('a clean machine gets every tool, in order, and the Construct settings', ()
   ])
   assert.ok(!run.calls.some((c) => /context7/.test(c)), 'context7 is never registered')
   assert.deepEqual(readSettings(box), {
-    theme: 'custom:construct:construct',
     permissions: { allow: ['mcp__engram', 'mcp__plugin_engram_engram'] },
   })
+  assert.ok(!('theme' in readSettings(box)), 'a clean machine never gets a theme')
   assert.deepEqual(backups(box), [], 'no backup when there was no file')
   assert.match(run.stdout, /Installed:/)
 })
@@ -117,7 +117,6 @@ test('existing settings are merged, never overwritten, and backed up first', () 
   assert.deepEqual(readSettings(box), {
     ...before,
     permissions: { allow: ['Bash(ls *)', 'mcp__engram', 'mcp__plugin_engram_engram'], deny: ['Bash(rm *)'] },
-    theme: 'custom:construct:construct',
   })
   const [backup] = backups(box)
   assert.ok(backup, 'a backup exists')
@@ -134,8 +133,9 @@ test('a symlinked settings.json stays a link and its target gets the merge', () 
   const run = install(box)
   assert.equal(run.status, 0, run.stderr)
   assert.ok(lstatSync(settingsPath(box)).isSymbolicLink(), 'still a symlink')
-  assert.equal(JSON.parse(readFileSync(target, 'utf8')).theme, 'custom:construct:construct')
+  assert.equal(JSON.parse(readFileSync(target, 'utf8')).theme, undefined)
   assert.equal(JSON.parse(readFileSync(target, 'utf8')).model, 'opus')
+  assert.deepEqual(JSON.parse(readFileSync(target, 'utf8')).permissions.allow, ['mcp__engram', 'mcp__plugin_engram_engram'])
 })
 
 test('the merge keeps the file mode of settings.json', () => {
@@ -153,22 +153,62 @@ test('a failed codegraph install warns and still merges the settings', () => {
   assert.equal(run.status, 0, run.stderr)
   assert.match(run.stderr, /codegraph.*--no-mcp/)
   assert.deepEqual(run.calls.filter((c) => /^claude mcp add --scope user codegraph/.test(c)), [])
-  assert.equal(readSettings(box).theme, 'custom:construct:construct')
+  assert.equal(readSettings(box).theme, undefined)
 })
 
-test('a different theme is kept with a warning unless --force, and outputStyle is never touched', () => {
-  const box = sandbox()
-  writeSettings(box, { theme: 'dark', outputStyle: 'Explanatory' })
-  const kept = install(box)
-  assert.equal(kept.status, 0, kept.stderr)
-  assert.equal(readSettings(box).theme, 'dark')
-  assert.match(kept.stdout + kept.stderr, /theme.*--force/)
-  assert.doesNotMatch(kept.stdout + kept.stderr, /outputStyle/)
+const OLD_THEME = 'custom:construct:construct'
 
-  const forced = install(box, ['--force'])
-  assert.equal(forced.status, 0, forced.stderr)
-  assert.equal(readSettings(box).theme, 'custom:construct:construct')
+test('the old Construct theme is removed with a backup and a + line; the rest is kept', () => {
+  const box = sandbox()
+  const before = { theme: OLD_THEME, model: 'opus', outputStyle: 'Explanatory' }
+  writeSettings(box, before)
+  const run = install(box)
+  assert.equal(run.status, 0, run.stderr)
+  assert.equal('theme' in readSettings(box), false)
+  assert.equal(readSettings(box).model, 'opus')
   assert.equal(readSettings(box).outputStyle, 'Explanatory')
+  assert.match(run.stdout, /setting: theme custom:construct:construct removed/)
+  const [backup] = backups(box)
+  assert.ok(backup, 'a backup exists')
+  assert.deepEqual(JSON.parse(readFileSync(join(box.home, '.claude', backup), 'utf8')), before)
+
+  const again = install(box)
+  assert.equal(again.status, 0, again.stderr)
+  assert.doesNotMatch(again.stdout, /theme/)
+  assert.equal(backups(box).length, 1, 'the second run makes no new backup')
+})
+
+test('any other theme value is kept with no warning, and outputStyle is never touched', () => {
+  for (const theme of ['dark', 'custom:other:theme']) {
+    const box = sandbox()
+    writeSettings(box, { theme, outputStyle: 'Explanatory' })
+    const run = install(box)
+    assert.equal(run.status, 0, run.stderr)
+    assert.equal(readSettings(box).theme, theme)
+    assert.equal(readSettings(box).outputStyle, 'Explanatory')
+    assert.doesNotMatch(run.stdout + run.stderr, /theme|outputStyle/)
+  }
+})
+
+test('--force is accepted, has no effect, and prints a deprecation warning', () => {
+  const box = sandbox()
+  writeSettings(box, { theme: 'dark' })
+  const run = install(box, ['--force'])
+  assert.equal(run.status, 0, run.stderr)
+  assert.match(run.stderr, /--force is deprecated and has no effect/)
+  assert.match(run.stdout, /Warnings:[\s\S]*--force is deprecated/)
+  assert.equal(readSettings(box).theme, 'dark', 'a different theme is not replaced')
+
+  const plain = install(box)
+  assert.doesNotMatch(plain.stdout + plain.stderr, /--force/)
+})
+
+test('the help text marks --force deprecated and no longer mentions replacing a theme', () => {
+  const box = sandbox()
+  const run = install(box, ['--help'])
+  assert.equal(run.status, 0, run.stderr)
+  assert.match(run.stdout, /--force\s+Deprecated/)
+  assert.doesNotMatch(run.stdout, /theme/)
 })
 
 test('a second run changes nothing and installs nothing', () => {
@@ -271,7 +311,6 @@ test('an empty or whitespace-only settings.json is treated as an empty object', 
     const run = install(box)
     assert.equal(run.status, 0, run.stderr)
     assert.deepEqual(readSettings(box), {
-      theme: 'custom:construct:construct',
       permissions: { allow: ['mcp__engram', 'mcp__plugin_engram_engram'] },
     })
     assert.equal(statSync(settingsPath(box)).mode & 0o777, 0o600)
@@ -297,7 +336,7 @@ test('a dangling-symlink settings.json stays a link and its target is created wi
   const run = install(box)
   assert.equal(run.status, 0, run.stderr)
   assert.ok(lstatSync(settingsPath(box)).isSymbolicLink(), 'still a symlink')
-  assert.equal(JSON.parse(readFileSync(target, 'utf8')).theme, 'custom:construct:construct')
+  assert.equal(JSON.parse(readFileSync(target, 'utf8')).theme, undefined)
   assert.deepEqual(readSettings(box), JSON.parse(readFileSync(target, 'utf8')))
 })
 

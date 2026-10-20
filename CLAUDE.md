@@ -6,7 +6,7 @@ The contributor rules live in [CONTRIBUTING.md](CONTRIBUTING.md) and are not rep
 
 ## What this repository is
 
-Construct: a Claude Code plugin (in `plugins/construct/`) plus its local marketplace (`.claude-plugin/marketplace.json`) and a curl installer (`install.sh`). The plugin implements Organic Driven Development (ODD): it injects an orchestration contract through hooks, ships role agents, skills, a mod (model/effort routing and a status panel), an output style, and a theme. It depends on the separate `engram@engram` plugin for memory. There is no build step; everything is plain Node.js ESM (Node 20+) and Markdown.
+Construct: a Claude Code plugin (in `plugins/construct/`) plus its local marketplace (`.claude-plugin/marketplace.json`) and a curl installer (`install.sh`). The plugin implements Organic Driven Development (ODD): it injects an orchestration contract through hooks, ships role agents, skills, a mod (model/effort routing and a status panel), and an output style. It depends on the separate `engram@engram` plugin for memory. There is no build step; everything is plain Node.js ESM (Node 20+) and Markdown.
 
 ## Commands
 

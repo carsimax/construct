@@ -14,7 +14,7 @@ Construct is a Claude Code plugin that makes every request follow Organic Driven
 - **Receipt-driven review.** `odd-assess` classifies risk and `odd-review` runs a bounded outside review of high-risk changes, with your consent.
 - **Secret guard.** A hook that denies reads and writes of credentials and destructive commands, including under `bypassPermissions`.
 - **Status panel.** A docked panel with the model, context, cost, plan limits, active feature, review state, permission gate, agents, and changes. Open it with `/construct`.
-- **Theme and output style.** The Matrix-style **Construct** theme and the `Principal Engineer` output style.
+- **Output style.** The `Principal Engineer` output style.
 
 Memory comes from the separate `engram@engram` plugin, which Construct depends on.
 
@@ -40,14 +40,14 @@ The installer checks the requirements above and stops before changing anything i
 - Installs the engram binary through Homebrew when it is missing, and runs `engram setup claude-code`.
 - Adds the engram and construct marketplaces and installs `construct@construct`.
 - Installs the CodeGraph CLI and registers the codegraph MCP server. If `npm install -g` fails, it warns, skips the server, and continues.
-- Merges into `~/.claude/settings.json`: `theme: "custom:construct:construct"` and the `permissions.allow` rules `mcp__engram` and `mcp__plugin_engram_engram`. An empty `settings.json` counts as `{}`. Other keys stay as they are, a symlinked file (even a dangling one, whose target is then created) is written through to its target with its mode kept, and the previous file is saved as `settings.json.bak-<timestamp>`.
+- Merges into `~/.claude/settings.json`: the `permissions.allow` rules `mcp__engram` and `mcp__plugin_engram_engram`, and removes a `theme` of `custom:construct:construct` left by earlier versions (any other theme is left alone). An empty `settings.json` counts as `{}`. Other keys stay as they are, a symlinked file (even a dangling one, whose target is then created) is written through to its target with its mode kept, and the previous file is saved as `settings.json.bak-<timestamp>`.
 
-Every step is skipped when it is already done, so running the installer again changes nothing. It never changes other permissions or your permission mode. A `theme` in `~/.claude/settings.local.json` still overrides the merged value. The output style needs no setting: the plugin forces `Principal Engineer`, and an `outputStyle` you already have stays in the file but has no effect while construct is enabled.
+Every step is skipped when it is already done, so running the installer again changes nothing. It never changes other permissions or your permission mode. The output style needs no setting: the plugin forces `Principal Engineer`, and an `outputStyle` you already have stays in the file but has no effect while construct is enabled.
 
 | Option | Meaning |
 |---|---|
 | `--no-mcp` | Skip the CodeGraph CLI and the codegraph MCP server |
-| `--force` | Replace an existing `theme`. Without it, a different value stays and the installer prints a warning |
+| `--force` | Deprecated: has no effect and prints a warning. It is accepted for now so scripted installs keep working, and will be removed in a later release |
 
 Pass options after `bash -s --`, for example `curl -fsSL <url> | bash -s -- --no-mcp`. To read the script before running it:
 
@@ -85,10 +85,7 @@ The manual steps the installer runs, for when you want to run them yourself:
 
 4. Optional: install the CodeGraph CLI and register the codegraph MCP server (see [MCP servers](#mcp-servers)).
 
-5. Inside Claude Code:
-
-   - `/theme` → **Construct** (the Matrix theme).
-   - Optionally, in `/config`, set each role's model and effort (rows such as `ODD Worker model`).
+5. Optional: inside Claude Code, in `/config`, set each role's model and effort (rows such as `ODD Worker model`).
 
 6. Check that it works. Open a session in any git repository:
 
@@ -138,8 +135,6 @@ Options are plugin settings, edited in `/config`:
 | Model and effort per role | See the routing table below |
 | `panel_open_on_start` (boolean, default `true`) | Open the panel at every session start |
 | `codegraph_auto_index` (boolean, default `false`) | Index a git root with CodeGraph at session start (see [MCP servers](#mcp-servers)) |
-
-Select the theme with `/theme` and choose **Construct**.
 
 ### Agents and model routing
 
@@ -365,10 +360,6 @@ The mod draws one thing: a docked **panel** (a `Pane` with id `construct`) laid 
 **Refresh and fail-open.** Git (status, `diff --numstat HEAD` and a line count per untracked file), `odd-review`, `odd-assess`, and the feature documents are read only on `session.start` and after each main-thread `turn.complete`, in the background with a timeout, never on a redraw. Context, cost and the plan limits are read from the session usage on each redraw. The panel's own state is kept in a versioned `atom` fed from engine events (`agent.spawn`, `turn.start`, `turn.step`, `tool.call`, `tool.check`, `turn.complete`, `session.compact`); the panel redraws on those events, not per token. These hooks only observe: each passes its event on unchanged and swallows its own failures, and the model and effort routing is untouched. Any error leaves out the affected card and never blocks or delays a turn.
 
 **Credit.** The drawing code (gauges, effort meter, timeline geometry, the animated rail and the elapsed clock) is adapted from [claude-flightdeck](https://github.com/scasella/claude-flightdeck) by Stephen Casella, MIT License. The copyright and permission notice are in [`plugins/construct/LICENSE-flightdeck`](plugins/construct/LICENSE-flightdeck) and at the top of each adapted file.
-
-### Theme: Construct
-
-The plugin ships one color theme, **Construct**, in the style of *The Matrix*: phosphor green `#00FF41` for the accent, success, permissions, and the usage meter; deeper greens for borders, hints, and backgrounds; pale green text on near-black. Errors stay red and warnings yellow, so they still stand out. Select it with `/theme` (it is listed as from this plugin); the panel turns matrix green with it, since it colors with theme keys.
 
 ### Layout
 
