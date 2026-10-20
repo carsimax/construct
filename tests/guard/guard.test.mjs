@@ -393,3 +393,14 @@ test('F14: a malformed glob never fails open', () => {
   assertAllow(call('Glob', { pattern: 'src/[z-a].ts' }))
   assertAllow(call('Glob', { pattern: 'src/[a-z].ts' }))
 })
+
+test('S1: an apostrophe in prose cannot hide a later line that names a protected path', () => {
+  const env = '.' + 'env'
+  assertDeny(bash(`bash <<'EOF'\necho it's ok\ncat ${env}\nEOF`), /\.env file/)
+  assertDeny(bash(`sh -c "echo it's\ncat secrets/x"`), /secrets directory/)
+  assertDeny(bash(`python3 - <<'EOF'\n# it's here\nopen('${env}').read()\nEOF`), /\.env file/)
+  // Previous behavior holds: one-line apostrophes and unprotected multi-line text pass.
+  assertAllow(bash("echo it's ok"))
+  assertAllow(bash(`bash <<'EOF'\necho it's ok\nls\nEOF`))
+  assertDeny(bash(`cat ${env}`), /\.env file/)
+})

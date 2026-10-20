@@ -1,9 +1,23 @@
 // The ODD_REVIEW_BINDING line and ODD_REVIEW_CONTEXT block served to an agent.
 // Everything comes from the frozen trees through the isolated git runner, so
 // neither the live worktree nor user git configuration can change the evidence.
+import { readFileSync } from 'node:fs'
 import { git } from '../assess/git.mjs'
 import { collectDiffStats } from '../assess/stats.mjs'
 import { Refusal } from './errors.mjs'
+
+const CHECKLIST_PATH = new URL('../../skills/rdd-review/references/security-checklist.md', import.meta.url)
+
+// Static plugin text for the risk lens only. A missing file refuses, like the
+// other missing inputs (manifest_mismatch): the lens never reviews without it.
+function securityChecklist() {
+  try {
+    const text = readFileSync(CHECKLIST_PATH, 'utf8')
+    return text.endsWith('\n') ? text : `${text}\n`
+  } catch {
+    throw new Refusal('checklist_unavailable', 'the security checklist of the risk lens could not be read from the plugin')
+  }
+}
 
 export const DEFAULT_CONTEXT_BYTES = 400 * 1024
 
@@ -50,6 +64,7 @@ export function buildContext({ root, isolation, baseTree, candidateTree, manifes
   manifest.forEach((path, index) => {
     text += `ODD_REVIEW_PATH ${JSON.stringify({ index, path })}\n${patchOf(root, baseTree, candidateTree, path, isolation)}ODD_REVIEW_PATH_END ${index}\n`
   })
+  if (lens === 'review-risk') text += `ODD_REVIEW_CHECKLIST_BEGIN\n${securityChecklist()}ODD_REVIEW_CHECKLIST_END\n`
   text += 'ODD_REVIEW_CONTEXT_END\n'
   if (findings) text += `ODD_REVIEW_FINDINGS ${JSON.stringify(findings)}\n`
   const bytes = Buffer.byteLength(text)

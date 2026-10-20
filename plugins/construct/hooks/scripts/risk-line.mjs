@@ -6,7 +6,7 @@
 // Usage: node risk-line.mjs mark|check   (hook JSON on stdin)
 import { mkdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { dataDir, readInput, safeName } from './hook-io.mjs'
+import { dataDir, hasOpenSubagents, readInput, safeName } from './hook-io.mjs'
 
 const MAX_PATHS = 3
 // Optional list marker (-, *, +, 1., 1)) and emphasis around the label and the
@@ -38,6 +38,8 @@ async function main() {
   const input = readInput()
   if (!input || typeof input.cwd !== 'string' || (mode !== 'mark' && mode !== 'check')) return
   if (mode === 'check' && (input.stop_hook_active === true || typeof input.last_assistant_message !== 'string')) return
+  // Subagents may still be writing; the first Stop after they finish runs the check.
+  if (mode === 'check' && hasOpenSubagents(input.session_id)) return
 
   const [{ repositoryRoot, freezeWorkingTree, git }, { headCommit }, { atomicWrite }] = await Promise.all([
     import('../../lib/assess/git.mjs'),
