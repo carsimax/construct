@@ -3,7 +3,7 @@
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync, readFileSync } from 'node:fs'
-import { atomicCreate, receiptPath as storeReceiptPath } from '../../plugins/odd-skills/lib/review/store.mjs'
+import { atomicCreate, receiptPath as storeReceiptPath } from '../../plugins/construct/lib/review/store.mjs'
 import { join } from 'node:path'
 import {
   LENSES, applyFiles, assessJson, capture, captureAll, commitAll, finding, git, highRepo, lensResult, readTransaction,

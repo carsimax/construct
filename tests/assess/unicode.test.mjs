@@ -4,7 +4,7 @@
 // code fence must not hide the line from the scans.
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { goTrimSpace } from '../../plugins/odd-skills/lib/assess/text.mjs'
+import { goTrimSpace } from '../../plugins/construct/lib/assess/text.mjs'
 import { applyFiles, assessJson, makeRepo, reasonKeys } from './helpers.mjs'
 
 const BOM = '﻿'

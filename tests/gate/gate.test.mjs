@@ -7,7 +7,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync
 import { join } from 'node:path'
 import { applyFiles, captureAll, commitAll, git, highRepo, makeRepo, review, scratchDir, start } from '../review/helpers.mjs'
 
-const PLUGIN = new URL('../../plugins/odd-skills/', import.meta.url).pathname
+const PLUGIN = new URL('../../plugins/construct/', import.meta.url).pathname
 const GATE = join(PLUGIN, 'hooks/scripts/review-gate.mjs')
 
 function env() {
@@ -106,7 +106,7 @@ describe('blocking', () => {
     assert.equal(r.json.decision, 'block')
     assert.match(r.json.reason, /the uncommitted changes are high risk/)
     assert.match(r.json.reason, /shell_source \(scripts\/build\.sh\)/)
-    assert.match(r.json.reason, /odd-skills:rdd-review/)
+    assert.match(r.json.reason, /construct:rdd-review/)
     assert.match(r.json.reason, /consent/)
     assert.match(r.json.reason, /skip/)
     assert.ok(existsSync(reminderFile(e)))
@@ -221,7 +221,7 @@ describe('blocking', () => {
     const e = { XDG_CONFIG_HOME: scratchDir('odd-gate-xdg-'), TMPDIR: tmp, CLAUDE_PLUGIN_DATA: '' }
     const repo = highRepo()
     assert.equal(gate(repo, e).json.decision, 'block')
-    const dir = join(tmp, `odd-skills-${process.getuid()}`)
+    const dir = join(tmp, `construct-${process.getuid()}`)
     assert.ok(existsSync(join(dir, 'review-gate', 's1.json')))
     assert.equal(statSync(dir).mode & 0o077, 0, 'no group or other access')
     silent(gate(repo, e))
@@ -229,7 +229,7 @@ describe('blocking', () => {
 
   test('a fallback directory with group or other access is not trusted and the gate stays silent', () => {
     const tmp = scratchDir('odd-gate-tmp-')
-    const dir = join(tmp, `odd-skills-${process.getuid()}`)
+    const dir = join(tmp, `construct-${process.getuid()}`)
     mkdirSync(dir, { mode: 0o777 })
     chmodSync(dir, 0o777)
     const e = { XDG_CONFIG_HOME: scratchDir('odd-gate-xdg-'), TMPDIR: tmp, CLAUDE_PLUGIN_DATA: '' }

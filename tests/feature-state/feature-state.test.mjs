@@ -6,8 +6,8 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 import { makeRepo, scratchDir, write } from '../assess/helpers.mjs'
 
-const SCRIPT = new URL('../../plugins/odd-skills/hooks/scripts/feature-state.mjs', import.meta.url).pathname
-const HOOKS = new URL('../../plugins/odd-skills/hooks/hooks.json', import.meta.url).pathname
+const SCRIPT = new URL('../../plugins/construct/hooks/scripts/feature-state.mjs', import.meta.url).pathname
+const HOOKS = new URL('../../plugins/construct/hooks/hooks.json', import.meta.url).pathname
 
 function run(cwd, input = { source: 'compact' }) {
   const stdin = typeof input === 'string' ? input : JSON.stringify({ cwd, ...input })

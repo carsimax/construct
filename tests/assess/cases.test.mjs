@@ -14,7 +14,7 @@ describe('classifier rules through the CLI', () => {
       applyFiles(repo, change)
       const { status, json, stderr } = assessJson(repo)
       assert.equal(status, 0, stderr)
-      assert.equal(json.schema, 'odd-skills.review-assessment/v1')
+      assert.equal(json.schema, 'construct.review-assessment/v1')
       assert.equal(json.risk, risk, JSON.stringify(json.reasons))
       assert.deepEqual(reasonKeys(json.reasons), [...reasons].sort())
       assert.equal(json.changed_lines, lines)

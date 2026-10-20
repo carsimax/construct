@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 
-const pluginRoot = new URL('../plugins/odd-skills/', import.meta.url).pathname
+const pluginRoot = new URL('../plugins/construct/', import.meta.url).pathname
 const skillsRoot = join(pluginRoot, 'skills')
 
 const EXPECTED = [
@@ -75,7 +75,7 @@ test('relative markdown links inside skills resolve to existing files', () => {
 test('judgment-day names the plugin-namespaced agents', () => {
   const text = readFileSync(join(skillsRoot, 'judgment-day', 'SKILL.md'), 'utf8')
   for (const agent of ['jd-judge-a', 'jd-judge-b', 'jd-fix-agent']) {
-    assert.match(text, new RegExp(`odd-skills:${agent}`), agent)
+    assert.match(text, new RegExp(`construct:${agent}`), agent)
     assert.doesNotMatch(text, new RegExp(`\`${agent}\``), `bare ${agent}`)
   }
 })
@@ -118,6 +118,6 @@ test('the codegraph skill uses the upstream CLI and the user-scope MCP tool, nev
   assert.match(text, /codegraph sync/)
   assert.match(text, /mcp__codegraph__codegraph_explore/)
   assert.match(text, /claude mcp add --scope user codegraph -- codegraph serve --mcp/)
-  assert.doesNotMatch(text, /mcp__plugin_odd-skills_codegraph/)
+  assert.doesNotMatch(text, /mcp__plugin_construct_codegraph/)
   assert.ok(!existsSync(join(pluginRoot, '.mcp.json')), 'option A: the plugin ships no MCP servers')
 })

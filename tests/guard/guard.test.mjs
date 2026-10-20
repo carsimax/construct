@@ -6,8 +6,8 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 import { scratchDir } from '../assess/helpers.mjs'
 
-const SCRIPT = new URL('../../plugins/odd-skills/hooks/scripts/secret-guard.mjs', import.meta.url).pathname
-const HOOKS = new URL('../../plugins/odd-skills/hooks/hooks.json', import.meta.url).pathname
+const SCRIPT = new URL('../../plugins/construct/hooks/scripts/secret-guard.mjs', import.meta.url).pathname
+const HOOKS = new URL('../../plugins/construct/hooks/hooks.json', import.meta.url).pathname
 
 const home = scratchDir('guard-home-')
 const cwd = join(scratchDir('guard-work-'), 'proj', 'sub')

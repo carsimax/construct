@@ -69,7 +69,7 @@ test('the settings command removes only hooks whose command starts with gentle-a
 })
 
 test('every agent and skill the guide removes is shipped by the plugin', () => {
-  const plugin = join(repoRoot, 'plugins/odd-skills')
+  const plugin = join(repoRoot, 'plugins/construct')
   const agents = new Set(readdirSync(join(plugin, 'agents')).map((f) => f.replace(/\.md$/, '')))
   const skills = new Set(readdirSync(join(plugin, 'skills')))
   for (const agent of ['review-risk', 'review-readability', 'review-reliability', 'review-resilience', 'review-refuter', 'jd-judge-a', 'jd-judge-b', 'jd-fix-agent']) {

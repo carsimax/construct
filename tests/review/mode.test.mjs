@@ -3,7 +3,7 @@ import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { atomicCreate, receiptPath } from '../../plugins/odd-skills/lib/review/store.mjs'
+import { atomicCreate, receiptPath } from '../../plugins/construct/lib/review/store.mjs'
 import {
   applyFiles, captureAll, commitAll, git, highRepo, receiptFiles, review, scratchDir, start, storeRoot,
 } from './helpers.mjs'
@@ -39,9 +39,9 @@ describe('mode switch', () => {
     const off = mode(repo, env, 'disable')
     assert.equal(off.status, 0)
     assert.deepEqual([off.json.mode, off.json.source, off.json.scope], ['off', 'global', 'global'])
-    const file = join(env.XDG_CONFIG_HOME, 'odd-skills', 'rdd.json')
+    const file = join(env.XDG_CONFIG_HOME, 'construct', 'rdd.json')
     assert.deepEqual(JSON.parse(readFileSync(file, 'utf8')), { mode: 'off' })
-    assert.deepEqual(readdirSync(join(env.XDG_CONFIG_HOME, 'odd-skills')), ['rdd.json'])
+    assert.deepEqual(readdirSync(join(env.XDG_CONFIG_HOME, 'construct')), ['rdd.json'])
     assert.equal(mode(repo, env, 'status').json.mode, 'off')
     assert.deepEqual([mode(repo, env, 'enable').json.mode, mode(repo, env, 'status').json.source], ['on', 'global'])
   })
@@ -50,7 +50,7 @@ describe('mode switch', () => {
     const home = scratchDir('odd-review-home-')
     const repo = highRepo()
     mode(repo, { XDG_CONFIG_HOME: '', HOME: home }, 'disable')
-    assert.ok(existsSync(join(home, '.config', 'odd-skills', 'rdd.json')))
+    assert.ok(existsSync(join(home, '.config', 'construct', 'rdd.json')))
   })
 
   test('the clone scope wins over the global one and lives under the common git directory', () => {

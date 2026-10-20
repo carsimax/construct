@@ -4,7 +4,7 @@ import { spawnSync } from 'node:child_process'
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 
-const pluginRoot = new URL('../plugins/odd-skills/', import.meta.url).pathname
+const pluginRoot = new URL('../plugins/construct/', import.meta.url).pathname
 const script = join(pluginRoot, 'hooks/scripts/contract.mjs')
 
 function run(kind, input) {
@@ -52,15 +52,15 @@ test('the session contract carries the ODD protocol, task size, risk line, and d
     'concurrency',
     'installers',
     'no test would catch',
-    'odd-skills:odd-explorer',
-    'odd-skills:odd-worker',
-    'odd-skills:odd-verify',
-    'odd-skills:odd-general',
-    'odd-skills:odd-workflow',
-    'odd-skills:odd-delegation',
-    'odd-skills:task-size-risk',
-    'odd-skills:lossless-prompts',
-    'odd-skills:rdd-review',
+    'construct:odd-explorer',
+    'construct:odd-worker',
+    'construct:odd-verify',
+    'construct:odd-general',
+    'construct:odd-workflow',
+    'construct:odd-delegation',
+    'construct:task-size-risk',
+    'construct:lossless-prompts',
+    'construct:rdd-review',
     'odd-review mode',
   ]) {
     assert.ok(text.toLowerCase().includes(anchor.toLowerCase()), `missing ${anchor}`)
@@ -68,7 +68,7 @@ test('the session contract carries the ODD protocol, task size, risk line, and d
 })
 
 test('SubagentStart gives worker agents the subagent contract', () => {
-  for (const agent of ['odd-skills:odd-worker', 'odd-skills:odd-explorer', 'general-purpose']) {
+  for (const agent of ['construct:odd-worker', 'construct:odd-explorer', 'general-purpose']) {
     const out = context('subagent', { hook_event_name: 'SubagentStart', agent_type: agent })
     assert.equal(out.hookEventName, 'SubagentStart')
     assert.ok(out.additionalContext.includes('## Key Learnings'), agent)
@@ -78,7 +78,7 @@ test('SubagentStart gives worker agents the subagent contract', () => {
 })
 
 test('SubagentStart injects nothing into agents that must return a single JSON object', () => {
-  for (const agent of ['odd-skills:review-risk', 'odd-skills:review-refuter', 'odd-skills:review-validator', 'odd-skills:jd-judge-a', 'odd-skills:jd-judge-b', 'review-risk', 'jd-judge-b']) {
+  for (const agent of ['construct:review-risk', 'construct:review-refuter', 'construct:review-validator', 'construct:jd-judge-a', 'construct:jd-judge-b', 'review-risk', 'jd-judge-b']) {
     const { code, stdout } = run('subagent', { hook_event_name: 'SubagentStart', agent_type: agent })
     assert.equal(code, 0, agent)
     assert.equal(stdout, '', agent)
@@ -103,13 +103,13 @@ test('hooks.json registers both contracts in exec form and keeps the mod module'
   assert.deepEqual(sub[0].hooks[0].args, ['${CLAUDE_PLUGIN_ROOT}/hooks/scripts/contract.mjs', 'subagent'])
 })
 
-test('every odd-skills component a contract names exists in the plugin', () => {
+test('every construct component a contract names exists in the plugin', () => {
   const agents = new Set(readdirSync(join(pluginRoot, 'agents')).map((f) => f.replace(/\.md$/, '')))
   for (const kind of ['session', 'subagent']) {
     const text = readFileSync(join(pluginRoot, `hooks/contract/${kind}.md`), 'utf8')
-    for (const [, name] of text.matchAll(/odd-skills:([a-z0-9-]+)/g)) {
+    for (const [, name] of text.matchAll(/construct:([a-z0-9-]+)/g)) {
       const exists = agents.has(name) || existsSync(join(pluginRoot, 'skills', name, 'SKILL.md'))
-      assert.ok(exists, `${kind} contract names missing odd-skills:${name}`)
+      assert.ok(exists, `${kind} contract names missing construct:${name}`)
     }
     assert.doesNotMatch(text, /gentle[-_ ]?ai/i)
   }

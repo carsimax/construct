@@ -212,7 +212,7 @@ Design consequences:
 | T11 | S1 | `codegraph` skill and user-scope MCP setup docs; no plugin `.mcp.json` (option A, L33) | inline | none | done | `feat: add the codegraph skill and MCP setup docs` (slice 16) |
 | T12 | S2, S8 | Mod status band: statusline replica when no native statusLine is set, plus ODD and RDD state (L34) | delegated (`odd-worker`, sonnet): long-session context backstop | 6 | done (live visual check deferred by the user, L35) | `feat: add the status band mod` (slice 17) |
 | T13 | S1, S3, S4 | Migration runbook (`docs/MIGRATION.md`) with executable doc tests; written, not executed on the user's machine | inline | none (docs and tests only; the guide itself touches the user's environment when they run it) | done | `docs: add the gentle-ai migration guide` (slice 18) |
-| T14 | S9 | Rename the plugin from `odd-skills` to `construct` (manifest, marketplace, prefixes, mod, contract filter, tests, evals, docs) | inline | 3 (component prefix changes) | pending | — |
+| T14 | S9 | Rename the plugin from `odd-skills` to `construct` (manifest, marketplace, prefixes, mod, contract filter, tests, evals, docs) | inline | none (reassessed, L37: never published, so no consumer of the old prefix) | done | `refactor: rename the plugin to Construct` (slice 19) |
 
 Route evidence: no Writer trigger reason is known yet (units are sequential and depend on T0/T1); revisit if T6 and T7 run in parallel.
 
@@ -251,6 +251,7 @@ main
 | 16 | `odd-skills/16-codegraph` | T11 | `feat: add the codegraph skill and MCP setup docs` | about 120 | within |
 | 17 | `odd-skills/17-status-mod` | T12 | `feat: add the status band mod` | about 840 | over budget; one mod unit with 27 tests |
 | 18 | `odd-skills/18-migration` | T13 | `docs: add the gentle-ai migration guide` | about 300 | within |
+| 19 | `odd-skills/19-construct` | T14 | `refactor: rename the plugin to Construct` | 340 (mechanical) | within |
 
 Push and PR creation remain the user's decision.
 
@@ -836,3 +837,30 @@ Push and PR creation remain the user's decision.
   - Dry runs on copies of the real files: `CLAUDE.md` went from 621 lines to empty; hooks went from 20 to 15, with all other keys equal. The leftovers check lists exactly the 5 gentle-ai hooks on the live settings (read-only).
   - `tests/migration.test.mjs` executes the guide's perl and jq commands against fixtures. It covers the nested blocks, user content kept, only `^gentle-ai ` hooks removed, and other keys untouched. It also checks that every removed agent and skill is shipped by the plugin, and that `skills/synced` is never removed. It passed on the first run because the commands had been dry-run first. A mutation that dropped `local:odd-model-routing` from the guide's regex made it fail (`2 pass, 1 fail`). Restored: `node --test tests/` gave `504 pass`.
   - Next step: T14 (rename to Construct). The guide uses `odd-skills` names that T14 renames.
+- **L37 (2026-10-20, user):** "Ok" (start T14)
+  - Branch `odd-skills/19-construct`.
+  - **Renamed:**
+    - `plugins/odd-skills/` → `plugins/construct/` (`git mv`).
+    - The `odd-skills:` prefix → `construct:` in agents, skills, contracts, the routing mod (`PLUGIN_PREFIX`), and the JSON-only filter.
+    - The manifest and marketplace names → `construct` (install id `construct@construct`), with `displayName` `Construct`.
+    - Schemas → `construct.review-assessment/v1`, `construct.review-transaction/v1`, `construct.review-receipt/v1`.
+    - The RDD global switch → `~/.config/construct/rdd.json`, and the gate fallback → `<tmpdir>/construct-<uid>`.
+    - The product name "odd_skills" → "Construct" in the README, NOTICE, contracts, migration guide, and skill `author` metadata.
+  - **Kept:**
+    - the ODD agent and skill names (`odd-worker`, `odd-workflow`, …);
+    - the `odd-assess` and `odd-review` CLIs and their `.git/odd-review` store;
+    - this feature document, its engram topic, and the branch names;
+    - the repository folder `odd_skills` where it is a path.
+  - Two shell attempts failed and changed nothing: zsh does not word-split an unquoted variable, and macOS `grep -Z` is not NUL output. A `while read` loop applied it. 44 files changed.
+  - Checks:
+    - `node --test tests/`: `504 pass`. `claude plugin test plugins/construct`: `34 pass`. `validate --strict` of the plugin and the marketplace: passed.
+    - Live `claude -p --plugin-dir plugins/construct`: the contract heading is `# Construct contract`, all 13 agents and 15 skills load as `construct:*`, and engram's memory block is present.
+  - Risk reassessed from item 3 to none: the plugin was never published or installed, so nothing consumed the old prefix.
+  - **All tasks T0–T14 are done.**
+  - Open follow-ups:
+    - F15: the status band replaces instead of composing.
+    - F16: the active-task rule is duplicated between the mod and the hook.
+    - F17: the routing hooks lack `.catch`.
+    - Advisories recorded per slice.
+  - Engram mirror: still pending, refused for the ended host session.
+  - Delivery: 19 chained slices on `odd-skills/01-…` to `odd-skills/19-construct`. The tracker `feat/odd-skills-plugin` is still at `e639e15`. Push, PR creation, and merge are the user's decisions.

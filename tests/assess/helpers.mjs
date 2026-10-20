@@ -5,7 +5,7 @@ import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:f
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 
-export const BIN = new URL('../../plugins/odd-skills/bin/odd-assess', import.meta.url).pathname
+export const BIN = new URL('../../plugins/construct/bin/odd-assess', import.meta.url).pathname
 
 const created = []
 process.on('exit', () => {

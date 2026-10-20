@@ -1,0 +1,359 @@
+{
+  "name": "construct",
+  "displayName": "Construct",
+  "version": "0.1.0",
+  "description": "Organic Driven Development orchestration, review lenses, and delivery skills for Claude Code",
+  "author": {
+    "name": "Maximiliano Carsi"
+  },
+  "keywords": [
+    "odd",
+    "orchestration",
+    "review",
+    "agents",
+    "skills"
+  ],
+  "dependencies": [
+    "engram@engram"
+  ],
+  "userConfig": {
+    "model_odd_explorer": {
+      "type": "string",
+      "title": "ODD Explorer model",
+      "description": "Model the odd-explorer agent runs on",
+      "options": [
+        "haiku",
+        "sonnet",
+        "opus",
+        "fable"
+      ],
+      "default": "haiku"
+    },
+    "effort_odd_explorer": {
+      "type": "string",
+      "title": "ODD Explorer effort",
+      "description": "Effort level for the odd-explorer agent; default keeps the model's own level",
+      "options": [
+        "default",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "default": "default"
+    },
+    "model_odd_worker": {
+      "type": "string",
+      "title": "ODD Worker model",
+      "description": "Model the odd-worker agent runs on",
+      "options": [
+        "haiku",
+        "sonnet",
+        "opus",
+        "fable"
+      ],
+      "default": "sonnet"
+    },
+    "effort_odd_worker": {
+      "type": "string",
+      "title": "ODD Worker effort",
+      "description": "Effort level for the odd-worker agent; default keeps the model's own level",
+      "options": [
+        "default",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "default": "medium"
+    },
+    "model_odd_verify": {
+      "type": "string",
+      "title": "ODD Verify model",
+      "description": "Model the odd-verify agent runs on",
+      "options": [
+        "haiku",
+        "sonnet",
+        "opus",
+        "fable"
+      ],
+      "default": "opus"
+    },
+    "effort_odd_verify": {
+      "type": "string",
+      "title": "ODD Verify effort",
+      "description": "Effort level for the odd-verify agent; default keeps the model's own level",
+      "options": [
+        "default",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "default": "medium"
+    },
+    "model_jd_judge_a": {
+      "type": "string",
+      "title": "JD Judge A model",
+      "description": "Model the jd-judge-a agent runs on",
+      "options": [
+        "haiku",
+        "sonnet",
+        "opus",
+        "fable"
+      ],
+      "default": "opus"
+    },
+    "effort_jd_judge_a": {
+      "type": "string",
+      "title": "JD Judge A effort",
+      "description": "Effort level for the jd-judge-a agent; default keeps the model's own level",
+      "options": [
+        "default",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "default": "medium"
+    },
+    "model_jd_judge_b": {
+      "type": "string",
+      "title": "JD Judge B model",
+      "description": "Model the jd-judge-b agent runs on",
+      "options": [
+        "haiku",
+        "sonnet",
+        "opus",
+        "fable"
+      ],
+      "default": "sonnet"
+    },
+    "effort_jd_judge_b": {
+      "type": "string",
+      "title": "JD Judge B effort",
+      "description": "Effort level for the jd-judge-b agent; default keeps the model's own level",
+      "options": [
+        "default",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "default": "medium"
+    },
+    "model_jd_fix_agent": {
+      "type": "string",
+      "title": "JD Fix Agent model",
+      "description": "Model the jd-fix-agent agent runs on",
+      "options": [
+        "haiku",
+        "sonnet",
+        "opus",
+        "fable"
+      ],
+      "default": "sonnet"
+    },
+    "effort_jd_fix_agent": {
+      "type": "string",
+      "title": "JD Fix Agent effort",
+      "description": "Effort level for the jd-fix-agent agent; default keeps the model's own level",
+      "options": [
+        "default",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "default": "medium"
+    },
+    "model_review_risk": {
+      "type": "string",
+      "title": "RDD Risk model",
+      "description": "Model the review-risk agent runs on",
+      "options": [
+        "haiku",
+        "sonnet",
+        "opus",
+        "fable"
+      ],
+      "default": "opus"
+    },
+    "effort_review_risk": {
+      "type": "string",
+      "title": "RDD Risk effort",
+      "description": "Effort level for the review-risk agent; default keeps the model's own level",
+      "options": [
+        "default",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "default": "medium"
+    },
+    "model_review_readability": {
+      "type": "string",
+      "title": "RDD Readability model",
+      "description": "Model the review-readability agent runs on",
+      "options": [
+        "haiku",
+        "sonnet",
+        "opus",
+        "fable"
+      ],
+      "default": "sonnet"
+    },
+    "effort_review_readability": {
+      "type": "string",
+      "title": "RDD Readability effort",
+      "description": "Effort level for the review-readability agent; default keeps the model's own level",
+      "options": [
+        "default",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "default": "medium"
+    },
+    "model_review_reliability": {
+      "type": "string",
+      "title": "RDD Reliability model",
+      "description": "Model the review-reliability agent runs on",
+      "options": [
+        "haiku",
+        "sonnet",
+        "opus",
+        "fable"
+      ],
+      "default": "sonnet"
+    },
+    "effort_review_reliability": {
+      "type": "string",
+      "title": "RDD Reliability effort",
+      "description": "Effort level for the review-reliability agent; default keeps the model's own level",
+      "options": [
+        "default",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "default": "medium"
+    },
+    "model_review_resilience": {
+      "type": "string",
+      "title": "RDD Resilience model",
+      "description": "Model the review-resilience agent runs on",
+      "options": [
+        "haiku",
+        "sonnet",
+        "opus",
+        "fable"
+      ],
+      "default": "sonnet"
+    },
+    "effort_review_resilience": {
+      "type": "string",
+      "title": "RDD Resilience effort",
+      "description": "Effort level for the review-resilience agent; default keeps the model's own level",
+      "options": [
+        "default",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "default": "medium"
+    },
+    "model_review_refuter": {
+      "type": "string",
+      "title": "RDD Refuter model",
+      "description": "Model the review-refuter agent runs on",
+      "options": [
+        "haiku",
+        "sonnet",
+        "opus",
+        "fable"
+      ],
+      "default": "opus"
+    },
+    "effort_review_refuter": {
+      "type": "string",
+      "title": "RDD Refuter effort",
+      "description": "Effort level for the review-refuter agent; default keeps the model's own level",
+      "options": [
+        "default",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "default": "medium"
+    },
+    "model_review_validator": {
+      "type": "string",
+      "title": "RDD Validator model",
+      "description": "Model the review-validator agent runs on",
+      "options": [
+        "haiku",
+        "sonnet",
+        "opus",
+        "fable"
+      ],
+      "default": "opus"
+    },
+    "effort_review_validator": {
+      "type": "string",
+      "title": "RDD Validator effort",
+      "description": "Effort level for the review-validator agent; default keeps the model's own level",
+      "options": [
+        "default",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "default": "medium"
+    },
+    "model_odd_general": {
+      "type": "string",
+      "title": "General delegation model",
+      "description": "Model the odd-general agent runs on",
+      "options": [
+        "haiku",
+        "sonnet",
+        "opus",
+        "fable"
+      ],
+      "default": "sonnet"
+    },
+    "effort_odd_general": {
+      "type": "string",
+      "title": "General delegation effort",
+      "description": "Effort level for the odd-general agent; default keeps the model's own level",
+      "options": [
+        "default",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "default": "medium"
+    }
+  }
+}

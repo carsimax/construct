@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs the odd-skills behavior evals against a temporary copy of the plugin
+# Runs the construct behavior evals against a temporary copy of the plugin
 # whose manifest drops the engram@engram dependency. Eval runs are isolated
 # and cannot resolve that dependency, so without this the plugin never loads
 # and both arms measure Claude without the plugin.
@@ -10,9 +10,9 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 copy_root="$(mktemp -d)"
-plugin_copy="$copy_root/odd-skills"
+plugin_copy="$copy_root/construct"
 
-cp -R "$repo_root/plugins/odd-skills" "$plugin_copy"
+cp -R "$repo_root/plugins/construct" "$plugin_copy"
 rm -rf "$plugin_copy/evals/results"
 
 node -e '

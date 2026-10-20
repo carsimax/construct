@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 
-const pluginRoot = new URL('../plugins/odd-skills/', import.meta.url).pathname
+const pluginRoot = new URL('../plugins/construct/', import.meta.url).pathname
 const manifest = JSON.parse(readFileSync(join(pluginRoot, '.claude-plugin/plugin.json'), 'utf8'))
 const agentFiles = readdirSync(join(pluginRoot, 'agents')).filter((f) => f.endsWith('.md'))
 

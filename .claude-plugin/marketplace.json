@@ -1,14 +1,14 @@
 {
-  "name": "odd-skills",
-  "description": "Marketplace for odd_skills: Organic Driven Development for Claude Code",
+  "name": "construct",
+  "description": "Marketplace for Construct: Organic Driven Development for Claude Code",
   "owner": {
     "name": "Maximiliano Carsi"
   },
   "allowCrossMarketplaceDependenciesOn": ["engram"],
   "plugins": [
     {
-      "name": "odd-skills",
-      "source": "./plugins/odd-skills",
+      "name": "construct",
+      "source": "./plugins/construct",
       "description": "Organic Driven Development orchestration, review lenses, and delivery skills for Claude Code"
     }
   ]

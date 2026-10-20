@@ -1,6 +1,6 @@
-# Migrating from gentle-ai to odd_skills
+# Migrating from gentle-ai to Construct
 
-This guide moves a Claude Code setup managed by gentle-ai to the odd_skills plugin, keeping engram as an independent memory instance. Nothing here runs automatically: every step is a command you run and can check.
+This guide moves a Claude Code setup managed by gentle-ai to the Construct plugin, keeping engram as an independent memory instance. Nothing here runs automatically: every step is a command you run and can check.
 
 ## Before you start
 
@@ -12,7 +12,7 @@ This guide moves a Claude Code setup managed by gentle-ai to the odd_skills plug
 | engram marketplace and plugin | `claude plugin list` | `engram@engram` enabled |
 | codegraph and context7 at user scope (optional) | `claude mcp list` | `codegraph`, `context7` listed |
 
-If engram is missing, follow the README Quick path first. The odd_skills plugin will not load without `engram@engram`.
+If engram is missing, follow the README Quick path first. The Construct plugin will not load without `engram@engram`.
 
 ## What changes
 
@@ -21,8 +21,8 @@ If engram is missing, follow the README Quick path first. The odd_skills plugin 
 | Orchestrator, routing, engram protocol, codegraph guidance, persona | `~/.claude/CLAUDE.md`, blocks `<!-- gentle-ai:* -->` | Removed. The plugin injects its contract per session, and engram injects its own protocol |
 | Local model routing note | `~/.claude/CLAUDE.md`, block `<!-- local:odd-model-routing -->` | Removed. The plugin's mod routes each role's model and effort (`/config`) |
 | Review, telemetry, and skill-registry hooks | `~/.claude/settings.json` `hooks`, commands starting `gentle-ai ` (5 entries) | Removed. The plugin ships its own hooks |
-| Review and judgment-day agents | `~/.claude/agents/{review-*,jd-*}.md` | Removed. The plugin ships `odd-skills:*` versions |
-| Ported skills | `~/.claude/skills/{_shared,chained-pr,cognitive-doc-design,go-testing,judgment-day,skill-creator,skill-improver,skill-registry,work-unit-commits}` | Removed. The plugin ships `odd-skills:*` versions |
+| Review and judgment-day agents | `~/.claude/agents/{review-*,jd-*}.md` | Removed. The plugin ships `construct:*` versions |
+| Ported skills | `~/.claude/skills/{_shared,chained-pr,cognitive-doc-design,go-testing,judgment-day,skill-creator,skill-improver,skill-registry,work-unit-commits}` | Removed. The plugin ships `construct:*` versions |
 | Neutral output style | `~/.claude/output-styles/neutral.md` | Removed after you select the plugin's Neutral style |
 | RDD switch and review state | `~/.gentle-ai/state.json`, `gentle-ai review …` | Replaced by `odd-review mode` and `odd-review` |
 | Skill registry files | `.atl/` in each project | No longer generated; safe to delete |
@@ -49,16 +49,16 @@ cp ~/.claude.json ~/.claude.json.backup-$STAMP
 Run one session with the plugin loaded from disk while gentle-ai is still installed:
 
 ```bash
-claude --plugin-dir <path-to-odd_skills>/plugins/odd-skills
+claude --plugin-dir <path-to-odd_skills>/plugins/construct
 ```
 
-Both rule sets are active in this session, which is fine for a trial. Check that `/agents` lists the `odd-skills:` agents, and that the `/odd-skills:` skills appear. Exit when satisfied.
+Both rule sets are active in this session, which is fine for a trial. Check that `/agents` lists the `construct:` agents, and that the `/construct:` skills appear. Exit when satisfied.
 
 ### 3. Install the plugin
 
 ```bash
 claude plugin marketplace add <path-or-repo-of-odd_skills>
-claude plugin install odd-skills@odd-skills
+claude plugin install construct@construct
 ```
 
 ### 4. Keep what is personal
@@ -131,9 +131,9 @@ Each project may still hold a `.atl/` directory (skill registry). It is no longe
 
 | Check | How | Expected |
 |---|---|---|
-| Plugins enabled | `claude plugin list` | `odd-skills@odd-skills` and `engram@engram` enabled |
-| Contract loads | Start a session and ask "what does your odd_skills contract say about Risk lines?" | It quotes the `Risk: item N` rule |
-| Agents | `/agents` | `odd-skills:odd-worker`, `odd-skills:review-risk`, … |
+| Plugins enabled | `claude plugin list` | `construct@construct` and `engram@engram` enabled |
+| Contract loads | Start a session and ask "what does your Construct contract say about Risk lines?" | It quotes the `Risk: item N` rule |
+| Agents | `/agents` | `construct:odd-worker`, `construct:review-risk`, … |
 | Model routing | `/config` | `ODD Worker model` and the other role rows |
 | RDD switch | `odd-review mode status` in a repository | `{"mode":"on","source":"default"}` (or your setting) |
 | Secret guard | In a scratch directory with a dummy `.env`, ask Claude to read it | The read is denied by `secret-guard` |
@@ -152,7 +152,7 @@ jq '[.hooks[][].hooks[].command] | map(select(test("^gentle-ai ")))' ~/.claude/s
 Restore the backup from step 1:
 
 ```bash
-claude plugin uninstall odd-skills@odd-skills
+claude plugin uninstall construct@construct
 rm -rf ~/.claude && cp -a ~/.claude.backup-$STAMP ~/.claude
 cp ~/.claude.json.backup-$STAMP ~/.claude.json
 ```

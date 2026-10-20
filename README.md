@@ -1,6 +1,6 @@
-# odd_skills
+# Construct
 
-odd_skills is a Claude Code plugin for Organic Driven Development (ODD). It ships orchestration rules, review lenses, and delivery skills as plugin components only: agents, skills, hooks, mods, workflows, and output styles. Engram stays an independent memory instance; this plugin depends on it.
+Construct is a Claude Code plugin for Organic Driven Development (ODD). It ships orchestration rules, review lenses, and delivery skills as plugin components only: agents, skills, hooks, mods, workflows, and output styles. Engram stays an independent memory instance; this plugin depends on it.
 
 ## Requirements
 
@@ -18,7 +18,7 @@ odd_skills is a Claude Code plugin for Organic Driven Development (ODD). It ship
    engram setup claude-code
    ```
 
-2. Add the engram marketplace first. odd_skills declares `engram@engram` as a dependency, and the dependency resolves only from a marketplace you have already added:
+2. Add the engram marketplace first. Construct declares `engram@engram` as a dependency, and the dependency resolves only from a marketplace you have already added:
 
    ```bash
    claude plugin marketplace add Gentleman-Programming/engram
@@ -28,14 +28,14 @@ odd_skills is a Claude Code plugin for Organic Driven Development (ODD). It ship
 
    ```bash
    claude plugin marketplace add <path-or-repo-of-odd_skills>
-   claude plugin install odd-skills@odd-skills
+   claude plugin install construct@construct
    ```
 
    The install output ends with `(+ 1 dependency: engram)` when engram was not installed yet.
 
 ## How the ODD contract loads
 
-A plugin cannot ship a `CLAUDE.md`, so odd_skills loads its rules in three layers:
+A plugin cannot ship a `CLAUDE.md`, so Construct loads its rules in three layers:
 
 | Layer | Mechanism | Content |
 |---|---|---|
@@ -44,7 +44,7 @@ A plugin cannot ship a `CLAUDE.md`, so odd_skills loads its rules in three layer
 | Skills | Loaded on demand | `odd-workflow`, `odd-delegation`, `task-size-risk`, `lossless-prompts` |
 | Output style | `/config` → Output style → `Neutral` | Reply tone, language, response length, verification, and working rules (no AI attribution in commits, one question at a time) |
 
-The contract texts live in `plugins/odd-skills/hooks/contract/`.
+The contract texts live in `plugins/construct/hooks/contract/`.
 
 After a compaction or a resume, a second `SessionStart` hook (matcher `compact|resume`) re-injects the active feature state. It reads `odd/tasks/*.md` under the project root and, for up to three documents with unfinished tasks (newest first), emits the path, title, branch line, unfinished task rows, and the last `Next step:` from the log, in at most 2,500 characters. It is read-only and prints nothing when no document is active. Task-to-document sync hooks were dropped: native tasks have no link to the document's `T#` rows, so a hook could corrupt the feature document. The orchestrator keeps the document current, and the re-injection tells it where it was.
 
@@ -69,19 +69,19 @@ The plugin ships 13 agents. Each role's model and effort can be changed in `/con
 
 | Role | Agent | Model | Effort |
 |---|---|---|---|
-| ODD Explorer | `odd-skills:odd-explorer` | haiku | default |
-| ODD Worker | `odd-skills:odd-worker` | sonnet | medium |
-| ODD Verify | `odd-skills:odd-verify` | opus | medium |
-| JD Judge A | `odd-skills:jd-judge-a` | opus | medium |
-| JD Judge B | `odd-skills:jd-judge-b` | sonnet | medium |
-| JD Fix Agent | `odd-skills:jd-fix-agent` | sonnet | medium |
-| RDD Risk | `odd-skills:review-risk` | opus | medium |
-| RDD Readability | `odd-skills:review-readability` | sonnet | medium |
-| RDD Reliability | `odd-skills:review-reliability` | sonnet | medium |
-| RDD Resilience | `odd-skills:review-resilience` | sonnet | medium |
-| RDD Refuter | `odd-skills:review-refuter` | opus | medium |
-| RDD Validator | `odd-skills:review-validator` | opus | medium |
-| General delegation | `odd-skills:odd-general` and the built-in `general-purpose` | sonnet | medium |
+| ODD Explorer | `construct:odd-explorer` | haiku | default |
+| ODD Worker | `construct:odd-worker` | sonnet | medium |
+| ODD Verify | `construct:odd-verify` | opus | medium |
+| JD Judge A | `construct:jd-judge-a` | opus | medium |
+| JD Judge B | `construct:jd-judge-b` | sonnet | medium |
+| JD Fix Agent | `construct:jd-fix-agent` | sonnet | medium |
+| RDD Risk | `construct:review-risk` | opus | medium |
+| RDD Readability | `construct:review-readability` | sonnet | medium |
+| RDD Reliability | `construct:review-reliability` | sonnet | medium |
+| RDD Resilience | `construct:review-resilience` | sonnet | medium |
+| RDD Refuter | `construct:review-refuter` | opus | medium |
+| RDD Validator | `construct:review-validator` | opus | medium |
+| General delegation | `construct:odd-general` and the built-in `general-purpose` | sonnet | medium |
 
 How the routing works:
 
@@ -107,7 +107,7 @@ odd-assess --escalate-item 2 --escalate-reason "touches the login guard" --json
 | `--base-ref REF` | Assess `REF` to `HEAD`. Tracked files must be clean, or pass `--committed-only` to ignore them |
 | `--committed-only` | Acknowledge that `--base-ref` ignores dirty tracked changes. It only qualifies `--base-ref`: passing it alone is a usage error (exit `2`) |
 | `--escalate-item N`, `--escalate-reason TEXT` | Raise the tier to `high` by citing high-risk item 1 to 6 (reason at most 500 bytes). Both flags or neither; a tier is never lowered |
-| `--json` | Print the `odd-skills.review-assessment/v1` object instead of a short summary |
+| `--json` | Print the `construct.review-assessment/v1` object instead of a short summary |
 
 Without `--base-ref`, the candidate is the working tree (tracked plus untracked, not ignored), frozen through a temporary index. Your real index is never changed.
 
@@ -151,9 +151,9 @@ odd-review mode enable --scope clone        # this clone only
 odd-review boundary                         # {"commit":"<sha>","source":"receipt|merge-base|root"}
 ```
 
-- The switch is on by default. Precedence is the clone file (`<git-common-dir>/odd-review/mode.json`), then the global file (`${XDG_CONFIG_HOME:-$HOME/.config}/odd-skills/rdd.json`), then the default. An unreadable file is skipped. Writes are atomic.
+- The switch is on by default. Precedence is the clone file (`<git-common-dir>/odd-review/mode.json`), then the global file (`${XDG_CONFIG_HOME:-$HOME/.config}/construct/rdd.json`), then the default. An unreadable file is skipped. Writes are atomic.
 - `boundary` is the start of the next committed range: among the receipts whose `candidate_commit` is an ancestor of (or equal to) `HEAD`, the one closest to `HEAD` by ancestry (ties go to the newest acknowledgement, so reviewing an older commit later never moves the boundary back), else the merge-base with the default branch (the first of `origin/HEAD`, `main`, `master`, `origin/main`, `origin/master` that resolves and differs from `HEAD`), else the root commit. Receipts of committed-mode reviews record `candidate_commit` (and `base_commit` when `--base-ref` names a commit); older receipts without them stay valid and are ignored by `boundary`.
-- The plugin's `Stop` hook (`hooks/scripts/review-gate.mjs`) assesses any uncommitted changes, and `boundary..HEAD` when the boundary comes from a receipt or a merge-base. A root boundary (for example the default branch of an existing repository with no receipts) never opens a committed range, so the gate does not review a whole history. When one is `high`, has no receipt, and was not yet reminded in this session, it blocks the stop once with the range, up to three reasons, and the next step (load `odd-skills:rdd-review`, ask for consent, or skip). Reminders are kept per session under `${CLAUDE_PLUGIN_DATA}/review-gate/`; without `CLAUDE_PLUGIN_DATA` they go to a private `odd-skills-<uid>` directory in the system temp dir, which must be owned by the user with no group or other access (otherwise the gate stays silent). It does nothing when the switch is off, outside a repository, in a repository without commits, or when `stop_hook_active` is set, and it fails open on any error.
+- The plugin's `Stop` hook (`hooks/scripts/review-gate.mjs`) assesses any uncommitted changes, and `boundary..HEAD` when the boundary comes from a receipt or a merge-base. A root boundary (for example the default branch of an existing repository with no receipts) never opens a committed range, so the gate does not review a whole history. When one is `high`, has no receipt, and was not yet reminded in this session, it blocks the stop once with the range, up to three reasons, and the next step (load `construct:rdd-review`, ask for consent, or skip). Reminders are kept per session under `${CLAUDE_PLUGIN_DATA}/review-gate/`; without `CLAUDE_PLUGIN_DATA` they go to a private `construct-<uid>` directory in the system temp dir, which must be owned by the user with no group or other access (otherwise the gate stays silent). It does nothing when the switch is off, outside a repository, in a repository without commits, or when `stop_hook_active` is set, and it fails open on any error.
 
 Store: `$(git rev-parse --git-common-dir)/odd-review/`, so nothing is written into the worktree and linked worktrees share it.
 
@@ -223,21 +223,21 @@ What it shows, top to bottom:
 Load the plugin for one session without installing it:
 
 ```bash
-claude --plugin-dir ./plugins/odd-skills
+claude --plugin-dir ./plugins/construct
 ```
 
 Validate the marketplace and the plugin:
 
 ```bash
 claude plugin validate --strict .
-claude plugin validate --strict ./plugins/odd-skills
+claude plugin validate --strict ./plugins/construct
 ```
 
 Run the tests:
 
 ```bash
 node --test tests/                       # repository checks, odd-assess and odd-review tests
-claude plugin test plugins/odd-skills    # mod tests (*.test.ts)
+claude plugin test plugins/construct    # mod tests (*.test.ts)
 ```
 
 Run the behavior evals (they spend real usage; each run is an isolated `claude -p` session):
@@ -253,22 +253,22 @@ scripts/eval.sh --case small-inline
 
 | Path | Contents |
 |---|---|
-| `.claude-plugin/marketplace.json` | Local marketplace `odd-skills`; allows the cross-marketplace `engram` dependency |
-| `plugins/odd-skills/` | The plugin (manifest name `odd-skills`) |
-| `plugins/odd-skills/agents/` | The 13 role agents |
-| `plugins/odd-skills/skills/` | Delivery and review skills (`branch-pr`, `chained-pr`, `work-unit-commits`, `judgment-day`, ...) |
-| `plugins/odd-skills/hooks/` | `hooks.json`, the mod (`register.js`), its routing helpers, and the status band modules (`status/`) |
-| `plugins/odd-skills/bin/` | Executable scripts put on the `PATH` (`odd-assess`) |
-| `plugins/odd-skills/lib/assess/` | `odd-assess` modules: git, stats, passive, signals, sinks, content, classify, escalation, output |
-| `plugins/odd-skills/hooks/contract/` | Session and subagent contract texts injected by hooks |
-| `plugins/odd-skills/evals/` | Behavior eval cases run by `claude plugin eval` |
-| `plugins/odd-skills/tests/` | Mod tests run by `claude plugin test` |
+| `.claude-plugin/marketplace.json` | Local marketplace `construct`; allows the cross-marketplace `engram` dependency |
+| `plugins/construct/` | The plugin (manifest name `construct`) |
+| `plugins/construct/agents/` | The 13 role agents |
+| `plugins/construct/skills/` | Delivery and review skills (`branch-pr`, `chained-pr`, `work-unit-commits`, `judgment-day`, ...) |
+| `plugins/construct/hooks/` | `hooks.json`, the mod (`register.js`), its routing helpers, and the status band modules (`status/`) |
+| `plugins/construct/bin/` | Executable scripts put on the `PATH` (`odd-assess`) |
+| `plugins/construct/lib/assess/` | `odd-assess` modules: git, stats, passive, signals, sinks, content, classify, escalation, output |
+| `plugins/construct/hooks/contract/` | Session and subagent contract texts injected by hooks |
+| `plugins/construct/evals/` | Behavior eval cases run by `claude plugin eval` |
+| `plugins/construct/tests/` | Mod tests run by `claude plugin test` |
 | `tests/` | Repository tests run by `node --test` |
 | `odd/tasks/` | ODD feature documents (specs, tasks, log) |
 
 ## License notice
 
-Part of the agents and skills are adapted from MIT-licensed material; see [`plugins/odd-skills/NOTICE`](plugins/odd-skills/NOTICE).
+Part of the agents and skills are adapted from MIT-licensed material; see [`plugins/construct/NOTICE`](plugins/construct/NOTICE).
 
 ## Status
 

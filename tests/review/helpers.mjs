@@ -12,7 +12,7 @@ export { applyFiles, assessJson, commitAll, git, makeRepo, scratchDir, sh, write
 // real home configuration; a test that needs its own passes env.
 const DEFAULT_XDG = scratchDir('odd-review-xdg-')
 
-export const REVIEW_BIN = new URL('../../plugins/odd-skills/bin/odd-review', import.meta.url).pathname
+export const REVIEW_BIN = new URL('../../plugins/construct/bin/odd-review', import.meta.url).pathname
 export const LENSES = ['review-risk', 'review-resilience', 'review-readability', 'review-reliability']
 
 const parse = (text) => {

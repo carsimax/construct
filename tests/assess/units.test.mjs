@@ -2,11 +2,11 @@
 // sink catalog, passive nomination, MDX analysis, and passive content proof.
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { PROCESS_SPAWN_LINE } from '../../plugins/odd-skills/lib/assess/content.mjs'
-import { isPassiveContentCandidatePath, isPassiveContentCandidateStat, isPassiveDocumentContent, isStaticMDXDocument } from '../../plugins/odd-skills/lib/assess/passive.mjs'
-import { DANGEROUS_SINK_CATALOG, dangerousSinkLine, isCommentOnlySourceLine } from '../../plugins/odd-skills/lib/assess/sinks.mjs'
-import { executableModeChanged, hotPathRiskSignals, isConfigurationReviewPath, isServiceTokenReviewPath, isTestRiskPath } from '../../plugins/odd-skills/lib/assess/signals.mjs'
-import { countChangedLines, isGeneratedGoldenPath } from '../../plugins/odd-skills/lib/assess/stats.mjs'
+import { PROCESS_SPAWN_LINE } from '../../plugins/construct/lib/assess/content.mjs'
+import { isPassiveContentCandidatePath, isPassiveContentCandidateStat, isPassiveDocumentContent, isStaticMDXDocument } from '../../plugins/construct/lib/assess/passive.mjs'
+import { DANGEROUS_SINK_CATALOG, dangerousSinkLine, isCommentOnlySourceLine } from '../../plugins/construct/lib/assess/sinks.mjs'
+import { executableModeChanged, hotPathRiskSignals, isConfigurationReviewPath, isServiceTokenReviewPath, isTestRiskPath } from '../../plugins/construct/lib/assess/signals.mjs'
+import { countChangedLines, isGeneratedGoldenPath } from '../../plugins/construct/lib/assess/stats.mjs'
 
 describe('dangerous sink catalog', () => {
   test('keeps every catalog entry of the original (45)', () => {
