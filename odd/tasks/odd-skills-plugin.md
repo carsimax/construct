@@ -208,7 +208,7 @@ Design consequences:
 | T7 | S1, S2 | `bin/odd-review`: frozen tree via temp index, inspect, capture validation, receipt and acknowledgement; plus F4 | delegated (`odd-worker`, sonnet): long-session context backstop | 1 and 2 (persisted receipts; it gates delivery confidence) | done | `feat: add odd-review lifecycle with receipts` + `fix: refute mixed severe findings and escalate unknown causality` (slice 09) |
 | T8 | S1, S2 | `rdd-review` skill, RDD switch, receipt boundary, `Stop` review gate, contract RDD section (workflows dropped, L29) | delegated: two parallel units (Writer trigger a) | 2 and 6 (review gate) | done | `feat: add the RDD switch, review boundary, and Stop gate` + `feat: add the rdd-review skill and contract section` + `fix: cover uncommitted reviews and boundary ordering` (slice 11) |
 | T9 | S1 | `secret-guard` `PreToolUse` deny list for file tools and Bash (Risk-line prompt hook dropped, L31) | delegated (`odd-worker`, sonnet): long-session context backstop | 2 | done | `feat: add a secret guard PreToolUse hook` + `fix: close secret guard glob leak and false positives` (slice 13) |
-| T10 | S1 | Compaction re-injection and task sync hooks | inline | none | pending | — |
+| T10 | S1 | Feature-state re-injection on SessionStart compact/resume (task sync dropped, L32) | delegated (`odd-worker`, sonnet): long-session context backstop | none | in progress | — |
 | T11 | S1 | `.mcp.json` (context7, codegraph) and `codegraph` skill | inline | none | pending | — |
 | T12 | S2, S8 | Mod status panel: replica of the user's statusline (S8) plus ODD task progress and RDD state (experimental; must fail open) | inline | 6 | pending | — |
 | T13 | S1, S3, S4 | Migration runbook and README: back up `~/.claude`, remove `gentle-ai:*` blocks and gentle-ai hooks, run side by side with `--plugin-dir`, then `gentle-ai uninstall` keeping engram | inline | 5 | pending | — |
@@ -740,3 +740,19 @@ Push and PR creation remain the user's decision.
     - Advisory: `|&` was not treated as a pipe, contradicting the code's own comment. The parent fixed it (RED, then GREEN; `484 pass`, as the probe joined an existing test).
     - Remaining advisories, which need deliberate indirection: `| (xargs cat)`, `| parallel cat`, and going through a temp file.
   - The native review was not escalated for slice 14: these are follow-ups of an approved review, already independently verified with 125 probes.
+- **L32 (2026-10-19, user):** "Ok" (start T10)
+  - Branch `odd-skills/15-feature-state`.
+  - **Design decisions:**
+    - `PostCompact` can only observe, so the re-injection vehicle is `SessionStart` with `source` `compact`. T0 confirmed that `SessionStart` re-fires after compaction with `additionalContext`.
+    - **The `TaskCreated`/`TaskCompleted` sync is dropped.** Native tasks have no link to the document's `T#` rows, so a hook editing the user's feature document blindly could corrupt it. The orchestrator keeps the document current with verified checks, and the re-injection tells it where it was.
+  - **T10 design:** `hooks/scripts/feature-state.mjs` on `SessionStart`, matcher `compact|resume`, exec form.
+    - It reads `odd/tasks/*.md` under the project root: the git toplevel of `cwd`, else `cwd`.
+    - A document is **active** when its `## Tasks` table has a row whose Status cell is not `done`. Status matching is case-insensitive; `done` and `dropped` count as finished.
+    - For each active document, newest mtime first, at most 3 documents, it emits:
+      - the repository-relative path and title;
+      - the header line that starts with `Branch:` or `Tracker branch:`, if present;
+      - the unfinished task rows (ID and Task cell, each truncated to 160 characters);
+      - the last `Next step:` line found in `## Log`.
+    - It ends with: "Read the full document before continuing; the engram mirror is under topic `odd/<feature>/tasks`."
+    - Total `additionalContext` is at most 2500 characters.
+    - No active documents, no `odd/tasks`, outside a repository, or any error → no output and exit 0. It is read-only and fails open.
