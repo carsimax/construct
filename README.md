@@ -173,7 +173,7 @@ odd-assess --escalate-item 2 --escalate-reason "touches the login guard" --json
 
 Without `--base-ref`, the candidate is the working tree (tracked plus untracked, not ignored), frozen through a temporary index. Your real index is never changed.
 
-JavaScript and TypeScript module files (`.mjs`, `.cjs`, `.mts`, `.cts`) are read as source, like `.js` and `.ts`: an added line that spawns a process (`process_boundary`) or calls a dangerous sink (`dangerous_sink`) makes the change `high`.
+JavaScript and TypeScript module files (`.mjs`, `.cjs`, `.mts`, `.cts`) are read as source, like `.js` and `.ts`: an added line that spawns a process (`process_boundary`) or calls a dangerous sink (`dangerous_sink`) makes the change `high`. In any source file outside tests, an added non-comment line that names a hook's `permissionDecision` (`permission_decision`, signal `permissions`) also makes it `high`.
 
 The JSON result has `risk` (`passive`, `medium`, `high`), `reasons`, `changed_paths`, `changed_lines`, `candidate`, `review_due`, `review_due_reason`, and `lenses` (empty for passive and medium, the four canonical lenses for high). Only `high` makes a review due; `medium` reports `under_budget` and `passive` reports `passive`. When the exact candidate already has a receipt from `odd-review acknowledge`, `candidate.consumed` is `true` and the result reports `review_due: false` with `review_due_reason: "already_reviewed"`, whatever the tier.
 
