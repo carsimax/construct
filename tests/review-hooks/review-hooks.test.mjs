@@ -4,7 +4,7 @@
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { existsSync, readFileSync, utimesSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { finding, highRepo, lensResult, readTransaction, scratchDir, start } from '../review/helpers.mjs'
 
@@ -144,34 +144,14 @@ describe('context hook ambiguity', () => {
     assert.match(r.json.hookSpecificOutput.updatedInput.prompt, /^ODD_REVIEW_BINDING /)
   })
 
-  test('a second spawn of the same lens with a fresh pending record is denied and keeps the record', () => {
+  test('a lens spawn after an empty-reply stop is allowed and gets the context again', () => {
     const { repo, txn, data } = lineage()
-    const first = hook(CONTEXT_HOOK, spawnInput(repo, `Review ${txn.lineage}`), data)
-    assert.equal(first.json.hookSpecificOutput.permissionDecision, 'allow')
-    const before = readFileSync(pendingPath(data), 'utf8')
-    const second = hook(CONTEXT_HOOK, spawnInput(repo, `Review ${txn.lineage}`), data)
-    assert.equal(second.json.hookSpecificOutput.permissionDecision, 'deny')
-    assert.match(second.json.hookSpecificOutput.permissionDecisionReason, /wait/i)
-    assert.equal(readFileSync(pendingPath(data), 'utf8'), before)
-  })
-
-  test('a pending record older than six hours is abandoned: the spawn is allowed and the record overwritten', () => {
-    const { repo, txn, data } = lineage()
-    hook(CONTEXT_HOOK, spawnInput(repo, `Review ${txn.lineage}`), data)
-    writeFileSync(pendingPath(data), `${JSON.stringify({ lineage: 'review-ffffffffffffffff', lens: 'review-risk', cwd: repo, attempts: 0 })}\n`)
-    const old = new Date(Date.now() - 6 * 3600 * 1000 - 60_000)
-    utimesSync(pendingPath(data), old, old)
-    const r = hook(CONTEXT_HOOK, spawnInput(repo, `Review ${txn.lineage}`), data)
-    assert.equal(r.json.hookSpecificOutput.permissionDecision, 'allow')
-    assert.equal(JSON.parse(readFileSync(pendingPath(data), 'utf8')).lineage, txn.lineage)
-  })
-
-  test('a pending record of another lens does not block this lens', () => {
-    const { repo, txn, data } = lineage()
-    const first = hook(CONTEXT_HOOK, spawnInput(repo, `Review ${txn.lineage}`), data)
-    assert.equal(first.json.hookSpecificOutput.permissionDecision, 'allow')
-    const other = hook(CONTEXT_HOOK, spawnInput(repo, `Review ${txn.lineage}`, 'construct:review-reliability'), data)
-    assert.equal(other.json.hookSpecificOutput.permissionDecision, 'allow')
+    const prompt = `Review lineage ${txn.lineage}`
+    assert.equal(hook(CONTEXT_HOOK, spawnInput(repo, prompt), data).json.hookSpecificOutput.permissionDecision, 'allow')
+    hook(CAPTURE_HOOK, stopInput(repo, ''), data)
+    const again = hook(CONTEXT_HOOK, spawnInput(repo, prompt), data)
+    assert.equal(again.json.hookSpecificOutput.permissionDecision, 'allow')
+    assert.match(again.json.hookSpecificOutput.updatedInput.prompt, /^ODD_REVIEW_BINDING /)
   })
 })
 

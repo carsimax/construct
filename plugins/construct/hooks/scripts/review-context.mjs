@@ -4,12 +4,12 @@
 // records the lineage for review-capture.mjs. A review agent without a lineage,
 // or one odd-review refuses, is denied with the reason; other agents and
 // prompts that start with the binding line pass through. A prompt naming two
-// distinct lineages, or a second spawn of a lens whose pending record is still
-// fresh (under the review-gate's six-hour window), is denied. Errors fail open.
+// distinct lineages is denied. A new spawn overwrites the lens's pending record.
+// Errors fail open.
 // Usage: node review-context.mjs   (hook JSON on stdin)
 import { spawnSync } from 'node:child_process'
-import { rmSync, statSync } from 'node:fs'
-import { OPEN_LINEAGE_MAX_IDLE_MS, atomicWrite } from '../../lib/review/store.mjs'
+import { rmSync } from 'node:fs'
+import { atomicWrite } from '../../lib/review/store.mjs'
 import { pendingFile, readInput } from './hook-io.mjs'
 
 const ODD_REVIEW = new URL('../../bin/odd-review', import.meta.url).pathname
@@ -37,21 +37,6 @@ function main() {
   if (!match) return
   const [agent, lens] = match
   const pending = pendingFile(input.session_id, agent)
-
-  // A fresh pending record means this lens is still running in the session; an
-  // older one is abandoned and gets overwritten below.
-  let age = null
-  try {
-    age = Date.now() - statSync(pending).mtimeMs
-  } catch {
-    // No pending record.
-  }
-  if (age !== null && age < OPEN_LINEAGE_MAX_IDLE_MS) {
-    decide('deny', {
-      permissionDecisionReason: `${agent} is already running in this session: wait for it to finish (its result is captured automatically) before spawning it again.`,
-    })
-    return
-  }
 
   // The orchestrator pasted the context itself (it starts with the binding
   // line): record its lineage, change nothing.
