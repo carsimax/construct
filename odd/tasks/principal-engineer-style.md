@@ -21,7 +21,7 @@ Source: "Tengo esta propuesta de output style pero se que puede ser mas que eso 
 | T2 | S2 | Subagent contract rules + contract test | odd-worker | 3 | done | `feat(contract): add engineering rules to the subagent contract` |
 | T3 | S3, S4 | Session contract autonomy and close + contract test | odd-worker | 3 | done | `feat(contract): scale autonomy with the verifier and unify the close` |
 | T4 | S4, S5 | odd-workflow, odd-delegation, odd-worker agent, risk-line grader | odd-worker | 3 | done | `feat(skills): carry the verifier and the unified close into ODD` |
-| T5 | — | Release 0.8.0 (`plugin.json`) | odd-worker | 5 | pending | — |
+| T5 | — | Release 0.8.0 (`plugin.json`) | odd-worker | 5 | done | `chore: release 0.8.0` |
 
 T1 and T2 run in parallel (disjoint surfaces); T3 after them; T4 after T3 (it quotes the close); T5 last.
 
