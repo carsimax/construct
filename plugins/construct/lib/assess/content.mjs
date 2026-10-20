@@ -5,7 +5,7 @@ import { GitOutputLimitError, batchLiteralPathspecs, git, grepInterpreterDirecti
 import { SCAN_BYTE_LIMIT } from './passive.mjs'
 import { PRIVATE_KEY_HEADER, contentRiskItemReason, hasDestructiveSql, hasTokenLine, isItemEvidencePath, isRiskItemContentPath, isSqlPath, isTokenDotfilePath } from './items.mjs'
 import { dangerousSinkLine, isCommentOnlySourceLine } from './sinks.mjs'
-import { SEMANTIC_SOURCE_EXTENSIONS, asciiLower, canonicalRiskReasons, goExt, isContentScanEligible, isInspectableStat, hasExcludedRiskSegment, isTestRiskPath } from './signals.mjs'
+import { JS_TS_EXTENSIONS, SEMANTIC_SOURCE_EXTENSIONS, asciiLower, canonicalRiskReasons, goExt, isContentScanEligible, isInspectableStat, hasExcludedRiskSegment, isTestRiskPath } from './signals.mjs'
 
 // A bare spawn word (`subprocess`, `child_process`, `execute_process`, `exec`)
 // counts only when it is not a member of another value: `db.Exec(`, `stmt.Exec(`
@@ -21,6 +21,25 @@ export const PROCESS_SPAWN_LINE = new RegExp(
 // `permissionDecision`. Only source files count: prose that explains the field is
 // not a decision.
 export const PERMISSION_DECISION_LINE = /(^|[^A-Za-z0-9_$])permissionDecision([^A-Za-z0-9_$]|$)/
+
+// Verifier weakening: an added suppression comment in a source or test file, or an added
+// skip/focus marker in a test file. A suppression is a comment, so it is matched where a comment opens (start of line
+// or after whitespace/punctuation, never inside a quote). shortcut: a marker spelled across two
+// lines or built from a string is not seen, upgrade with a per-language tokenizer.
+const OPENER = '(?:^|[\\s;{}),])'
+const JS_SUPPRESSION = new RegExp(`${OPENER}(?:\\/\\/|\\/\\*+)[\\s*]*(?:@ts-(?:ignore|expect-error|nocheck)\\b|eslint-disable\\b)`)
+const PY_SUPPRESSION = new RegExp(`${OPENER}#[\\s]*(?:noqa\\b|type:\\s*ignore\\b)`)
+const GO_SUPPRESSION = new RegExp(`${OPENER}\\/\\/[\\s]*nolint\\b`)
+// Markers are keyed on the file's language: `#` never opens a JS comment and `//nolint` is Go only.
+export function suppressionLine(path, line) {
+  const extension = asciiLower(goExt(path))
+  if (JS_TS_EXTENSIONS.includes(extension)) return JS_SUPPRESSION.test(line)
+  if (extension === '.py') return PY_SUPPRESSION.test(line)
+  if (extension === '.go') return GO_SUPPRESSION.test(line)
+  return false
+}
+export const TEST_SKIP_LINE =
+  /(?:^|[^\w.$])(?:(?:test|it|describe|context|suite)(?:\.\w+)*\.(?:skip|only|todo)(?:\s*\(|\.)|x(?:it|describe|test)\s*\()|\{\s*(?:skip|todo)\s*:|@pytest\.mark\.skip\b|\bt\.Skip(?:f|Now)?\s*\(/
 const isSemanticSourcePath = (path) => SEMANTIC_SOURCE_EXTENSIONS.has(asciiLower(goExt(path)))
 
 const reason = (code, signal, path) => ({ code, signal, path })
@@ -32,16 +51,20 @@ const isRiskItemScanEligible = (stat) =>
   isContentScanEligible(stat) ||
   (isInspectableStat(stat) && !hasExcludedRiskSegment(stat.path) && isRiskItemContentPath(stat.path))
 
-// processBoundaryRiskReasons scans eligible non-test files: an interpreter
-// directive anywhere in a candidate file, and added lines that spawn a process,
-// set a hook permission decision, or call a dangerous sink. Both trees count toward the byte budget.
+// processBoundaryRiskReasons scans eligible files. Non-test files get every rule: an interpreter
+// directive anywhere in a candidate file, and added lines that spawn a process, set a hook
+// permission decision, or call a dangerous sink; both trees of those count toward the byte budget.
+// Test files are read only through their added lines (suppressions and skip/focus markers), so
+// their whole-file sizes are not budgeted; their diff stays bounded by the same output limit.
 export function processBoundaryRiskReasons(root, baseTree, candidateTree, stats) {
-  const paths = stats.filter((stat) => isRiskItemScanEligible(stat) && !isTestRiskPath(stat.path)).map((stat) => stat.path)
+  // Test files join the scan only for verifier weakening; every other rule skips them below.
+  const paths = stats.filter((stat) => isRiskItemScanEligible(stat)).map((stat) => stat.path)
   if (paths.length === 0) return []
+  const nonTest = new Set(paths.filter((path) => !isTestRiskPath(path)))
   const reasons = []
   let scanned = 0
   for (const tree of [baseTree, candidateTree]) {
-    const blobs = treeBlobSizes(root, tree, paths)
+    const blobs = nonTest.size === 0 ? [] : treeBlobSizes(root, tree, [...nonTest])
     const treePaths = []
     for (const blob of blobs) {
       scanned += blob.size
@@ -50,8 +73,9 @@ export function processBoundaryRiskReasons(root, baseTree, candidateTree, stats)
     }
     // An interpreter directive is whole-file evidence only in the candidate: a
     // shebang that exists solely on the base side no longer executes.
-    if (tree !== candidateTree || treePaths.length === 0) continue
-    for (const match of grepInterpreterDirective(root, tree, treePaths)) {
+    const directivePaths = treePaths.filter((path) => nonTest.has(path))
+    if (tree !== candidateTree || directivePaths.length === 0) continue
+    for (const match of grepInterpreterDirective(root, tree, directivePaths)) {
       reasons.push(reason('process_boundary', 'shell_process', match))
     }
   }
@@ -82,6 +106,7 @@ export function processBoundaryRiskReasons(root, baseTree, candidateTree, stats)
     let sinkSeen = false
     let keySeen = false
     let tokenSeen = false
+    let weakSeen = false
     let sqlLines = []
     const flushSql = () => {
       if (currentPath !== '' && isSqlPath(currentPath) && isItemEvidencePath(currentPath) && hasDestructiveSql(sqlLines)) {
@@ -95,13 +120,22 @@ export function processBoundaryRiskReasons(root, baseTree, candidateTree, stats)
         const separator = line.lastIndexOf(' b/')
         if (separator < 0) return ambiguous
         currentPath = line.slice(separator + 3)
-        inHunk = processSeen = permissionSeen = sinkSeen = keySeen = tokenSeen = false
+        inHunk = processSeen = permissionSeen = sinkSeen = keySeen = tokenSeen = weakSeen = false
         if (!batchPaths.has(currentPath)) return ambiguous
       } else if (line.startsWith('@@')) {
         inHunk = true
       } else if (inHunk && line.length > 0 && line[0] === '+') {
         const added = line.slice(1)
         const code = !isCommentOnlySourceLine(currentPath, added)
+        const isTest = !nonTest.has(currentPath)
+        if (!weakSeen && isSemanticSourcePath(currentPath)) {
+          // Suppressions are comments, so they ignore the comment-only skip; skips are code.
+          if (suppressionLine(currentPath, added) || (isTest && code && TEST_SKIP_LINE.test(added))) {
+            reasons.push(reason('verifier_weakening', 'verifier_weakening', currentPath))
+            weakSeen = true
+          }
+        }
+        if (isTest) continue
         if (!keySeen && PRIVATE_KEY_HEADER.test(added) && isItemEvidencePath(currentPath)) {
           reasons.push(contentRiskItemReason('private_key_content', currentPath))
           keySeen = true

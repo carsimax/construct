@@ -19,6 +19,12 @@ Print the deterministic risk tier of a candidate change.
   --escalate-item N    raise the tier to high by citing high-risk item 1-6
   --escalate-reason T  one-line reason for --escalate-item (at most 500 bytes)
   --json               print the construct.review-assessment/v1 JSON object
+
+Signals that make a change high include verifier_weakening: an added suppression
+(@ts-ignore, @ts-expect-error, @ts-nocheck, eslint-disable, # noqa, # type: ignore,
+//nolint) in a source or test file, or an added skip/focus marker (.skip(, .only(,
+xit(, xdescribe(, test.todo(, { skip: } / { todo: }, @pytest.mark.skip, t.Skip()
+in a test file.
 `
 
 const OPTIONS = {

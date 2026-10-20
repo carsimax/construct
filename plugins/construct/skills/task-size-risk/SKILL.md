@@ -34,6 +34,8 @@ A mistake would be hard to detect, hard to undo, or reaches beyond the change.
 | 5 Delivery | Installers, release, CI, deploy, dependencies | — |
 | 6 Untested | No test would catch a regression in what changes | — |
 
+For items 1 and 3, plan the change with `construct:migration` (expand, migrate, contract; deprecation with a removal condition).
+
 Count "unclear" as high only when a bounded look cannot tell whether items 1–5 apply.
 
 ## Decision Gates

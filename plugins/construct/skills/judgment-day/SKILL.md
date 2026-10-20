@@ -33,6 +33,7 @@ Load only when the user explicitly requests Judgment Day or equivalent dual/adve
 | Judges contradict | Escalate for explicit human decision. |
 | Scoped re-judgment fails before round two | Parent may launch the final bounded fix round. |
 | Any issue remains after round two | Escalate and stop. |
+| Plan, design, or claim before implementation | Use decision mode: judges get artifact + contract only, never the claim; no fix actor; at most 3 cycles. |
 
 ## Execution Steps
 
@@ -49,4 +50,5 @@ Return target identity, round, confirmed/suspect/contradiction/INFO counts, corr
 
 ## References
 
+- [references/decision-mode.md](references/decision-mode.md) — decision mode procedure for a plan, design, or claim (code review stays as above).
 - [references/prompts-and-formats.md](references/prompts-and-formats.md) — compact judge/fix prompts and verdict shape.
