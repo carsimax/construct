@@ -19,8 +19,8 @@ Reference: github.com/scasella/claude-flightdeck v0.4.0 (MIT), studied read-only
 
 | ID | Specs | Task | Route | Risk | Status | Commit |
 |---|---|---|---|---|---|---|
-| T1 | S2, S3, S4, S5, S8 | Pure panel state: event reducers in `hooks/panel/state.js` with mod tests | odd-worker | none | done (uncommitted) | — |
-| T2 | S6, S7 | Pure panel layout: element trees per section and width in `hooks/panel/layout.js`, task title in `hooks/status/tasks.js`, with mod tests | odd-worker (after T1) | none | pending | — |
+| T1 | S2, S3, S4, S5, S8 | Pure panel state: event reducers in `hooks/panel/state.js` with mod tests | odd-worker | none | done | `21ddf18` |
+| T2 | S6, S7 | Pure panel layout: element trees per section and width in `hooks/panel/layout.js`, task title in `hooks/status/tasks.js`, with mod tests | odd-worker (after T1) | none | done (uncommitted) | — |
 | T3 | S1, S8 | Wire `register.js`: hooks, atoms, `/construct`, `Pane` render, one-line band, `userConfig`, README | odd-worker (after T2) | 6 | pending | — |
 
 Route evidence: T2 renders T1's state shape, and T3 wires both, so the three run in sequence. Risk item 6 for T3: hook wiring has no end-to-end check against a real session.
@@ -31,3 +31,4 @@ Route evidence: T2 renders T1's state shape, and T3 wires both, so the three run
 - **L2 (2026-10-20):** Analysis. Flightdeck is a mods-only plugin that builds its pane from engine events (`agent.spawn`, `turn.step`, `tool.check`, `tool.call`, `session.compact`) kept in `atom`s. It reads no git and no transcript. Our band reads outside state (git, `odd/tasks`, `odd-review`, `odd-assess`) and caches it on `session.start` and `turn.complete`. Proposed: agents by role, an inline-write detector, the gate, a turn receipt, a richer ODD line, our meters and git kept, and flightdeck's pure-core, atom and width-aware layout patterns.
 - **L3 (2026-10-20, user):** "Quiero el panel". The answer to "a docked panel with the band as a compact summary, or everything inside the band?"
 - **L4 (2026-10-20, T1, S2 S3 S4 S5 S8):** `hooks/panel/state.js` and `tests/panel-state.test.ts`. RED: `claude plugin test plugins/construct` failed with `panel-state.test.ts: cannot import "../hooks/panel/state.js"` (36 pass, 1 fail). GREEN: 63 pass, 0 fail in the mod tests; `node --test tests/`: 558 pass, 0 fail.
+- **L5 (2026-10-20, T2, S6 S7, rendering of S2-S5):** `hooks/panel/layout.js` (`buildPanel`, `buildSummary`, `layoutFor`), exports in `hooks/status/format.js`, `activeWork` in `hooks/status/tasks.js`, `tests/panel-layout.test.ts`. `activeFeature` keeps its `{feature, open}` shape because an existing test asserts it with `toEqual`; the task title comes from the new `activeWork`. RED: `claude plugin test plugins/construct` failed with `panel-layout.test.ts: cannot import "../hooks/panel/layout.js"` (63 pass, 1 fail). GREEN: 80 pass, 0 fail in the mod tests; `node --test tests/`: 558 pass, 0 fail.
