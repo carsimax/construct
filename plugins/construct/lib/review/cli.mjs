@@ -5,7 +5,7 @@
 import { parseArgs } from 'node:util'
 import { repositoryRoot } from '../assess/git.mjs'
 import { requireBaseRefForCommittedOnly } from '../assess/cli.mjs'
-import { UsageError } from '../assess/escalation.mjs'
+import { UsageError, parseEscalation } from '../assess/escalation.mjs'
 import { goTrimSpace } from '../assess/text.mjs'
 import * as commands from './commands.mjs'
 import { reviewBoundary } from './boundary.mjs'
@@ -19,10 +19,13 @@ export const USAGE = `Usage: odd-review [--cwd DIR] <command> [options]
 Review lifecycle. State lives under the git common directory (odd-review/), never
 in the worktree. Each command prints JSON that names the exact next command.
 
-  start [--lenses LIST --lenses-reason TEXT] [--base-ref REF [--committed-only]]
+  start [--lenses LIST --lenses-reason TEXT | --escalate-item N --escalate-reason TEXT]
+        [--base-ref REF [--committed-only]]
         freeze the candidate and open a transaction (LIST: risk,resilience,
         readability,reliability or the review-* names); without --lenses, the
-        lenses odd-assess assigns (all four for high risk)
+        lenses odd-assess assigns (all four for high risk). --escalate-item
+        (1-6, with --escalate-reason) raises the tier to high first, as in
+        odd-assess; it cannot be combined with --lenses
   context --lineage L --lens LENS [--max-bytes N]
         print the binding and evidence for one lens (also review-refuter and
         review-validator in their states); default budget ${DEFAULT_CONTEXT_BYTES} bytes
@@ -47,6 +50,8 @@ const OPTIONS = {
   'lenses-reason': { type: 'string' },
   'base-ref': { type: 'string' },
   'committed-only': { type: 'boolean' },
+  'escalate-item': { type: 'string' },
+  'escalate-reason': { type: 'string' },
   input: { type: 'string' },
   'max-bytes': { type: 'string' },
   scope: { type: 'string' },
@@ -55,7 +60,7 @@ const OPTIONS = {
 
 // Options each command accepts besides --cwd; required ones are checked by the command.
 const ACCEPTS = {
-  start: ['lenses', 'lenses-reason', 'base-ref', 'committed-only'],
+  start: ['lenses', 'lenses-reason', 'base-ref', 'committed-only', 'escalate-item', 'escalate-reason'],
   context: ['lineage', 'lens', 'max-bytes'],
   capture: ['lineage', 'lens', 'input'],
   'capture-refuter': ['lineage', 'input'],
@@ -98,6 +103,8 @@ function dispatch(command, values, root) {
     case 'start': {
       // Both or neither: without them, start takes the assessment's lenses.
       if (values.lenses !== undefined || values['lenses-reason'] !== undefined) need(values, 'lenses', 'lenses-reason')
+      const escalation = parseEscalation(values['escalate-item'], values['escalate-reason'])
+      if (escalation && values.lenses !== undefined) throw new UsageError('--escalate-item cannot be combined with --lenses')
       requireBaseRefForCommittedOnly(values['base-ref'], values['committed-only'] === true)
       let lenses = null
       if (values.lenses !== undefined) {
@@ -106,7 +113,7 @@ function dispatch(command, values, root) {
         if (parsed.error) throw new UsageError(parsed.error)
         lenses = parsed.lenses
       }
-      return { json: commands.start({ root, cwd, baseRef: values['base-ref'], committedOnly: values['committed-only'] === true, lenses, lensesReason: values['lenses-reason'] }) }
+      return { json: commands.start({ root, cwd, baseRef: values['base-ref'], committedOnly: values['committed-only'] === true, lenses, lensesReason: values['lenses-reason'], escalation }) }
     }
     case 'context':
       need(values, 'lineage', 'lens')

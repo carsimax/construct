@@ -18,7 +18,7 @@ Load this skill after each work-unit commit while the RDD switch is on, when `od
 - You may raise the tier with `--escalate-item N --escalate-reason "<one line>"`, citing the high-risk list. Never lower it, and never infer low risk from a failed assessment.
 - Consent is asked per candidate through `construct:lossless-prompts`. A decline skips only this candidate and is not the kill switch.
 - Never edit an agent's JSON before capture, never invent a `subject_hash`, and never retry from prose. Follow the `next` field of each `odd-review` reply.
-- Never pick lenses yourself: `odd-review start` without `--lenses` takes the ones `odd-assess` assigns. Pass `--lenses` only when the user names lenses, or for a `medium` candidate the user asked to review.
+- Never pick lenses yourself: `odd-review start` without `--lenses` takes the ones `odd-assess` assigns. When you escalated `odd-assess`, pass the same `--escalate-item N --escalate-reason "<one line>"` to `odd-review start` instead of explicit `--lenses` (the two cannot be combined). Pass `--lenses` only when the user names lenses, or for a `medium` candidate the user asked to review.
 - Run every source-mutating step (formatters, fixers, commit hooks that rewrite files) before `odd-review start`. Any byte, path, or mode change after start is a new candidate and needs a new review.
 - One bounded correction per lineage, committed by you. Nothing else mutates the candidate.
 - Commit, push, PR, and merge stay human decisions. An approval never authorizes delivery.
