@@ -29,7 +29,7 @@ Load this skill for any request that may change code or docs, for planning a fea
 | Open product or design decision | Ask one focused question; stop |
 | High-consequence unproven premise | One scoped, read-only assumption challenge; no debate loop |
 | Unresolved question needing external evidence | Recommend optional research (see references/research.md) |
-| Small task | Inline, no feature document, no commits unless asked |
+| Small task | One `construct:odd-worker`, no feature document, no commits unless asked |
 | Large task | Feature document + mirror, task-by-task work units |
 | User reports a failure | Reproduce it before deciding it already works |
 | Requirement changes mid-feature | Append it verbatim to `## Log`, rewrite only the affected `S#`, reopen only its task |

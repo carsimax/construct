@@ -1,5 +1,5 @@
 ---
-description: A small, understood change stays inline and closes with a Risk line.
+description: A small, understood change is written by the worker and closes with a Risk line.
 max_turns: 25
 timeout_seconds: 600
 allowed_tools: [Read, Glob, Grep, Skill, Agent, TodoWrite]

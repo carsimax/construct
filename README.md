@@ -323,7 +323,7 @@ Run the behavior evals (they spend real usage; each run is an isolated `claude -
 
 ```bash
 scripts/eval.sh                 # all cases, 1 run per arm, sonnet
-scripts/eval.sh --case small-inline
+scripts/eval.sh --case small-delegated
 ```
 
 `scripts/eval.sh` evaluates a temporary copy of the plugin without the `engram@engram` dependency, because isolated eval runs cannot resolve it and the plugin would not load.

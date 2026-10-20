@@ -1,9 +1,9 @@
 ---
 name: odd-worker
 description: >
-  Bounded ODD writer. Use for one independent unit of behavior (code, tests, and docs together)
-  when a Writer trigger reason holds: parallel independent units launched together, or the
-  long-session context backstop. The prompt must name the allowed edit surfaces.
+  Bounded ODD writer. Use for every write to repository code, tests, or docs: one independent
+  unit of behavior (code, tests, and docs together) per worker, whatever its size. The prompt
+  must name the allowed edit surfaces.
 model: sonnet
 effort: medium
 disallowedTools: Agent
