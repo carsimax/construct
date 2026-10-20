@@ -210,7 +210,7 @@ Design consequences:
 | T9 | S1 | `secret-guard` `PreToolUse` deny list for file tools and Bash (Risk-line prompt hook dropped, L31) | delegated (`odd-worker`, sonnet): long-session context backstop | 2 | done | `feat: add a secret guard PreToolUse hook` + `fix: close secret guard glob leak and false positives` (slice 13) |
 | T10 | S1 | Feature-state re-injection on SessionStart compact/resume (task sync dropped, L32) | delegated (`odd-worker`, sonnet): long-session context backstop | none | done | `feat: re-inject active feature state after compaction` (slice 15) |
 | T11 | S1 | `codegraph` skill and user-scope MCP setup docs; no plugin `.mcp.json` (option A, L33) | inline | none | done | `feat: add the codegraph skill and MCP setup docs` (slice 16) |
-| T12 | S2, S8 | Mod status band: statusline replica when no native statusLine is set, plus ODD and RDD state (L34) | delegated (`odd-worker`, sonnet): long-session context backstop | 6 | in progress | — |
+| T12 | S2, S8 | Mod status band: statusline replica when no native statusLine is set, plus ODD and RDD state (L34) | delegated (`odd-worker`, sonnet): long-session context backstop | 6 | done (pending live visual check) | `feat: add the status band mod` (slice 17) |
 | T13 | S1, S3, S4 | Migration runbook and README: back up `~/.claude`, remove `gentle-ai:*` blocks and gentle-ai hooks, run side by side with `--plugin-dir`, then `gentle-ai uninstall` keeping engram | inline | 5 | pending | — |
 | T14 | S9 | Rename the plugin from `odd-skills` to `construct` (manifest, marketplace, prefixes, mod, contract filter, tests, evals, docs) | inline | 3 (component prefix changes) | pending | — |
 
@@ -249,6 +249,7 @@ main
 | 14 | `odd-skills/14-guard-followups` | F11–F14 | `fix: close secret guard pipe, pattern-file, and glob bypasses` + `fix: treat \|& as a pipe in the secret guard` | about 175 | within |
 | 15 | `odd-skills/15-feature-state` | T10 | `feat: re-inject active feature state after compaction` | about 400 | within |
 | 16 | `odd-skills/16-codegraph` | T11 | `feat: add the codegraph skill and MCP setup docs` | about 120 | within |
+| 17 | `odd-skills/17-status-mod` | T12 | `feat: add the status band mod` | about 840 | over budget; one mod unit with 27 tests |
 
 Push and PR creation remain the user's decision.
 
@@ -797,3 +798,24 @@ Push and PR creation remain the user's decision.
       - the classification for the review state, cached and refreshed at most once per turn completion.
     - Lines added/removed, PR, worktree, vim mode, and agent name are shown only when a documented mods API provides them. Otherwise they are left out and the gap is reported, never invented.
     - It must fail open: a `.catch` on every hook, and on any error it draws nothing extra and never blocks a turn.
+  - T12 worker result, with the API table confirmed from the Claude Code 2.1.304 mod types:
+    - **Available:**
+      - context % (`$.session.usage().context.percent`);
+      - 5h and 7d limits (`rateLimits[{kind, percentUsed, resetsAt}]`);
+      - model id (`$.session.model()`, not the display name);
+      - effort (main-thread `turn.step`, after the first turn);
+      - cwd;
+      - output style from settings (not the effective style);
+      - `statusLine` presence;
+      - git via `$.process.run`;
+      - worktree (derived from `git rev-parse`).
+    - **Not available to a mod:** lines added/removed (`SessionCost` has only `usd`), PR, vim mode. The agent name is partial (settings `agent` only).
+    - Band drawn in `AbovePrompt`.
+    - Refresh is detached, on `session.start` and main-thread `turn.complete` only.
+    - Every new hook has a `.catch`.
+    - 27 new mod tests. RED came from stubs (23 behavior failures). `claude plugin test`: `34 pass`. `node --test tests/`: `501 pass`. `validate --strict`: passed.
+    - `claude -p` live run: no mod errors. Rendering cannot show in `-p`.
+  - Follow-ups:
+    - **F15 (parent review):** the band hook returns its own tree instead of composing with `next(e)`. Whatever Claude Code or another plugin draws in `AbovePrompt` is replaced while the band has content (it yields only when a survey is up). Compose with the engine's band, or yield when `next` has content. This needs a live check.
+    - **F16:** `hooks/status/tasks.js` restates the `feature-state.mjs` active-task rule (a mod cannot import a Node script), so there is no automated parity check. Extract a shared pure module.
+    - **F17:** the original `agent.spawn` and `turn.step` routing hooks still have no `.catch`. `validate` reports `agent.spawn`.

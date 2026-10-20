@@ -191,6 +191,29 @@ The denial says which rule matched and that the user can run the command manuall
 
 Known lexical limits: the guard reads the command text and cannot see through whole-directory searches such as `grep -rn KEY .`, symlinks, shell globs (`cat .e*`), variables, or obfuscation (`cat $(echo .e)nv`, encoded payloads).
 
+## Status band (mod)
+
+The mod draws a band above the prompt (`AbovePrompt`, which holds a multi-row tree; `PromptHint` is a single text line). It needs Claude Code 2.1.304 or later and does not appear in `claude -p` runs, which draw no interface.
+
+What it shows, top to bottom:
+
+1. **Budget line** (replica): context window, 5-hour and 7-day plan limits as 8-cell meters (green below 50%, yellow below 80%, red above), each limit with its reset (`↻HH:MM`, and `↻Day HH:MM` for 7d).
+2. **Where line** (replica): `~`-shortened directory, git state (`⎇ branch`, `±dirty`, `↑ahead`, `↓behind`, `wt:<worktree>`), `◆ model effort`, `✎ output style`, and `@agent`. Segments are joined by a dim `│`.
+3. **ODD line**: the active feature document (newest `odd/tasks/*.md` with a task whose status is not `done` or `dropped`, the rule of `feature-state.mjs`) and its open task count.
+4. **RDD line**: the switch (`RDD on` or `RDD off`) and, when on, `review due` (the committed range since `odd-review boundary`, or the uncommitted changes, classify high and have no receipt), `reviewed`, or `clear`. A `root` boundary is not assessed.
+
+**When the replica is hidden.** The two replica lines are drawn only when your merged settings have no `statusLine`; with one, they would show everything twice. The ODD and RDD lines are always drawn. The band yields to a survey.
+
+**Data gaps.** The mods API has no source for these fields of a statusline script, so the band leaves them out: lines added and removed, PR number and state, and vim mode. Other fields differ from a statusline's:
+
+- The model is the id `$.session.model()` returns, not a display name.
+- Effort is the one seen on the main thread's last request, so it appears after the first turn.
+- Output style and agent come from your settings (`outputStyle`, `agent`), not from a flag.
+- The worktree name comes from git.
+- Resets and meters are omitted when the figure is missing, for example off a subscription.
+
+**Refresh and fail-open.** Git, `odd-review`, `odd-assess`, and the feature documents are read only on `session.start` and after each main-thread `turn.complete`, in the background with a timeout, never on a redraw. Every hook has a `.catch`; any error leaves out the affected segment (or the whole band) and never blocks or delays a turn.
+
 ## Local development
 
 Load the plugin for one session without installing it:
@@ -230,7 +253,7 @@ scripts/eval.sh --case small-inline
 | `plugins/odd-skills/` | The plugin (manifest name `odd-skills`) |
 | `plugins/odd-skills/agents/` | The 13 role agents |
 | `plugins/odd-skills/skills/` | Delivery and review skills (`branch-pr`, `chained-pr`, `work-unit-commits`, `judgment-day`, ...) |
-| `plugins/odd-skills/hooks/` | `hooks.json`, the mod (`register.js`), and its routing helpers |
+| `plugins/odd-skills/hooks/` | `hooks.json`, the mod (`register.js`), its routing helpers, and the status band modules (`status/`) |
 | `plugins/odd-skills/bin/` | Executable scripts put on the `PATH` (`odd-assess`) |
 | `plugins/odd-skills/lib/assess/` | `odd-assess` modules: git, stats, passive, signals, sinks, content, classify, escalation, output |
 | `plugins/odd-skills/hooks/contract/` | Session and subagent contract texts injected by hooks |
