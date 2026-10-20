@@ -36,8 +36,9 @@ function replyOf(input) {
     }
     if (entry?.type !== 'assistant' || !Array.isArray(entry.message?.content)) continue
     for (const part of entry.message.content) {
+      if (!part || typeof part !== 'object') continue
       if (part.type === 'tool_use' && part.name === 'SubagentHandback' && typeof part.input?.message === 'string') handback = part.input.message
-      if (part.type === 'text' && part.text.trim() !== '') text = part.text
+      if (part.type === 'text' && typeof part.text === 'string' && part.text.trim() !== '') text = part.text
     }
   }
   return handback ?? text

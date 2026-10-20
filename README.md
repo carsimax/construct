@@ -17,14 +17,14 @@ Construct is a Claude Code plugin for Organic Driven Development (ODD). It ships
 curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v0.1.0/install.sh | bash
 ```
 
-The installer checks the requirements above and stops before changing anything if one is missing, or if `~/.claude` or `~/.claude/settings.json` is not writable. Then it runs the Quick path below for you:
+The installer checks the requirements above and stops before changing anything if one is missing, or if `~/.claude` or `~/.claude/settings.json` is not writable, or if `settings.json` is a directory. Then it runs the Quick path below for you:
 
 - Installs the engram binary through Homebrew when it is missing, and runs `engram setup claude-code`.
 - Adds the engram and construct marketplaces and installs `construct@construct`.
 - Installs the CodeGraph CLI and registers the codegraph MCP server. If `npm install -g` fails, it warns, skips the server, and continues.
-- Merges into `~/.claude/settings.json`: `theme: "custom:construct:construct"` and the `permissions.allow` rules `mcp__engram` and `mcp__plugin_engram_engram`. An empty `settings.json` counts as `{}`. Other keys stay as they are, a symlinked file is written through to its target with its mode kept, and the previous file is saved as `settings.json.bak-<timestamp>`.
+- Merges into `~/.claude/settings.json`: `theme: "custom:construct:construct"` and the `permissions.allow` rules `mcp__engram` and `mcp__plugin_engram_engram`. An empty `settings.json` counts as `{}`. Other keys stay as they are, a symlinked file (even a dangling one, whose target is then created) is written through to its target with its mode kept, and the previous file is saved as `settings.json.bak-<timestamp>`.
 
-Every step is skipped when it is already done, so running the installer again changes nothing. It never changes other permissions or your permission mode. A `theme` in `~/.claude/settings.local.json` still overrides the merged value. The output style needs no setting: the plugin forces `Neutral`, and an `outputStyle` you already have stays in the file but has no effect while construct is enabled.
+Every step is skipped when it is already done, so running the installer again changes nothing. It never changes other permissions or your permission mode. A `theme` in `~/.claude/settings.local.json` still overrides the merged value. The output style needs no setting: the plugin forces `Principal Engineer`, and an `outputStyle` you already have stays in the file but has no effect while construct is enabled.
 
 | Option | Meaning |
 |---|---|
@@ -170,12 +170,14 @@ odd-assess --escalate-item 2 --escalate-reason "touches the login guard" --json
 | `--cwd DIR` | Repository path (default: current directory) |
 | `--base-ref REF` | Assess `REF` to `HEAD`. Tracked files must be clean, or pass `--committed-only` to ignore them |
 | `--committed-only` | Acknowledge that `--base-ref` ignores dirty tracked changes. It only qualifies `--base-ref`: passing it alone is a usage error (exit `2`) |
-| `--escalate-item N`, `--escalate-reason TEXT` | Raise the tier to `high` by citing high-risk item 1 to 6 (reason at most 500 bytes). Both flags or neither; a tier is never lowered |
+| `--escalate-item N`, `--escalate-reason TEXT` | Raise the tier to `high` by citing high-risk item 1 to 6 (one-line reason, at most 500 bytes). Both flags or neither; a tier is never lowered |
 | `--json` | Print the `construct.review-assessment/v1` object instead of a short summary |
 
 Without `--base-ref`, the candidate is the working tree (tracked plus untracked, not ignored), frozen through a temporary index. Your real index is never changed.
 
 JavaScript and TypeScript module files (`.mjs`, `.cjs`, `.mts`, `.cts`) are read as source, like `.js` and `.ts`: an added line that spawns a process (`process_boundary`) or calls a dangerous sink (`dangerous_sink`) makes the change `high`. In any source file outside tests, an added non-comment line that names a hook's `permissionDecision` (`permission_decision`, signal `permissions`) also makes it `high`.
+
+Three high-risk items are recognized by path or content, and each reason carries `high-risk item N (...)` in its `detail`. Item 1 (`database_migration`, `destructive_sql`, signal `data_loss`): code, SQL, or config files (`.sql`, `.py`, `.rb`, JS/TS, `.go`, `.php`, `.java`, `.kt`, `.cs`, `.ex`/`.exs`, `.yaml`/`.yml`, `.json`, `.xml`, and extensionless files, which fail toward high) under `migrations/` or `migration/` directories (Django, Prisma, Knex, Flyway) or Rails `db/migrate/`, files under `alembic/versions/`, Flyway `V<n>__*.sql`, `U<n>__*.sql`, and repeatable `R__*.sql` names (anywhere in the tree), and added `DROP`, `TRUNCATE`, `ALTER ... DROP`, or `DELETE FROM` without `WHERE` in a `.sql` file (comments are ignored). Item 2 (`private_key`, `credential_file`, `private_key_content`, signal `security`): `id_rsa`/`id_dsa`/`id_ecdsa`/`id_ed25519` with an optional suffix (never `*.pub`), `.pem`, `.key`, `.p12`, `.pfx`, `.jks`, `.keystore`, `.ppk`, `credentials.json`, `.npmrc` or `.pypirc` with an added token or password line, and an added PEM `PRIVATE KEY` header in any scanned text file. Item 5 (`dependency_manifest`, `git_hook`, signal `delivery`): package manifests and lockfiles (npm, pnpm, yarn, pip `requirements*.txt`, pyproject, poetry, Pipfile, Go, Cargo, Bundler, Composer), `Dockerfile*`, and git hooks (`.githooks/`, `.husky/`, `.git/hooks/`, `lefthook.yml`, `.pre-commit-config.yaml`). Test files and `test`, `tests`, `spec`, `docs`, `fixtures`, `testdata` directories are never evidence for these items, and Markdown stays passive. Known fail-toward-high cases: a Keynote `.key` file and a string literal such as `SELECT 'drop table'` still count.
 
 The JSON result has `risk` (`passive`, `medium`, `high`), `reasons`, `changed_paths`, `changed_lines`, `candidate`, `review_due`, `review_due_reason`, and `lenses` (empty for passive and medium, the four canonical lenses for high). Only `high` makes a review due; `medium` reports `under_budget` and `passive` reports `passive`. When the exact candidate already has a receipt from `odd-review acknowledge`, `candidate.consumed` is `true` and the result reports `review_due: false` with `review_due_reason: "already_reviewed"`, whatever the tier.
 
@@ -266,7 +268,7 @@ How each tool is read:
 - **Path-valued flags and flag arity.** Pattern-file and ignore-file flags take a path that is checked: `grep -f`/`--file`, `rg -f`/`--file`/`--ignore-file`, `ag --path-to-ignore`, `git grep -f`. Which flags take a value is modeled per command: `rg -t`/`-T` take a type, GNU `grep -T` and `ag -t` do not, so `grep -T KEY .env` is denied.
 - **Invalid globs.** A glob that does not compile (`[z-a]`) is matched permissively, with the broken bracket class standing for any characters, so it can only deny more and never allows because of the error.
 - **`rev:path` tokens.** For a token such as `HEAD:.env`, the part after `:` is also checked.
-- **Interpreter one-liners.** The `-c` argument of `python`/`python3` and the `-e` argument of `node`, `perl`, and `ruby` are scanned for quoted string literals that name a protected path; `bash -c` and `eval` strings are parsed as commands. Heredoc bodies are read as commands.
+- **Interpreter one-liners.** The `-c` argument of `python`/`python3` and the `-e` argument of `node`, `perl`, and `ruby` are scanned for quoted string literals that name a protected path; `bash -c` and `eval` strings are parsed as commands. Heredoc bodies are read as commands, so a heredoc that names a protected path is denied. To write a file or a commit message that names a protected path, use the Write tool (for a commit, write the message to a file and run `git commit -F <file>`).
 - **Prose.** A quoted multi-word string given to another command is not checked.
 
 The denial says which rule matched and that the user can run the command manually. Unreadable hook input is allowed with a stderr note.

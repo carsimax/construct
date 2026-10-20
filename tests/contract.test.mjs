@@ -71,6 +71,20 @@ test('the session contract carries the ODD protocol, task size, risk line, and d
   }
 })
 
+test('the session contract scales autonomy to the verifier and closes with checks and the Risk line', () => {
+  const text = context('session', SESSION).additionalContext
+  const flat = text.replace(/\s+/g, ' ')
+  assert.match(flat, /autonomy matches the (strength of the )?verifier, not confidence/i)
+  assert.match(flat, /strong verifier[^.]*loop until it passes/i)
+  assert.match(flat, /weak verifier[^.]*one small step[^.]*stop/i)
+  assert.match(flat, /docs-only[^.]*reviewed diff is the verifier/i)
+  const close = text.match(/^7\. Close\..*$/m)?.[0]
+  assert.ok(close, 'step 7 Close line not found')
+  assert.match(close, /skipped|unverified/i)
+  assert.match(close, /Risk line/)
+  assert.ok(text.includes('Risk: item N (reason)') && text.includes('Risk: none'))
+})
+
 test('code writes go to the worker while reads and answers stay with the parent', () => {
   const text = context('session', SESSION).additionalContext
   assert.ok(text.includes('Every write to repository code, tests, or docs goes to `construct:odd-worker`'))
@@ -92,6 +106,25 @@ test('SubagentStart gives worker agents the subagent contract', () => {
     assert.ok(out.additionalContext.includes('English'), agent)
     assert.ok(out.additionalContext.length <= 3000)
   }
+})
+
+test('SubagentStart carries the S2 engineering rules for writers', () => {
+  const text = context('subagent', { hook_event_name: 'SubagentStart', agent_type: 'construct:odd-worker' }).additionalContext
+  assert.match(text, /never weaken a verifier/i)
+  assert.match(text, /suppress an error, widen a type, skip a test, or delete an assertion/)
+  assert.match(text, /root cause/i)
+  assert.match(text, /reproduce a bug before/i)
+  assert.match(text, /not needed.*already in the codebase.*standard library or platform.*installed dependency.*minimum new code/s)
+  assert.match(text, /no dependency for a few lines/i)
+  assert.match(text, /match the surrounding code/i)
+  assert.ok(text.includes('`shortcut: <the limit>, <when to upgrade>`'))
+  assert.match(text, /review your own diff as if someone else wrote it/i)
+  assert.match(text, /missing test is a finding/i)
+  assert.match(text, /finish every caller, test, and fixture/i)
+  assert.match(text, /short means quick to read/i)
+  assert.match(text, /equal.size options.*correct on edge cases/i)
+  assert.match(text, /never ship code .*explain.*line by line/i)
+  assert.ok(text.length <= 3000, `length ${text.length}`)
 })
 
 test('SubagentStart injects nothing into agents that must return a single JSON object', () => {
@@ -145,7 +178,7 @@ test('SessionStart notes a missing CodeGraph index for a git root, identically a
     const plain = context('session', { ...SESSION, cwd: project() }).additionalContext
     assert.ok(base.includes('CodeGraph:'))
     assert.ok(base.includes(`\`${dir}\` has no \`.codegraph/\` index`))
-    assert.ok(base.includes(`! codegraph init ${dir}`))
+    assert.ok(base.includes('`! codegraph init` (it runs in that directory)'))
     assert.ok(base.startsWith(plain.trim().split('\n\nCodeGraph:')[0]))
     assert.ok(base.length <= 8000, `length ${base.length}`)
     for (const source of ['resume', 'clear', 'compact']) {
@@ -243,7 +276,7 @@ test('auto-index off or unset: the S2 notice is unchanged and nothing is spawned
       if (value === undefined) delete env.CLAUDE_PLUGIN_OPTION_CODEGRAPH_AUTO_INDEX
       assert.equal(context('session', { ...SESSION, cwd: dir }, env).additionalContext, baseline)
     }
-    assert.ok(baseline.includes(`! codegraph init ${dir}`))
+    assert.ok(baseline.includes('`! codegraph init` (it runs in that directory)'))
     spawnSync('sleep', ['0.5'])
     assert.ok(!existsSync(marker))
   } finally {
@@ -379,5 +412,33 @@ test('auto-index launches only on startup (or a missing source); resume, clear, 
   } finally {
     rmSync(dir, { recursive: true, force: true })
     rmSync(bin, { recursive: true, force: true })
+  }
+})
+
+test('every notice variant stays under 8,000 characters for long project paths, including resume with auto-index', () => {
+  const { bin } = fakeCli()
+  const empty = mkdtempSync(join(tmpdir(), 'construct-emptybin-'))
+  const roots = []
+  try {
+    for (const target of [150, 200, 300]) {
+      const base = project()
+      roots.push(base)
+      const dir = join(base, 'p'.repeat(target - base.length - 1))
+      mkdirSync(join(dir, '.git'), { recursive: true })
+      assert.equal(dir.length, target)
+      for (const source of ['startup', 'resume', 'clear', 'compact']) {
+        const variants = [
+          context('session', { ...SESSION, source, cwd: dir }).additionalContext,
+          context('session', { ...SESSION, source, cwd: dir }, autoEnv(bin)).additionalContext,
+          context('session', { ...SESSION, source, cwd: dir }, { CLAUDE_PLUGIN_OPTION_CODEGRAPH_AUTO_INDEX: 'true', PATH: empty }).additionalContext,
+        ]
+        for (const v of variants) {
+          assert.ok(v.length <= 8000, `${source} ${target}: ${v.length} chars`)
+          assert.ok(v.split(dir).length - 1 <= 1, `${source} ${target}: path occurs more than once`)
+        }
+      }
+    }
+  } finally {
+    for (const d of [bin, empty, ...roots]) rmSync(d, { recursive: true, force: true })
   }
 })

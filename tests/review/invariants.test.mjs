@@ -466,6 +466,11 @@ describe('usage', () => {
     assert.equal(review(repo, ['start', '--escalate-item', '2']).status, 2)
     assert.equal(review(repo, ['start', '--escalate-reason', 'r']).status, 2)
     assert.equal(review(repo, ['start', '--escalate-item', '9', '--escalate-reason', 'r']).status, 2)
+    for (const reason of ['a\nb', 'a\rb', 'a\u0007b']) {
+      const multiline = review(repo, ['start', '--escalate-item', '2', '--escalate-reason', reason])
+      assert.equal(multiline.status, 2)
+      assert.match(multiline.stderr, /--escalate-reason/)
+    }
     assert.equal(review(repo, ['status', '--escalate-item', '2']).status, 2)
   })
 

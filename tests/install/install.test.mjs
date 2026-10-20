@@ -277,3 +277,88 @@ test('an empty or whitespace-only settings.json is treated as an empty object', 
     assert.equal(statSync(settingsPath(box)).mode & 0o777, 0o600)
   }
 })
+
+test('a settings.json that is a directory stops the preflight with one clear message and no change', () => {
+  const box = sandbox({ engram: false })
+  mkdirSync(settingsPath(box), { recursive: true })
+  const run = install(box)
+  assert.notEqual(run.status, 0)
+  assert.match(run.stderr, /construct-install: .*settings\.json is a directory/)
+  assert.doesNotMatch(run.stderr, /at .*\.js|node:internal|Error:|EISDIR/)
+  assert.deepEqual(NOTHING_INSTALLED(run), [])
+  assert.ok(statSync(settingsPath(box)).isDirectory(), 'the directory is untouched')
+})
+
+test('a dangling-symlink settings.json stays a link and its target is created with the merge', () => {
+  const box = sandbox()
+  const target = join(box.root, 'dotfiles', 'settings.json')
+  mkdirSync(join(box.home, '.claude'))
+  symlinkSync(target, settingsPath(box))
+  const run = install(box)
+  assert.equal(run.status, 0, run.stderr)
+  assert.ok(lstatSync(settingsPath(box)).isSymbolicLink(), 'still a symlink')
+  assert.equal(JSON.parse(readFileSync(target, 'utf8')).theme, 'custom:construct:construct')
+  assert.deepEqual(readSettings(box), JSON.parse(readFileSync(target, 'utf8')))
+})
+
+const CLEAN = /at .*\.js|node:|Error:|ELOOP|ENOTDIR|EISDIR/
+
+test('a symlink-loop settings.json stops the preflight with one clean message and no change', () => {
+  const box = sandbox({ engram: false })
+  mkdirSync(join(box.home, '.claude'))
+  symlinkSync(join(box.home, '.claude', 'b.json'), settingsPath(box))
+  symlinkSync(settingsPath(box), join(box.home, '.claude', 'b.json'))
+  const run = install(box)
+  assert.notEqual(run.status, 0)
+  assert.match(run.stderr, /construct-install: .*not a directory, or .*loops/)
+  assert.doesNotMatch(run.stderr, CLEAN)
+  assert.deepEqual(NOTHING_INSTALLED(run), [])
+  assert.ok(lstatSync(settingsPath(box)).isSymbolicLink(), 'the link is untouched')
+})
+
+test('a self-referencing settings.json symlink stops the preflight cleanly', () => {
+  const box = sandbox({ engram: false })
+  mkdirSync(join(box.home, '.claude'))
+  symlinkSync(settingsPath(box), settingsPath(box))
+  const run = install(box)
+  assert.notEqual(run.status, 0)
+  assert.match(run.stderr, /construct-install: .*not a directory, or .*loops/)
+  assert.doesNotMatch(run.stderr, CLEAN)
+  assert.deepEqual(NOTHING_INSTALLED(run), [])
+})
+
+test('a regular file at ~/.claude stops the preflight with an accurate one-line message', () => {
+  const box = sandbox({ engram: false })
+  writeFileSync(join(box.home, '.claude'), 'x')
+  const run = install(box)
+  assert.notEqual(run.status, 0)
+  assert.match(run.stderr, /construct-install: .*not a directory, or .*loops/)
+  assert.doesNotMatch(run.stderr, /symlink loop or a link/)
+  assert.doesNotMatch(run.stderr, CLEAN)
+  assert.equal(run.stderr.trim().split('\n').filter((l) => /construct-install:/.test(l)).length, 1)
+  assert.deepEqual(NOTHING_INSTALLED(run), [])
+})
+
+test('a dangling settings.json link through a regular file stops the preflight cleanly', () => {
+  const box = sandbox({ engram: false })
+  mkdirSync(join(box.home, '.claude'))
+  writeFileSync(join(box.root, 'plain'), 'x')
+  symlinkSync(join(box.root, 'plain', 'settings.json'), settingsPath(box))
+  const run = install(box)
+  assert.notEqual(run.status, 0)
+  assert.match(run.stderr, /construct-install: .*not a directory/)
+  assert.doesNotMatch(run.stderr, CLEAN)
+  assert.deepEqual(NOTHING_INSTALLED(run), [])
+})
+
+test('a settings.json symlink to a directory gets the clean directory refusal', () => {
+  const box = sandbox({ engram: false })
+  mkdirSync(join(box.home, '.claude'))
+  mkdirSync(join(box.root, 'dir'))
+  symlinkSync(join(box.root, 'dir'), settingsPath(box))
+  const run = install(box)
+  assert.notEqual(run.status, 0)
+  assert.match(run.stderr, /construct-install: .*settings\.json is a directory/)
+  assert.doesNotMatch(run.stderr, CLEAN)
+  assert.deepEqual(NOTHING_INSTALLED(run), [])
+})

@@ -126,6 +126,49 @@ describe('context hook', () => {
   })
 })
 
+describe('context hook binding validation', () => {
+  const pendingPath = (data) => join(data, 'review-hooks', 's1', 'construct_review-risk.json')
+  const binding = (value) => `ODD_REVIEW_BINDING ${typeof value === 'string' ? value : JSON.stringify(value)}`
+  const cases = {
+    'a lineage that is not a string': (txn) => `${binding({ lineage: 42, lens: 'review-risk' })}\nbody ${txn.lineage}`,
+    'a lineage that is not an id': () => `${binding({ lineage: 'nope', lens: 'review-risk' })}\nbody`,
+    'a binding that is not JSON': (txn) => `${binding('{oops')}\nbody ${txn.lineage}`,
+    'a lineage different from the one in the body': (txn) =>
+      `${binding({ lineage: txn.lineage, lens: 'review-risk' })}\nbody review-0123456789abcdef`,
+  }
+  for (const [name, make] of Object.entries(cases)) {
+    test(`${name} is denied and not recorded`, () => {
+      const { repo, txn, data } = lineage()
+      const r = hook(CONTEXT_HOOK, spawnInput(repo, make(txn)), data)
+      assert.equal(r.status, 0)
+      assert.equal(r.json.hookSpecificOutput.permissionDecision, 'deny')
+      assert.match(r.json.hookSpecificOutput.permissionDecisionReason, /ODD_REVIEW_BINDING/)
+      assert.equal(existsSync(pendingPath(data)), false)
+    })
+  }
+
+  test('a binding whose lineage matches the body still passes through', () => {
+    const { repo, txn, data } = lineage()
+    const prompt = `${binding({ lineage: txn.lineage, lens: 'review-risk' })}\nbody ${txn.lineage}`
+    const r = hook(CONTEXT_HOOK, spawnInput(repo, prompt), data)
+    assert.equal(r.stdout, '')
+    assert.ok(existsSync(pendingPath(data)))
+  })
+})
+
+describe('context hook pasted context with patch text', () => {
+  test('a real pasted context whose patch text mentions another lineage id is allowed and recorded', () => {
+    const { repo, txn, data } = lineage()
+    const out = spawnSync('node', [join(PLUGIN, 'bin/odd-review'), '--cwd', repo, 'context', '--lineage', txn.lineage, '--lens', 'risk'], { encoding: 'utf8' })
+    assert.equal(out.status, 0, out.stderr)
+    const pasted = out.stdout.replace('ODD_REVIEW_PATH_END 0', '+logged review-0123456789abcdef earlier\nODD_REVIEW_PATH_END 0')
+    assert.notEqual(pasted, out.stdout)
+    const r = hook(CONTEXT_HOOK, spawnInput(repo, pasted), data)
+    assert.equal(r.stdout, '')
+    assert.ok(existsSync(join(data, 'review-hooks', 's1', 'construct_review-risk.json')))
+  })
+})
+
 describe('context hook ambiguity', () => {
   const pendingPath = (data, agent = 'construct_review-risk') => join(data, 'review-hooks', 's1', `${agent}.json`)
 
@@ -177,6 +220,19 @@ describe('capture hook', () => {
     return file
   }
   const handback = (message) => ({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', name: 'SubagentHandback', input: { message } }] } })
+
+  test('a transcript part of type text without text is skipped and the reply is still captured', () => {
+    const { repo, txn, data } = lineage()
+    spawned(repo, txn, data)
+    const report = fenced(lensResult(txn.subjects['review-risk'], txn.manifest))
+    const path = transcript([
+      { type: 'assistant', message: { role: 'assistant', content: [{ type: 'text' }, { type: 'text', text: report }, { type: 'text', text: null }] } },
+      { type: 'assistant', message: { role: 'assistant', content: [{ type: 'text' }] } },
+    ])
+    const r = hook(CAPTURE_HOOK, stopInput(repo, undefined, 'construct:review-risk', { agent_transcript_path: path }), data)
+    assert.equal(r.stdout, '')
+    assert.ok(readTransaction(repo, txn.lineage).results['review-risk'])
+  })
 
   test('a background lens reply delivered through SubagentHandback is captured from the transcript', () => {
     const { repo, txn, data } = lineage()

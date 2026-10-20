@@ -74,7 +74,7 @@ describe('check', () => {
 
   for (const line of ['Risk: none', '- **Risk:** item 2 (touches auth)', '* `Risk:` item 6 (x)', '_Risk:_ none', 'Summary\n\nRisk: item 1 (money)',
     '**Risk**: none', 'Risk: **none**', 'Risk: `none`', '**Risk:** item 2', 'Risk:none',
-    '+ Risk: none', '1. Risk: none', '2) Risk: item 3 (x)']) {
+    '+ Risk: none', '1. Risk: none', '2) Risk: item 3 (x)', 'Risk: item 2(x)', 'Risk: none \t']) {
     test(`accepts ${JSON.stringify(line)}`, () => {
       const { repo, e } = changed()
       silent(check(repo, e, line))
@@ -82,12 +82,25 @@ describe('check', () => {
   }
 
   for (const line of ['risk: none', 'Risk: item 7 (x)', 'Risk: maybe', 'The Risk: none holds',
-    'Risk: None', 'Risk: item 10', '> Risk: none', '## Risk: none']) {
+    'Risk: None', 'Risk: item 10', '> Risk: none', '## Risk: none',
+    'Risk: none-ish', 'Risk: nonexistent', 'Risk: item 2x', 'Risk: item 2-ish', 'Risk: none.']) {
     test(`rejects ${JSON.stringify(line)}`, () => {
       const { repo, e } = changed()
       assert.equal(check(repo, e, line).json?.decision, 'block')
     })
   }
+
+  test('accepts a multi-line unified close that ends with the Risk line', () => {
+    const { repo, e } = changed()
+    const close = [
+      'Verified: node --test tests/: 631 pass; claude plugin test plugins/construct: 139 pass.',
+      'Skipped: claude plugin validate (not installed here).',
+      'Not checked: behavior in a real session.',
+      '',
+      'Risk: item 3 (every session consumes the contracts)',
+    ].join('\n')
+    silent(check(repo, e, close))
+  })
 
   test('a rename into odd/tasks reports the deleted source path', () => {
     const repo = makeRepo({ 'src/a.js': 'export const a = 1\n' })

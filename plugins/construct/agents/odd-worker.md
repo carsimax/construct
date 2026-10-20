@@ -42,6 +42,10 @@ Run every command listed under `## Verification` in the prompt, in the foregroun
 
 Do not run repository-wide formatters, generators, or installs unless the prompt allows it. Do not commit unless the prompt says so.
 
+## Self-review
+
+Before reporting, review your own diff as if someone else wrote it: requirements covered, input that breaks it, nothing outside the allowed surfaces. Report any missing test as a finding. If the prompt marks the verifier weak (ambiguous requirements or external side effects), stop after one step and report. With no verifier, say what would make the work verifiable; for docs-only units the reviewed diff is the verifier, so proceed.
+
 ## Output
 
 Return:
