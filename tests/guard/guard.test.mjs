@@ -473,7 +473,8 @@ test('T16: process substitution on or around a heredoc opener hides the receiver
   assertAllow(bash('cat > notes.md <<"EOF"\n.env\nEOF'))
   assertAllow(bash('cat > notes.md <<-EOF\n\t.env\n\tEOF'))
   assertAllow(bash("cat <<'EOF' | tee notes.md\n.env\nEOF"))
-  assertAllow(bash("cat <<'EOF'; bash\n.env\nEOF"))
-  assertAllow(bash("cat <<'EOF' && bash\n.env\nEOF"))
+  // T18: a command word that runs code anywhere outside the bodies makes the bodies shell text
+  assertDeny(bash("cat <<'EOF'; bash\n.env\nEOF"))
+  assertDeny(bash("cat <<'EOF' && bash\n.env\nEOF"))
   assertAllow(bash("cat <<'EOF' > notes.md\n.env\nEOF"))
 })

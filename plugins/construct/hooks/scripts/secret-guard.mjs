@@ -111,11 +111,10 @@ function splitCommands(input) {
   let piped = false
   let here = false
   let comment = false
-  // Substitution tracking (fail closed): parenthesis depth, backtick state, and whether
-  // the current line has a process substitution or a heredoc opened inside a substitution.
-  let depth = 0
-  let tick = false
-  let subst = false
+  // Index of the first character of the current line, and the spans of consumed heredoc
+  // bodies (removed to get the command text outside heredoc bodies).
+  let lineAt = 0
+  const bodies = []
   const endWord = () => {
     if (has) words.push({ t: cur, r: redir })
     if (has) redir = false
@@ -156,18 +155,18 @@ function splitCommands(input) {
       endWord()
     } else if (';|&()`\n'.includes(c)) {
       endCommand()
-      if (c === '(') depth++
-      else if (c === ')') depth = Math.max(0, depth - 1)
-      else if (c === '`') tick = !tick
       if (c === '\n') {
         comment = false
         if (pending.length) {
-          const last = takeHeredocs(input, i, pending, commands, lineStart, subst)
-          if (last >= 0) i = last
+          const last = takeHeredocs(input, i, pending, commands, lineStart, !continues(input.slice(lineAt, i)))
+          if (last >= 0) {
+            bodies.push([i + 1, last + 1])
+            i = last
+          }
         }
         pending = []
-        subst = false
         lineStart = commands.length
+        lineAt = i + 1
       }
       // `|` and `|&` feed the next command; `||` does not.
       if (c === '|') {
@@ -183,12 +182,10 @@ function splitCommands(input) {
       // Operators: >> >| >&N <<EOF; a here-string (<<<) takes data, not a file.
       const op = /^(<<<|<<-?|>>|>\||>&[0-9-]*|<&[0-9-]*|[<>])/.exec(input.slice(i))[0]
       i += op.length - 1
-      if ((op === '<' || op === '>') && input[i + 1] === '(') subst = true
       if (op === '<<' || op === '<<-') {
         const d = /^[ \t]*(?:'([^']*)'|"([^"]*)"|((?:\\.|[^\s;|&()<>'"])+))/.exec(input.slice(i + 1))
         // After an unquoted `#` that starts a word, `<<` is comment text, not a heredoc.
         if (d && !comment) here = true
-        if (d && !comment && (depth > 0 || tick)) subst = true
         if (d && !comment) pending.push({ word: d[1] ?? d[2] ?? d[3].replace(/\\(.)/g, '$1'), strip: op === '<<-', expands: d[3] !== undefined })
       }
       redir = op !== '<<<' && !/&[0-9-]*$/.test(op) || /^[<>]&$/.test(op)
@@ -199,13 +196,61 @@ function splitCommands(input) {
     }
   }
   endCommand()
+  // The whole command text without heredoc bodies decides whether any body can be data.
+  let outside = ''
+  let at = 0
+  for (const [from, to] of bodies) {
+    outside += input.slice(at, from)
+    at = to
+  }
+  outside += input.slice(at)
+  const hazard = !heredocsMayBeData(outside)
+  for (const c of commands) if (c.heredoc && hazard) c.heredocLine.opensRun = true
   return commands
+}
+
+// continues: does a heredoc opening line continue onto the next command (it ends with
+// `|`, `|&`, `&&`, `||` or a backslash, after trailing spaces or a comment)? Both the raw
+// line and the line cut at its first `#` are checked, so a quoted `#` cannot hide it.
+function continues(line) {
+  const ends = (x) => /[|&\\]\s*$/.test(x)
+  return ends(line) || ends(line.replace(/#.*$/, ''))
+}
+
+// Global precondition (fail closed) for treating any heredoc body as data: the command
+// text outside heredoc bodies has no parentheses, substitution, or backtick (they hide
+// receivers: `| (bash)`, `>(bash)`, `$(...)`), and no word that rebinds, runs, or
+// redirects the shell itself (exec, eval, source, `.`, coproc, function, alias).
+function heredocsMayBeData(outside) {
+  if (/[()`]/.test(outside)) return false
+  if (/(^|[\s;&|{}])(exec|eval|source|coproc|function|alias|\.)(?=[\s;&|{}]|$)/.test(outside)) return false
+  return !outside.split(/[;&|\n]+/).some(runsCode)
+}
+
+const RUNNERS = /^(bash|sh|zsh|dash|ksh|csh|tcsh|fish|python[0-9.]*|pypy[0-9]*|node(js)?|deno|bun|ruby[0-9.]*|perl[0-9.]*|php[0-9.]*|lua[0-9.]*|osascript|[gmn]?awk|ssh|su|sudo|doas|env|xargs|timeout|nice|nohup|docker|podman|make|gmake|npm|npx|pnpm|yarn|exec|eval|source|command|builtin|time|watch|script|expect|tclsh|java|go|cargo)$/
+const KEYWORDS = new Set(['if', 'then', 'else', 'elif', 'do', 'while', 'until', '!', '{', '}', 'fi', 'done'])
+
+// runsCode: does one simple command (a segment between ; & | newline) run code? Its
+// command word is a shell, interpreter, wrapper or build runner (basename, version
+// suffixes allowed), a path (`./x`, `/x`, `~/x`: executes a file), or `chmod` with an
+// execute bit. Fail closed: quotes are stripped and unknown shapes count as running.
+function runsCode(segment) {
+  const words = segment.trim().split(/\s+/).map((w) => w.replace(/['"\\]/g, '')).filter(Boolean)
+  let i = 0
+  while (i < words.length && (KEYWORDS.has(words[i]) || /^[A-Za-z_][A-Za-z0-9_]*=/.test(words[i]))) i++
+  const cmd = words[i]
+  if (!cmd) return false
+  if (/^(\.{1,2}\/|\/|~)/.test(cmd) || RUNNERS.test(basename(cmd))) return true
+  if (basename(cmd) === 'chmod') {
+    return words.slice(i + 1).some((w) => /^[ugoa]*[-+=]?[rwXst]*x/.test(w) && !w.startsWith('-') || /^[0-7]{3,4}$/.test(w) && /[1357]/.test(w))
+  }
+  return false
 }
 
 // takeHeredocs consumes the bodies of the heredocs opened on the current line. `nl` is
 // the index of the newline that ends it. It returns the index of the last consumed
 // character, or -1 (nothing consumed) when a terminator line is missing.
-function takeHeredocs(input, nl, pending, commands, lineStart, subst) {
+function takeHeredocs(input, nl, pending, commands, lineStart, open) {
   let pos = nl + 1
   const bodies = []
   for (const { word, strip, expands } of pending) {
@@ -228,7 +273,7 @@ function takeHeredocs(input, nl, pending, commands, lineStart, subst) {
   for (const c of line) {
     c.heredoc = bodies
     c.heredocLine = line
-    c.heredocSubst = subst
+    c.heredocOpen = open
   }
   return pos - 1
 }
@@ -353,8 +398,8 @@ function pipedWordsVerdict(upstream, cwd, depth) {
 //   tee  copies stdin to stdout and files (file arguments are checked as usual);
 //   git commit|tag ... -F - / --file=-  reads a message from stdin and stores it.
 // Leading VAR=value assignments are skipped; no other prefix word is. A heredoc whose
-// opening line has a process substitution (`<(` or `>(`), or that is opened inside a
-// `$(`, `<(`, `>(` or backtick substitution, is never data: its receiver is hidden.
+// opening line continues into another command, or whose command has a hazard from
+// `heredocsMayBeData`, is never data either (see heredocVerdict).
 function isDataSink(texts) {
   let i = 0
   while (i < texts.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(texts[i])) i++
@@ -382,8 +427,8 @@ function heredocReceivers(line) {
 // the body is data; otherwise it is checked as shell text (plus its quoted literals, for
 // python -c style bodies). Even for data, an unquoted delimiter lets bash expand $(...)
 // and backticks inside the body, so those are checked as commands.
-function heredocVerdict(bodies, line, cwd, depth, subst) {
-  const runs = subst || !heredocReceivers(line).every(isDataSink)
+function heredocVerdict(bodies, line, cwd, depth, open) {
+  const runs = !open || line.opensRun || !heredocReceivers(line).every(isDataSink)
   for (const { text, expands } of bodies) {
     if (runs) {
       const verdict = bashVerdict(text, cwd, depth + 1) ?? literalRule(text, cwd)
@@ -413,7 +458,7 @@ function bashVerdict(command, cwd, depth = 0) {
       if (verdict) return verdict
     }
     if (words.heredoc && words.heredocLine[0] === words && depth < 3) {
-      const verdict = heredocVerdict(words.heredoc, words.heredocLine, cwd, depth, words.heredocSubst)
+      const verdict = heredocVerdict(words.heredoc, words.heredocLine, cwd, depth, words.heredocOpen)
       if (verdict) return verdict
     }
     if (DATA_COMMANDS.has(cmd)) upstream = words.filter((w, i) => i > ci && !w.r).map((w) => w.t)
