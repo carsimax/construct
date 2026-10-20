@@ -1,5 +1,7 @@
 // Agent escalation: the agent that made a change may cite one high-risk item to
 // raise the assessed tier to high. It never lowers a tier.
+import { goTrimSpace } from './text.mjs'
+
 export const HIGH_RISK_ITEMS = {
   1: 'data or irreversible effects',
   2: 'security',
@@ -22,12 +24,12 @@ export function parseEscalation(item, reason) {
   if (!itemGiven || !reasonGiven) {
     throw new UsageError('--escalate-item and --escalate-reason must be passed together')
   }
-  const trimmed = item.trim()
+  const trimmed = goTrimSpace(item)
   const number = /^[+-]?\d+$/.test(trimmed) ? Number.parseInt(trimmed, 10) : Number.NaN
   if (!Object.hasOwn(HIGH_RISK_ITEMS, number)) {
     throw new UsageError(`--escalate-item ${JSON.stringify(item)} must be an integer from 1 to 6 naming a high-risk item`)
   }
-  if (reason.trim() === '' || Buffer.byteLength(reason) > ESCALATION_REASON_MAX_BYTES) {
+  if (goTrimSpace(reason) === '' || Buffer.byteLength(reason) > ESCALATION_REASON_MAX_BYTES) {
     throw new UsageError(`--escalate-reason must be non-empty and at most ${ESCALATION_REASON_MAX_BYTES} bytes`)
   }
   return { item: number, reason }

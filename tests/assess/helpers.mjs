@@ -34,6 +34,13 @@ export function write(repo, path, content, { executable = false } = {}) {
 
 // makeRepo creates a repository with one unchanged base commit holding `base`
 // (path -> content or {content, executable}).
+// A temporary directory removed when the test process exits
+export function scratchDir(prefix) {
+  const dir = mkdtempSync(join(tmpdir(), prefix))
+  created.push(dir)
+  return dir
+}
+
 export function makeRepo(base = {}) {
   const repo = mkdtempSync(join(tmpdir(), 'odd-assess-test-'))
   created.push(repo)

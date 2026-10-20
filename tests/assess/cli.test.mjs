@@ -2,10 +2,9 @@
 // results, and the guarantee that the user's real index is never touched.
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, readFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { applyFiles, assess, assessJson, commitAll, git, makeRepo, reasonKeys, sh, write } from './helpers.mjs'
+import { applyFiles, assess, assessJson, commitAll, git, makeRepo, reasonKeys, scratchDir, sh, write } from './helpers.mjs'
 
 const passiveRepo = () => {
   const repo = makeRepo()
@@ -135,7 +134,7 @@ describe('candidate selection', () => {
   })
 
   test('a repository with no commits uses the empty tree as base', () => {
-    const repo = mkdtempSync(join(tmpdir(), 'odd-assess-unborn-'))
+    const repo = scratchDir('odd-assess-unborn-')
     git(repo, 'init', '-q', '-b', 'main')
     write(repo, 'docs/a.md', 'a\n')
     const { status, json } = assessJson(repo)
@@ -146,7 +145,7 @@ describe('candidate selection', () => {
 
   test('a linked worktree is assessed like any repository', () => {
     const repo = makeRepo()
-    const linked = join(mkdtempSync(join(tmpdir(), 'odd-assess-wt-')), 'wt')
+    const linked = join(scratchDir('odd-assess-wt-'), 'wt')
     git(repo, 'worktree', 'add', '-q', '-b', 'side', linked)
     write(linked, 'src/auth/x.go', 'package x\n')
     const { json } = assessJson(linked)
@@ -184,7 +183,7 @@ describe('fail closed', () => {
   })
 
   test('a directory that is not a repository fails closed', () => {
-    const { status, json } = assessJson(mkdtempSync(join(tmpdir(), 'odd-assess-none-')))
+    const { status, json } = assessJson(scratchDir('odd-assess-none-'))
     assert.equal(status, 0)
     assert.equal(json.risk, 'high')
     assert.equal(json.reasons[0].code, 'unassessable')

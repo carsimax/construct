@@ -4,6 +4,7 @@
 import { batchBlobContents, catFileRecordBytes, treeBlobSizes } from './git.mjs'
 import { asciiLower, fieldsFunc, goBase, goExt, isConfigurationReviewPath } from './signals.mjs'
 import { isGeneratedGoldenPath } from './stats.mjs'
+import { goTrimSpace } from './text.mjs'
 
 // Caps every content readback this classifier performs (8 MiB).
 export const SCAN_BYTE_LIMIT = 8 << 20
@@ -112,7 +113,7 @@ export function stripMarkdownCodeSpans(input) {
     }
     value = remainder.slice(end + run)
   }
-  return visible.trim()
+  return goTrimSpace(visible)
 }
 
 function trimLeadingJavaScriptBlockComments(input) {
@@ -120,7 +121,7 @@ function trimLeadingJavaScriptBlockComments(input) {
   while (value.startsWith('/*')) {
     const end = value.indexOf('*/', 2)
     if (end < 0) break
-    value = value.slice(end + 2).trim()
+    value = goTrimSpace(value.slice(end + 2))
   }
   return value
 }
@@ -133,7 +134,7 @@ export function isStaticMDXDocument(content) {
   let fence = ''
   for (const rawLine of lines) {
     if (Buffer.byteLength(rawLine) > 1024 * 1024) return false
-    const trimmed = rawLine.replace(/\r$/, '').replace(/^﻿/, '').trim()
+    const trimmed = goTrimSpace(rawLine.replace(/\r$/, '').replace(/^﻿/, ''))
     if (fence !== '') {
       if (trimmed.startsWith(fence)) fence = ''
       continue

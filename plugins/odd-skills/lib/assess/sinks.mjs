@@ -2,6 +2,7 @@
 // sink, not a suspicious word, and is gated by file extension so identical API
 // names in unrelated runtimes do not become lexical false positives.
 import { asciiLower, goBase, goExt, isTestRiskPath } from './signals.mjs'
+import { goTrimSpace } from './text.mjs'
 
 const sink = (name, extensions, expression) => ({ name, extensions: ` ${extensions} `, expression })
 
@@ -88,7 +89,7 @@ function commentSyntaxFor(logicalPath) {
 // own language. Code after a closed block comment is code, and an unrecognized
 // language is never skipped, so the scan fails toward high.
 export function isCommentOnlySourceLine(logicalPath, line) {
-  const trimmed = line.trim()
+  const trimmed = goTrimSpace(line)
   switch (commentSyntaxFor(logicalPath)) {
     case HASH:
       return trimmed.startsWith('#')
@@ -98,9 +99,9 @@ export function isCommentOnlySourceLine(logicalPath, line) {
       if (trimmed.startsWith('//')) return true
       if (trimmed.startsWith('/*')) {
         const closing = trimmed.indexOf('*/', 2)
-        return closing < 0 || trimmed.slice(closing + 2).trim() === ''
+        return closing < 0 || goTrimSpace(trimmed.slice(closing + 2)) === ''
       }
-      if (trimmed.startsWith('*/')) return trimmed.slice(2).trim() === ''
+      if (trimmed.startsWith('*/')) return goTrimSpace(trimmed.slice(2)) === ''
       // A block comment continuation is a lone `*` followed by whitespace or
       // nothing; `*cmd` is a dereference, not a comment.
       return trimmed === '*' || trimmed.startsWith('* ') || trimmed.startsWith('*\t')
