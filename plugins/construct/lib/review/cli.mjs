@@ -19,9 +19,10 @@ export const USAGE = `Usage: odd-review [--cwd DIR] <command> [options]
 Review lifecycle. State lives under the git common directory (odd-review/), never
 in the worktree. Each command prints JSON that names the exact next command.
 
-  start --lenses LIST --lenses-reason TEXT [--base-ref REF [--committed-only]]
+  start [--lenses LIST --lenses-reason TEXT] [--base-ref REF [--committed-only]]
         freeze the candidate and open a transaction (LIST: risk,resilience,
-        readability,reliability or the review-* names)
+        readability,reliability or the review-* names); without --lenses, the
+        lenses odd-assess assigns (all four for high risk)
   context --lineage L --lens LENS [--max-bytes N]
         print the binding and evidence for one lens (also review-refuter and
         review-validator in their states); default budget ${DEFAULT_CONTEXT_BYTES} bytes
@@ -95,12 +96,17 @@ function dispatch(command, values, root) {
   const common = { root, cwd, lineage: values.lineage }
   switch (command) {
     case 'start': {
-      need(values, 'lenses', 'lenses-reason')
+      // Both or neither: without them, start takes the assessment's lenses.
+      if (values.lenses !== undefined || values['lenses-reason'] !== undefined) need(values, 'lenses', 'lenses-reason')
       requireBaseRefForCommittedOnly(values['base-ref'], values['committed-only'] === true)
-      if (goTrimSpace(values['lenses-reason']) === '') throw new UsageError('--lenses-reason must not be blank')
-      const parsed = canonicalLenses(values.lenses)
-      if (parsed.error) throw new UsageError(parsed.error)
-      return { json: commands.start({ root, cwd, baseRef: values['base-ref'], committedOnly: values['committed-only'] === true, lenses: parsed.lenses, lensesReason: values['lenses-reason'] }) }
+      let lenses = null
+      if (values.lenses !== undefined) {
+        if (goTrimSpace(values['lenses-reason']) === '') throw new UsageError('--lenses-reason must not be blank')
+        const parsed = canonicalLenses(values.lenses)
+        if (parsed.error) throw new UsageError(parsed.error)
+        lenses = parsed.lenses
+      }
+      return { json: commands.start({ root, cwd, baseRef: values['base-ref'], committedOnly: values['committed-only'] === true, lenses, lensesReason: values['lenses-reason'] }) }
     }
     case 'context':
       need(values, 'lineage', 'lens')
