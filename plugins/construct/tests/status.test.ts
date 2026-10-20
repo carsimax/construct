@@ -103,13 +103,13 @@ const under = async (ui, key: string) => (await leaves(ui)).filter((l) => l.key 
 
 // ---- pure helpers --------------------------------------------------------
 
-test('meterColor turns yellow at 50 and red at 80', async () => {
-  expect(meterColor(0)).toBe('green')
-  expect(meterColor(49)).toBe('green')
-  expect(meterColor(50)).toBe('yellow')
-  expect(meterColor(79)).toBe('yellow')
-  expect(meterColor(80)).toBe('red')
-  expect(meterColor(100)).toBe('red')
+test('meterColor uses the theme keys success, warning at 50, and error at 80', async () => {
+  expect(meterColor(0)).toBe('success')
+  expect(meterColor(49)).toBe('success')
+  expect(meterColor(50)).toBe('warning')
+  expect(meterColor(79)).toBe('warning')
+  expect(meterColor(80)).toBe('error')
+  expect(meterColor(100)).toBe('error')
 })
 
 test('clampPct floors and clamps, and rejects non-numbers', async () => {
@@ -239,7 +239,7 @@ test('without a statusLine the replica comes first, then the ODD and RDD lines',
   expect(text.indexOf('feat')).toBeLessThan(text.indexOf('RDD'))
 })
 
-for (const [pct, color] of [[49, 'green'], [50, 'yellow'], [79, 'yellow'], [80, 'red']] as const) {
+for (const [pct, color] of [[49, 'success'], [50, 'warning'], [79, 'warning'], [80, 'error']] as const) {
   test(`the context meter at ${pct}% is ${color}`, async ($, on) => {
     const { ui } = await drawBand($, on, { usage: { startedAt: 0, context: { window: 1, percent: pct }, rateLimits: [] } })
     const shown = (await under(ui, 'ctx')).find((l) => l.text.includes('%'))
@@ -247,6 +247,24 @@ for (const [pct, color] of [[49, 'green'], [50, 'yellow'], [79, 'yellow'], [80, 
     expect(shown.props.color).toBe(color)
   })
 }
+
+// Theme keys documented for custom themes; the band colors with these so it follows the active theme.
+const THEME_KEYS = new Set(['claude', 'text', 'inverseText', 'inactive', 'subtle', 'suggestion', 'permission', 'remember', 'success', 'error', 'warning', 'merged', 'promptBorder', 'planMode', 'autoAccept', 'bashBorder', 'ide', 'fastMode'])
+
+test('every color the band draws is a theme key, so it follows the active theme', async ($, on) => {
+  const { ui } = await drawBand($, on, { committed: assessJson('high', 'high_risk', true) })
+  const colors = (await leaves(ui)).map((l) => l.props.color).filter(Boolean)
+  expect(colors.length).toBeDefined()
+  for (const color of colors) expect(THEME_KEYS.has(color)).toBe(true)
+})
+
+test('each band line starts with the matrix mark and segments are joined by a faint rail', async ($, on) => {
+  const { ui } = await drawBand($, on)
+  const text = await joined(ui)
+  expect(text).toContain('▌')
+  expect(text).toContain(' ┊ ')
+  expect(text).not.toContain(' │ ')
+})
 
 test('a segment whose data is missing is omitted', async ($, on) => {
   const { ui } = await drawBand($, on, { usage: { startedAt: 0, context: { window: 1 }, rateLimits: [{ kind: 'five_hour', percentUsed: 5 }] } })

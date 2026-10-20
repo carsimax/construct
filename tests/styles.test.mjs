@@ -26,13 +26,33 @@ test('the plugin ships only the Neutral output style, without forcing it', () =>
   }
 })
 
-test('the plugin ships a single odd theme as valid theme JSON', () => {
-  assert.deepEqual(readdirSync(join(pluginRoot, 'themes')), ['odd.json'])
-  const text = readFileSync(join(pluginRoot, 'themes', 'odd.json'), 'utf8')
+// Override tokens documented for custom themes (terminal-config, Color token reference).
+const THEME_TOKENS = new Set([
+  'claude', 'text', 'inverseText', 'inactive', 'subtle', 'suggestion', 'permission', 'remember',
+  'success', 'error', 'warning', 'merged', 'promptBorder', 'planMode', 'autoAccept', 'bashBorder', 'ide',
+  'fastMode', 'effortUltra', 'diffAdded', 'diffRemoved', 'diffAddedDimmed', 'diffRemovedDimmed',
+  'diffAddedWord', 'diffRemovedWord', 'userMessageBackground', 'userMessageBackgroundHover',
+  'bashMessageBackgroundColor', 'memoryBackgroundColor', 'selectionBg', 'composerSidebarBackground',
+  'rate_limit_fill', 'rate_limit_empty', 'briefLabelYou', 'briefLabelClaude', 'claudeShimmer', 'warningShimmer',
+  'permissionShimmer', 'promptBorderShimmer', 'inactiveShimmer', 'fastModeShimmer',
+  ...['red', 'blue', 'green', 'yellow', 'purple', 'orange', 'pink', 'cyan'].map((c) => `${c}_FOR_SUBAGENTS_ONLY`),
+])
+
+test('the plugin ships a single Construct theme with the matrix palette', () => {
+  assert.deepEqual(readdirSync(join(pluginRoot, 'themes')), ['construct.json'])
+  const text = readFileSync(join(pluginRoot, 'themes', 'construct.json'), 'utf8')
   const theme = JSON.parse(text)
-  assert.equal(theme.name, 'odd')
-  assert.ok(['dark', 'light'].includes(theme.base))
-  assert.ok(Object.keys(theme.overrides).length > 0)
+  assert.equal(theme.name, 'Construct')
+  assert.equal(theme.base, 'dark')
+  for (const [token, value] of Object.entries(theme.overrides)) {
+    assert.ok(THEME_TOKENS.has(token), `unknown theme token ${token} would be ignored silently`)
+    assert.match(value, /^#[0-9A-Fa-f]{6}$/, `${token} must be #rrggbb`)
+  }
+  // Matrix phosphor green as the accent; errors and warnings keep their signal colors.
+  assert.equal(theme.overrides.claude, '#00FF41')
+  assert.equal(theme.overrides.success, '#00FF41')
+  assert.equal(theme.overrides.error, '#FF3B3B')
+  assert.ok(theme.overrides.warning && theme.overrides.warning !== theme.overrides.success)
   assert.doesNotMatch(text, /gentleman/i)
 })
 

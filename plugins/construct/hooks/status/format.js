@@ -11,11 +11,12 @@ export function clampPct(value) {
   return Math.min(100, Math.max(0, Math.floor(value)))
 }
 
-// Green below 50, yellow below 80, red otherwise.
+// Colors are theme keys, so the band follows the active theme (the Construct
+// theme turns them matrix green). Success below 50, warning below 80, error otherwise.
 export function meterColor(pct) {
-  if (pct < 50) return 'green'
-  if (pct < 80) return 'yellow'
-  return 'red'
+  if (pct < 50) return 'success'
+  if (pct < 80) return 'warning'
+  return 'error'
 }
 
 export function bar(pct, width = BAR_WIDTH) {
@@ -103,43 +104,43 @@ function budgetSegments(usage, nowMs) {
 function gitSegment(git, worktree) {
   if (!git?.branch) return null
   return segment('git', [
-    text(`⎇ ${git.branch}`, { color: 'magenta' }),
-    git.dirty > 0 ? text(` ±${git.dirty}`, { color: 'yellow' }) : null,
-    git.ahead > 0 ? text(` ↑${git.ahead}`, { color: 'cyan' }) : null,
-    git.behind > 0 ? text(` ↓${git.behind}`, { color: 'red' }) : null,
-    worktree ? text(` wt:${worktree}`, { color: 'cyan' }) : null,
+    text(`⎇ ${git.branch}`, { color: 'suggestion' }),
+    git.dirty > 0 ? text(` ±${git.dirty}`, { color: 'warning' }) : null,
+    git.ahead > 0 ? text(` ↑${git.ahead}`, { color: 'success' }) : null,
+    git.behind > 0 ? text(` ↓${git.behind}`, { color: 'error' }) : null,
+    worktree ? text(` wt:${worktree}`, { color: 'inactive' }) : null,
   ])
 }
 
 function whereSegments({ dir, home, git, worktree, model, effort, style, agent }) {
   const out = []
-  if (dir) out.push(segment('dir', [text(shortDir(dir, home), { color: 'blue', bold: true })]))
+  if (dir) out.push(segment('dir', [text(shortDir(dir, home), { color: 'claude', bold: true })]))
   out.push(gitSegment(git, worktree))
   if (model) {
     out.push(
       segment('model', [
         text(`◆ ${model}`, { bold: true }),
         effort ? text(` ${effort}`, { dim: true }) : null,
-        style ? text(`  ✎ ${style}`, { color: 'cyan' }) : null,
+        style ? text(`  ✎ ${style}`, { color: 'inactive' }) : null,
       ]),
     )
   } else if (style) {
-    out.push(segment('model', [text(`✎ ${style}`, { color: 'cyan' })]))
+    out.push(segment('model', [text(`✎ ${style}`, { color: 'inactive' })]))
   }
-  if (agent) out.push(segment('agent', [text(`@${agent}`, { color: 'cyan' })]))
+  if (agent) out.push(segment('agent', [text(`@${agent}`, { color: 'suggestion' })]))
   return out
 }
 
-const STATE_COLOR = { 'review due': 'red', reviewed: 'green', clear: undefined }
+const STATE_COLOR = { 'review due': 'error', reviewed: 'success', clear: undefined }
 
 function oddLine(odd) {
   if (!odd) return null
-  return [segment('odd', [text('ODD ', { dim: true }), text(odd.feature, { bold: true }), text(` · ${odd.open} open`, { dim: true })])]
+  return [segment('odd', [text('ODD ', { color: 'claude' }), text(odd.feature, { bold: true }), text(` · ${odd.open} open`, { dim: true })])]
 }
 
 function rddLine(rdd) {
   if (!rdd || (rdd.mode !== 'on' && rdd.mode !== 'off')) return null
-  const mode = segment('rdd', [text('RDD ', { dim: true }), text(rdd.mode, { bold: true })])
+  const mode = segment('rdd', [text('RDD ', { color: 'claude' }), text(rdd.mode, { bold: true })])
   const state =
     rdd.mode === 'on' && rdd.state
       ? segment('rdd-state', [text(rdd.state, { color: STATE_COLOR[rdd.state], bold: rdd.state === 'review due', dim: rdd.state === 'clear' })])
@@ -147,9 +148,11 @@ function rddLine(rdd) {
   return [mode, state]
 }
 
+// Each line opens with a phosphor mark, and segments are joined by a faint rail.
 const row = (key, segments) => {
-  const kids = joinSegments(segments).map((s) => (s.sep ? text(' │ ', { dim: true }) : s))
-  return kids.length === 0 ? null : { type: 'Box', props: { key, flexDirection: 'row' }, children: kids }
+  const kids = joinSegments(segments).map((s) => (s.sep ? text(' ┊ ', { color: 'subtle' }) : s))
+  if (kids.length === 0) return null
+  return { type: 'Box', props: { key, flexDirection: 'row' }, children: [text('▌ ', { color: 'claude' }), ...kids] }
 }
 
 // Builds the band: the replica (budget, then where) when `replica` is given, then the ODD and RDD lines.

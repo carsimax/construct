@@ -201,10 +201,12 @@ The mod draws a band above the prompt (`AbovePrompt`, which holds a multi-row tr
 
 What it shows, top to bottom:
 
-1. **Budget line** (replica): context window, 5-hour and 7-day plan limits as 8-cell meters (green below 50%, yellow below 80%, red above), each limit with its reset (`↻HH:MM`, and `↻Day HH:MM` for 7d).
-2. **Where line** (replica): `~`-shortened directory, git state (`⎇ branch`, `±dirty`, `↑ahead`, `↓behind`, `wt:<worktree>`), `◆ model effort`, `✎ output style`, and `@agent`. Segments are joined by a dim `│`.
+1. **Budget line** (replica): context window, 5-hour and 7-day plan limits as 8-cell meters (theme `success` below 50%, `warning` below 80%, `error` above), each limit with its reset (`↻HH:MM`, and `↻Day HH:MM` for 7d).
+2. **Where line** (replica): `~`-shortened directory, git state (`⎇ branch`, `±dirty`, `↑ahead`, `↓behind`, `wt:<worktree>`), `◆ model effort`, `✎ output style`, and `@agent`.
 3. **ODD line**: the active feature document (newest `odd/tasks/*.md` with a task whose status is not `done` or `dropped`, the rule of `feature-state.mjs`) and its open task count.
 4. **RDD line**: the switch (`RDD on` or `RDD off`) and, when on, `review due` (the committed range since `odd-review boundary`, or the uncommitted changes, classify high and have no receipt), `reviewed`, or `clear`. A `root` boundary is not assessed.
+
+Every line opens with a phosphor mark `▌`, and segments are joined by a faint `┊`. All colors are theme keys (`claude`, `success`, `warning`, `error`, `suggestion`, `inactive`, `subtle`), so the band follows the active theme.
 
 **When the replica is hidden.** The two replica lines are drawn only when your merged settings have no `statusLine`; with one, they would show everything twice. The ODD and RDD lines are always drawn. The band yields to a survey.
 
@@ -217,6 +219,10 @@ What it shows, top to bottom:
 - Resets and meters are omitted when the figure is missing, for example off a subscription.
 
 **Refresh and fail-open.** Git, `odd-review`, `odd-assess`, and the feature documents are read only on `session.start` and after each main-thread `turn.complete`, in the background with a timeout, never on a redraw. Every hook has a `.catch`; any error leaves out the affected segment (or the whole band) and never blocks or delays a turn.
+
+## Theme: Construct
+
+The plugin ships one color theme, **Construct**, in the style of *The Matrix*: phosphor green `#00FF41` for the accent, success, permissions, and the usage meter; deeper greens for borders, hints, and backgrounds; pale green text on near-black. Errors stay red and warnings yellow, so they still stand out. Select it with `/theme` (it is listed as from this plugin); the status band turns matrix green with it, since it colors with theme keys.
 
 ## Local development
 
