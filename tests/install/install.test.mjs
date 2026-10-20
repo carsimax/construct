@@ -229,3 +229,50 @@ test('the installer never grants anything beyond the engram MCP servers', () => 
   assert.doesNotMatch(text, /skipDangerousModePermissionPrompt|bypassPermissions|defaultMode/)
   assert.match(text.trimEnd().split('\n').at(-1), /^main "\$@"$/, 'main runs on the last line')
 })
+
+const NOTHING_INSTALLED = (run) => run.calls.filter((c) => /install|marketplace add|mcp add|setup/.test(c))
+
+test('a read-only ~/.claude stops the preflight with one clear message and no change', { skip: process.getuid?.() === 0 }, () => {
+  const box = sandbox({ engram: false })
+  const dir = join(box.home, '.claude')
+  mkdirSync(dir)
+  chmodSync(dir, 0o555)
+  try {
+    const run = install(box)
+    assert.notEqual(run.status, 0)
+    assert.match(run.stderr, /construct-install: .*\.claude exists but is not writable/)
+    assert.doesNotMatch(run.stderr, /at .*\.js|node:internal|Error:/)
+    assert.deepEqual(NOTHING_INSTALLED(run), [])
+    assert.deepEqual(readdirSync(dir), [])
+  } finally {
+    chmodSync(dir, 0o755)
+  }
+})
+
+test('a read-only settings.json stops the preflight with one clear message and no change', { skip: process.getuid?.() === 0 }, () => {
+  const box = sandbox({ engram: false })
+  writeSettings(box, { model: 'opus' })
+  chmodSync(settingsPath(box), 0o444)
+  const run = install(box)
+  assert.notEqual(run.status, 0)
+  assert.match(run.stderr, /construct-install: .*settings\.json is not writable/)
+  assert.doesNotMatch(run.stderr, /at .*\.js|node:internal|Error:/)
+  assert.deepEqual(NOTHING_INSTALLED(run), [])
+  assert.deepEqual(readSettings(box), { model: 'opus' })
+  assert.deepEqual(backups(box), [])
+})
+
+test('an empty or whitespace-only settings.json is treated as an empty object', () => {
+  for (const content of ['', ' \n\t\n']) {
+    const box = sandbox()
+    writeSettings(box, content)
+    chmodSync(settingsPath(box), 0o600)
+    const run = install(box)
+    assert.equal(run.status, 0, run.stderr)
+    assert.deepEqual(readSettings(box), {
+      theme: 'custom:construct:construct',
+      permissions: { allow: ['mcp__engram', 'mcp__plugin_engram_engram'] },
+    })
+    assert.equal(statSync(settingsPath(box)).mode & 0o777, 0o600)
+  }
+})
