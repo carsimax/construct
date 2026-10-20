@@ -35,7 +35,7 @@ Load this skill after each work-unit commit while the RDD switch is on, when `od
 | `odd-assess` fails | Treat as `high` (it fails closed); ask consent |
 | Stop gate blocked, naming a committed range | Review the committed range |
 | Stop gate blocked, naming "uncommitted changes" | Review the working-tree candidate |
-| Both candidates are high | Review the committed range first, then the uncommitted changes, or ask the user to commit first. Never leave high uncommitted work unreviewed: the gate does not remind again in the same session |
+| Both candidates are high | Review the committed range first, then the uncommitted changes, or ask the user to commit first. Never leave high uncommitted work unreviewed: the gate reminds once per target per session, and uncommitted work changes the target |
 | `boundary.source` is `root` | Do not review the whole history. Review only uncommitted changes, or ask the user which commit to use as the base |
 | `boundary.commit` equals HEAD | No committed range to review; only the working tree can be due |
 | `state` is `refutation_required`, `correction_required`, `validation_required`, or `approved` | Run the commands in `next` per the lifecycle steps below |
@@ -56,7 +56,7 @@ Load this skill after each work-unit commit while the RDD switch is on, when `od
 6. On "Review this change", start with the form that matches the candidate and keep the `lineage`:
    - committed range: `odd-review start --base-ref <commit> --committed-only`;
    - uncommitted changes: `odd-review start`.
-7. Per selected lens, in one message and in parallel, launch `construct:review-<lens>` with only the lineage id as its prompt, for example `Review lineage review-0123456789abcdef`. Two plugin hooks do the rest by code: before the agent starts, the prompt is replaced with the full `odd-review context` for that lens; when it stops, its reply is piped to `odd-review capture`, and a malformed or invalid reply is sent back to the agent with the validator's message, at most twice. Do not paste context or copy replies. The hook replaces the whole prompt, so text added after the lineage id never reaches the agent: the `risk` lens does not receive [security-checklist](references/security-checklist.md) this way, and applies the category triage written in `review-risk` itself. When the agents finish, run `odd-review status --lineage <L>`. A lens still pending there was not captured: launch it again the same way.
+7. Per selected lens, in one message and in parallel, launch `construct:review-<lens>` with only the lineage id as its prompt, for example `Review lineage review-0123456789abcdef`. Two plugin hooks do the rest by code: before the agent starts, the prompt is replaced with the full `odd-review context` for that lens; when it stops, its reply is piped to `odd-review capture`, and a malformed or invalid reply is sent back to the agent with the validator's message, at most twice. Do not paste context or copy replies. The hook replaces the whole prompt, so text added after the lineage id never reaches the agent: the `risk` lens context already includes the [security-checklist](references/security-checklist.md), added by `odd-review context` inside the context block. When the agents finish, run `odd-review status --lineage <L>`. A lens still pending there was not captured: launch it again the same way.
 8. Read the `state` field of the status and act on it:
    - `refutation_required`: launch `construct:review-refuter` with the lineage id; the hooks capture it with `capture-refuter`.
    - `correction_required`: make one bounded correction for the corroborated findings only and commit it, run `odd-review correct --lineage <L>`, then launch `construct:review-validator` with the lineage id; the hooks capture it with `capture-validation`. The budget is min(200, ceil(n/2)) of the reviewed lines. A refused `correct` (`correction_budget_exceeded`) does not consume the single correction: make a smaller fix, or report one **Needs your decision** result. A very small candidate, such as a one-line change, cannot fit any correction.
@@ -72,4 +72,4 @@ Report the tier, whether review was due, the consent outcome, and the terminal s
 
 - [lifecycle](references/lifecycle.md): commands, states, flags, and the switch.
 - [consent](references/consent.md): the per-candidate consent prompt.
-- [security-checklist](references/security-checklist.md): the `risk` lens checklist; `review-risk` has no tools, so it reaches the agent only as pasted text.
+- [security-checklist](references/security-checklist.md): the `risk` lens checklist; `odd-review context` embeds it in the context of that lens.

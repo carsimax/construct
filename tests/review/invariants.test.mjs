@@ -77,6 +77,22 @@ describe('context', () => {
     assert.equal(refused.stdout, '')
   })
 
+  test('only the risk lens context carries the security checklist, inside the block', () => {
+    const repo = highRepo()
+    const txn = start(repo, { lenses: 'readability,risk,reliability,resilience' })
+    const risk = contextOf(repo, txn, 'review-risk').stdout
+    const begin = risk.indexOf('ODD_REVIEW_CHECKLIST_BEGIN\n')
+    const end = risk.indexOf('ODD_REVIEW_CHECKLIST_END\n')
+    assert.ok(begin > 0 && end > begin)
+    assert.ok(end < risk.indexOf('ODD_REVIEW_CONTEXT_END'))
+    assert.ok(risk.slice(begin, end).includes('Security checklist'))
+    for (const lens of ['review-resilience', 'review-readability', 'review-reliability']) {
+      const other = contextOf(repo, txn, lens)
+      assert.equal(other.status, 0)
+      assert.ok(!other.stdout.includes('ODD_REVIEW_CHECKLIST'))
+    }
+  })
+
   test('the default budget allows a normal change', () => {
     const repo = highRepo()
     assert.equal(contextOf(repo, start(repo)).status, 0)
