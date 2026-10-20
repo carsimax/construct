@@ -2,8 +2,8 @@
 // hook JSON on stdin and a scratch CLAUDE_PLUGIN_DATA directory.
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { spawnSync } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { execFileSync, spawnSync } from 'node:child_process'
+import { mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { applyFiles, makeRepo, scratchDir } from '../review/helpers.mjs'
 
@@ -72,19 +72,51 @@ describe('check', () => {
     assert.equal(['a.txt', 'b.txt', 'c.txt', 'd.txt'].filter((p) => r.json.reason.includes(p)).length, 3)
   })
 
-  for (const line of ['Risk: none', '- **Risk:** item 2 (touches auth)', '* `Risk:` item 6 (x)', '_Risk:_ none', 'Summary\n\nRisk: item 1 (money)']) {
+  for (const line of ['Risk: none', '- **Risk:** item 2 (touches auth)', '* `Risk:` item 6 (x)', '_Risk:_ none', 'Summary\n\nRisk: item 1 (money)',
+    '**Risk**: none', 'Risk: **none**', 'Risk: `none`', '**Risk:** item 2', 'Risk:none',
+    '+ Risk: none', '1. Risk: none', '2) Risk: item 3 (x)']) {
     test(`accepts ${JSON.stringify(line)}`, () => {
       const { repo, e } = changed()
       silent(check(repo, e, line))
     })
   }
 
-  for (const line of ['risk: none', 'Risk: item 7 (x)', 'Risk: maybe', 'The Risk: none holds']) {
+  for (const line of ['risk: none', 'Risk: item 7 (x)', 'Risk: maybe', 'The Risk: none holds',
+    'Risk: None', 'Risk: item 10', '> Risk: none', '## Risk: none']) {
     test(`rejects ${JSON.stringify(line)}`, () => {
       const { repo, e } = changed()
       assert.equal(check(repo, e, line).json?.decision, 'block')
     })
   }
+
+  test('a rename into odd/tasks reports the deleted source path', () => {
+    const repo = makeRepo({ 'src/a.js': 'export const a = 1\n' })
+    const e = env()
+    silent(run('mark', repo, e))
+    mkdirSync(join(repo, 'odd/tasks'), { recursive: true })
+    execFileSync('git', ['mv', 'src/a.js', 'odd/tasks/a.js'], { cwd: repo })
+    const r = check(repo, e, 'Done.')
+    assert.equal(r.json.decision, 'block')
+    assert.match(r.json.reason, /src\/a\.js/)
+  })
+
+  test('a record marked in another repository is ignored', () => {
+    const e = env()
+    const a = makeRepo({ 'src/a.js': 'export const a = 1\n' })
+    silent(run('mark', a, e))
+    const b = makeRepo({ 'src/a.js': 'export const a = 1\n' })
+    applyFiles(b, { 'src/a.js': 'export const a = 2\n' })
+    silent(check(b, e, 'Done.'))
+  })
+
+  test('a record without a root is ignored', () => {
+    const { repo, e } = changed()
+    const file = join(e.CLAUDE_PLUGIN_DATA, 'risk-line', 's1.json')
+    const record = JSON.parse(readFileSync(file, 'utf8'))
+    delete record.root
+    writeFileSync(file, JSON.stringify(record))
+    silent(check(repo, e, 'Done.'))
+  })
 
   test('only odd/tasks changed', () => {
     const { repo, e } = changed({ 'odd/tasks/x.md': '# x\n' })
@@ -144,5 +176,6 @@ describe('mark', () => {
     const r = run('mark', repo, e)
     silent(r)
     assert.match(readFileSync(join(e.CLAUDE_PLUGIN_DATA, 'risk-line', 's1.json'), 'utf8'), /"tree":"[0-9a-f]{40,}"/)
+    assert.equal(JSON.parse(readFileSync(join(e.CLAUDE_PLUGIN_DATA, 'risk-line', 's1.json'), 'utf8')).root, realpathSync(repo))
   })
 })

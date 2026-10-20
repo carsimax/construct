@@ -11,11 +11,17 @@ Objective: move two closure steps the model does by memory into code: a `Stop` g
 
 | ID | Specs | Task | Route | Risk | Status | Commit |
 |---|---|---|---|---|---|---|
-| T1 | S1 | `--escalate-item`/`--escalate-reason` on `start` in `lib/review/cli.mjs` and `commands.mjs`; tests in `tests/review/`; usage, README, `rdd-review` | odd-worker | none | pending | — |
-| T2 | S2 | `hooks/scripts/risk-line.mjs` (`mark` on UserPromptSubmit, `check` on Stop), `hooks.json`; tests in `tests/risk-line/`; README | odd-worker, after T1 (shared README) | 2 | pending | — |
+| T1 | S1 | `--escalate-item`/`--escalate-reason` on `start` in `lib/review/cli.mjs` and `commands.mjs`; tests in `tests/review/`; usage, README, `rdd-review` | odd-worker | none | done | `f2856a1` |
+| T2 | S2 | `hooks/scripts/risk-line.mjs` (`mark` on UserPromptSubmit, `check` on Stop), `hooks.json`; tests in `tests/risk-line/`; README | odd-worker, after T1 (shared README) | 2 | done | `28b15fa` |
+| T3 | S2 | odd-verify advisories 1-3 and 6 (L7): emphasis variants, all list markers, `--no-renames`, record bound to the repository root | odd-worker | 2 | done | see L8 |
 
 ## Log
 
 - **L1 (2026-10-20, user):** "Quiero que revisemos los pendientes para que nuestro fujo de odd siga siendo mas pareceido y determinista que el de https://github.com/Gentleman-Programming"
 - **L2 (2026-10-20, parent):** Upstream gentle-ai is still v4.2.0 (2 later commits: README videos, a codegraph worktree note); nothing new to port. The proposed classifier fix (Node hook scripts) already shipped in `assess-node-modules` (0.2.1); the user was told. Remaining package: S1 and S2.
 - **L3 (2026-10-20, user):** "Si vamos con ese plan!"
+- **L4 (2026-10-20):** T1 done in `f2856a1`. RED: the escalation test failed (105 pass, 1 fail); the usage-error test already passed because unknown flags were rejected. GREEN: `node --test tests/review/` 106 pass; `node --test tests/` 578 pass; plugin validate passed. The transaction `risk` field now records the escalated tier when lenses come from the assessment.
+- **L5 (2026-10-20, user, out of scope):** "pudeo pedir un cambio fuera de esto, es solo un ajuste al panel donde esta la parte de  Opus 5.5 · main podemos poner una seccion de la rama en la que se esta'" — handled as a separate small change (branch row in the panel main card), not tracked here.
+- **L6 (2026-10-20):** T2 done in `28b15fa`. RED: `node --test tests/risk-line/` failed before the script existed. GREEN: 21 pass; `node --test tests/` 599 pass (worker run, with the panel change in the tree); plugin validate passed. Record `{tree, blocked}` under `${CLAUDE_PLUGIN_DATA}/risk-line/`; `mark` re-arms the block. Known cost: `mark` freezes the working tree on every prompt (bounded by the 30 s timeout, fails open). Next: full suite, then odd-verify (Risk item 2).
+- **L7 (2026-10-20, odd-verify):** S1 PASS, S2 PASS, no blockers. Advisories: (1) `**Risk**: none`, `Risk: **none**`, `` Risk: `none` ``, `Risk:none` false-block; (2) `1.` and `+` list markers false-block; (3) `git mv src/a.js odd/tasks/a.js` false-passes (rename shows only the new path; fix `--no-renames`); (4) a Risk line inside a code fence passes (harmless, kept); (5) `mark`/`check` take ~1.4 s on a 20k-file repo and write untracked blobs to the object store (kept as a known limit); (6) the record is not bound to a repository, so a same-tree record from another repo can be used. T3 opened for 1, 2, 3, 6 (defects of S2's own guard, within S2).
+- **L8 (2026-10-20):** T3 done. RED: `node --test tests/risk-line/` 11 failures (7 accept forms, rename, 2 root-binding, mark root). GREEN: 36 pass; `node --test tests/` 614 pass; plugin validate passed. Advisories 4 and 5 kept as known limits.

@@ -9,8 +9,9 @@ import { join } from 'node:path'
 import { dataDir, readInput, safeName } from './hook-io.mjs'
 
 const MAX_PATHS = 3
-// Optional list marker and emphasis around `Risk:`, then `none` or `item 1-6`.
-const RISK_LINE = /^[ \t]*(?:[-*][ \t]+)?[*_`]*Risk:[*_`]*[ \t]+(?:none|item [1-6])\b/m
+// Optional list marker (-, *, +, 1., 1)) and emphasis around the label and the
+// value, then `none` or `item 1-6`; the space after the colon is optional.
+const RISK_LINE = /^[ \t]*(?:(?:[-*+]|\d+[.)])[ \t]+)?[*_`]*Risk[*_`]*:[*_`]*[ \t]*[*_`]*(?:none|item [1-6])\b/m
 
 const recordFile = (session) => {
   const dir = join(dataDir(), 'risk-line')
@@ -59,14 +60,15 @@ async function main() {
   }
 
   if (mode === 'mark') {
-    write({ tree: candidateTree, blocked: false })
+    write({ root, tree: candidateTree, blocked: false })
     return
   }
 
   const record = readRecord(file)
-  if (!record || record.blocked === true || record.tree === candidateTree) return
+  // A record from another repository, or an old one without a root, is not this turn's.
+  if (!record || record.root !== root || record.blocked === true || record.tree === candidateTree) return
   if (RISK_LINE.test(input.last_assistant_message)) return
-  const paths = git(root, ['diff', '--name-only', '-z', record.tree, candidateTree])
+  const paths = git(root, ['diff', '--no-renames', '--name-only', '-z', record.tree, candidateTree])
     .toString('utf8')
     .split('\0')
     .filter((path) => path !== '' && !path.startsWith('odd/tasks/'))
