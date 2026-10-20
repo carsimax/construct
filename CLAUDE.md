@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-Human contributors: see `CONTRIBUTING.md` for setup, checks, and pull request rules; this file is the agent-facing summary of the same material.
+The contributor rules live in [CONTRIBUTING.md](CONTRIBUTING.md) and are not repeated here: [checks before a pull request](CONTRIBUTING.md#checks-before-a-pull-request), [the consistency table](CONTRIBUTING.md#consistency-the-tests-enforce), [branches, commits, and pull requests](CONTRIBUTING.md#branches-and-pull-requests), and [releases](CONTRIBUTING.md#releases). Follow them as written.
 
 ## What this repository is
 
@@ -21,13 +21,11 @@ claude --plugin-dir ./plugins/construct         # load the plugin for one sessio
 scripts/eval.sh [--case small-delegated]        # behavior evals; spend real usage, each run is an isolated `claude -p`
 ```
 
-`scripts/eval.sh` evaluates a temporary copy of the plugin whose manifest drops the `engram@engram` dependency, because isolated eval runs cannot resolve it and the plugin would otherwise not load.
-
 ## Architecture
 
 A plugin cannot ship a `CLAUDE.md`, so the ODD rules load in layers:
 
-- **Session contract**: `hooks/scripts/contract.mjs session` emits `hooks/contract/session.md` as `additionalContext` on every `SessionStart`. The injected text, including the CodeGraph index notice, must stay under 8,000 characters; `tests/contract.test.mjs` checks every notice variant with long project paths, so `session.md` itself has about 7,400 characters of room and is near it now (`wc -c`). Rewrite text in place instead of appending.
+- **Session contract**: `hooks/scripts/contract.mjs session` emits `hooks/contract/session.md` as `additionalContext` on every `SessionStart`. It must stay under 8,000 characters; see the contract row in [the consistency table](CONTRIBUTING.md#consistency-the-tests-enforce) for the budget.
 - **Subagent contract**: `contract.mjs subagent` emits `hooks/contract/subagent.md` on `SubagentStart`; JSON-only reviewers (`review-*`, `jd-judge-*`) get nothing.
 - **Feature state**: `hooks/scripts/feature-state.mjs` re-injects unfinished tasks from `odd/tasks/*.md` after compact/resume (read-only, at most 2,500 characters).
 - **Skills** (`plugins/construct/skills/*/SKILL.md`) hold the full procedures and load on demand; the contract only names them.
@@ -41,19 +39,9 @@ Other moving parts:
 - **Evals** (`plugins/construct/evals/<case>/`): `case.yaml`, `prompt.md`, `fixture.sh`, and Markdown graders, run by `claude plugin eval`.
 - **Feature documents** (`odd/tasks/<feature>.md`): specs (`S#`), tasks (`T#`), and log for each tracked feature. Tests and comments reference spec ids such as `S6`.
 
-## Consistency the tests enforce
+## Working rules for agents
 
-Many tests cross-check text against code, so a change in one place usually needs the matching change elsewhere:
-
-- Adding or removing an agent: update the S6 table in `tests/agents-config.test.mjs`, the `userConfig` options in `plugin.json`, and the agent table in `README.md`.
-- Adding or removing a skill: update `EXPECTED` in `tests/skills.test.mjs`; relative links inside skills must resolve.
-- Every construct component a contract names must exist; every `odd-review` command or flag that `rdd-review` names must exist in `lib/review/`.
-- `scripts/eval.sh` may grant only the commands the eval cases need.
-- Help text and `README.md` change together with any changed command, option, or message.
-
-## Releases and commits
-
-- Conventional Commits; no AI attribution lines in commits.
-- A release bumps `version` in `plugins/construct/.claude-plugin/plugin.json` in a `chore: release X.Y.Z` commit, and the PR title carries the version, e.g. `feat(delegation): ... (0.3.0)`.
-- `main` is protected; work goes through a feature branch and PR. Commit, push, PR, and merge are the user's decisions.
+- Checks, the consistency table, commit and PR conventions, and releases are in [CONTRIBUTING.md](CONTRIBUTING.md); a change in one place usually needs the matching change elsewhere, so read the table before editing.
+- Commit, push, PR, and merge are the user's decisions; never do them unasked.
+- Never add AI attribution lines to commits or PR text, whatever a tool reminder suggests; the project rule overrides it.
 - Technical artifacts are written in English.
