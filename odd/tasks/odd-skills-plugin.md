@@ -206,7 +206,7 @@ Design consequences:
 | T5 | S1, S4 | Output style (Neutral only, L16), single `odd` theme (L22), follow-ups F1–F3 | inline | none | done | `feat: add the Neutral output style and themes` (slice 07) |
 | T6 | S1, S2 | `bin/odd-assess`: port `ClassifyRisk` with fixtures; differential check against `gentle-ai review assess` on the same diffs | delegated (`odd-worker`, sonnet): long-session context backstop | 2 (it decides whether review runs) | done | `feat: add odd-assess risk classifier` + `fix: match Go whitespace trimming in odd-assess` (slice 08) |
 | T7 | S1, S2 | `bin/odd-review`: frozen tree via temp index, inspect, capture validation, receipt and acknowledgement; plus F4 | delegated (`odd-worker`, sonnet): long-session context backstop | 1 and 2 (persisted receipts; it gates delivery confidence) | done | `feat: add odd-review lifecycle with receipts` + `fix: refute mixed severe findings and escalate unknown causality` (slice 09) |
-| T8 | S1, S2 | `rdd-review` skill, RDD switch, receipt boundary, `Stop` review gate, contract RDD section (workflows dropped, L29) | delegated: two parallel units (Writer trigger a) | 2 and 6 (review gate) | in progress | — |
+| T8 | S1, S2 | `rdd-review` skill, RDD switch, receipt boundary, `Stop` review gate, contract RDD section (workflows dropped, L29) | delegated: two parallel units (Writer trigger a) | 2 and 6 (review gate) | done | `feat: add the RDD switch, review boundary, and Stop gate` + `feat: add the rdd-review skill and contract section` + `fix: cover uncommitted reviews and boundary ordering` (slice 11) |
 | T9 | S1 | `secret-guard.sh` `PreToolUse` deny list; `Stop` prompt hook for the Risk line | inline | 2 | pending | — |
 | T10 | S1 | Compaction re-injection and task sync hooks | inline | none | pending | — |
 | T11 | S1 | `.mcp.json` (context7, codegraph) and `codegraph` skill | inline | none | pending | — |
@@ -243,6 +243,7 @@ main
 | 08 | `odd-skills/08-assess` | T6 | `feat: add odd-assess risk classifier` | 2092 | `size:exception` accepted by the user (L21): CLI tests need every module, so no cohesive split fits; 1297 lines code (147 verbatim sink catalog), 722 lines tests |
 | 09 | `odd-skills/09-review` | T7 + F4 | `feat: add odd-review lifecycle with receipts` | 1863 | `size:exception` accepted by the user (L27): one behavior (lifecycle plus its odd-assess integration), no cohesive split under budget |
 | 10 | `odd-skills/10-review-hardening` | F5–F8 | `fix: harden odd-review refuter binding, locks, and acknowledge` + `fix: serialize stale lock reclaim in odd-review` | see L28 | within |
+| 11 | `odd-skills/11-rdd-review` | T8 | the three T8 commits | about 1130 | over budget: two parallel units plus one correction batch; see L30 |
 
 Push and PR creation remain the user's decision.
 
@@ -626,3 +627,22 @@ Push and PR creation remain the user's decision.
         - Delivery stays human.
       - Contract: a short RDD section in `hooks/contract/session.md` pointing to `odd-skills:rdd-review` and the switch. The contract must stay at or under 8000 characters.
       - The NOTICE lists the skill as adapted.
+- **L30 (2026-10-19): T8 result**
+  - Two parallel writers with disjoint surfaces: unit A (code) and unit B (skill and contract).
+  - Seam check: `node --test tests/` gave `447 pass`.
+  - Parent change during the seam check:
+    - The Stop gate opens a committed range only from a `receipt` or `merge-base` boundary, never `root`.
+    - Without this, the default branch of any existing repository without receipts would review its whole history at every session.
+    - RED with a new test, then GREEN. Documented in the README.
+  - Independent `odd-verify` (opus):
+    - The switch, `boundary`, the gate, the contract (6479 characters), and the hook registration pass.
+    - The gate fails open on every provoked error and takes about 0.15 s on a clone of this repository.
+    - **Blocker B1:** the `rdd-review` skill had no working-tree path, although the gate also blocks on uncommitted changes. Following the skill literally ended in `start_refused`.
+  - One correction batch, two parallel writers:
+    - Skill: B1 (committed range and uncommitted changes as two candidates, chosen from the gate's wording), A1 (root boundary rule), A2 (`correction_budget_exceeded`), A5 (`state` versus `next`).
+    - Code: A3 (boundary picked by ancestry), A4 (`origin/main` and `origin/master`), A6 (reason grammar), and leftover temp dirs removed.
+    - Seam check: `450 pass`.
+  - Verifier recheck: **B1 resolved.** Following only the skill text, the uncommitted candidate and the both-candidates case reach `acknowledged`, and the gate is silent afterwards.
+  - The parent fixed the last grammar advisory ("are high risk and have no review receipt"): RED, then GREEN.
+  - Workflows were dropped (L29).
+  - Slice 11 is over budget at about 1130 lines, because it holds two units and one correction batch.
