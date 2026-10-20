@@ -19,7 +19,7 @@ Source: "Tengo esta propuesta de output style pero se que puede ser mas que eso 
 |---|---|---|---|---|---|---|
 | T1 | S1, S6 | New style file, remove `neutral.md`, `tests/styles.test.mjs`, `status.test.ts`, README, CLAUDE.md | odd-worker | 3 | done | `feat(style): replace Neutral with the Principal Engineer style` |
 | T2 | S2 | Subagent contract rules + contract test | odd-worker | 3 | done | `feat(contract): add engineering rules to the subagent contract` |
-| T3 | S3, S4 | Session contract autonomy and close + contract test | odd-worker | 3 | pending | — |
+| T3 | S3, S4 | Session contract autonomy and close + contract test | odd-worker | 3 | done | `feat(contract): scale autonomy with the verifier and unify the close` |
 | T4 | S4, S5 | odd-workflow, odd-delegation, odd-worker agent, risk-line grader | odd-worker | 3 | pending | — |
 | T5 | — | Release 0.8.0 (`plugin.json`) | odd-worker | 5 | pending | — |
 
@@ -33,6 +33,7 @@ Risk item 3: every session consumes the output style and the contracts; the Stop
 - **L2 (2026-10-20, parent):** Analysis: the proposal wins on substance (calm voice, never weaken the verifier, reproduce first, preference ladder, `shortcut:` marker, self-review, reaffirmed decisions). Gaps: the output style does not reach subagents, who write all code, so code rules go to the subagent contract; "No verifier: do not act" conflicts with work continuity and would block docs; its closing line duplicates the Risk line; it lacks `force-for-plugin` and the current Working Rules. Session contract was 6,853/8,000 characters; subagent contract 1,524.
 - **L3 (2026-10-20, user):** "Si vamos a cambiarlo a Principal Engineer y como quedaria el plan", then "Dale con el Plan!".
 - **L4 (2026-10-20):** T1 done: `principal-engineer.md` (7,549 chars) replaces `neutral.md`; code-writing sections replaced by a pointer to the subagent contract; No-verifier bullet per S3; close per S4; Working Rules kept. RED: styles test expected `principal-engineer.md`, got `neutral.md`. `status.test.ts` L170 renamed to keep its intent. T2 done: 5 bullets in `subagent.md` (1,524 → 2,303 chars; test cap 3,000); RED: new contract test failed against the old contract. `node --test tests/` 627 pass; `claude plugin test` 139 pass; validate passed. CLAUDE.md edited, not staged.
+- **L5 (2026-10-20):** T3 done: Close step names failed, skipped, or unverified checks and the Risk line (format paragraph untouched); one "Work continuity" bullet scales autonomy to the verifier (weak verifier counts as missing proof; docs diff is the verifier). RED: new contract test failed first. Emitted contract 7,385 chars (all codegraph variants ≤ 8,000 by test). `node --test tests/` 628 pass; `claude plugin test` 139 pass.
 
 ## Appendix A — proposal (verbatim)
 

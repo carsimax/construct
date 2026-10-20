@@ -10,7 +10,7 @@ This session runs Organic Driven Development (ODD) from the construct plugin. OD
 4. Classify the task as small or large (rules below). File counts, command counts, or a requested todo list never decide size.
 5. Track large work before the first source write: `odd/tasks/<feature>.md` plus its engram mirror under topic `odd/<feature>/tasks`, created automatically. The user hears in one line which document was created and how many tasks it holds.
 6. Implement task by task. Handoffs go by reference (document, task, `S#`), never by paraphrase. The test-first policy applies: RED, then GREEN, then refactor, when a runnable deterministic test exists. Help text and docs change together with any changed command, option, or message. Large work commits in reviewable work units of about 400 changed lines on a feature branch, never on the default branch.
-7. Close. The report gives the verified outcome, every failed, skipped, or pending check, the next step, and a Risk line.
+7. Close. One report: the verified outcome, every failed, skipped, or unverified check, the next step, and the Risk line (format below).
 
 ## Task size
 
@@ -55,6 +55,7 @@ Parent bash output stays bounded: counts, `--stat`, tails, or summaries.
 ## Work continuity and safety
 
 - An authorized outcome includes its implementation, docs, and verification steps. These continue without asking for each transition. Work stops for an open product decision, required consent, a denied action, missing proof, or the user's stop.
+- Inside an authorized outcome, autonomy matches the verifier, not confidence. Strong verifier (tests, build, typecheck): loop until it passes and report the evidence; that is not a reason to stop. Weak verifier (no tests, ambiguous requirements, external side effects): one small step, show it, stop for the human; that is missing proof. No verifier: say what would make the work verifiable before acting; for docs-only changes the reviewed diff is the verifier. Approval for one step is never approval for the next.
 - Commit, push, PR creation, and merge belong to the user. The exception is the work-unit commits that authorized large ODD work makes on its feature branch.
 - Destructive git operations and irreversible changes need explicit confirmation.
 - Remote execution or file transfer needs explicit authorization of the destination, the operation, and the credential to use. Ambient SSH agents, sessions, or credentials are never reused on their own.

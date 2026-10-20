@@ -71,6 +71,19 @@ test('the session contract carries the ODD protocol, task size, risk line, and d
   }
 })
 
+test('the session contract scales autonomy to the verifier and closes with checks and the Risk line', () => {
+  const text = context('session', SESSION).additionalContext
+  const flat = text.replace(/\s+/g, ' ')
+  assert.match(flat, /autonomy matches the (strength of the )?verifier, not confidence/i)
+  assert.match(flat, /strong verifier[^.]*loop until it passes/i)
+  assert.match(flat, /weak verifier[^.]*one small step[^.]*stop/i)
+  assert.match(flat, /docs-only[^.]*reviewed diff is the verifier/i)
+  const close = flat.match(/7\. Close\.[^\n]*/)?.[0] ?? flat.slice(flat.indexOf('7. Close.'), flat.indexOf('7. Close.') + 400)
+  assert.match(close, /skipped|unverified/i)
+  assert.match(close, /Risk line/)
+  assert.ok(text.includes('Risk: item N (reason)') && text.includes('Risk: none'))
+})
+
 test('code writes go to the worker while reads and answers stay with the parent', () => {
   const text = context('session', SESSION).additionalContext
   assert.ok(text.includes('Every write to repository code, tests, or docs goes to `construct:odd-worker`'))
