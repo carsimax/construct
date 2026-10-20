@@ -23,7 +23,8 @@ const MIGRATION_EXTENSIONS = [
 // Plain test directories are never evidence for these item rules. The wider
 // isTestRiskPath is left alone because other classifier rules rely on it.
 const TEST_DIRECTORIES = ['test', 'tests', 'spec']
-const FLYWAY_NAME = /^[vur]\d+(?:[._]\d+)*__.+\.sql$/
+// Flyway: V<version>__ and U<version>__ carry a version; repeatable R__ has none.
+const FLYWAY_NAME = /^(?:[vu]\d+(?:[._]\d+)*|r)__.+\.sql$/
 
 const KEY_BASENAME = /^id_(?:rsa|dsa|ecdsa|ed25519)(?:_.+)?$/
 const PUBLIC_KEY_EXTENSION = '.pub'
@@ -54,9 +55,12 @@ export function isMigrationPath(path) {
   const base = segments[segments.length - 1]
   if (DOCUMENT_EXTENSIONS.includes(goExt(base))) return false
   if (FLYWAY_NAME.test(base)) return true
-  if (!MIGRATION_EXTENSIONS.includes(goExt(base))) return false
+  // An extensionless file in a migration directory counts (fail toward high).
+  const ext = goExt(base)
+  if (ext !== '' && !MIGRATION_EXTENSIONS.includes(ext)) return false
   const dirs = segments.slice(0, -1)
   if (dirs.some((segment) => MIGRATION_DIRECTORIES.includes(segment))) return true
+  if (ext === '') return false
   // Rails keeps migrations in db/migrate; a bare migrate directory is a CLI command.
   if (dirs.some((segment, index) => segment === 'db' && dirs[index + 1] === 'migrate')) return true
   // Alembic keeps revisions in <env>/versions next to env.py.

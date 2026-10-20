@@ -18,6 +18,10 @@ const HIGH = [
   ['Knex migrations', {}, { 'knex/migrations/20240101_a.js': 'exports.up = () => {}\n' }, ['database_migration:knex/migrations/20240101_a.js']],
   ['Alembic versions', {}, { 'alembic/versions/abc123_add.py': 'revision = "abc"\n' }, ['database_migration:alembic/versions/abc123_add.py']],
   ['Flyway db/migration', {}, { 'db/migration/V1__init.sql': DDL }, ['database_migration:db/migration/V1__init.sql']],
+  ['Flyway repeatable migration', {}, { 'db/migration/R__views.sql': 'CREATE VIEW v AS SELECT 1;\n' }, ['database_migration:db/migration/R__views.sql']],
+  ['Flyway repeatable migration under migrations/', {}, { 'migrations/R__views.sql': 'CREATE VIEW v AS SELECT 1;\n' }, ['database_migration:migrations/R__views.sql']],
+  ['Flyway undo migration', {}, { 'sql/U3__drop_col.sql': DDL }, ['database_migration:sql/U3__drop_col.sql']],
+  ['extensionless file in migrations/', {}, { 'migrations/0005_up': 'ALTER TABLE a ADD b int;\n' }, ['database_migration:migrations/0005_up']],
   ['Flyway versioned name outside a migration dir', {}, { 'sql/V2_1__add_col.sql': DDL }, ['database_migration:sql/V2_1__add_col.sql']],
   // item 1: destructive SQL by content
   ['DROP TABLE in a .sql file', {}, { 'sql/cleanup.sql': 'DROP TABLE IF EXISTS sessions;\n' }, ['destructive_sql:sql/cleanup.sql']],
@@ -99,6 +103,7 @@ describe('items 1, 2, 5 negatives keep their earlier tier', () => {
     ['a migrate directory outside db/ is not a migration', {}, { 'src/commands/migrate/index.js': 'export const a = 1\n' }, 'medium', ['executable_change:src/commands/migrate/index.js']],
     ['a text file in a migrations directory is not a migration', {}, { 'guide/migrations/upgrade-v2.txt': 'Upgrade notes\n' }, 'medium', ['executable_change:guide/migrations/upgrade-v2.txt']],
     ['an .rst file in a migrations directory is not a migration', {}, { 'guide/migrations/notes.rst': 'Notes\n' }, 'passive', ['non_executable_only']],
+    ['a notes.txt in migrations stays prose', {}, { 'migrations/notes.txt': 'Notes\n' }, 'medium', ['executable_change:migrations/notes.txt']],
     ['a test/ migration is test data', {}, { 'test/migrations/0001.sql': DDL }, 'medium', ['executable_change:test/migrations/0001.sql']],
     ['a spec/ destructive SQL is test data', {}, { 'spec/sql/drop.sql': 'DROP TABLE a;\n' }, 'medium', ['executable_change:spec/sql/drop.sql']],
     ['a tests/ PEM header is test data', {}, { 'tests/keys.py': `K = \"\"\"${PEM}\"\"\"\n` }, 'medium', ['executable_change:tests/keys.py']],
@@ -135,6 +140,9 @@ describe('path predicates', () => {
     assert.equal(isMigrationPath('src/migrate.go'), false)
     assert.equal(isMigrationPath('src/commands/migrate/index.js'), false)
     assert.equal(isMigrationPath('guide/migrations/upgrade-v2.txt'), false)
+    assert.equal(isMigrationPath('migrations/0005_up'), true)
+    assert.equal(isMigrationPath('migrations/notes.txt'), false)
+    assert.equal(isMigrationPath('sql/R__views.sql'), true)
     assert.equal(isMigrationPath('migrations/0001.sql'), true)
     assert.equal(isMigrationPath('migrations/0003.ts'), true)
     assert.equal(isMigrationPath('db/migrate/001.rb'), true)

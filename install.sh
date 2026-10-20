@@ -90,7 +90,7 @@ preflight() {
   local rc=0
   settings_tool check || rc=$?
   if [ "$rc" = 4 ]; then
-    fail "$HOME/.claude/settings.json is a symlink loop or a link through a path that is not a directory, so nothing was installed; fix the link and run the installer again"
+    fail "$HOME/.claude/settings.json cannot be read because a component of its path is not a directory, or its link loops, so nothing was installed; fix the path and run the installer again"
   fi
   [ "$rc" = 0 ] || fail "nothing was installed"
   if ! has engram; then
