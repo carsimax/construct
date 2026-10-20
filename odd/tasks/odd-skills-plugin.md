@@ -399,4 +399,5 @@ Push and PR creation remain the user's decision.
     - One theme assertion of mine was wrong (theme `name` is the display name `Gentleman Cute`, not the file name) and was corrected.
     - `node --test tests/`: `22 pass`. `claude plugin test`: `7 pass`. `validate --strict`: passed.
   - Not verified live: theme loading and the plugin output style showing in `/config`. `validate` checks both paths.
+  - RDD on slice 07 (`--base-ref 79efa7f`, 217 lines): `high` because of `scripts/eval.sh` (process boundary, shell source). The user granted consent. Lens `review-risk`, lineage `review-e8435be81ded762e`: **approved** with no findings, then acknowledged.
   - Next step: T6 (`bin/odd-assess`, port of `ClassifyRisk`).
