@@ -34,15 +34,17 @@ function scanTasks(markdown) {
   if (!/^\|?\s*:?-{3,}/.test(lines[i + 1] ?? '')) return null
   let open = 0
   let first = null
+  const tasks = []
   for (i += 2; i < lines.length && lines[i].trim().startsWith('|'); i++) {
     const cells = splitRow(lines[i])
     if (cells.length < header.length) return null
+    tasks.push({ id: cells[idCol], done: FINISHED.has(cells[status].toLowerCase()) })
     if (!FINISHED.has(cells[status].toLowerCase())) {
       open++
       first ??= { id: cells[idCol], title: cells[titleCol] }
     }
   }
-  return { open, first }
+  return { open, first, tasks }
 }
 
 // Number of unfinished rows, or null when the table is missing or malformed.
@@ -61,7 +63,7 @@ function newest(docs) {
       continue
     }
     if (!scan?.open) continue
-    if (best === null || doc.mtimeMs > best.mtimeMs) best = { mtimeMs: doc.mtimeMs, feature: doc.name.slice(0, -3), open: scan.open, task: scan.first }
+    if (best === null || doc.mtimeMs > best.mtimeMs) best = { mtimeMs: doc.mtimeMs, feature: doc.name.slice(0, -3), open: scan.open, task: scan.first, tasks: scan.tasks }
   }
   return best
 }
@@ -72,8 +74,9 @@ export function activeFeature(docs) {
   return best ? { feature: best.feature, open: best.open } : null
 }
 
-// Same document as activeFeature, plus its first unfinished task: { feature, open, task: { id, title } }, or null.
+// Same document as activeFeature, plus its first unfinished task and every task row as
+// { feature, open, task: { id, title }, tasks: [{ id, done }] }, or null.
 export function activeWork(docs) {
   const best = newest(docs)
-  return best ? { feature: best.feature, open: best.open, task: best.task } : null
+  return best ? { feature: best.feature, open: best.open, task: best.task, tasks: best.tasks } : null
 }

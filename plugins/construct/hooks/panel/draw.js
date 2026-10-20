@@ -69,14 +69,46 @@ export function laneBar(geo) {
 // How many session log rows fit: what the other cards leave, never fewer than 4 nor more than 8.
 export const logRows = (bodyRows, used) => Math.max(4, Math.min(8, Math.floor(bodyRows - used - 3)))
 
+// Largest-remainder split of `width` cells among `counts` (an array of numbers, in drawing order):
+// each non-zero count gets at least one cell and the cells sum to `width` (none when every count is 0
+// or width is 0). Returns an array of cell counts, one per input count.
+export function stackBar(counts, width) {
+  const list = (Array.isArray(counts) ? counts : []).map((n) => (isNum(n) && n > 0 ? n : 0))
+  const w = Math.max(0, Math.floor(isNum(width) ? width : 0))
+  const total = list.reduce((a, b) => a + b, 0)
+  if (total === 0 || w === 0) return list.map(() => 0)
+  const nonZero = list.filter((n) => n > 0).length
+  if (nonZero >= w) {
+    // No room for a cell each: the largest counts keep one.
+    const keep = [...list.keys()].filter((i) => list[i] > 0).sort((a, b) => list[b] - list[a]).slice(0, w)
+    return list.map((_, i) => (keep.includes(i) ? 1 : 0))
+  }
+  const spare = w - nonZero
+  const exact = list.map((n) => (n > 0 ? (n / total) * spare : 0))
+  const cells = list.map((n, i) => (n > 0 ? 1 + Math.floor(exact[i]) : 0))
+  let left = w - cells.reduce((a, b) => a + b, 0)
+  const order = [...list.keys()].filter((i) => list[i] > 0).sort((a, b) => exact[b] - Math.floor(exact[b]) - (exact[a] - Math.floor(exact[a])))
+  for (let k = 0; left > 0; k = (k + 1) % order.length, left--) cells[order[k]]++
+  return cells
+}
+
 function textNode(content, props) {
   return { type: 'Text', props, children: [content] }
 }
 
+// A round bordered column: `dim` dims the border, `marginTop` and `width` are optional.
+export function panelBox({ color, dim, width, marginTop, children = [] }) {
+  const props = { flexDirection: 'column', borderStyle: 'round', borderColor: color, paddingX: 1 }
+  if (dim) props.borderDimColor = true
+  if (isNum(width)) props.width = width
+  if (isNum(marginTop) && marginTop > 0) props.marginTop = marginTop
+  return { type: 'Box', props, children }
+}
+
 // A round bordered card: a bold title on the left and the status on the right of one
 // row, then `children` (element objects). `status` is a string (in the card color) or
-// { text, color, dim }; `width` is omitted to let the pane size the card.
-export function card({ title, status, color, children = [], width }) {
+// { text, color, dim }; `width` is omitted to let the pane size the card; `dim` dims the border.
+export function card({ title, status, color, children = [], width, dim }) {
   const head = [textNode(title, { color, bold: true })]
   if (status !== undefined && status !== null) {
     const s = typeof status === 'string' ? { text: status, color } : status
@@ -85,11 +117,5 @@ export function card({ title, status, color, children = [], width }) {
     else if (s.color) props.color = s.color
     head.push(textNode(s.text, props))
   }
-  const props = { flexDirection: 'column', borderStyle: 'round', borderColor: color, paddingX: 1 }
-  if (isNum(width)) props.width = width
-  return {
-    type: 'Box',
-    props,
-    children: [{ type: 'Box', props: { justifyContent: 'space-between' }, children: head }, ...children],
-  }
+  return panelBox({ color, dim, width, children: [{ type: 'Box', props: { justifyContent: 'space-between' }, children: head }, ...children] })
 }

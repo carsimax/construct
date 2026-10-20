@@ -65,7 +65,7 @@ async function leaves(ui) {
   const out: string[] = []
   const walk = (node) => {
     if (typeof node === 'string' || node == null) return
-    if (node.type === 'Text') {
+    if (node.type === 'Text' && !(node.children ?? []).some((k) => k?.type === 'Text')) {
       out.push((node.children ?? []).filter((k) => typeof k === 'string').join(''))
       return
     }
@@ -128,7 +128,7 @@ test('a main-thread Write outside odd/tasks shows the inline alert', async ($, o
   await settle()
   const p = await pane($)
   await p.redraw()
-  expect(await joined(p)).toMatch(/inline writes\s+1/)
+  expect(await joined(p)).toContain('⚠ 1 inline write')
   expect(await joined(p)).toContain('a.js')
 })
 
@@ -169,8 +169,10 @@ test('spawn makes a card and passes the spawn result through', async ($, on) => 
   await settle()
   const p = await pane($)
   await p.redraw()
-  expect(await joined(p)).toContain('sonnet')
-  expect(await joined(p)).toContain('0 steps')
+  const text = await joined(p)
+  expect(text).toContain('agents · 1 running · 1 total')
+  expect(text).toContain('1: odd_worker')
+  expect(text).toContain('spawned')
 })
 
 test('new hooks pass events through unchanged', async ($, on) => {
@@ -199,10 +201,10 @@ test('with panel_open_on_start false the pane stays closed on start', { options:
   expect(await isUp($)).toBe(false)
 })
 
-test('the pane is requested at 56 columns, titled Construct', { options: { panel_open_on_start: true } }, async ($, on) => {
+test('the pane is requested at 66 columns, titled Construct', { options: { panel_open_on_start: true } }, async ($, on) => {
   opens.length = 0
   await start($, on)
   expect(opens.length).toBeGreaterThan(0)
-  expect(opens[0].columns).toBe(56)
+  expect(opens[0].columns).toBe(66)
   expect(opens[0].title).toBe('Construct')
 })

@@ -215,14 +215,11 @@ async function drawPane($, e, next) {
   if (e.requestId !== PANEL_ID) return next(e)
   const live = await readLive($)
   const panel = merge(await read($, PANEL))
-  // The replica fills in for a statusLine the user has not set; with one, it would show everything twice.
-  const replica =
-    data && !data.hasStatusLine
-      ? { usage: live.usage, dir: live.dir, home: data.home, git: data.git, worktree: data.worktree, model: live.model, effort: status.effort, style: data.style, agent: data.agent }
-      : null
   const tree = buildPanel({
     panel,
-    replica,
+    usage: live.usage,
+    model: live.model,
+    effort: status.effort,
     odd: data?.odd ?? null,
     rdd: data?.rdd ?? null,
     nowMs: live.nowMs,
