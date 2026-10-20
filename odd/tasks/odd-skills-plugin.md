@@ -472,3 +472,11 @@ Push and PR creation remain the user's decision.
 - **L23 (2026-10-19, user):** "por que como podriamos bautizar este plugin para que no sea odd? quiero nombres originales", "otrod nombres mas pro?", "y por ejemplo relacionado a la mitologia girega, nordica, japonesa?"
   - Plugin renaming is under discussion. Candidates offered: Ariadne (recommended), Norns, Omoikane, Metis, Huginn, Keel, and Praxis.
   - The rename is planned as one final commit across the manifest, marketplace, `odd-skills:` prefixes, the routing mod, the contract filter, tests, and docs. Collisions are to be checked first.
+- **L24 (2026-10-19, user):** "sigo pensamdo ideas de nombres, sigueme proponiendo, algo relacionado a la cultura mexicana?"
+  - More candidates offered: Milpa (recommended), Tequio, Tlacuilo, Xólotl, Nahual, Itzamná, plus Tianguis as the marketplace name.
+  - The name is still open.
+- **RDD on slice 08** (`--base-ref cb90fb2`, 2301 lines):
+  - `gentle-ai review assess` and `odd-assess` agree: `high`, `executable_mode` on `plugins/odd-skills/bin/odd-assess`.
+  - The user granted consent. The candidate fit the reviewer budget.
+  - Lenses `review-risk` and `review-reliability`, lineage `review-a9203826f6a28e9f`: **approved**, then acknowledged.
+  - Advisory finding, tracked as follow-up **F4** (R3, WARNING): `--committed-only` without `--base-ref` is silently ignored (`lib/assess/cli.mjs:42`). Make it a usage error (exit 2) with a test.
