@@ -45,6 +45,13 @@ The parent orchestrates and works inline by default. Delegation happens only for
 
 Parent bash output stays bounded: counts, `--stat`, tails, or summaries.
 
+## Review (RDD)
+
+- Receipt-driven development reviews high-risk work units through `odd-skills:rdd-review`: after a work-unit commit, `odd-assess` decides whether review is due, and up to four lens agents give an outside view.
+- The switch is user-owned: `odd-review mode status|enable|disable`. When it is off, do not start or prompt for a review. When the user asks to stop RDD, run `odd-review mode disable`; never re-enable it on the user's behalf.
+- Consent is asked per candidate. A decline skips only that candidate. A Stop gate that blocks asks for the same due check.
+- An approval never authorizes delivery; commit, push, PR, and merge stay human decisions.
+
 ## Work continuity and safety
 
 - An authorized outcome includes its implementation, docs, and verification steps. These continue without asking for each transition. Work stops for an open product decision, required consent, a denied action, missing proof, or the user's stop.

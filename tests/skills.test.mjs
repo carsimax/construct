@@ -16,6 +16,7 @@ const EXPECTED = [
   'lossless-prompts',
   'odd-delegation',
   'odd-workflow',
+  'rdd-review',
   'skill-creator',
   'skill-improver',
   'task-size-risk',
@@ -82,4 +83,20 @@ test('the MIT notice for the ported material ships with the plugin', () => {
   const notice = readFileSync(join(pluginRoot, 'NOTICE'), 'utf8')
   assert.match(notice, /MIT License/)
   assert.match(notice, /Copyright \(c\) 2025 Gentleman Programming/)
+})
+
+test('every odd-review command and CLI flag named in rdd-review exists in the CLI implementations', () => {
+  const reviewCli = readFileSync(join(pluginRoot, 'lib/review/cli.mjs'), 'utf8')
+  const assessCli = readFileSync(join(pluginRoot, 'lib/assess/cli.mjs'), 'utf8')
+  const commandBlock = reviewCli.match(/const ACCEPTS = \{([\s\S]*?)\n\}/)?.[1] ?? ''
+  const commands = new Set([...commandBlock.matchAll(/^\s*'?([a-z-]+)'?:/gm)].map((m) => m[1]))
+  const flags = (src) => new Set([...src.matchAll(/^\s*'?([a-z-]+)'?: \{ type:/gm)].map((m) => m[1]))
+  const known = new Set([...flags(reviewCli), ...flags(assessCli)])
+  const text = filesUnder(join(skillsRoot, 'rdd-review')).map((f) => readFileSync(f, 'utf8')).join('\n')
+  const used = [...text.matchAll(/odd-review ([a-z][a-z-]*)/g)].map((m) => m[1])
+  assert.ok(used.length > 5, 'the skill names odd-review commands')
+  for (const name of new Set(used)) assert.ok(commands.has(name), `odd-review ${name} is not implemented in lib/review/cli.mjs`)
+  const usedFlags = [...text.matchAll(/(?<![\w-])--([a-z][a-z-]*)/g)].map((m) => m[1])
+  assert.ok(usedFlags.length > 5, 'the skill names flags')
+  for (const flag of new Set(usedFlags)) assert.ok(known.has(flag), `--${flag} is not implemented`)
 })

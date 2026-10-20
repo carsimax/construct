@@ -60,6 +60,8 @@ test('the session contract carries the ODD protocol, task size, risk line, and d
     'odd-skills:odd-delegation',
     'odd-skills:task-size-risk',
     'odd-skills:lossless-prompts',
+    'odd-skills:rdd-review',
+    'odd-review mode',
   ]) {
     assert.ok(text.toLowerCase().includes(anchor.toLowerCase()), `missing ${anchor}`)
   }

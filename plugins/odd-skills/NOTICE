@@ -10,6 +10,8 @@ Adapted material:
 - skills/odd-workflow, odd-delegation, task-size-risk, lossless-prompts and
   hooks/contract/session.md, subagent.md (condensed from the orchestrator,
   routing, research, and persistence guidance)
+- skills/rdd-review (adapted from the review ledger guidance: consent per
+  candidate, lens selection by consequence, one bounded correction)
 
 The adapted files were modified for odd_skills: product-specific commands,
 registry references, and per-agent managed blocks were removed or replaced,
