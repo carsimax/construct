@@ -132,6 +132,23 @@ test('S5: odd-delegation handoff names the verifier and its strength', () => {
   assert.match(t, /stops after one step/)
 })
 
+test('A2: weak and missing verifiers are distinguished in the worker, handoff, and delegation docs', () => {
+  for (const f of ['odd-delegation/references/handoffs.md', 'odd-delegation/SKILL.md', '../agents/odd-worker.md']) {
+    const t = readFileSync(join(skillsRoot, f), 'utf8')
+    assert.match(t, /ambiguous requirements or external side effects/, f)
+    assert.match(t, /no verifier/i, f)
+    assert.match(t, /what would make (it|the work) verifiable/, f)
+    assert.match(t, /docs-only[^\n]*reviewed diff is the verifier/, f)
+    assert.doesNotMatch(t, /weak \(none or ambiguous\)/, f)
+  }
+})
+
+test('A3: odd-workflow Close reports without another verification loop and loops only during implementation', () => {
+  const t = readFileSync(join(skillsRoot, 'odd-workflow/SKILL.md'), 'utf8')
+  assert.match(t, /during implementation[^\n]*loop until it passes/i)
+  assert.match(t, /\*\*Close\.\*\*[^\n]*reports[^\n]*never starts another verification loop/)
+})
+
 test('S5: odd-workflow Close names skipped or unverified checks', () => {
   const t = readFileSync(join(skillsRoot, 'odd-workflow/SKILL.md'), 'utf8')
   assert.match(t, /\*\*Close\.\*\*[^\n]*unverified/)

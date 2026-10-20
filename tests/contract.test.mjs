@@ -119,6 +119,11 @@ test('SubagentStart carries the S2 engineering rules for writers', () => {
   assert.ok(text.includes('`shortcut: <the limit>, <when to upgrade>`'))
   assert.match(text, /review your own diff as if someone else wrote it/i)
   assert.match(text, /missing test is a finding/i)
+  assert.match(text, /finish every caller, test, and fixture/i)
+  assert.match(text, /short means quick to read/i)
+  assert.match(text, /equal.size options.*correct on edge cases/i)
+  assert.match(text, /never ship code .*explain.*line by line/i)
+  assert.ok(text.length <= 3000, `length ${text.length}`)
 })
 
 test('SubagentStart injects nothing into agents that must return a single JSON object', () => {
@@ -406,5 +411,30 @@ test('auto-index launches only on startup (or a missing source); resume, clear, 
   } finally {
     rmSync(dir, { recursive: true, force: true })
     rmSync(bin, { recursive: true, force: true })
+  }
+})
+
+test('every notice variant stays under 8,000 characters for long project paths, including resume with auto-index', () => {
+  const { bin } = fakeCli()
+  const empty = mkdtempSync(join(tmpdir(), 'construct-emptybin-'))
+  const roots = []
+  try {
+    for (const target of [150, 200]) {
+      const base = project()
+      roots.push(base)
+      const dir = join(base, 'p'.repeat(target - base.length - 1))
+      mkdirSync(join(dir, '.git'), { recursive: true })
+      assert.equal(dir.length, target)
+      for (const source of ['startup', 'resume', 'clear', 'compact']) {
+        const variants = [
+          context('session', { ...SESSION, source, cwd: dir }).additionalContext,
+          context('session', { ...SESSION, source, cwd: dir }, autoEnv(bin)).additionalContext,
+          context('session', { ...SESSION, source, cwd: dir }, { CLAUDE_PLUGIN_OPTION_CODEGRAPH_AUTO_INDEX: 'true', PATH: empty }).additionalContext,
+        ]
+        for (const v of variants) assert.ok(v.length <= 8000, `${source} ${target}: ${v.length} chars`)
+      }
+    }
+  } finally {
+    for (const d of [bin, empty, ...roots]) rmSync(d, { recursive: true, force: true })
   }
 })

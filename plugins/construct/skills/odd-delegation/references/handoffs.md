@@ -38,7 +38,7 @@ Runner: <command>. One RED test per rule; prove previous behavior of touched com
 
 ## Verification
 <exact commands to run in the foreground; these are the unit's verifier>
-Verifier strength: <strong (tests, build, typecheck): loop until it passes | weak (none or ambiguous): the worker stops after one step and reports>
+Verifier strength: <strong (tests, build, typecheck): loop until it passes | weak (ambiguous requirements or external side effects): the worker stops after one step and reports | no verifier: say what would make it verifiable; for docs-only units the reviewed diff is the verifier, so the worker proceeds>
 
 ## Known environmental failures
 <exact failing test names or command lines already failing on the base, with evidence>

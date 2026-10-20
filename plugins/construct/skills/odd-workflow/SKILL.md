@@ -44,11 +44,11 @@ Load this skill for any request that may change code or docs, for planning a fea
 5. **Track** large work: create the feature document (references/feature-document.md), save the engram mirror, and tell the user in one line which document was created and how many tasks it holds.
 6. **Implement task by task.**
    - Hand off by reference (`Spec: odd/tasks/<feature>.md, T2, S3-S4`) and ask which `S#` were covered.
-   - Apply the test-first policy (references/testing.md).
+   - Apply the test-first policy (references/testing.md). During implementation a strong verifier means loop until it passes.
    - Update help text and docs with any changed command, option, or message.
    - After each task, update the document and the mirror.
    - Commit the work unit and record its commit in `## Tasks`.
-7. **Close.** One report: the verified outcome, every failed, skipped, or unverified check, the next step, and the Risk line (the Risk line comes last). Partial or missing proof becomes one **Needs your decision** result, never another verification loop.
+7. **Close.** One report: the verified outcome, every failed, skipped, or unverified check, the next step, and the Risk line (the Risk line comes last). The Close reports and never starts another verification loop. Partial or missing proof becomes one **Needs your decision** result.
 
 To resume an interrupted feature, follow references/persistence.md.
 

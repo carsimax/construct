@@ -89,6 +89,18 @@ describe('check', () => {
     })
   }
 
+  test('accepts a multi-line unified close that ends with the Risk line', () => {
+    const { repo, e } = changed()
+    const close = [
+      'Verified: node --test tests/: 631 pass; claude plugin test plugins/construct: 139 pass.',
+      'Skipped: claude plugin validate (not installed here).',
+      'Not checked: behavior in a real session.',
+      '',
+      'Risk: item 3 (every session consumes the contracts)',
+    ].join('\n')
+    silent(check(repo, e, close))
+  })
+
   test('a rename into odd/tasks reports the deleted source path', () => {
     const repo = makeRepo({ 'src/a.js': 'export const a = 1\n' })
     const e = env()
