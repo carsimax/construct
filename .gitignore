@@ -4,3 +4,4 @@ node_modules/
 .claude/worktrees/
 .atl/
 evals/results/
+plugins/construct/tsconfig.json
