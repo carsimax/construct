@@ -6,7 +6,7 @@ Construct is a Claude Code plugin for Organic Driven Development (ODD). It ships
 
 | Requirement | Why |
 |---|---|
-| Claude Code 2.1.287 or later, signed in | The status band is a mod, and mods need 2.1.287. Tested on 2.1.304 |
+| Claude Code 2.1.304 or later, signed in | The panel and status band are a mod, and the panel needs 2.1.304. Tested on 2.1.304 |
 | Node.js 20 or later, with npm | The plugin's scripts and hooks (`odd-assess`, `odd-review`, the hook scripts). Claude Code's native install does not bundle Node.js |
 | `git` on the PATH | `odd-assess` and `odd-review` read the repository |
 | Homebrew (macOS or Linux) | Installs the engram binary |
@@ -77,7 +77,7 @@ The manual steps the installer runs, for when you want to run them yourself:
    - Ask "what does your Construct contract say about Risk lines?". The answer quotes the `Risk: item N` rule.
    - `/agents` lists the `construct:` agents, such as `construct:odd-worker` and `construct:review-risk`.
    - Ask Claude to run `odd-review mode status`; it prints `{"mode":"on","source":"default"}`. The plugin's `bin/` is on the PATH of Claude's Bash tool only, not your own shell.
-   - After a turn ends, the band above the prompt shows the `RDD` line.
+   - After a turn ends, the band above the prompt shows the RDD state (`clear`, `review due` or `reviewed`), and `/construct` opens the panel with the full `RDD` section.
 
 ## Update
 
@@ -268,22 +268,29 @@ The denial says which rule matched and that the user can run the command manuall
 
 Known lexical limits: the guard reads the command text and cannot see through whole-directory searches such as `grep -rn KEY .`, symlinks, shell globs (`cat .e*`), variables, or obfuscation (`cat $(echo .e)nv`, encoded payloads).
 
-## Status band (mod)
+## Construct panel and status band (mod)
 
-The mod draws a band above the prompt (`AbovePrompt`, which holds a multi-row tree; `PromptHint` is a single text line). It needs Claude Code 2.1.304 or later and does not appear in `claude -p` runs, which draw no interface.
+The mod draws two things. A docked **panel** (a `Pane` with id `construct`) holds the detail, and the **band** above the prompt (`AbovePrompt`) shrinks to one summary line. The panel is modeled on [claude-flightdeck](https://github.com/scasella/claude-flightdeck) (read-only study, no code copied) and adapted to the ODD flow. Both need Claude Code 2.1.304 or later and do not appear in `claude -p` runs, which draw no interface.
 
-What it shows, top to bottom:
+**Commands.** `/construct` opens the panel and `/construct close` closes it. The panel docks beside the transcript from 110 columns in fullscreen, else it sits above the prompt. To open it at every session start, turn on the plugin option `panel_open_on_start` (boolean, default `false`).
 
-1. **Budget line** (replica): context window, 5-hour and 7-day plan limits as 8-cell meters (theme `success` below 50%, `warning` below 80%, `error` above), each limit with its reset (`↻HH:MM`, and `↻Day HH:MM` for 7d).
-2. **Where line** (replica): `~`-shortened directory, git state (`⎇ branch`, `±dirty`, `↑ahead`, `↓behind`, `wt:<worktree>`), `◆ model effort`, `✎ output style`, and `@agent`.
-3. **ODD line**: the active feature document (newest `odd/tasks/*.md` with a task whose status is not `done` or `dropped`, the rule of `feature-state.mjs`) and its open task count.
-4. **RDD line**: the switch (`RDD on` or `RDD off`) and, when on, `review due` (the committed range since `odd-review boundary`, or the uncommitted changes, classify high and have no receipt), `reviewed`, or `clear`. A `root` boundary is not assessed.
+**The band: one line.** `▌ ctx 12% ┊ ⚙ 2 agents ┊ ODD T2 ┊ review due ┊ inline 1`. Each segment shows only when it has something to say: context %, running subagents, the first unfinished task id of the active feature, the RDD state (`review due`, `reviewed`, `clear`, shown when the switch is on), and an `inline N` alert in the error color. The band yields to a survey. Segments are joined by a faint `┊`, and all colors are theme keys (`claude`, `success`, `warning`, `error`, `suggestion`, `inactive`, `subtle`), so it follows the active theme.
 
-Every line opens with a phosphor mark `▌`, and segments are joined by a faint `┊`. All colors are theme keys (`claude`, `success`, `warning`, `error`, `suggestion`, `inactive`, `subtle`), so the band follows the active theme.
+**The panel, by section.** A section with nothing to show takes no room.
 
-**When the replica is hidden.** The two replica lines are drawn only when your merged settings have no `statusLine`; with one, they would show everything twice. The ODD and RDD lines are always drawn. The band yields to a survey.
+1. **Main** (replica): context window, 5-hour and 7-day plan limits as 8-cell meters (theme `success` below 50%, `warning` below 80%, `error` above), each limit with its reset (`↻HH:MM`, and `↻Day HH:MM` for 7d); `~`-shortened directory, git state (`⎇ branch`, `±dirty`, `↑ahead`, `↓behind`, `wt:<worktree>`), `◆ model effort`, `✎ output style`, and `@agent`.
+2. **ODD**: the active feature document (newest `odd/tasks/*.md` with a task whose status is not `done` or `dropped`, the rule of `feature-state.mjs`), its first unfinished task (id and title), and the open count.
+3. **RDD**: the switch (`RDD on` or `RDD off`) and, when on, `review due` (the committed range since `odd-review boundary`, or the uncommitted changes, classify high and have no receipt), `reviewed`, or `clear`. A `root` boundary is not assessed.
+4. **Agents**: one card per subagent (up to 3, then one summary row): role (construct role, else the subagent type), routed model and effort, ctx (the latest request's whole input), steps, elapsed time, running or done.
+5. **Inline writes**: a main-thread `Edit`, `Write`, `MultiEdit` or `NotebookEdit` on a path outside `odd/tasks/` counts; the panel shows the count and the last path. It only observes and never blocks.
+6. **Gate**: one cell per permission verdict in the session (allowed, asked, denied, or made inside a subagent), the deny count, and the last denied tool with credential-like values masked.
+7. **Turn receipt**: duration, agents spawned, edits, errors, and the cost added by the running or last main-thread turn.
 
-**Data gaps.** The mods API has no source for these fields of a statusline script, so the band leaves them out: lines added and removed, PR number and state, and vim mode. Other fields differ from a statusline's:
+**Width.** Two columns from 110 columns, compact from 56 to 109, and a mini layout below 56.
+
+**When the replica is hidden.** Budget and where (the Main section) are drawn only when your merged settings have no `statusLine`; with one, they would show everything twice, and the band's `ctx` segment is left out for the same reason. The ODD and RDD sections are always drawn.
+
+**Data gaps.** The mods API has no source for these fields of a statusline script, so the panel leaves them out: lines added and removed, PR number and state, and vim mode. Other fields differ from a statusline's:
 
 - The model is the id `$.session.model()` returns, not a display name.
 - Effort is the one seen on the main thread's last request, so it appears after the first turn.
@@ -291,11 +298,11 @@ Every line opens with a phosphor mark `▌`, and segments are joined by a faint 
 - The worktree name comes from git.
 - Resets and meters are omitted when the figure is missing, for example off a subscription.
 
-**Refresh and fail-open.** Git, `odd-review`, `odd-assess`, and the feature documents are read only on `session.start` and after each main-thread `turn.complete`, in the background with a timeout, never on a redraw. Every hook has a `.catch`; any error leaves out the affected segment (or the whole band) and never blocks or delays a turn.
+**Refresh and fail-open.** Git, `odd-review`, `odd-assess`, and the feature documents are read only on `session.start` and after each main-thread `turn.complete`, in the background with a timeout, never on a redraw. The panel's own state (agents, writes, gate, receipt) is kept in a versioned `atom` fed from engine events (`agent.spawn`, `turn.start`, `turn.step`, `tool.call`, `tool.check`, `turn.complete`, `session.compact`); the panel redraws on those events, not per token. These hooks only observe: each passes its event on unchanged and swallows its own failures, and the model and effort routing is untouched. Every hook has a `.catch` where it can; any error leaves out the affected segment (or the whole band) and never blocks or delays a turn.
 
 ## Theme: Construct
 
-The plugin ships one color theme, **Construct**, in the style of *The Matrix*: phosphor green `#00FF41` for the accent, success, permissions, and the usage meter; deeper greens for borders, hints, and backgrounds; pale green text on near-black. Errors stay red and warnings yellow, so they still stand out. Select it with `/theme` (it is listed as from this plugin); the status band turns matrix green with it, since it colors with theme keys.
+The plugin ships one color theme, **Construct**, in the style of *The Matrix*: phosphor green `#00FF41` for the accent, success, permissions, and the usage meter; deeper greens for borders, hints, and backgrounds; pale green text on near-black. Errors stay red and warnings yellow, so they still stand out. Select it with `/theme` (it is listed as from this plugin); the panel and the band turn matrix green with it, since it colors with theme keys.
 
 ## Local development
 
@@ -337,7 +344,7 @@ scripts/eval.sh --case small-delegated
 | `plugins/construct/` | The plugin (manifest name `construct`) |
 | `plugins/construct/agents/` | The 13 role agents |
 | `plugins/construct/skills/` | Delivery and review skills (`branch-pr`, `chained-pr`, `work-unit-commits`, `judgment-day`, ...) |
-| `plugins/construct/hooks/` | `hooks.json`, the mod (`register.js`), its routing helpers, the status band modules (`status/`), and the command hooks (`scripts/`: contract, feature state, secret guard, review gate, review context and capture) |
+| `plugins/construct/hooks/` | `hooks.json`, the mod (`register.js`), its routing helpers, the status modules (`status/`), the panel modules (`panel/`), and the command hooks (`scripts/`: contract, feature state, secret guard, review gate, review context and capture) |
 | `plugins/construct/bin/` | Executable scripts put on the `PATH` (`odd-assess`) |
 | `plugins/construct/lib/assess/` | `odd-assess` modules: git, stats, passive, signals, sinks, content, classify, escalation, output |
 | `plugins/construct/hooks/contract/` | Session and subagent contract texts injected by hooks |

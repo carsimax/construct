@@ -64,7 +64,7 @@ export function shortDir(dir, home) {
 // ---- element tree -----------------------------------------------------------
 
 // A Text leaf; props with no value are left out, since a prop must be plain data.
-function text(content, { color, dim, bold } = {}) {
+export function text(content, { color, dim, bold } = {}) {
   const props = {}
   if (color) props.color = color
   if (dim) props.dimColor = true
@@ -72,9 +72,9 @@ function text(content, { color, dim, bold } = {}) {
   return { type: 'Text', props, children: [content] }
 }
 
-const segment = (key, parts) => ({ type: 'Box', props: { key }, children: parts.filter(Boolean) })
+export const segment = (key, parts) => ({ type: 'Box', props: { key }, children: parts.filter(Boolean) })
 
-function meter(key, label, pct, resetText) {
+export function meter(key, label, pct, resetText) {
   const color = meterColor(pct)
   const cells = bar(pct)
   return segment(key, [
@@ -88,7 +88,7 @@ function meter(key, label, pct, resetText) {
 }
 
 // The budget line: context, then the 5h and 7d plan limits. A segment without data is left out.
-function budgetSegments(usage, nowMs) {
+export function budgetSegments(usage, nowMs) {
   const out = []
   const ctx = clampPct(usage?.context?.percent)
   if (ctx !== null) out.push(meter('ctx', 'ctx', ctx, ''))
@@ -101,7 +101,7 @@ function budgetSegments(usage, nowMs) {
   return out
 }
 
-function gitSegment(git, worktree) {
+export function gitSegment(git, worktree) {
   if (!git?.branch) return null
   return segment('git', [
     text(`⎇ ${git.branch}`, { color: 'suggestion' }),
@@ -112,7 +112,7 @@ function gitSegment(git, worktree) {
   ])
 }
 
-function whereSegments({ dir, home, git, worktree, model, effort, style, agent }) {
+export function whereSegments({ dir, home, git, worktree, model, effort, style, agent }) {
   const out = []
   if (dir) out.push(segment('dir', [text(shortDir(dir, home), { color: 'claude', bold: true })]))
   out.push(gitSegment(git, worktree))
@@ -131,14 +131,14 @@ function whereSegments({ dir, home, git, worktree, model, effort, style, agent }
   return out
 }
 
-const STATE_COLOR = { 'review due': 'error', reviewed: 'success', clear: undefined }
+export const STATE_COLOR = { 'review due': 'error', reviewed: 'success', clear: undefined }
 
-function oddLine(odd) {
+export function oddLine(odd) {
   if (!odd) return null
   return [segment('odd', [text('ODD ', { color: 'claude' }), text(odd.feature, { bold: true }), text(` · ${odd.open} open`, { dim: true })])]
 }
 
-function rddLine(rdd) {
+export function rddLine(rdd) {
   if (!rdd || (rdd.mode !== 'on' && rdd.mode !== 'off')) return null
   const mode = segment('rdd', [text('RDD ', { color: 'claude' }), text(rdd.mode, { bold: true })])
   const state =
@@ -149,7 +149,7 @@ function rddLine(rdd) {
 }
 
 // Each line opens with a phosphor mark, and segments are joined by a faint rail.
-const row = (key, segments) => {
+export const row = (key, segments) => {
   const kids = joinSegments(segments).map((s) => (s.sep ? text(' ┊ ', { color: 'subtle' }) : s))
   if (kids.length === 0) return null
   return { type: 'Box', props: { key, flexDirection: 'row' }, children: [text('▌ ', { color: 'claude' }), ...kids] }

@@ -13,8 +13,10 @@ function splitRow(line) {
     .map((cell) => cell.replace(/\\\|/g, '|').trim())
 }
 
-// Number of unfinished rows, or null when the table is missing or malformed.
-export function unfinishedCount(markdown) {
+// { open, first } of the Tasks table: the unfinished row count and the first
+// unfinished row's { id, title } (null when none), or null when the table is
+// missing or malformed.
+function scanTasks(markdown) {
   const lines = String(markdown).split(/\r?\n/)
   const start = lines.findIndex((l) => /^##\s+Tasks\s*$/.test(l))
   if (start < 0) return null
@@ -26,30 +28,52 @@ export function unfinishedCount(markdown) {
   if (i >= lines.length) return null
   const header = splitRow(lines[i]).map((c) => c.toLowerCase())
   const status = header.indexOf('status')
-  if (status < 0 || header.indexOf('id') < 0 || header.indexOf('task') < 0) return null
+  const idCol = header.indexOf('id')
+  const titleCol = header.indexOf('task')
+  if (status < 0 || idCol < 0 || titleCol < 0) return null
   if (!/^\|?\s*:?-{3,}/.test(lines[i + 1] ?? '')) return null
   let open = 0
+  let first = null
   for (i += 2; i < lines.length && lines[i].trim().startsWith('|'); i++) {
     const cells = splitRow(lines[i])
     if (cells.length < header.length) return null
-    if (!FINISHED.has(cells[status].toLowerCase())) open++
+    if (!FINISHED.has(cells[status].toLowerCase())) {
+      open++
+      first ??= { id: cells[idCol], title: cells[titleCol] }
+    }
   }
-  return open
+  return { open, first }
+}
+
+// Number of unfinished rows, or null when the table is missing or malformed.
+export function unfinishedCount(markdown) {
+  return scanTasks(markdown)?.open ?? null
+}
+
+function newest(docs) {
+  let best = null
+  for (const doc of docs) {
+    if (typeof doc?.name !== 'string' || !doc.name.endsWith('.md')) continue
+    let scan
+    try {
+      scan = scanTasks(doc.text)
+    } catch {
+      continue
+    }
+    if (!scan?.open) continue
+    if (best === null || doc.mtimeMs > best.mtimeMs) best = { mtimeMs: doc.mtimeMs, feature: doc.name.slice(0, -3), open: scan.open, task: scan.first }
+  }
+  return best
 }
 
 // The newest document (by mtime) that still has unfinished tasks: { feature, open }, or null.
 export function activeFeature(docs) {
-  let best = null
-  for (const doc of docs) {
-    if (typeof doc?.name !== 'string' || !doc.name.endsWith('.md')) continue
-    let open
-    try {
-      open = unfinishedCount(doc.text)
-    } catch {
-      continue
-    }
-    if (!open) continue
-    if (best === null || doc.mtimeMs > best.mtimeMs) best = { mtimeMs: doc.mtimeMs, feature: doc.name.slice(0, -3), open }
-  }
+  const best = newest(docs)
   return best ? { feature: best.feature, open: best.open } : null
+}
+
+// Same document as activeFeature, plus its first unfinished task: { feature, open, task: { id, title } }, or null.
+export function activeWork(docs) {
+  const best = newest(docs)
+  return best ? { feature: best.feature, open: best.open, task: best.task } : null
 }
