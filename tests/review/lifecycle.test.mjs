@@ -3,10 +3,11 @@
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync, readFileSync } from 'node:fs'
+import { atomicCreate, receiptPath as storeReceiptPath } from '../../plugins/odd-skills/lib/review/store.mjs'
 import { join } from 'node:path'
 import {
   LENSES, applyFiles, assessJson, capture, captureAll, commitAll, finding, git, highRepo, lensResult, readTransaction,
-  receiptFiles, review, start, storeRoot,
+  receiptFiles, refuterSubject, review, start, storeRoot,
 } from './helpers.mjs'
 
 const ack = (repo, txn) => review(repo, ['acknowledge', '--lineage', txn.lineage])
@@ -86,7 +87,7 @@ describe('refutation path', () => {
     assert.ok(ctx.stdout.includes(id))
 
     const refuted = review(repo, ['capture-refuter', '--lineage', txn.lineage, '--input', '-'], {
-      input: JSON.stringify({ results: [{ finding_id: id, outcome: 'refuted', proof_refs: ['the command is constant'] }] }),
+      input: JSON.stringify({ subject_hash: refuterSubject(repo, txn), results: [{ finding_id: id, outcome: 'refuted', proof_refs: ['the command is constant'] }] }),
     })
     assert.equal(refuted.status, 0)
     assert.equal(refuted.json.state, 'approved')
@@ -100,7 +101,7 @@ describe('refutation path', () => {
     const txn = start(repo)
     const id = captureAll(repo, txn, { 'review-risk': [inferential] }).refutation_batch[0].id
     const { json } = review(repo, ['capture-refuter', '--lineage', txn.lineage, '--input', '-'], {
-      input: JSON.stringify({ results: [{ finding_id: id, outcome: 'corroborated', proof_refs: ['reachable'] }] }),
+      input: JSON.stringify({ subject_hash: refuterSubject(repo, txn), results: [{ finding_id: id, outcome: 'corroborated', proof_refs: ['reachable'] }] }),
     })
     assert.equal(json.state, 'correction_required')
     assert.equal(json.to_correct.length, 1)
@@ -111,7 +112,7 @@ describe('refutation path', () => {
     const txn = start(repo)
     const id = captureAll(repo, txn, { 'review-risk': [inferential] }).refutation_batch[0].id
     const { json } = review(repo, ['capture-refuter', '--lineage', txn.lineage, '--input', '-'], {
-      input: JSON.stringify({ results: [{ finding_id: id, outcome: 'inconclusive', proof_refs: ['no evidence'] }] }),
+      input: JSON.stringify({ subject_hash: refuterSubject(repo, txn), results: [{ finding_id: id, outcome: 'inconclusive', proof_refs: ['no evidence'] }] }),
     })
     assert.equal(json.state, 'approved')
   })
@@ -121,7 +122,7 @@ describe('refutation path', () => {
     const txn = start(repo)
     const id = captureAll(repo, txn, { 'review-risk': [inferential] }).refutation_batch[0].id
     for (const results of [[], [{ finding_id: 'F99', outcome: 'refuted', proof_refs: ['x'] }], [{ finding_id: id, outcome: 'maybe', proof_refs: ['x'] }]]) {
-      const r = review(repo, ['capture-refuter', '--lineage', txn.lineage, '--input', '-'], { input: JSON.stringify({ results }) })
+      const r = review(repo, ['capture-refuter', '--lineage', txn.lineage, '--input', '-'], { input: JSON.stringify({ subject_hash: refuterSubject(repo, txn), results }) })
       assert.equal(r.status, 1)
       assert.equal(r.error.code, 'invalid_result')
     }
@@ -159,12 +160,70 @@ describe('reduction', () => {
   })
 })
 
+describe('refuter binding', () => {
+  const inferential = finding({ evidence_class: 'inferential', claim: 'might expose a secret' })
+  const setup = () => {
+    const repo = highRepo()
+    const txn = start(repo)
+    captureAll(repo, txn, { 'review-risk': [inferential] })
+    return { repo, txn }
+  }
+  const send = (repo, txn, subject_hash) =>
+    review(repo, ['capture-refuter', '--lineage', txn.lineage, '--input', '-'], {
+      input: JSON.stringify({ subject_hash, results: [{ finding_id: 'F1', outcome: 'refuted', proof_refs: ['checked'] }] }),
+    })
+
+  test('the context binding carries the lineage-bound refuter subject', () => {
+    const { repo, txn } = setup()
+    const line = review(repo, ['context', '--lineage', txn.lineage, '--lens', 'review-refuter']).stdout.split('\n')[0]
+    const binding = JSON.parse(line.slice('ODD_REVIEW_BINDING '.length))
+    assert.equal(binding.subject_hash, refuterSubject(repo, txn))
+    assert.match(binding.subject_hash, /^sha256:[0-9a-f]{64}$/)
+    assert.notEqual(binding.subject_hash, txn.subjects['review-risk'])
+  })
+
+  test('a wrong subject is refused and leaves the transaction unchanged', () => {
+    const { repo, txn } = setup()
+    const before = readTransaction(repo, txn.lineage)
+    const refused = send(repo, txn, 'sha256:wrong')
+    assert.equal(refused.status, 1)
+    assert.equal(refused.error.code, 'subject_mismatch')
+    const after = readTransaction(repo, txn.lineage)
+    assert.equal(after.state, 'refutation_required')
+    assert.deepEqual(after.refutation_batch, before.refutation_batch)
+  })
+
+  test('a result without a subject is refused as invalid', () => {
+    const { repo, txn } = setup()
+    const r = review(repo, ['capture-refuter', '--lineage', txn.lineage, '--input', '-'], {
+      input: JSON.stringify({ results: [{ finding_id: 'F1', outcome: 'refuted', proof_refs: ['x'] }] }),
+    })
+    assert.equal(r.error.code, 'invalid_result')
+  })
+
+  test('the subject of another lineage over the same candidate is refused', () => {
+    const { repo, txn } = setup()
+    const other = start(repo)
+    captureAll(repo, other, { 'review-risk': [inferential] })
+    assert.equal(other.target, txn.target)
+    assert.notEqual(refuterSubject(repo, other), refuterSubject(repo, txn))
+    assert.equal(send(repo, txn, refuterSubject(repo, other)).error.code, 'subject_mismatch')
+  })
+
+  test('the correct subject is accepted', () => {
+    const { repo, txn } = setup()
+    const ok = send(repo, txn, refuterSubject(repo, txn))
+    assert.equal(ok.status, 0)
+    assert.equal(ok.json.state, 'approved')
+  })
+})
+
 describe('mixed and unknown severe findings', () => {
   const f1 = finding({ location: 'a.txt:1', severity: 'BLOCKER' })
   const f2 = finding({ location: 'a.txt:5', evidence_class: 'inferential', claim: 'inferred exposure' })
   const refute = (repo, txn, outcome) =>
     review(repo, ['capture-refuter', '--lineage', txn.lineage, '--input', '-'], {
-      input: JSON.stringify({ results: [{ finding_id: 'F2', outcome, proof_refs: ['checked'] }] }),
+      input: JSON.stringify({ subject_hash: refuterSubject(repo, txn), results: [{ finding_id: 'F2', outcome, proof_refs: ['checked'] }] }),
     })
 
   test('deterministic and inferential severe findings share one refuter batch', () => {
@@ -351,6 +410,45 @@ describe('correction path', () => {
     commitAll(repo, 'fix')
     const refused = review(repo, ['correct', '--lineage', txn.lineage, '--base-ref', 'HEAD'])
     assert.equal(refused.error.code, 'base_mismatch')
+  })
+})
+
+describe('idempotent acknowledge', () => {
+  const crashed = (lineage) => {
+    const repo = highRepo()
+    const txn = start(repo)
+    captureAll(repo, txn)
+    atomicCreate(storeReceiptPath(repo, txn.target), `${JSON.stringify({ lineage, target: txn.target })}\n`)
+    return { repo, txn }
+  }
+
+  test('a receipt of the same lineage on an approved transaction completes it', () => {
+    const repo = highRepo()
+    const txn = start(repo)
+    captureAll(repo, txn)
+    atomicCreate(storeReceiptPath(repo, txn.target), `${JSON.stringify({ lineage: txn.lineage, target: txn.target })}\n`)
+    const done = ack(repo, txn)
+    assert.equal(done.status, 0)
+    assert.equal(done.json.state, 'acknowledged')
+    assert.equal(done.json.recovered, true)
+    assert.deepEqual(done.json.next, [])
+    assert.equal(readTransaction(repo, txn.lineage).state, 'acknowledged')
+    assert.equal(ack(repo, txn).error.code, 'already_acknowledged')
+  })
+
+  test('a normal acknowledge is not marked recovered', () => {
+    const repo = highRepo()
+    const txn = start(repo)
+    captureAll(repo, txn)
+    assert.equal(ack(repo, txn).json.recovered, undefined)
+  })
+
+  test('a receipt naming a different lineage still refuses', () => {
+    const { repo, txn } = crashed('review-0123456789abcdef')
+    const refused = ack(repo, txn)
+    assert.equal(refused.status, 1)
+    assert.equal(refused.error.code, 'target_already_acknowledged')
+    assert.equal(readTransaction(repo, txn.lineage).state, 'approved')
   })
 })
 

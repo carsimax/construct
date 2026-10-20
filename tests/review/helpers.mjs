@@ -105,3 +105,6 @@ export function repoFingerprint(repo) {
 }
 
 export const sha = (value) => `sha256:${createHash('sha256').update(value).digest('hex')}`
+
+// refuterSubject is the lineage-bound subject the refuter must copy back.
+export const refuterSubject = (repo, txn) => readTransaction(repo, txn.lineage).refutation_subject

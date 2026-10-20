@@ -79,30 +79,55 @@ const processAlive = (pid) => {
   }
 }
 
+const LOCK_ATTEMPTS = 5
+
+// inspectLock reads the holder of an existing lock, or null when the holder
+// released it meanwhile (ENOENT).
+function inspectLock(lock) {
+  // Test-only fault seam: behave as if the holder released between the failed
+  // open and the read. It does nothing unless the variable is set.
+  if (process.env.ODD_REVIEW_TEST_FAULT === 'release-after-exists') rmSync(lock, { force: true })
+  try {
+    const holder = Number.parseInt(readFileSync(lock, 'utf8'), 10)
+    return { holder: Number.isInteger(holder) ? holder : null, ageMs: Date.now() - statSync(lock).mtimeMs }
+  } catch (error) {
+    if (error.code === 'ENOENT') return null
+    throw error
+  }
+}
+
 // withLock runs fn while holding the transaction's lock file. A second writer is
-// refused; a lock whose process is gone is reclaimed.
+// refused. A lock whose process is gone (or an empty one older than
+// EMPTY_LOCK_STALE_MS) is reclaimed by renaming it to a unique tombstone, so only
+// one contender wins; losing that rename means the lock is held. A lock released
+// while being inspected is simply acquired on the next bounded attempt.
 export function withLock(root, lineage, fn) {
   const lock = transactionPath(root, lineage).replace(/\.json$/, '.lock')
+  const locked = () => new Refusal('transaction_locked', `transaction ${lineage} is being written by another process; try again`)
   mkdirSync(join(lock, '..'), { recursive: true })
-  for (let attempt = 0; ; attempt++) {
+  let acquired = false
+  for (let attempt = 0; attempt < LOCK_ATTEMPTS && !acquired; attempt++) {
     try {
       const fd = openSync(lock, 'wx')
       writeFileSync(fd, `${process.pid}\n`)
       closeSync(fd)
-      break
+      acquired = true
     } catch (error) {
       if (error.code !== 'EEXIST') throw error
-      const holder = Number.parseInt(readFileSync(lock, 'utf8'), 10)
-      // A lock with no pid is a crash between open and write; it is stale only
-      // once it is older than EMPTY_LOCK_STALE_MS, so a writer mid-open is safe.
-      const emptyAndStale = !Number.isInteger(holder) && Date.now() - statSync(lock).mtimeMs > EMPTY_LOCK_STALE_MS
-      if (attempt === 0 && (emptyAndStale || (Number.isInteger(holder) && !processAlive(holder)))) {
-        rmSync(lock, { force: true })
-        continue
+      const seen = inspectLock(lock)
+      if (seen === null) continue
+      const stale = seen.holder === null ? seen.ageMs > EMPTY_LOCK_STALE_MS : !processAlive(seen.holder)
+      if (!stale) throw locked()
+      const tombstone = `${lock}.stale-${randomBytes(6).toString('hex')}`
+      try {
+        renameSync(lock, tombstone)
+      } catch {
+        throw locked()
       }
-      throw new Refusal('transaction_locked', `transaction ${lineage} is being written by another process; try again`)
+      rmSync(tombstone, { force: true })
     }
   }
+  if (!acquired) throw locked()
   try {
     return fn()
   } finally {

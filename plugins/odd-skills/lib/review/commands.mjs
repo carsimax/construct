@@ -13,7 +13,7 @@ import { publicRisk } from '../assess/output.mjs'
 import { collectDiffStats, countChangedLines } from '../assess/stats.mjs'
 import { buildContext, DEFAULT_CONTEXT_BYTES } from './evidence.mjs'
 import { Refusal } from './errors.mjs'
-import { REFUTER, VALIDATOR, newLineage, subjectHashOf, targetOf, manifestDigest, canonicalLens } from './identity.mjs'
+import { REFUTER, VALIDATOR, newLineage, refuterSubjectHashOf, subjectHashOf, targetOf, manifestDigest, canonicalLens } from './identity.mjs'
 import { reduceLenses } from './reduce.mjs'
 import { atomicCreate, readTransaction, receiptExists, receiptPath, withLock, writeTransaction } from './store.mjs'
 import { validateLensResult, validateRefuterResult, validateValidatorResult } from './validate.mjs'
@@ -163,7 +163,7 @@ export function context({ root, lineage, lens: lensName, maxBytes = DEFAULT_CONT
   let served
   if (lens === REFUTER) {
     requireState(transaction, 'refutation_required')
-    served = { ...original(transaction), subjectHash: subjectHashOf({ lineage, target: transaction.target, lens, manifest: transaction.manifest }), findings: transaction.refutation_batch }
+    served = { ...original(transaction), subjectHash: transaction.refutation_subject, findings: transaction.refutation_batch }
   } else if (lens === VALIDATOR) {
     requireState(transaction, 'validation_required')
     const fix = transaction.correction
@@ -190,6 +190,13 @@ function settle(transaction, outcome) {
   transaction.to_correct = outcome.to_correct
   if (outcome.escalation) transaction.escalation = outcome.escalation
   transaction.advisory = outcome.advisory
+  if (outcome.state === 'refutation_required') {
+    transaction.refutation_subject = refuterSubjectHashOf({
+      lineage: transaction.lineage,
+      target: transaction.target,
+      batchIds: outcome.refutation_batch.map((finding) => finding.id),
+    })
+  }
   transition(transaction, outcome.state)
 }
 
@@ -239,7 +246,10 @@ export function captureRefuter({ root, cwd, lineage, input }) {
   const result = readInput(input)
   return modify(root, lineage, (transaction) => {
     requireState(transaction, 'refutation_required')
-    const valid = validateRefuterResult(result, transaction.refutation_batch.map((finding) => finding.id))
+    const valid = validateRefuterResult(result, {
+      subjectHash: transaction.refutation_subject,
+      expectedIds: transaction.refutation_batch.map((finding) => finding.id),
+    })
     const byId = new Map(valid.results.map((entry) => [entry.finding_id, entry]))
     const corroborated = []
     const advisory = [...transaction.advisory]
@@ -343,6 +353,14 @@ export function status({ root, cwd, lineage }) {
 
 // acknowledge consumes an approved review: it writes the receipt for the final
 // reviewed candidate (the corrected one after a correction) exactly once.
+function readReceiptLineage(root, target) {
+  try {
+    return JSON.parse(readFileSync(receiptPath(root, target), 'utf8')).lineage
+  } catch {
+    return null
+  }
+}
+
 export function acknowledge({ root, cwd, lineage }) {
   return withLock(root, lineage, () => {
     const transaction = readTransaction(root, lineage)
@@ -368,12 +386,19 @@ export function acknowledge({ root, cwd, lineage }) {
       started_at: transaction.created_at,
       acknowledged_at: now,
     }
+    let recovered = false
     if (!atomicCreate(receiptPath(root, target), `${JSON.stringify(receipt, null, 2)}\n`)) {
-      throw new Refusal('target_already_acknowledged', 'this exact candidate already has a receipt', { target })
+      // A crash after the receipt and before the transaction update leaves an
+      // approved transaction with its own receipt: complete it. A receipt of
+      // another lineage is a different review of the same candidate.
+      if (readReceiptLineage(root, target) !== lineage) {
+        throw new Refusal('target_already_acknowledged', 'this exact candidate already has a receipt', { target })
+      }
+      recovered = true
     }
     transition(transaction, 'acknowledged')
     transaction.acknowledged_at = now
     writeTransaction(root, transaction)
-    return view(transaction, cwd, { receipt: receiptPath(root, target), outcome: 'approved' })
+    return view(transaction, cwd, { receipt: receiptPath(root, target), outcome: 'approved', ...(recovered ? { recovered: true } : {}) })
   })
 }

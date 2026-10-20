@@ -26,6 +26,6 @@ Receive the immutable review target (the ODD_REVIEW_BINDING line and the ODD_REV
 
 Return one JSON object and no prose:
 
-{"results":[{"finding_id":"<id>","outcome":"corroborated","proof_refs":["concrete proof"]}]}
+{"subject_hash":"<copied from ODD_REVIEW_BINDING.subject_hash>","results":[{"finding_id":"<id>","outcome":"corroborated","proof_refs":["concrete proof"]}]}
 
-Return one entry for every input claim, then terminate.
+Copy subject_hash from ODD_REVIEW_BINDING.subject_hash; never compute or invent it. Return one entry for every input claim, then terminate.

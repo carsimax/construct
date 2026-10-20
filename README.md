@@ -121,7 +121,8 @@ States: `collecting` to `approved`, `refutation_required`, or `correction_requir
 - `capture` validates the result against the agent's output contract: matching `subject_hash`, no unknown or missing fields, a completed inspection that lists exactly the changed paths, a selected lens, and one capture per lens.
 - Only a BLOCKER or CRITICAL finding introduced by the candidate blocks. Deterministic ones need a correction; inferential ones go to the refuter first. Everything else is advisory and lands in the receipt.
 - `correct` is allowed once per lineage and may change at most `min(200, ceil(n/2))` lines, where `n` is the reviewed line count. A correction over the budget is refused and does not use up the one correction.
-- `acknowledge` accepts only `approved` and refuses a replay. `start` refuses a candidate that already has a receipt.
+- The refuter result must carry the `subject_hash` from its `ODD_REVIEW_BINDING`, which binds it to the lineage, target, and batch (`subject_mismatch` otherwise).
+- `acknowledge` accepts only `approved` and refuses a replay. If a crash left the receipt written but the transaction still `approved`, running it again completes the transaction and reports `recovered: true`; a receipt of another lineage is refused as `target_already_acknowledged`. `start` refuses a candidate that already has a receipt.
 
 Store: `$(git rev-parse --git-common-dir)/odd-review/`, so nothing is written into the worktree and linked worktrees share it.
 
@@ -130,7 +131,7 @@ odd-review/transactions/<lineage>.json   # one per review; <lineage>.lock while 
 odd-review/receipts/<target hex>.json    # written by acknowledge
 ```
 
-Writes are a temporary file plus a rename. A second writer on a locked transaction is refused (`transaction_locked`); a lock left by a dead process is reclaimed. No command changes the index, `HEAD`, or the working tree.
+Writes are a temporary file plus a rename. A second writer on a locked transaction is refused (`transaction_locked`); a lock left by a dead process (or an empty one older than 10 seconds) is reclaimed by renaming it away, so only one contender wins. No command changes the index, `HEAD`, or the working tree.
 
 ## Local development
 

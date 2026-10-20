@@ -20,6 +20,11 @@ export const targetOf = (baseTree, candidateTree, manifest) =>
 export const subjectHashOf = ({ lineage, target, lens, manifest }) =>
   sha256(JSON.stringify({ lineage, target, lens, manifest_digest: manifestDigest(manifest) }))
 
+// The refuter judges a batch of findings whose ids (F1, F2...) repeat across
+// lineages, so its subject binds the lineage, target, and sorted batch ids.
+export const refuterSubjectHashOf = ({ lineage, target, batchIds }) =>
+  sha256(JSON.stringify({ lineage, target, lens: REFUTER, batch_ids: [...batchIds].sort() }))
+
 export const newLineage = () => `review-${randomBytes(8).toString('hex')}`
 
 const LINEAGE = /^review-[0-9a-f]{16}$/

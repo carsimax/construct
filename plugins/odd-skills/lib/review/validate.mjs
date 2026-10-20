@@ -93,8 +93,11 @@ function outcomes(entries, allowed, where) {
   })
 }
 
-export function validateRefuterResult(result, expectedIds) {
-  exactKeys(result, ['results'], 'the refuter result')
+export function validateRefuterResult(result, { subjectHash, expectedIds }) {
+  exactKeys(result, ['subject_hash', 'results'], 'the refuter result')
+  if (result.subject_hash !== subjectHash) {
+    throw new Refusal('subject_mismatch', `subject_hash ${JSON.stringify(result.subject_hash)} does not match the refuter subject of this lineage`)
+  }
   coverage(result.results, expectedIds, 'results')
   outcomes(result.results, REFUTER_OUTCOMES, 'results')
   return result

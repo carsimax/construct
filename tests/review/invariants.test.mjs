@@ -103,10 +103,14 @@ describe('capture validation', () => {
     return { repo, txn, ok: lensResult(hashOf(txn), txn.manifest) }
   }
   const refuse = (repo, txn, result, code = 'invalid_result', lens = 'review-risk') => {
+    const before = readTransaction(repo, txn.lineage)
     const r = capture(repo, txn, lens, result)
     assert.equal(r.status, 1, r.stdout)
     assert.equal(r.error.code, code)
-    assert.deepEqual(readTransaction(repo, txn.lineage).captured ?? {}, {})
+    const after = readTransaction(repo, txn.lineage)
+    assert.deepEqual(after.results, before.results)
+    assert.deepEqual(after.findings, before.findings)
+    assert.equal(after.state, before.state)
     return r
   }
 
@@ -268,6 +272,39 @@ describe('store, locking and atomicity', () => {
     utimesSync(lock, old, old)
     assert.equal(ok().status, 0)
     assert.ok(!existsSync(lock))
+  })
+
+  test('a lock released between the open and the read is retried, not an internal error', () => {
+    const repo = highRepo()
+    const txn = start(repo)
+    const lock = `${transactionFile(repo, txn.lineage).replace(/\.json$/, '')}.lock`
+    writeFileSync(lock, `${process.pid}\n`)
+    const r = review(repo, ['capture', '--lineage', txn.lineage, '--lens', 'risk', '--input', '-'], {
+      input: JSON.stringify(lensResult(hashOf(txn), txn.manifest)),
+      env: { ODD_REVIEW_TEST_FAULT: 'release-after-exists' },
+    })
+    assert.equal(r.status, 0, r.stderr)
+    assert.ok(!existsSync(lock))
+  })
+
+  test('the fault seam does nothing unless the test variable is set', () => {
+    const repo = highRepo()
+    const txn = start(repo)
+    const lock = `${transactionFile(repo, txn.lineage).replace(/\.json$/, '')}.lock`
+    writeFileSync(lock, `${process.pid}\n`)
+    const r = capture(repo, txn, 'review-risk', lensResult(hashOf(txn), txn.manifest))
+    assert.equal(r.error.code, 'transaction_locked')
+    assert.ok(existsSync(lock))
+  })
+
+  test('stale reclaim leaves no tombstone behind', async () => {
+    const repo = highRepo()
+    const txn = start(repo)
+    const child = spawn(process.execPath, ['-e', '0'])
+    await new Promise((resolve) => child.on('exit', resolve))
+    writeFileSync(`${transactionFile(repo, txn.lineage).replace(/\.json$/, '')}.lock`, `${child.pid}\n`)
+    assert.equal(capture(repo, txn, 'review-risk', lensResult(hashOf(txn), txn.manifest)).status, 0)
+    assert.deepEqual(readdirSync(join(storeRoot(repo), 'transactions')).filter((n) => n.includes('stale')), [])
   })
 
   test('the lock is released after every command, including refusals', () => {
