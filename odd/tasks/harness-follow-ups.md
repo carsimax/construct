@@ -19,12 +19,12 @@ Source for every spec: the user's "ok vamos con esos pendeinte" (L1) over the fo
 
 | ID | Specs | Task | Route | Risk | Status | Commit |
 |---|---|---|---|---|---|---|
-| T1 | S1 | `secret-guard.mjs`, `tests/guard/**`, README guard section | odd-worker, wave A | 2 | pending | — |
-| T2 | S2 | `hooks/contract/subagent.md` | odd-worker, wave A | none | pending | — |
-| T3 | S5, S6 | `lib/assess/**`, `tests/assess/**` | odd-worker, wave A | 3 | pending | — |
-| T4 | S4, S3 doc line | `lib/review/evidence.mjs`, `tests/review/**`, `tests/review-hooks/**`, `agents/review-risk.md`, `rdd-review/SKILL.md` | odd-worker, wave A | 2 | pending | — |
-| T5 | S3 | gate scripts, counter hook, `hooks.json`, `tests/gate/**`, `tests/risk-line/**`, README gate and review sections (incl. S4 README line) | odd-worker, wave B (shared README) | 4 | pending | — |
-| T6 | S7 | evals run | odd-general, after T5 | none | pending | — |
+| T1 | S1 | `secret-guard.mjs`, `tests/guard/**`, README guard section | odd-worker, wave A | 2 | done | `cafd7e6`, pins `5819dfc` |
+| T2 | S2 | `hooks/contract/subagent.md` | odd-worker, wave A | none | done | `a328466` |
+| T3 | S5, S6 | `lib/assess/**`, `tests/assess/**` | odd-worker, wave A | 3 | done | `cda8367`, B1 `5819dfc` |
+| T4 | S4, S3 doc line | `lib/review/evidence.mjs`, `tests/review/**`, `tests/review-hooks/**`, `agents/review-risk.md`, `rdd-review/SKILL.md` | odd-worker, wave A | 2 | done | `310ee34` |
+| T5 | S3, S8 | gate scripts, counter hook, `hooks.json`, `tests/gate/**`, `tests/risk-line/**`, README gate and review sections (incl. S4 README line), subagent.md stash rule | odd-worker, wave B (shared README) | 4 | done | `6ae4b86` |
+| T6 | S7 | evals run, `debugging-fires` grader | odd-general, odd-worker | none | done (behavior finding open, L7) | `40f8db9` |
 
 ## Log
 
@@ -36,3 +36,4 @@ Source for every spec: the user's "ok vamos con esos pendeinte" (L1) over the fo
 - **L6 (2026-10-20, review):** `odd-assess` rated `e026daa..6ae4b86` medium; escalated to item 2 (guard and gate logic). User consent: "Revisar este cambio". Lineage `review-8c410dea11c64a1e`, four lenses, no findings → approved, acknowledged. Unraised note: `TEST_SKIP_LINE` is a global regex; its only caller resets `lastIndex` (advisory).
 - **L7 (2026-10-20, evals):** `debugging-stays-quiet` 3/3 (with), 1.00; `debugging-fires` 2/3 (with) vs 0/3 (without), $0.41 total. `regression-test` failed because the fixture already ships the failing test; grader reworded → 3/3 on rerun. Rerun exposed behavior (n=1): the debugging skill loaded in 1 of 2 runs, and in the run without it the parent delegated from the pasted output without reproducing (`reproduced-first` 1/3). Not tuned blind: needs `--runs 3` signal first. Eval scratch removed.
 - **L8 (2026-10-20, verify):** `odd-verify` on `6ae4b86`: S1, S3, S4, S5 pass (168-command guard differential: 0 new allows, 23 new denies). Blockers: B1 — S6 also stopped flagging conditional skips (`{ skip: process.platform === 'win32' }`, `{ skip: isWindows }`, `{ todo: flag }`); spec only excludes numbers. B2 — subagent.md stash rule had no spec (now S8). Advisories: new guard deny shapes without apostrophes (multi-line `git commit -m`, `gh pr create --body`) not pinned in the corpus; help text lacks the skip qualifier; gate and checklist-missing probes not committed.
+- **L9 (2026-10-20, correction):** `5819dfc`: only number literals exclude a `{ skip|todo: }` marker (RED 6 → GREEN); help text qualified; guard corpus pins `s1-commit-multiline`, `s1-gh-pr-body`, `s1-heredoc-crlf-apostrophe` (main allow verified) plus `s1-commit-multiline-clean` allow; S3 probes (59/61 min, unreadable dir, hook order) and S4 checklist-missing probe pass on current code. `node --test tests/`: 832 pass, 0 fail; validate passes. Recheck: B1 pass, B2 pass (S8 and L5 arrived in `40f8db9`, whose title names only the eval fix). Open: the user's confirmation of S8; debugging trigger reliability (L7). Push, PR, release: user.
