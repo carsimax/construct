@@ -32,7 +32,7 @@ Memory comes from the separate `engram@engram` plugin, which Construct depends o
 ### One command
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v1.0.0/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v1.1.0/install.sh | bash
 ```
 
 The installer checks the requirements above and stops before changing anything if one is missing, or if `~/.claude` or `~/.claude/settings.json` is not writable, or if `settings.json` is a directory. Then it runs the manual steps below for you:
@@ -52,7 +52,7 @@ Every step is skipped when it is already done, so running the installer again ch
 Pass options after `bash -s --`, for example `curl -fsSL <url> | bash -s -- --no-mcp`. To read the script before running it:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v1.0.0/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v1.1.0/install.sh -o install.sh
 less install.sh
 bash install.sh
 ```

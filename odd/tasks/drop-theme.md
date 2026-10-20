@@ -14,7 +14,7 @@ Objective: stop shipping the Construct color theme and clean the `theme` setting
 | ID | Specs | Task | Route | Risk | Status | Commit |
 |---|---|---|---|---|---|---|
 | T1 | S1–S4 | Delete the theme, change the installer merge and `--force`, update tests and docs | odd-worker | 1, 5 | done | `feat(installer): drop the Construct theme and clean its setting` |
-| T2 | — | Release 1.1.0 (`plugin.json` version) | parent | 5 | pending | — |
+| T2 | — | Release 1.1.0 (`plugin.json` version) | parent | 5 | done | `chore: release 1.1.0` |
 
 Risk item 1: the installer edits the user's persisted `settings.json`. Item 5: the installer is delivery.
 
