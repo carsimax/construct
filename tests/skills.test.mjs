@@ -9,6 +9,7 @@ const skillsRoot = join(pluginRoot, 'skills')
 const EXPECTED = [
   'branch-pr',
   'chained-pr',
+  'codegraph',
   'cognitive-doc-design',
   'comment-writer',
   'go-testing',
@@ -109,4 +110,14 @@ test('rdd-review covers the working-tree candidate, the root boundary rule, and 
   assert.match(text, /`root`/)
   assert.match(text, /correction_budget_exceeded/)
   assert.doesNotMatch(text, /`next` is `/)
+})
+
+test('the codegraph skill uses the upstream CLI and the user-scope MCP tool, never a plugin MCP server', () => {
+  const text = readFileSync(join(skillsRoot, 'codegraph', 'SKILL.md'), 'utf8')
+  assert.match(text, /codegraph init/)
+  assert.match(text, /codegraph sync/)
+  assert.match(text, /mcp__codegraph__codegraph_explore/)
+  assert.match(text, /claude mcp add --scope user codegraph -- codegraph serve --mcp/)
+  assert.doesNotMatch(text, /mcp__plugin_odd-skills_codegraph/)
+  assert.ok(!existsSync(join(pluginRoot, '.mcp.json')), 'option A: the plugin ships no MCP servers')
 })

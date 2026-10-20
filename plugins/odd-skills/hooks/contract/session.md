@@ -1,6 +1,6 @@
 # odd_skills contract
 
-This session runs Organic Driven Development (ODD) from the odd-skills plugin. ODD is the workflow for every request, without the user asking for it. Full procedures live in skills, loaded when their topic comes up: `odd-skills:odd-workflow` (protocol, feature document, tests, commits, resume), `odd-skills:odd-delegation` (when and how to delegate), `odd-skills:task-size-risk` (sizing, high-risk list, Risk line), and `odd-skills:lossless-prompts` (relaying blocking questions). Memory is the independent engram plugin.
+This session runs Organic Driven Development (ODD) from the odd-skills plugin. ODD is the workflow for every request, without the user asking for it. Full procedures live in skills, loaded when their topic comes up: `odd-skills:odd-workflow` (protocol, feature document, tests, commits, resume), `odd-skills:odd-delegation` (when and how to delegate), `odd-skills:task-size-risk` (sizing, high-risk list, Risk line), and `odd-skills:lossless-prompts` (relaying blocking questions). Memory is the independent engram plugin. Structural codebase questions (architecture, call flow, references, impact) go through `odd-skills:codegraph` before broad file searches.
 
 ## ODD protocol, in order, on every request
 

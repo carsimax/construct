@@ -209,7 +209,7 @@ Design consequences:
 | T8 | S1, S2 | `rdd-review` skill, RDD switch, receipt boundary, `Stop` review gate, contract RDD section (workflows dropped, L29) | delegated: two parallel units (Writer trigger a) | 2 and 6 (review gate) | done | `feat: add the RDD switch, review boundary, and Stop gate` + `feat: add the rdd-review skill and contract section` + `fix: cover uncommitted reviews and boundary ordering` (slice 11) |
 | T9 | S1 | `secret-guard` `PreToolUse` deny list for file tools and Bash (Risk-line prompt hook dropped, L31) | delegated (`odd-worker`, sonnet): long-session context backstop | 2 | done | `feat: add a secret guard PreToolUse hook` + `fix: close secret guard glob leak and false positives` (slice 13) |
 | T10 | S1 | Feature-state re-injection on SessionStart compact/resume (task sync dropped, L32) | delegated (`odd-worker`, sonnet): long-session context backstop | none | done | `feat: re-inject active feature state after compaction` (slice 15) |
-| T11 | S1 | `.mcp.json` (context7, codegraph) and `codegraph` skill | inline | none | pending | — |
+| T11 | S1 | `codegraph` skill and user-scope MCP setup docs; no plugin `.mcp.json` (option A, L33) | inline | none | done | `feat: add the codegraph skill and MCP setup docs` (slice 16) |
 | T12 | S2, S8 | Mod status panel: replica of the user's statusline (S8) plus ODD task progress and RDD state (experimental; must fail open) | inline | 6 | pending | — |
 | T13 | S1, S3, S4 | Migration runbook and README: back up `~/.claude`, remove `gentle-ai:*` blocks and gentle-ai hooks, run side by side with `--plugin-dir`, then `gentle-ai uninstall` keeping engram | inline | 5 | pending | — |
 | T14 | S9 | Rename the plugin from `odd-skills` to `construct` (manifest, marketplace, prefixes, mod, contract filter, tests, evals, docs) | inline | 3 (component prefix changes) | pending | — |
@@ -248,6 +248,7 @@ main
 | 13 | `odd-skills/13-secret-guard` | T9 | the two T9 commits | about 620 | slightly over; one unit plus one correction batch |
 | 14 | `odd-skills/14-guard-followups` | F11–F14 | `fix: close secret guard pipe, pattern-file, and glob bypasses` + `fix: treat \|& as a pipe in the secret guard` | about 175 | within |
 | 15 | `odd-skills/15-feature-state` | T10 | `feat: re-inject active feature state after compaction` | about 400 | within |
+| 16 | `odd-skills/16-codegraph` | T11 | `feat: add the codegraph skill and MCP setup docs` | about 120 | within |
 
 Push and PR creation remain the user's decision.
 
@@ -766,3 +767,12 @@ Push and PR creation remain the user's decision.
       - With several active documents, the footer names each mirror topic.
       - In this document the last `Next step:` match can be a spec line that quotes `Next step:`.
     - Risk: none, so no independent verifier.
+- **L33 (2026-10-19, user):** "Ok A"
+  - Question asked: should the plugin ship context7 and codegraph MCP servers? The user chose **A: no**.
+  - Reason: the user already has both at user scope, and plugin copies would load duplicate tools (`mcp__plugin_odd-skills_codegraph__*` beside `mcp__codegraph__*`). The ported agents reference the user-scope names.
+  - T11 is done inline on `odd-skills/16-codegraph`:
+    - `skills/codegraph/SKILL.md` is adapted from the CodeGraph guidance and uses the upstream `codegraph init` instead of `gentle-ai codegraph init`.
+    - The README section "MCP servers" gives the exact registration commands taken from the user's live config: `claude mcp add --scope user codegraph -- codegraph serve --mcp` and `claude mcp add --scope user context7 -- npx -y --package=@upstash/context7-mcp@2.2.5 -- context7-mcp`.
+    - The session contract gained one line pointing structural questions at `odd-skills:codegraph`.
+    - NOTICE updated.
+  - Tests: RED first (expected-skills list plus a content test asserting no plugin `.mcp.json`), then GREEN. `node --test tests/` gave `501 pass`.
