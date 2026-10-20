@@ -78,7 +78,8 @@ test('the session contract scales autonomy to the verifier and closes with check
   assert.match(flat, /strong verifier[^.]*loop until it passes/i)
   assert.match(flat, /weak verifier[^.]*one small step[^.]*stop/i)
   assert.match(flat, /docs-only[^.]*reviewed diff is the verifier/i)
-  const close = flat.match(/7\. Close\.[^\n]*/)?.[0] ?? flat.slice(flat.indexOf('7. Close.'), flat.indexOf('7. Close.') + 400)
+  const close = text.match(/^7\. Close\..*$/m)?.[0]
+  assert.ok(close, 'step 7 Close line not found')
   assert.match(close, /skipped|unverified/i)
   assert.match(close, /Risk line/)
   assert.ok(text.includes('Risk: item N (reason)') && text.includes('Risk: none'))
