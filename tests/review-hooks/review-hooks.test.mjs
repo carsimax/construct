@@ -4,7 +4,7 @@
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { finding, highRepo, lensResult, readTransaction, scratchDir, start } from '../review/helpers.mjs'
 
@@ -136,6 +136,35 @@ describe('capture hook', () => {
     const reply = fenced(lensResult(txn.subjects['review-risk'], txn.manifest))
     const r = hook(CAPTURE_HOOK, stopInput(repo, reply), data)
     assert.equal(r.status, 0)
+    assert.equal(r.stdout, '')
+    assert.ok(readTransaction(repo, txn.lineage).results['review-risk'])
+  })
+
+  // A background lens hands its report back through the SubagentHandback tool,
+  // so its final message has no text: the hook reads the agent's transcript.
+  const transcript = (entries) => {
+    const file = join(scratchDir('odd-hooks-transcript-'), 'agent.jsonl')
+    writeFileSync(file, entries.map((entry) => JSON.stringify(entry)).join('\n') + '\n')
+    return file
+  }
+  const handback = (message) => ({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', name: 'SubagentHandback', input: { message } }] } })
+
+  test('a background lens reply delivered through SubagentHandback is captured from the transcript', () => {
+    const { repo, txn, data } = lineage()
+    spawned(repo, txn, data)
+    const report = JSON.stringify(lensResult(txn.subjects['review-risk'], txn.manifest))
+    const path = transcript([{ type: 'user', message: { role: 'user', content: 'ODD_REVIEW_BINDING ...' } }, handback(report)])
+    const r = hook(CAPTURE_HOOK, stopInput(repo, '', 'construct:review-risk', { agent_transcript_path: path }), data)
+    assert.equal(r.stdout, '')
+    assert.ok(readTransaction(repo, txn.lineage).results['review-risk'])
+  })
+
+  test('without a handback, the last assistant text in the transcript is captured', () => {
+    const { repo, txn, data } = lineage()
+    spawned(repo, txn, data)
+    const report = fenced(lensResult(txn.subjects['review-risk'], txn.manifest))
+    const path = transcript([{ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: report }] } }])
+    const r = hook(CAPTURE_HOOK, stopInput(repo, undefined, 'construct:review-risk', { agent_transcript_path: path }), data)
     assert.equal(r.stdout, '')
     assert.ok(readTransaction(repo, txn.lineage).results['review-risk'])
   })

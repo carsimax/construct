@@ -1,5 +1,6 @@
 // SubagentStop hook for construct:review-* agents that review-context.mjs
-// prepared: pipe the agent's final reply to odd-review (capture,
+// prepared: pipe the agent's report (its final reply, or the SubagentHandback
+// message a background agent sends, read from its transcript) to odd-review (capture,
 // capture-refuter, or capture-validation), so no result is copied by hand. Only
 // a surrounding code fence is removed; the JSON itself is never edited. A
 // malformed or invalid reply blocks the stop with the validator's message, at
@@ -18,6 +19,30 @@ const RETRYABLE = new Set(['malformed_result', 'invalid_result'])
 const FENCE = /^```[A-Za-z]*[ \t]*\r?\n([\s\S]*?)\r?\n```$/
 const unfence = (text) => FENCE.exec(text.trim())?.[1] ?? text
 
+// replyOf is the agent's report: last_assistant_message when it has text,
+// otherwise, from the agent's transcript, the message of its last
+// SubagentHandback call (how a background agent reports) or its last text.
+function replyOf(input) {
+  if (typeof input.last_assistant_message === 'string' && input.last_assistant_message.trim() !== '') return input.last_assistant_message
+  if (typeof input.agent_transcript_path !== 'string') return null
+  let handback = null
+  let text = null
+  for (const line of readFileSync(input.agent_transcript_path, 'utf8').split('\n')) {
+    let entry
+    try {
+      entry = JSON.parse(line)
+    } catch {
+      continue
+    }
+    if (entry?.type !== 'assistant' || !Array.isArray(entry.message?.content)) continue
+    for (const part of entry.message.content) {
+      if (part.type === 'tool_use' && part.name === 'SubagentHandback' && typeof part.input?.message === 'string') handback = part.input.message
+      if (part.type === 'text' && part.text.trim() !== '') text = part.text
+    }
+  }
+  return handback ?? text
+}
+
 function captureArgs({ lineage, lens }) {
   if (lens === 'review-refuter') return ['capture-refuter', '--lineage', lineage]
   if (lens === 'review-validator') return ['capture-validation', '--lineage', lineage]
@@ -34,7 +59,7 @@ function refusalOf(stderr) {
 
 function main() {
   const input = readInput()
-  if (typeof input?.agent_type !== 'string' || typeof input.last_assistant_message !== 'string') return
+  if (typeof input?.agent_type !== 'string') return
   const file = pendingFile(input.session_id, input.agent_type)
   let pending
   try {
@@ -43,9 +68,11 @@ function main() {
     return
   }
 
+  const reply = replyOf(input)
+  if (reply === null) return
   const args = captureArgs(pending)
   const result = spawnSync('node', [ODD_REVIEW, '--cwd', pending.cwd, ...args, '--input', '-'], {
-    input: unfence(input.last_assistant_message),
+    input: unfence(reply),
     encoding: 'utf8',
     timeout: 25_000,
   })
