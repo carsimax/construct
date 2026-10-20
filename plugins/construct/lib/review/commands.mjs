@@ -9,7 +9,7 @@ import { readFileSync } from 'node:fs'
 import { resolveCandidate } from '../assess/cli.mjs'
 import { createIsolation, freezeWorkingTree, git, resolveTree } from '../assess/git.mjs'
 import { assessSnapshotRisk } from '../assess/classify.mjs'
-import { publicRisk } from '../assess/output.mjs'
+import { lensesFor, publicReasons, publicRisk } from '../assess/output.mjs'
 import { collectDiffStats, countChangedLines } from '../assess/stats.mjs'
 import { headCommit } from './boundary.mjs'
 import { buildContext, DEFAULT_CONTEXT_BYTES } from './evidence.mjs'
@@ -108,8 +108,21 @@ function commitFields(root, candidate) {
   return fields
 }
 
+// assessedLenses is start's default when no --lenses is given: the lenses the
+// assessment assigns to the frozen candidate, and a reason built from it.
+function assessedLenses(assessment) {
+  const risk = publicRisk(assessment.level)
+  const lenses = lensesFor(risk)
+  if (lenses.length === 0) {
+    throw new Refusal('lenses_required', `the candidate is ${risk} risk, which assigns no lenses; pass --lenses and --lenses-reason`, { risk })
+  }
+  const reasons = publicReasons(assessment.reasons).map((reason) => (reason.path ? `${reason.code} ${reason.path}` : reason.code))
+  return { lenses, lensesReason: `odd-assess: ${risk} risk (${reasons.join(', ')})` }
+}
+
 // start freezes the candidate and opens a transaction in state collecting.
-export function start({ root, cwd, baseRef, committedOnly, lenses, lensesReason }) {
+// Without lenses, it takes them from the assessment (assessedLenses).
+export function start({ root, cwd, baseRef, committedOnly, lenses: requested, lensesReason: requestedReason }) {
   let isolation = null
   try {
     let candidate
@@ -125,6 +138,7 @@ export function start({ root, cwd, baseRef, committedOnly, lenses, lensesReason 
     if (receiptExists(root, target)) {
       throw new Refusal('target_already_acknowledged', 'this exact candidate already has a receipt; change the candidate to review it again', { target })
     }
+    const { lenses, lensesReason } = requested ? { lenses: requested, lensesReason: requestedReason } : assessedLenses(assessment)
     const lineage = newLineage()
     const now = new Date().toISOString()
     const transaction = {

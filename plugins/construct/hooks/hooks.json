@@ -1,5 +1,7 @@
 {
-  "modules": ["./register.js"],
+  "modules": [
+    "./register.js"
+  ],
   "hooks": {
     "SessionStart": [
       {
@@ -8,7 +10,10 @@
           {
             "type": "command",
             "command": "node",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/contract.mjs", "session"],
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/contract.mjs",
+              "session"
+            ],
             "timeout": 10
           }
         ]
@@ -19,7 +24,9 @@
           {
             "type": "command",
             "command": "node",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/feature-state.mjs"],
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/feature-state.mjs"
+            ],
             "timeout": 10
           }
         ]
@@ -31,7 +38,10 @@
           {
             "type": "command",
             "command": "node",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/contract.mjs", "subagent"],
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/contract.mjs",
+              "subagent"
+            ],
             "timeout": 10
           }
         ]
@@ -44,8 +54,38 @@
           {
             "type": "command",
             "command": "node",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/secret-guard.mjs"],
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/secret-guard.mjs"
+            ],
             "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/review-context.mjs"
+            ],
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": "^construct:review-",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/review-capture.mjs"
+            ],
+            "timeout": 30
           }
         ]
       }
@@ -56,7 +96,9 @@
           {
             "type": "command",
             "command": "node",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/review-gate.mjs"],
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/review-gate.mjs"
+            ],
             "timeout": 30
           }
         ]

@@ -6,7 +6,7 @@ import { spawn } from 'node:child_process'
 import { existsSync, mkdirSync, utimesSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
-  REVIEW_BIN, applyFiles, capture, captureAll, finding, git, highRepo, lensResult, readTransaction, repoFingerprint, review,
+  REVIEW_BIN, applyFiles, capture, captureAll, finding, git, highRepo, lensResult, makeRepo, readTransaction, repoFingerprint, review,
   scratchDir, start, storeRoot, transactionFile, write,
 } from './helpers.mjs'
 
@@ -424,11 +424,28 @@ describe('the repository is never changed', () => {
 })
 
 describe('usage', () => {
-  test('start requires lenses and a reason', () => {
+  test('explicit lenses still need a reason, and a reason needs lenses', () => {
     const repo = highRepo()
     assert.equal(review(repo, ['start', '--lenses-reason', 'x']).status, 2)
     assert.equal(review(repo, ['start', '--lenses', 'risk']).status, 2)
     assert.equal(review(repo, ['start', '--lenses', 'risk', '--lenses-reason', '  ']).status, 2)
+  })
+
+  test('start without --lenses takes the lenses and reason from the assessment', () => {
+    const r = review(highRepo(), ['start'])
+    assert.equal(r.status, 0, r.stderr)
+    assert.deepEqual(r.json.lenses, ['review-risk', 'review-resilience', 'review-readability', 'review-reliability'])
+    assert.equal(r.json.risk, 'high')
+    assert.match(r.json.lenses_reason, /^odd-assess: high risk \(.+\)$/)
+  })
+
+  test('start without --lenses refuses a tier that assigns no lenses', () => {
+    const repo = makeRepo({ 'src/app.js': 'export const a = 1\n' })
+    applyFiles(repo, { 'src/app.js': 'export const a = 2\n' })
+    const r = review(repo, ['start'])
+    assert.equal(r.status, 1)
+    assert.equal(r.error.code, 'lenses_required')
+    assert.match(r.error.message, /--lenses/)
   })
 
   test('unknown lenses, commands, and options are usage errors', () => {

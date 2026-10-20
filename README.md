@@ -80,6 +80,24 @@ The manual steps the installer runs, for when you want to run them yourself:
    - Ask Claude to run `odd-review mode status`; it prints `{"mode":"on","source":"default"}`. The plugin's `bin/` is on the PATH of Claude's Bash tool only, not your own shell.
    - After a turn ends, the band above the prompt shows the `RDD` line.
 
+## Update
+
+Construct and engram update through Claude Code's plugin commands. Running `install.sh` again does not update them: it skips every step that is already done.
+
+```bash
+claude plugin marketplace update construct     # fetch the latest catalog from carsimax/construct
+claude plugin update construct@construct       # install the new version
+```
+
+Restart Claude Code afterwards; a plugin update applies to new sessions. `claude plugin list` shows the installed version.
+
+To update engram as well, upgrade the binary and rerun its setup, which also updates the `engram@engram` plugin:
+
+```bash
+brew upgrade engram
+engram setup claude-code
+```
+
 ## How the ODD contract loads
 
 A plugin cannot ship a `CLAUDE.md`, so Construct loads its rules in three layers:
@@ -164,7 +182,8 @@ Exit codes: `0` for any successful assessment, including a fail-closed one (`ris
 `bin/odd-review` runs the review lifecycle without any external binary: it freezes the candidate, serves immutable evidence to the review agents, validates their results, drives one bounded correction, and records a receipt. It never asks for consent; that belongs to the review skill.
 
 ```bash
-odd-review start --lenses risk,reliability --lenses-reason "touches the login guard"   # or --base-ref main --committed-only
+odd-review start                                    # lenses from odd-assess; or --base-ref main --committed-only
+odd-review start --lenses risk,reliability --lenses-reason "touches the login guard"   # explicit lenses
 odd-review context --lineage L --lens risk          # evidence for one lens (binding + block)
 odd-review capture --lineage L --lens risk --input result.json     # one per selected lens ("-" reads stdin)
 odd-review capture-refuter --lineage L --input refuter.json        # only after refutation_required
@@ -177,7 +196,7 @@ odd-review acknowledge --lineage L                  # only when approved; writes
 States: `collecting` to `approved`, `refutation_required`, or `correction_required`; `refutation_required` to `approved` or `correction_required`; `correction_required` to `validation_required`; `validation_required` to `approved` or `escalated` (a human decision); `approved` to `acknowledged`.
 
 - Every command prints JSON with the exact `next` commands. Exit `0` is success, `1` a refused transition (`{"error":{"code","message"}}` on stderr), `2` bad usage.
-- Lenses are `review-risk`, `review-resilience`, `review-readability`, and `review-reliability`; the short names work and the canonical order is kept.
+- Lenses are `review-risk`, `review-resilience`, `review-readability`, and `review-reliability`; the short names work and the canonical order is kept. Without `--lenses` (and `--lenses-reason`), `start` takes the lenses `odd-assess` assigns to the frozen candidate, all four for `high`, and records `odd-assess: <risk> risk (<reasons>)` as the reason; a `medium` or `passive` candidate refuses with `lenses_required`. `--lenses` and `--lenses-reason` go together.
 - The candidate is frozen into immutable git trees (the working state goes through a temporary index). `context` serves name-status, numstat, and one verbatim patch per changed path from those trees only, and refuses with `context_budget_exceeded` above 400 KB (`--max-bytes N` overrides it); split the change into smaller slices when that happens.
 - `capture` validates the result against the agent's output contract: matching `subject_hash`, no unknown or missing fields, a completed inspection that lists exactly the changed paths, a selected lens, and one capture per lens.
 - Only a BLOCKER or CRITICAL finding introduced by the candidate blocks. Deterministic ones need a correction; inferential ones go to the refuter first. Everything else is advisory and lands in the receipt.
@@ -197,7 +216,16 @@ odd-review boundary                         # {"commit":"<sha>","source":"receip
 
 - The switch is on by default. Precedence is the clone file (`<git-common-dir>/odd-review/mode.json`), then the global file (`${XDG_CONFIG_HOME:-$HOME/.config}/construct/rdd.json`), then the default. An unreadable file is skipped. Writes are atomic.
 - `boundary` is the start of the next committed range: among the receipts whose `candidate_commit` is an ancestor of (or equal to) `HEAD`, the one closest to `HEAD` by ancestry (ties go to the newest acknowledgement, so reviewing an older commit later never moves the boundary back), else the merge-base with the default branch (the first of `origin/HEAD`, `main`, `master`, `origin/main`, `origin/master` that resolves and differs from `HEAD`), else the root commit. Receipts of committed-mode reviews record `candidate_commit` (and `base_commit` when `--base-ref` names a commit); older receipts without them stay valid and are ignored by `boundary`.
-- The plugin's `Stop` hook (`hooks/scripts/review-gate.mjs`) assesses any uncommitted changes, and `boundary..HEAD` when the boundary comes from a receipt or a merge-base. A root boundary (for example the default branch of an existing repository with no receipts) never opens a committed range, so the gate does not review a whole history. When one is `high`, has no receipt, and was not yet reminded in this session, it blocks the stop once with the range, up to three reasons, and the next step (load `construct:rdd-review`, ask for consent, or skip). Reminders are kept per session under `${CLAUDE_PLUGIN_DATA}/review-gate/`; without `CLAUDE_PLUGIN_DATA` they go to a private `construct-<uid>` directory in the system temp dir, which must be owned by the user with no group or other access (otherwise the gate stays silent). It does nothing when the switch is off, outside a repository, in a repository without commits, or when `stop_hook_active` is set, and it fails open on any error.
+- The plugin's `Stop` hook (`hooks/scripts/review-gate.mjs`) assesses any uncommitted changes, and `boundary..HEAD` when the boundary comes from a receipt or a merge-base. A root boundary (for example the default branch of an existing repository with no receipts) never opens a committed range, so the gate does not review a whole history. When one is `high`, has no receipt, and was not yet reminded in this session, it blocks the stop once with the range, up to three reasons, and the next step (load `construct:rdd-review`, ask for consent, or skip). Reminders are kept per session under `${CLAUDE_PLUGIN_DATA}/review-gate/`; without `CLAUDE_PLUGIN_DATA` they go to a private `construct-<uid>` directory in the system temp dir, which must be owned by the user with no group or other access (otherwise the gate stays silent). It does nothing when the switch is off, outside a repository, in a repository without commits, or when `stop_hook_active` is set, stays silent for a target that has an open lineage (any state but `escalated` and `acknowledged`, with a transition in the last six hours; an older one counts as abandoned), and fails open on any error.
+
+### Review hooks: context in, results out
+
+Two hooks move the hand-offs between the orchestrator and the lens agents into code. The orchestrator launches each lens with only the lineage id as its prompt (for example `Review lineage review-0123456789abcdef`).
+
+- **`PreToolUse` on `Agent`** (`hooks/scripts/review-context.mjs`). For a `construct:review-*` agent (the four lenses, the refuter, and the validator) whose prompt names a lineage, it runs `odd-review context` for that agent and returns it as `updatedInput.prompt` with `permissionDecision: allow`. A review agent without a lineage, or one `odd-review` refuses (for example `lens_not_selected`), is denied with the reason. A prompt that already starts with the `ODD_REVIEW_BINDING` line passes through. Other agents are untouched.
+- **`SubagentStop` on `^construct:review-`** (`hooks/scripts/review-capture.mjs`). For an agent the first hook prepared, it pipes the agent's report to `capture`, `capture-refuter`, or `capture-validation`: `last_assistant_message`, or, when that has no text (a background agent reports through its `SubagentHandback` call), the handback message or last text read from `agent_transcript_path`. Only a surrounding code fence is removed; the JSON is never edited. A `malformed_result` or `invalid_result` refusal blocks the stop with the validator's message, at most twice; any other answer lets the agent stop. The orchestrator then reads `odd-review status`.
+
+The lineage of each spawned agent is kept per session and agent type under `${CLAUDE_PLUGIN_DATA}/review-hooks/` (same fallback rules as the gate). Both hooks fail open on errors.
 
 Store: `$(git rev-parse --git-common-dir)/odd-review/`, so nothing is written into the worktree and linked worktrees share it.
 
@@ -308,7 +336,7 @@ scripts/eval.sh --case small-inline
 | `plugins/construct/` | The plugin (manifest name `construct`) |
 | `plugins/construct/agents/` | The 13 role agents |
 | `plugins/construct/skills/` | Delivery and review skills (`branch-pr`, `chained-pr`, `work-unit-commits`, `judgment-day`, ...) |
-| `plugins/construct/hooks/` | `hooks.json`, the mod (`register.js`), its routing helpers, and the status band modules (`status/`) |
+| `plugins/construct/hooks/` | `hooks.json`, the mod (`register.js`), its routing helpers, the status band modules (`status/`), and the command hooks (`scripts/`: contract, feature state, secret guard, review gate, review context and capture) |
 | `plugins/construct/bin/` | Executable scripts put on the `PATH` (`odd-assess`) |
 | `plugins/construct/lib/assess/` | `odd-assess` modules: git, stats, passive, signals, sinks, content, classify, escalation, output |
 | `plugins/construct/hooks/contract/` | Session and subagent contract texts injected by hooks |

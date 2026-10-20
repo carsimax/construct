@@ -5,7 +5,7 @@
 // Every write is a temporary file plus rename in the same directory.
 import { randomBytes } from 'node:crypto'
 import {
-  closeSync, existsSync, statSync, linkSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, unlinkSync, writeFileSync,
+  closeSync, existsSync, statSync, linkSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, rmSync, unlinkSync, writeFileSync,
 } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { git } from '../assess/git.mjs'
@@ -21,6 +21,38 @@ export const transactionPath = (root, lineage) => join(storeDir(root), 'transact
 export const receiptPath = (root, target) => join(storeDir(root), 'receipts', `${target.replace(/^sha256:/, '')}.json`)
 
 export const receiptExists = (root, target) => existsSync(receiptPath(root, target))
+
+const TERMINAL_STATES = new Set(['escalated', 'acknowledged'])
+// A review runs for minutes; one idle longer than this was abandoned.
+export const OPEN_LINEAGE_MAX_IDLE_MS = 6 * 3600 * 1000
+
+// openLineageTargets lists the targets of every transaction still in flight
+// (any state but escalated and acknowledged, with a transition in the last
+// OPEN_LINEAGE_MAX_IDLE_MS), including a correction's target. It reads without
+// the lock: writes are atomic renames. An unreadable transaction is skipped.
+export function openLineageTargets(root, now = Date.now()) {
+  const dir = join(storeDir(root), 'transactions')
+  let names
+  try {
+    names = readdirSync(dir).filter((name) => /^review-[0-9a-f]{16}\.json$/.test(name))
+  } catch {
+    return new Set()
+  }
+  const targets = new Set()
+  for (const name of names) {
+    try {
+      const transaction = JSON.parse(readFileSync(join(dir, name), 'utf8'))
+      if (TERMINAL_STATES.has(transaction.state)) continue
+      const last = Date.parse(transaction.history?.at(-1)?.at ?? transaction.created_at)
+      if (!(now - last <= OPEN_LINEAGE_MAX_IDLE_MS)) continue
+      if (typeof transaction.target === 'string') targets.add(transaction.target)
+      if (typeof transaction.correction?.target === 'string') targets.add(transaction.correction.target)
+    } catch {
+      // Skip it; the gate still checks receipts.
+    }
+  }
+  return targets
+}
 
 function temporaryName(file) {
   const slash = file.lastIndexOf('/')
