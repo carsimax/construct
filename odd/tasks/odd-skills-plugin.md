@@ -884,3 +884,16 @@ Push and PR creation remain the user's decision.
 - **L40 (2026-10-20, user):** "Y quita la documentación de la migración esto se asume que estará en máquinas limpias"
   - `docs/MIGRATION.md`, `tests/migration.test.mjs`, and the README "Migrating from gentle-ai" section are removed. The plugin is assumed to install on clean machines, and the README Quick path covers that.
   - T13 is superseded by this decision.
+- **L41 (2026-10-20, user):** "Ahora podemos hacer el repo público y proteger main ?"; protection level chosen: "Estricta con PRs".
+  - Pre-publication scan of the full history (49 commits):
+    - the only author is the GitHub noreply address;
+    - no tokens, keys, or credentials;
+    - no institutional email, other project names, or local absolute paths;
+    - the MIT notice for the adapted gentle-ai material is present in `NOTICE`.
+  - `gh repo edit carsimax/construct --visibility public` → `PUBLIC`.
+  - `main` protection, read back from the API:
+    - pull request required, with 0 approvals (single maintainer);
+    - `enforce_admins: true`;
+    - linear history required;
+    - force pushes and deletion blocked.
+  - From now on every change to `main` goes through a pull request, including the owner's.
