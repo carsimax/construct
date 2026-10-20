@@ -16,7 +16,8 @@ export const ESCALATION_REASON_MAX_BYTES = 500
 export class UsageError extends Error {}
 
 // parseEscalation validates --escalate-item and --escalate-reason: both or
-// neither, an integer item from 1 to 6, a non-blank reason of at most 500 bytes.
+// neither, an integer item from 1 to 6, a non-blank one-line reason (no newline or other
+// control character) of at most 500 bytes.
 export function parseEscalation(item, reason) {
   const itemGiven = item !== undefined
   const reasonGiven = reason !== undefined
@@ -31,6 +32,9 @@ export function parseEscalation(item, reason) {
   }
   if (goTrimSpace(reason) === '' || Buffer.byteLength(reason) > ESCALATION_REASON_MAX_BYTES) {
     throw new UsageError(`--escalate-reason must be non-empty and at most ${ESCALATION_REASON_MAX_BYTES} bytes`)
+  }
+  if (/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/.test(reason)) {
+    throw new UsageError('--escalate-reason must be one line without control characters')
   }
   return { item: number, reason }
 }
