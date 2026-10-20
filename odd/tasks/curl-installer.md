@@ -15,7 +15,7 @@ Objective: one `curl | bash` command sets up Construct and its tools and merges 
 | ID | Specs | Task | Route | Risk | Status | Commit |
 |---|---|---|---|---|---|---|
 | T1 | S1-S4 | `install.sh` plus `tests/install/install.test.mjs` with stubbed `claude`, `brew`, `engram`, `npm` and a scratch `HOME`, run through piped stdin | inline | 5, 1 | done | see L5 |
-| T2 | S5 | README install section | inline | none | pending | — |
+| T2 | S5 | README install section | inline | none | done | see L6 |
 
 ## Log
 
@@ -24,3 +24,4 @@ Objective: one `curl | bash` command sets up Construct and its tools and merges 
 - **L3 (2026-10-20, user):** "sí, impleméntalo"
 - **L4 (2026-10-20):** Evidence: `/config` stores `outputStyle: "construct:Neutral"` in `~/.claude/settings.local.json`; `theme` is `custom:construct:construct` in `settings.json`. `engram setup claude-code` is non-interactive with an explicit agent. `claude mcp get <name>` exits 1 when missing. `claude plugin marketplace list` prints `Source: GitHub (<owner>/<repo>)`; `claude plugin list` prints `❯ <plugin>@<marketplace>`. No git tags exist yet.
 - **L5 (2026-10-20):** T1 done. RED: `node --test tests/install/` failed with ENOENT on `install.sh`. GREEN: 9 pass. A second RED made the invalid-JSON test require that nothing is installed first; the settings check moved into preflight (`settings_tool check`), GREEN 9 pass. Full `node --test tests/`: 510 pass, 0 fail. `bash -n install.sh`: ok. Tests run under the macOS system `/bin/bash` 3.2.57. `shellcheck`: not installed, skipped. Not run against the real `~/.claude` (would change the user's settings).
+- **L6 (2026-10-20):** T2 done. README gains "One-command install" (command, what it does, options, inspect-before-run) before Quick path, and an `install.sh` row in the layout table. Passive docs: no RED. `node --test tests/`: 510 pass. Pending for the user: push the branch, open the PR, and create and push the `v0.1.0` tag the curl URL points to.
