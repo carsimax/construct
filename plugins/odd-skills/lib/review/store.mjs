@@ -5,7 +5,7 @@
 // Every write is a temporary file plus rename in the same directory.
 import { randomBytes } from 'node:crypto'
 import {
-  closeSync, existsSync, linkSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, unlinkSync, writeFileSync,
+  closeSync, existsSync, statSync, linkSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, unlinkSync, writeFileSync,
 } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { git } from '../assess/git.mjs'
@@ -68,6 +68,8 @@ export function writeTransaction(root, transaction) {
   atomicWrite(transactionPath(root, transaction.lineage), `${JSON.stringify(transaction, null, 2)}\n`)
 }
 
+const EMPTY_LOCK_STALE_MS = 10_000
+
 const processAlive = (pid) => {
   try {
     process.kill(pid, 0)
@@ -91,7 +93,10 @@ export function withLock(root, lineage, fn) {
     } catch (error) {
       if (error.code !== 'EEXIST') throw error
       const holder = Number.parseInt(readFileSync(lock, 'utf8'), 10)
-      if (attempt === 0 && Number.isInteger(holder) && !processAlive(holder)) {
+      // A lock with no pid is a crash between open and write; it is stale only
+      // once it is older than EMPTY_LOCK_STALE_MS, so a writer mid-open is safe.
+      const emptyAndStale = !Number.isInteger(holder) && Date.now() - statSync(lock).mtimeMs > EMPTY_LOCK_STALE_MS
+      if (attempt === 0 && (emptyAndStale || (Number.isInteger(holder) && !processAlive(holder)))) {
         rmSync(lock, { force: true })
         continue
       }

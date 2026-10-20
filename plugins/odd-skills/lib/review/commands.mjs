@@ -69,7 +69,15 @@ function view(transaction, cwd, extra = {}) {
     out.to_correct = transaction.to_correct
     out.correction_budget = { max_changed_lines: correctionBudget(transaction) }
   }
-  if (transaction.state === 'escalated') out.message = 'the correction did not resolve every finding: a human decision is required'
+  if (transaction.state === 'escalated') {
+    if (transaction.escalation) {
+      out.reason = transaction.escalation.reason
+      out.finding_ids = transaction.escalation.finding_ids
+      out.message = 'a BLOCKER or CRITICAL finding has unknown causality: a human decision is required'
+    } else {
+      out.message = 'the correction did not resolve every finding: a human decision is required'
+    }
+  }
   out.next = nextCommands(transaction, cwd)
   return out
 }
@@ -178,7 +186,9 @@ const original = (transaction) => ({ baseTree: transaction.base_tree, candidateT
 // settle applies a reduction outcome to the transaction.
 function settle(transaction, outcome) {
   transaction.refutation_batch = outcome.refutation_batch
+  transaction.confirmed = outcome.confirmed
   transaction.to_correct = outcome.to_correct
+  if (outcome.escalation) transaction.escalation = outcome.escalation
   transaction.advisory = outcome.advisory
   transition(transaction, outcome.state)
 }
@@ -242,8 +252,9 @@ export function captureRefuter({ root, cwd, lineage, input }) {
     transaction.refutation = valid.results
     transaction.advisory = advisory
     transaction.refutation_batch = []
-    if (corroborated.length > 0) {
-      transaction.to_correct = corroborated
+    const toCorrect = [...(transaction.confirmed ?? []), ...corroborated].sort((a, b) => Number(a.id.slice(1)) - Number(b.id.slice(1)))
+    if (toCorrect.length > 0) {
+      transaction.to_correct = toCorrect
       transition(transaction, 'correction_required')
     } else {
       transition(transaction, 'approved')

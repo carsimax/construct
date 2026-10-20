@@ -3,7 +3,7 @@
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, utimesSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   applyFiles, capture, captureAll, finding, git, highRepo, lensResult, readTransaction, repoFingerprint, review,
@@ -252,6 +252,21 @@ describe('store, locking and atomicity', () => {
     writeFileSync(lock, `${child.pid}\n`)
     const r = capture(repo, txn, 'review-risk', lensResult(hashOf(txn), txn.manifest))
     assert.equal(r.status, 0)
+    assert.ok(!existsSync(lock))
+  })
+
+  test('an empty lock is reclaimed only once it is older than 10 seconds', () => {
+    const repo = highRepo()
+    const txn = start(repo)
+    const lock = `${transactionFile(repo, txn.lineage).replace(/\.json$/, '')}.lock`
+    const ok = () => capture(repo, txn, 'review-risk', lensResult(hashOf(txn), txn.manifest))
+    writeFileSync(lock, '')
+    const fresh = ok()
+    assert.equal(fresh.status, 1)
+    assert.equal(fresh.error.code, 'transaction_locked')
+    const old = new Date(Date.now() - 60_000)
+    utimesSync(lock, old, old)
+    assert.equal(ok().status, 0)
     assert.ok(!existsSync(lock))
   })
 

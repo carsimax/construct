@@ -134,7 +134,7 @@ describe('reduction', () => {
     const repo = highRepo()
     const txn = start(repo)
     const reduced = captureAll(repo, txn, {
-      'review-risk': [finding({ causal_disposition: 'pre-existing' }), finding({ severity: 'WARNING' }), finding({ causal_disposition: 'unknown' })],
+      'review-risk': [finding({ causal_disposition: 'pre-existing' }), finding({ severity: 'WARNING' }), finding({ severity: 'WARNING', causal_disposition: 'unknown' }), finding({ causal_disposition: 'base-only' })],
     })
     assert.equal(reduced.state, 'approved')
   })
@@ -156,6 +156,65 @@ describe('reduction', () => {
     assert.equal(first.json.state, 'collecting')
     assert.deepEqual(first.json.pending, ['review-reliability'])
     assert.ok(first.json.next.length > 0)
+  })
+})
+
+describe('mixed and unknown severe findings', () => {
+  const f1 = finding({ location: 'a.txt:1', severity: 'BLOCKER' })
+  const f2 = finding({ location: 'a.txt:5', evidence_class: 'inferential', claim: 'inferred exposure' })
+  const refute = (repo, txn, outcome) =>
+    review(repo, ['capture-refuter', '--lineage', txn.lineage, '--input', '-'], {
+      input: JSON.stringify({ results: [{ finding_id: 'F2', outcome, proof_refs: ['checked'] }] }),
+    })
+
+  test('deterministic and inferential severe findings share one refuter batch', () => {
+    const repo = highRepo()
+    const txn = start(repo, { lenses: 'risk' })
+    const reduced = captureAll(repo, txn, { 'review-risk': [f1, f2] })
+    assert.equal(reduced.state, 'refutation_required')
+    assert.deepEqual(reduced.refutation_batch.map((f) => f.id), ['F2'])
+  })
+
+  test('a corroborated inferential finding joins the confirmed deterministic one', () => {
+    const repo = highRepo()
+    const txn = start(repo, { lenses: 'risk' })
+    captureAll(repo, txn, { 'review-risk': [f1, f2] })
+    const { json } = refute(repo, txn, 'corroborated')
+    assert.equal(json.state, 'correction_required')
+    assert.deepEqual(json.to_correct.map((f) => f.id), ['F1', 'F2'])
+    applyFiles(repo, { 'scripts/build.sh': 'echo safe\n' })
+    assert.equal(review(repo, ['correct', '--lineage', txn.lineage]).status, 0)
+    const ctx = review(repo, ['context', '--lineage', txn.lineage, '--lens', 'review-validator']).stdout
+    const listed = JSON.parse(ctx.split('\n').find((l) => l.startsWith('ODD_REVIEW_FINDINGS ')).slice('ODD_REVIEW_FINDINGS '.length))
+    assert.deepEqual(listed.map((f) => f.id), ['F1', 'F2'])
+    const subject = readTransaction(repo, txn.lineage).correction.subject_hash
+    const partial = review(repo, ['capture-validation', '--lineage', txn.lineage, '--input', '-'], {
+      input: JSON.stringify({ subject_hash: subject, results: [{ finding_id: 'F1', outcome: 'resolved', proof_refs: ['x'] }], regressions: [] }),
+    })
+    assert.equal(partial.error.code, 'invalid_result')
+  })
+
+  test('a refuted inferential finding leaves only the deterministic one to correct', () => {
+    const repo = highRepo()
+    const txn = start(repo, { lenses: 'risk' })
+    captureAll(repo, txn, { 'review-risk': [f1, f2] })
+    const { json } = refute(repo, txn, 'refuted')
+    assert.equal(json.state, 'correction_required')
+    assert.deepEqual(json.to_correct.map((f) => f.id), ['F1'])
+  })
+
+  test('a severe finding with unknown causality escalates before refutation or correction', () => {
+    const repo = highRepo()
+    const txn = start(repo, { lenses: 'risk' })
+    const reduced = captureAll(repo, txn, { 'review-risk': [finding({ causal_disposition: 'unknown' }), f2] })
+    assert.equal(reduced.state, 'escalated')
+    assert.deepEqual(reduced.next, [])
+    assert.equal(reduced.reason, 'unknown_causality')
+    assert.deepEqual(reduced.finding_ids, ['F1'])
+    const refused = ack(repo, txn)
+    assert.equal(refused.status, 1)
+    assert.equal(refused.error.code, 'not_approved')
+    assert.deepEqual(receiptFiles(repo), [])
   })
 })
 
