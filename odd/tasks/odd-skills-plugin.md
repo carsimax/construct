@@ -689,3 +689,10 @@ Push and PR creation remain the user's decision.
     - **Output:** `{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"…"}}`. The reason names the matched rule and says the user can do it manually.
     - **Errors:** unparseable hook input → allow (exit 0, no output) with a short stderr note. An internal error while evaluating a path that matched a rule → deny. The guard must never block unrelated tools.
     - **Must be confirmed live:** the deny holds under `--permission-mode bypassPermissions` and for subagent tool calls.
+  - Worker result (T9):
+    - `secret-guard.mjs` plus a `PreToolUse` entry in `hooks.json`, 17 tests.
+    - RED came from a stub that always allows (11 failures). Then `node --test tests/` gave `471 pass`.
+    - Quoted multi-word prose in Bash is allowed, but it is still scanned when executed via `bash -c`, `sh -c`, or `eval` (3 levels).
+    - Known limit: the guard is lexical, so obfuscation such as `$(echo .e)nv` or base64 is not caught.
+  - **Live confirmation:** with a dummy `.env`, `claude -p --permission-mode bypassPermissions --plugin-dir …` refused the read, both directly and through a general-purpose subagent. The dummy value was never printed. Transcripts were removed.
+  - **Parent correction (L31 spec error):** a Grep `pattern` is a content regex, not a location. Treating it as a path blocked legitimate searches such as `Grep "\.env"`. Only Grep `path` and `glob` are checked now; Glob `pattern` is still checked. RED, then GREEN. `node --test tests/` gave `472 pass`.

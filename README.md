@@ -147,6 +147,21 @@ odd-review/receipts/<target hex>.json    # written by acknowledge
 
 Writes are a temporary file plus a rename. A second writer on a locked transaction is refused (`transaction_locked`); a lock left by a dead process (or an empty one older than 10 seconds) is reclaimed under a separate `<lock>.reclaim` lock, and only if it is still the very file (same inode and content) that was inspected as stale, so a live lock is never removed. A contender that cannot reclaim does not wait; it gets `transaction_locked`. No command changes the index, `HEAD`, or the working tree.
 
+## Secret guard
+
+A `PreToolUse` hook (`hooks/scripts/secret-guard.mjs`) denies tool calls that touch secrets. It replaces a `permissions.deny` list, which a plugin cannot set. It covers `Read`, `Edit`, `Write`, `MultiEdit`, `NotebookEdit`, `Grep`, `Glob`, and `Bash`, in the main session and in subagents, and holds under `bypassPermissions`.
+
+Protected, anywhere in the tree (paths resolve against `cwd`; `~` and `$HOME` expand):
+
+- `.env` and `.env.*`
+- any `.ssh` or `.credentials` directory, `Library/Keychains`
+- `.aws/credentials` and `.config/gh/hosts.yml`
+- `*.pem` and `*.key` files
+- any `secrets` directory
+- `rm -rf` (any flag order or spelling, with or without `sudo`) aimed at `/`, `~`, `$HOME`, or `/*`
+
+Exception: `.env.example`, `.env.sample`, and `.env.template` are allowed, since they are committed templates. In `Bash`, a quoted multi-word string is prose and is not checked (unless a shell runs it, as in `bash -c "..."`); a bare word such as `.env` is. The denial says which rule matched and that the user can run the command manually. Unreadable hook input is allowed with a stderr note.
+
 ## Local development
 
 Load the plugin for one session without installing it:
