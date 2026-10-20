@@ -178,7 +178,7 @@ setup_mcp() {
 
 # settings_tool MODE: "check" only validates ~/.claude/settings.json; "merge"
 # prints one line per setting: "+ text" changed, "= text" already set,
-# "! text" kept a different value, "backup PATH" when the old file was saved.
+# and "backup PATH" when the old file was saved.
 settings_tool() {
   node - "$1" "$HOME/.claude/settings.json" <<'NODE'
 const fs = require('node:fs')
@@ -275,7 +275,6 @@ merge_settings() {
     case "$line" in
       "+ "*) installed "setting: ${line#+ }" ;;
       "= "*) skipped "setting: ${line#= }" ;;
-      "! "*) warn "${line#! }" ;;
       "backup "*) BACKUP=${line#backup } ;;
     esac
   done <<<"$out"

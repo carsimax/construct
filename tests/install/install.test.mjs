@@ -401,3 +401,24 @@ test('a settings.json symlink to a directory gets the clean directory refusal', 
   assert.doesNotMatch(run.stderr, CLEAN)
   assert.deepEqual(NOTHING_INSTALLED(run), [])
 })
+
+test('settings.local.json is never touched, even with the old theme in it', () => {
+  const box = sandbox()
+  const local = join(box.home, '.claude', 'settings.local.json')
+  const text = '{"theme":"custom:construct:construct"}'
+  writeSettings(box, { model: 'opus' })
+  writeFileSync(local, text)
+  const run = install(box)
+  assert.equal(run.status, 0, run.stderr)
+  assert.equal(readFileSync(local, 'utf8'), text)
+})
+
+test('--force with another theme leaves settings.json unchanged and makes no backup', () => {
+  const box = sandbox()
+  const before = JSON.stringify({ theme: 'dark', permissions: { allow: ['mcp__engram', 'mcp__plugin_engram_engram'] } }, null, 2)
+  writeSettings(box, before)
+  const run = install(box, ['--force'])
+  assert.equal(run.status, 0, run.stderr)
+  assert.equal(readFileSync(settingsPath(box), 'utf8'), before)
+  assert.deepEqual(backups(box), [])
+})
