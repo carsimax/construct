@@ -9,6 +9,7 @@ import { readFileSync } from 'node:fs'
 import { resolveCandidate } from '../assess/cli.mjs'
 import { createIsolation, freezeWorkingTree, git, resolveTree } from '../assess/git.mjs'
 import { assessSnapshotRisk } from '../assess/classify.mjs'
+import { escalateRisk } from '../assess/escalation.mjs'
 import { lensesFor, publicReasons, publicRisk } from '../assess/output.mjs'
 import { collectDiffStats, countChangedLines } from '../assess/stats.mjs'
 import { headCommit } from './boundary.mjs'
@@ -110,19 +111,19 @@ function commitFields(root, candidate) {
 
 // assessedLenses is start's default when no --lenses is given: the lenses the
 // assessment assigns to the frozen candidate, and a reason built from it.
-function assessedLenses(assessment) {
-  const risk = publicRisk(assessment.level)
+function assessedLenses(assessment, escalation) {
+  const { risk, reasons: publicList } = escalateRisk(publicRisk(assessment.level), publicReasons(assessment.reasons), escalation)
   const lenses = lensesFor(risk)
   if (lenses.length === 0) {
     throw new Refusal('lenses_required', `the candidate is ${risk} risk, which assigns no lenses; pass --lenses and --lenses-reason`, { risk })
   }
-  const reasons = publicReasons(assessment.reasons).map((reason) => (reason.path ? `${reason.code} ${reason.path}` : reason.code))
-  return { lenses, lensesReason: `odd-assess: ${risk} risk (${reasons.join(', ')})` }
+  const reasons = publicList.map((reason) => (reason.path ? `${reason.code} ${reason.path}` : reason.code === 'agent_escalation' ? `${reason.code} ${reason.detail}` : reason.code))
+  return { risk, lenses, lensesReason: `odd-assess: ${risk} risk (${reasons.join(', ')})` }
 }
 
 // start freezes the candidate and opens a transaction in state collecting.
 // Without lenses, it takes them from the assessment (assessedLenses).
-export function start({ root, cwd, baseRef, committedOnly, lenses: requested, lensesReason: requestedReason }) {
+export function start({ root, cwd, baseRef, committedOnly, lenses: requested, lensesReason: requestedReason, escalation = null }) {
   let isolation = null
   try {
     let candidate
@@ -138,7 +139,7 @@ export function start({ root, cwd, baseRef, committedOnly, lenses: requested, le
     if (receiptExists(root, target)) {
       throw new Refusal('target_already_acknowledged', 'this exact candidate already has a receipt; change the candidate to review it again', { target })
     }
-    const { lenses, lensesReason } = requested ? { lenses: requested, lensesReason: requestedReason } : assessedLenses(assessment)
+    const { risk, lenses, lensesReason } = requested ? { risk: publicRisk(assessment.level), lenses: requested, lensesReason: requestedReason } : assessedLenses(assessment, escalation)
     const lineage = newLineage()
     const now = new Date().toISOString()
     const transaction = {
@@ -154,7 +155,7 @@ export function start({ root, cwd, baseRef, committedOnly, lenses: requested, le
       manifest_digest: manifestDigest(assessment.manifest),
       changed_paths: assessment.changedPaths,
       changed_lines: assessment.changedLines,
-      risk: publicRisk(assessment.level),
+      risk,
       lenses,
       lenses_reason: lensesReason,
       subjects: Object.fromEntries(lenses.map((lens) => [lens, subjectHashOf({ lineage, target, lens, manifest: assessment.manifest })])),

@@ -12,6 +12,7 @@ State lives under the git common directory (`odd-review/`), never in the worktre
 | `odd-review boundary` | Last reviewed commit, or the branch point: `{commit, source}` |
 | `odd-review start --base-ref B --committed-only` | Freeze a committed range and open a transaction with the lenses `odd-assess` assigns; prints `lineage`, `target`, per-lens `subject_hash`. A tier with no lenses refuses with `lenses_required` |
 | `odd-review start` | Same for the uncommitted changes (no `--base-ref`) |
+| `odd-review start ... --escalate-item N --escalate-reason TEXT` | Raise the tier to `high` first, as in `odd-assess`, so all four lenses apply; use it instead of `--lenses` when `odd-assess` was escalated |
 | `odd-review start ... --lenses LIST --lenses-reason TEXT` | Explicit lenses, only when the user names them or asks to review a `medium` candidate |
 | `odd-review context --lineage L --lens LENS` | Binding and frozen evidence for one lens, the refuter, or the validator. The PreToolUse hook runs it when a review agent is launched with the lineage id |
 | `odd-review capture --lineage L --lens LENS --input -` | Store one lens result; reduces when all lenses are in. The SubagentStop hook runs it, and `capture-refuter` and `capture-validation`, with the agent's reply |

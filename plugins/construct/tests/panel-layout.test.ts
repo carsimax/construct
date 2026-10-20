@@ -84,6 +84,9 @@ const changes = [
 const args = (o: any = {}) => ({ panel: full(), usage, odd, rdd, nowMs: NOW, columns: 66, rows: 60, git, changes, ...o })
 const rowsOf = (o: any = {}) => lines(buildPanel(args(o)))
 const idx = (rows: string[], needle: string) => rows.findIndex((r) => r.includes(needle))
+const lastIdx = (rows: string[], needle: string) => rows.findLastIndex((r) => r.includes(needle))
+// the changes card title row: the branch name alone or with ↑N ↓N, never the main card's `⎇ ` row
+const isTitle = (r: string) => /^feat\/x( [↑↓]\d+)*$/.test(r)
 
 // ---- header ----------------------------------------------------------------
 
@@ -93,7 +96,7 @@ test('PANEL_COLUMNS is 66', async () => {
 
 test('no header and no legend: the panel starts with the main card', async () => {
   const rows = rowsOf()
-  expect(rows[0]).toBe('Opus 5.5 · main ○ idle')
+  expect(rows[0]).toBe('Opus 5.5 ○ idle')
   expect(rows.some((r) => r.startsWith('CONSTRUCT'))).toBe(false)
   expect(rows.some((r) => r.includes('■ main'))).toBe(false)
   const tree = buildPanel(args())
@@ -105,7 +108,7 @@ test('no header and no legend: the panel starts with the main card', async () =>
 
 test('cards come in order: main, ODD, REVIEW, GATE, agents, last turn, changes', async () => {
   const rows = rowsOf()
-  const at = ['Opus 5.5 · main', 'ODD · flightdeck-panel', 'REVIEW', 'GATE · permissions', 'agents · 1 running · 2 total', 'last turn', 'feat/x'].map((n) => idx(rows, n))
+  const at = ['Opus 5.5', 'ODD · flightdeck-panel', 'REVIEW', 'GATE · permissions', 'agents · 1 running · 2 total', 'last turn', 'feat/x ↑2'].map((n) => idx(rows, n))
   for (const i of at) expect(i).toBeGreaterThanOrEqual(0)
   expect([...at].sort((a, b) => a - b)).toEqual(at)
 })
@@ -122,22 +125,34 @@ test('one column: the root is a column Box and nothing splits at 140 columns', a
 
 test('main card: model, status, effort meter, mode, requests, ctx gauge with tokens, cost, 5h and 7d', async () => {
   const rows = rowsOf()
-  expect(rows[idx(rows, 'Opus 5.5 · main')]).toBe('Opus 5.5 · main ○ idle')
-  const i = idx(rows, 'Opus 5.5 · main')
-  expect(rows[i + 1]).toBe('effort ▮▮▯▯ medium   mode auto   7 req')
-  expect(rows[i + 2]).toBe('ctx ▰▰▰▰▰▰▰▱▱▱ 67% 666k/1.0M  ⟲2')
-  expect(rows[i + 3]).toBe('$104   5h ▱▱▱▱▱ 4%   7d ▰▱▱▱▱ 13%')
+  expect(rows[idx(rows, 'Opus 5.5')]).toBe('Opus 5.5 ○ idle')
+  const i = idx(rows, 'Opus 5.5')
+  expect(rows[i + 1]).toBe('⎇ feat/x')
+  expect(rows[i + 2]).toBe('effort ▮▮▯▯ medium   mode auto   7 req')
+  expect(rows[i + 3]).toBe('ctx ▰▰▰▰▰▰▰▱▱▱ 67% 666k/1.0M  ⟲2')
+  expect(rows[i + 4]).toBe('$104   5h ▱▱▱▱▱ 4%   7d ▰▱▱▱▱ 13%')
   const card = buildPanel(args()).children.find((c) => c.props?.borderStyle === 'round')
   expect(card.props.borderColor).toBe('claude')
 })
 
+test('main card branch row: first body row, clipped, control-stripped, hidden without a branch', async () => {
+  const at = (o) => { const r = rowsOf(o); return r[idx(r, ' idle') + 1] }
+  expect(at({})).toBe('⎇ feat/x')
+  expect(rowsOf().some((r) => r.includes('· main'))).toBe(false)
+  expect(at({ git: { ...git, branch: 'a\u001b[31mb' } })).toBe('⎇ a[31mb')
+  const long = at({ git: { ...git, branch: 'x'.repeat(100) }, columns: 40 })
+  expect(long.length).toBe(36)
+  expect(long.endsWith('…')).toBe(true)
+  for (const g of [null, { ...git, branch: '' }, { ...git, branch: undefined }]) expect(at({ git: g }).startsWith('⎇')).toBe(false)
+})
+
 test('main card shows without usage or replica, and is busy while a turn is open', async () => {
   const rows = rowsOf({ usage: null, panel: { ...initialState() }, odd: null, rdd: null, model: 'sonnet' })
-  expect(rows).toContain('Sonnet · main ○ idle')
+  expect(rows).toContain('Sonnet ○ idle')
   expect(rows.some((r) => r.startsWith('ctx'))).toBe(false)
   expect(rows.some((r) => r.startsWith('effort ▯▯▯▯ —'))).toBe(true)
   const busy = { ...full(), receipt: { ...full().receipt, endedMs: null } }
-  expect(rowsOf({ panel: busy }).some((r) => r === 'Opus 5.5 · main ● busy')).toBe(true)
+  expect(rowsOf({ panel: busy }).some((r) => r === 'Opus 5.5 ● busy')).toBe(true)
 })
 
 test('a high ctx is flagged in the error color', async () => {
@@ -285,7 +300,7 @@ test('last turn card: duration, agents, edits, errors, cost added', async () => 
 
 test('changes card: branch title, ↑N ↓N on the right, rows sorted by changed lines with +added -removed', async () => {
   const rows = rowsOf()
-  const i = idx(rows, 'feat/x')
+  const i = lastIdx(rows, 'feat/x')
   expect(rows[i]).toBe('feat/x ↑2 ↓1')
   const body = rows.slice(i + 1, i + 6)
   expect(body.map((r) => r.replace(/\s+/g, ' '))).toEqual([
@@ -301,7 +316,7 @@ test('changes card: branch title, ↑N ↓N on the right, rows sorted by changed
 
 test('changes card colors: branch git color, + success, - error; round card', async () => {
   const tree = buildPanel(args())
-  expect(find(tree, 'feat/x')?.props).toMatchObject({ bold: true, color: 'remember' })
+  expect(leaves(tree).findLast((l) => l.text.includes('feat/x'))?.props).toMatchObject({ bold: true, color: 'remember' })
   expect(leaves(tree).find((l) => l.text === '+120')?.props.color).toBe('success')
   expect(leaves(tree).find((l) => l.text === '-80')?.props.color).toBe('error')
   expect(leaves(tree).find((l) => l.text === 'bin')?.props.dimColor ?? leaves(tree).find((l) => l.text === 'bin')?.props.dim).toBeTruthy()
@@ -332,7 +347,7 @@ test('a long path is shortened and keeps its basename; control characters are dr
 test('rows that do not fit end with +N more', async () => {
   const many = Array.from({ length: 30 }, (_, i) => ({ path: `src/f${i}.ts`, added: 30 - i, removed: 0 }))
   const rows = rowsOf({ changes: many, rows: 200 })
-  const i = idx(rows, 'feat/x')
+  const i = lastIdx(rows, 'feat/x')
   expect(rows.slice(i + 1).filter((r) => r.startsWith('src/')).length).toBe(9)
   expect(rows.at(-1)).toBe('+21 more')
   expect(rows[i + 1].startsWith('src/f0.ts')).toBe(true)
@@ -340,7 +355,6 @@ test('rows that do not fit end with +N more', async () => {
 
 test('the changes card is hidden when clean and in sync, and shown when only ahead or behind', async () => {
   const clean = { branch: 'main', dirty: 0, ahead: 0, behind: 0 }
-  expect(textOf(buildPanel(args({ git: clean, changes: [] }))).includes('main\n')).toBe(false)
   expect(rowsOf({ git: clean, changes: [] }).some((r) => r === 'main')).toBe(false)
   expect(rowsOf({ git: { ...clean, ahead: 1 }, changes: [] }).some((r) => r === 'main ↑1')).toBe(true)
   expect(rowsOf({ git: null, changes: undefined }).some((r) => r.includes('feat/x'))).toBe(false)
@@ -415,16 +429,16 @@ test('the panel never takes more rows than the pane has: the changes rows shrink
   }
   const shown = (rows: number) => rowsOf({ ...lean, rows }).filter((r) => r.startsWith('src/')).length
   expect(shown(26)).toBeGreaterThan(0)
-  expect(rowsOf({ ...lean, rows: 9 }).some((r) => r.includes('feat/x'))).toBe(false)
+  expect(rowsOf({ ...lean, rows: 9 }).some(isTitle)).toBe(false)
   // only the frame fits: the title (branch, ↑↓) stays, the rows go
-  expect(rowsOf({ ...lean, rows: 10 }).some((r) => r.includes('feat/x'))).toBe(true)
-  expect(shown(10)).toBe(0)
-  expect(rowsOf({ ...lean, rows: 11 }).at(-1)).toBe('+30 more')
+  expect(rowsOf({ ...lean, rows: 11 }).some(isTitle)).toBe(true)
+  expect(shown(11)).toBe(0)
+  expect(rowsOf({ ...lean, rows: 12 }).at(-1)).toBe('+30 more')
   expect(rowsOf({ ...lean, rows: 26 }).at(-1)).toMatch(/^\+\d+ more$/)
   // a full panel on a short pane: the changes go, the other cards stay
   for (const rows of [20, 24]) {
     const tree = buildPanel(args({ rows }))
-    expect(textOf(tree).includes('feat/x')).toBe(false)
+    expect(rowsOf({ rows }).some(isTitle)).toBe(false)
     expect(textOf(tree).includes('last turn')).toBe(true)
   }
 })

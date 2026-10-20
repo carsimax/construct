@@ -448,6 +448,27 @@ describe('usage', () => {
     assert.match(r.error.message, /--lenses/)
   })
 
+  test('start --escalate-item raises a no-lens candidate to high with four lenses and the escalation reason', () => {
+    const repo = makeRepo({ 'src/app.js': 'export const a = 1\n' })
+    applyFiles(repo, { 'src/app.js': 'export const a = 2\n' })
+    const r = review(repo, ['start', '--escalate-item', '2', '--escalate-reason', 'touches the login guard'])
+    assert.equal(r.status, 0, r.stderr)
+    assert.deepEqual(r.json.lenses, ['review-risk', 'review-resilience', 'review-readability', 'review-reliability'])
+    assert.match(r.json.lenses_reason, /agent_escalation/)
+    assert.match(r.json.lenses_reason, /^odd-assess: high risk \(/)
+  })
+
+  test('--escalate-item with --lenses, a lone escalate flag, or an invalid item is a usage error', () => {
+    const repo = highRepo()
+    const withLenses = review(repo, ['start', '--lenses', 'risk', '--lenses-reason', 'x', '--escalate-item', '2', '--escalate-reason', 'r'])
+    assert.equal(withLenses.status, 2)
+    assert.match(withLenses.stderr, /--lenses/)
+    assert.equal(review(repo, ['start', '--escalate-item', '2']).status, 2)
+    assert.equal(review(repo, ['start', '--escalate-reason', 'r']).status, 2)
+    assert.equal(review(repo, ['start', '--escalate-item', '9', '--escalate-reason', 'r']).status, 2)
+    assert.equal(review(repo, ['status', '--escalate-item', '2']).status, 2)
+  })
+
   test('unknown lenses, commands, and options are usage errors', () => {
     const repo = highRepo()
     assert.equal(review(repo, ['start', '--lenses', 'speed', '--lenses-reason', 'x']).status, 2)

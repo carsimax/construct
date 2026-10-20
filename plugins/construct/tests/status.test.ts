@@ -202,13 +202,12 @@ test('the panel shows the same cards with or without a statusLine', async ($, on
     usage: { startedAt: 0, context: { window: 1, percent: 40 }, rateLimits: [] },
   })
   const text = await joined(ui)
-  expect(text).toContain('Opus 4 · main')
+  expect(text).toContain('Opus 4')
   expect(text).toContain('ODD · feat')
   expect(text).toContain('T2')
   expect(text).toContain('clear')
   expect(text).toContain('ctx')
   expect(text).toContain('40%')
-  expect(text).not.toContain('⎇')
   expect(text).not.toContain('~/proj')
 })
 
@@ -227,8 +226,8 @@ test('the main card draws ctx, 5h and 7d from the session usage, and no dir, git
   })
   const text = await joined(ui)
   expect(text).toMatch(/ODD · feat.*T2/)
-  for (const w of ['ctx', '12%', '120k/1.0M', '$3.50', '5h', '30%', '7d', '60%', 'Opus 4 · main']) expect(text).toContain(w)
-  for (const w of ['~/proj', '⎇', '±2', 'construct:Neutral', 'Explanatory']) expect(text).not.toContain(w)
+  for (const w of ['ctx', '12%', '120k/1.0M', '$3.50', '5h', '30%', '7d', '60%', 'Opus 4']) expect(text).toContain(w)
+  for (const w of ['~/proj', '±2', 'construct:Neutral', 'Explanatory']) expect(text).not.toContain(w)
   expect(text.indexOf('ODD · feat')).toBeGreaterThan(text.indexOf('ctx'))
 })
 
@@ -311,7 +310,7 @@ test('a failing process draws no git or RDD segments and does not throw', async 
   expect(await joined(ui)).toContain('ctx')
   const text = await joined(ui)
   expect(text).toContain('ctx')
-  expect(text).toContain('Opus 4 · main')
+  expect(text).toContain('Opus 4')
   expect(text).not.toContain('⎇')
   expect(text).not.toContain('REVIEW')
 })
@@ -323,7 +322,7 @@ test('with a native statusLine and a failing process nothing extra is drawn', as
   await new Promise((r) => setTimeout(r, 30))
   await ui.redraw()
   const text = await joined(ui)
-  expect(text).toContain('main')
+  expect(text).toContain('Opus 4')
   for (const w of ['ODD ·', 'REVIEW', 'GATE', 'agents ·']) expect(text).not.toContain(w)
 })
 

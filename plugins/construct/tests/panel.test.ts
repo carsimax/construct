@@ -229,7 +229,7 @@ test('a main-thread turn.step shows its request count, model and effort in the m
   const p = await pane($)
   await p.redraw()
   const text = await joined(p)
-  expect(text).toContain('Opus 5.5 · main')
+  expect(text).toContain('Opus 5.5')
   expect(text).toContain('2 req')
   expect(text).toContain('▮▮▮▯')
 })
@@ -306,7 +306,8 @@ test('a clean repository in sync has no changes card', async ($, on) => {
   await start($, on, { git: '# branch.oid abc1234\n# branch.head main\n# branch.ab +0 -0\n' })
   const p = await pane($)
   await p.redraw()
-  expect(await leaves(p)).not.toContain('main')
+  // only the main card's branch row names it: no changes card title
+  expect((await leaves(p)).filter((l) => l === 'main')).toHaveLength(1)
 })
 
 test('5h and 7d show the reset time next to the gauges', async ($, on) => {
