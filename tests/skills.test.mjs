@@ -124,3 +124,21 @@ test('the codegraph skill uses the upstream CLI and the user-scope MCP tool, nev
   assert.doesNotMatch(text, /mcp__plugin_construct_codegraph/)
   assert.ok(!existsSync(join(pluginRoot, '.mcp.json')), 'option A: the plugin ships no MCP servers')
 })
+
+test('S5: odd-delegation handoff names the verifier and its strength', () => {
+  const t = readFileSync(join(skillsRoot, 'odd-delegation/references/handoffs.md'), 'utf8')
+  assert.match(t, /Verifier strength/)
+  assert.match(t, /weak/i)
+  assert.match(t, /stops after one step/)
+})
+
+test('S5: odd-workflow Close names skipped or unverified checks', () => {
+  const t = readFileSync(join(skillsRoot, 'odd-workflow/SKILL.md'), 'utf8')
+  assert.match(t, /\*\*Close\.\*\*[^\n]*unverified/)
+})
+
+test('S5: odd-worker reviews its own diff before reporting', () => {
+  const t = readFileSync(join(pluginRoot, 'agents/odd-worker.md'), 'utf8')
+  assert.match(t, /review your own diff/)
+  assert.match(t, /missing test/)
+})

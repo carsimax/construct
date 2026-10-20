@@ -48,13 +48,13 @@ Load this skill for any request that may change code or docs, for planning a fea
    - Update help text and docs with any changed command, option, or message.
    - After each task, update the document and the mirror.
    - Commit the work unit and record its commit in `## Tasks`.
-7. **Close.** Report the verified outcome, every failed, skipped, or pending check, the next step, and the Risk line. Partial or missing proof becomes one **Needs your decision** result, never another verification loop.
+7. **Close.** One report: the verified outcome, every failed, skipped, or unverified check, the next step, and the Risk line (the Risk line comes last). Partial or missing proof becomes one **Needs your decision** result, never another verification loop.
 
 To resume an interrupted feature, follow references/persistence.md.
 
 ## Output Contract
 
-Every implementation reply ends with: the outcome, the checks run as `<command>: <observed result>`, pending or failed items, the next step, and `Risk: item N (reason)` or `Risk: none`.
+Every implementation reply ends with: the outcome, the checks run as `<command>: <observed result>`, every failed, skipped, or unverified check, the next step, and `Risk: item N (reason)` or `Risk: none`.
 
 ## References
 

@@ -20,7 +20,7 @@ Source: "Tengo esta propuesta de output style pero se que puede ser mas que eso 
 | T1 | S1, S6 | New style file, remove `neutral.md`, `tests/styles.test.mjs`, `status.test.ts`, README, CLAUDE.md | odd-worker | 3 | done | `feat(style): replace Neutral with the Principal Engineer style` |
 | T2 | S2 | Subagent contract rules + contract test | odd-worker | 3 | done | `feat(contract): add engineering rules to the subagent contract` |
 | T3 | S3, S4 | Session contract autonomy and close + contract test | odd-worker | 3 | done | `feat(contract): scale autonomy with the verifier and unify the close` |
-| T4 | S4, S5 | odd-workflow, odd-delegation, odd-worker agent, risk-line grader | odd-worker | 3 | pending | — |
+| T4 | S4, S5 | odd-workflow, odd-delegation, odd-worker agent, risk-line grader | odd-worker | 3 | done | `feat(skills): carry the verifier and the unified close into ODD` |
 | T5 | — | Release 0.8.0 (`plugin.json`) | odd-worker | 5 | pending | — |
 
 T1 and T2 run in parallel (disjoint surfaces); T3 after them; T4 after T3 (it quotes the close); T5 last.
@@ -34,6 +34,7 @@ Risk item 3: every session consumes the output style and the contracts; the Stop
 - **L3 (2026-10-20, user):** "Si vamos a cambiarlo a Principal Engineer y como quedaria el plan", then "Dale con el Plan!".
 - **L4 (2026-10-20):** T1 done: `principal-engineer.md` (7,549 chars) replaces `neutral.md`; code-writing sections replaced by a pointer to the subagent contract; No-verifier bullet per S3; close per S4; Working Rules kept. RED: styles test expected `principal-engineer.md`, got `neutral.md`. `status.test.ts` L170 renamed to keep its intent. T2 done: 5 bullets in `subagent.md` (1,524 → 2,303 chars; test cap 3,000); RED: new contract test failed against the old contract. `node --test tests/` 627 pass; `claude plugin test` 139 pass; validate passed. CLAUDE.md edited, not staged.
 - **L5 (2026-10-20):** T3 done: Close step names failed, skipped, or unverified checks and the Risk line (format paragraph untouched); one "Work continuity" bullet scales autonomy to the verifier (weak verifier counts as missing proof; docs diff is the verifier). RED: new contract test failed first. Emitted contract 7,385 chars (all codegraph variants ≤ 8,000 by test). `node --test tests/` 628 pass; `claude plugin test` 139 pass.
+- **L6 (2026-10-20):** T4 done: odd-workflow Close and Output Contract use the unified close; odd-delegation step 3 and the Worker handoff template name the verifier and its strength (weak: stop after one step); odd-worker gains `## Self-review`. The risk-line grader is a regex on `Risk: none|item N` in the last message, so it already accepts the unified close; left unchanged. RED: 3 new skills tests failed first. `node --test tests/` 631 pass; `claude plugin test` 139 pass; validate passed.
 
 ## Appendix A — proposal (verbatim)
 

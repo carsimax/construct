@@ -36,7 +36,7 @@ A unit is one independent piece of behavior with its code, tests, and docs toget
 
 1. Name the trigger and its evidence. For large work, record the route per task in the feature document.
 2. Derive the allowed edit surface from the task (references/handoffs.md). If it cannot be derived, present the candidate path list as an approve/decline choice under `construct:lossless-prompts`.
-3. Write the handoff by reference: the feature document, the task, and its `S#`; or, without a document, the user's request verbatim. Include the verification commands, the test-first policy, the helpers to reuse, and the invariants to keep.
+3. Write the handoff by reference: the feature document, the task, and its `S#`; or, without a document, the user's request verbatim. Include the verification commands as the unit's verifier with its strength (strong: tests, build, typecheck; weak: none or ambiguous, so the worker stops after one step and reports), the test-first policy, the helpers to reuse, and the invariants to keep.
 4. Launch parallel units in one message.
 5. Check each writer's diff against its surface before accepting it. Run one seam check (the full suite, once) after parallel units.
 6. Spot check one reported command yourself.
