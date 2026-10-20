@@ -4,10 +4,12 @@ Construct is a Claude Code plugin for Organic Driven Development (ODD). It ships
 
 ## Requirements
 
-- Claude Code with plugin support.
-- Node.js 20 or later for the plugin's scripts and hooks (`bin/odd-assess`, and the hook scripts as they land). Claude Code's native install does not bundle Node.js.
-- `git` on the PATH for `odd-assess`.
-- The engram binary and marketplace (see Quick path).
+| Requirement | Why |
+|---|---|
+| Claude Code 2.1.287 or later, signed in | The status band is a mod, and mods need 2.1.287. Tested on 2.1.304 |
+| Node.js 20 or later, with npm | The plugin's scripts and hooks (`odd-assess`, `odd-review`, the hook scripts). Claude Code's native install does not bundle Node.js |
+| `git` on the PATH | `odd-assess` and `odd-review` read the repository |
+| Homebrew (macOS or Linux) | Installs the engram binary |
 
 ## Quick path
 
@@ -18,7 +20,7 @@ Construct is a Claude Code plugin for Organic Driven Development (ODD). It ships
    engram setup claude-code
    ```
 
-2. Add the engram marketplace first. Construct declares `engram@engram` as a dependency, and the dependency resolves only from a marketplace you have already added:
+2. Make sure the engram marketplace is added. `engram setup claude-code` normally adds it and installs the engram plugin; running the command again is harmless. Construct declares `engram@engram` as a dependency, and the dependency resolves only from a marketplace you have already added:
 
    ```bash
    claude plugin marketplace add Gentleman-Programming/engram
@@ -32,6 +34,21 @@ Construct is a Claude Code plugin for Organic Driven Development (ODD). It ships
    ```
 
    The install output ends with `(+ 1 dependency: engram)` when engram was not installed yet.
+
+4. Optional: install the CodeGraph CLI and register the codegraph and context7 MCP servers (see [MCP servers](#mcp-servers)).
+
+5. Inside Claude Code:
+
+   - `/config` → **Output style** → `Neutral` (the plugin's style).
+   - `/theme` → **Construct** (the Matrix theme).
+   - Optionally, in `/config`, set each role's model and effort (rows such as `ODD Worker model`).
+
+6. Check that it works. Open a session in any git repository:
+
+   - Ask "what does your Construct contract say about Risk lines?". The answer quotes the `Risk: item N` rule.
+   - `/agents` lists the `construct:` agents, such as `construct:odd-worker` and `construct:review-risk`.
+   - Ask Claude to run `odd-review mode status`; it prints `{"mode":"on","source":"default"}`. The plugin's `bin/` is on the PATH of Claude's Bash tool only, not your own shell.
+   - After a turn ends, the band above the prompt shows the `RDD` line.
 
 ## How the ODD contract loads
 
@@ -50,9 +67,10 @@ After a compaction or a resume, a second `SessionStart` hook (matcher `compact|r
 
 ## MCP servers
 
-The plugin ships no MCP servers, so it never duplicates servers you already registered (duplicates would load every tool twice). The agents and the `codegraph` skill expect these user-scope servers; register them once:
+The plugin ships no MCP servers, so it never duplicates servers you already registered (duplicates would load every tool twice). The agents and the `codegraph` skill expect these user-scope servers. Install the CodeGraph CLI, then register both servers once:
 
 ```bash
+npm install -g @colbymchenry/codegraph
 claude mcp add --scope user codegraph -- codegraph serve --mcp
 claude mcp add --scope user context7 -- npx -y --package=@upstash/context7-mcp@2.2.5 -- context7-mcp
 ```
