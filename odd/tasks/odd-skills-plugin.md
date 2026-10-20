@@ -208,7 +208,7 @@ Design consequences:
 | T7 | S1, S2 | `bin/odd-review`: frozen tree via temp index, inspect, capture validation, receipt and acknowledgement; plus F4 | delegated (`odd-worker`, sonnet): long-session context backstop | 1 and 2 (persisted receipts; it gates delivery confidence) | done | `feat: add odd-review lifecycle with receipts` + `fix: refute mixed severe findings and escalate unknown causality` (slice 09) |
 | T8 | S1, S2 | `rdd-review` skill, RDD switch, receipt boundary, `Stop` review gate, contract RDD section (workflows dropped, L29) | delegated: two parallel units (Writer trigger a) | 2 and 6 (review gate) | done | `feat: add the RDD switch, review boundary, and Stop gate` + `feat: add the rdd-review skill and contract section` + `fix: cover uncommitted reviews and boundary ordering` (slice 11) |
 | T9 | S1 | `secret-guard` `PreToolUse` deny list for file tools and Bash (Risk-line prompt hook dropped, L31) | delegated (`odd-worker`, sonnet): long-session context backstop | 2 | done | `feat: add a secret guard PreToolUse hook` + `fix: close secret guard glob leak and false positives` (slice 13) |
-| T10 | S1 | Feature-state re-injection on SessionStart compact/resume (task sync dropped, L32) | delegated (`odd-worker`, sonnet): long-session context backstop | none | in progress | — |
+| T10 | S1 | Feature-state re-injection on SessionStart compact/resume (task sync dropped, L32) | delegated (`odd-worker`, sonnet): long-session context backstop | none | done | `feat: re-inject active feature state after compaction` (slice 15) |
 | T11 | S1 | `.mcp.json` (context7, codegraph) and `codegraph` skill | inline | none | pending | — |
 | T12 | S2, S8 | Mod status panel: replica of the user's statusline (S8) plus ODD task progress and RDD state (experimental; must fail open) | inline | 6 | pending | — |
 | T13 | S1, S3, S4 | Migration runbook and README: back up `~/.claude`, remove `gentle-ai:*` blocks and gentle-ai hooks, run side by side with `--plugin-dir`, then `gentle-ai uninstall` keeping engram | inline | 5 | pending | — |
@@ -247,6 +247,7 @@ main
 | 12 | `odd-skills/12-gate-followups` | F9, F10 | `fix: scope mode status and protect the gate fallback dir` | 76 | within |
 | 13 | `odd-skills/13-secret-guard` | T9 | the two T9 commits | about 620 | slightly over; one unit plus one correction batch |
 | 14 | `odd-skills/14-guard-followups` | F11–F14 | `fix: close secret guard pipe, pattern-file, and glob bypasses` + `fix: treat \|& as a pipe in the secret guard` | about 175 | within |
+| 15 | `odd-skills/15-feature-state` | T10 | `feat: re-inject active feature state after compaction` | about 400 | within |
 
 Push and PR creation remain the user's decision.
 
@@ -756,3 +757,12 @@ Push and PR creation remain the user's decision.
     - It ends with: "Read the full document before continuing; the engram mirror is under topic `odd/<feature>/tasks`."
     - Total `additionalContext` is at most 2500 characters.
     - No active documents, no `odd/tasks`, outside a repository, or any error → no output and exit 0. It is read-only and fails open.
+  - T10 worker result:
+    - `feature-state.mjs` plus a second SessionStart entry (`compact|resume`).
+    - 16 tests. RED came from an empty stub: 9 behavior failures; the 7 no-output cases passed trivially. Then `node --test tests/` gave `500 pass`.
+    - `tests/contract.test.mjs` now finds the contract entry by its args instead of assuming one SessionStart entry.
+    - Parent spot check from a nested cwd in this repository: it resolved the root, listed T10–T14 as unfinished, and produced 1077 characters.
+    - Notes:
+      - With several active documents, the footer names each mirror topic.
+      - In this document the last `Next step:` match can be a spec line that quotes `Next step:`.
+    - Risk: none, so no independent verifier.

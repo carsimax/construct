@@ -95,10 +95,10 @@ test('hooks.json registers both contracts in exec form and keeps the mod module'
   const hooks = JSON.parse(readFileSync(join(pluginRoot, 'hooks/hooks.json'), 'utf8'))
   assert.deepEqual(hooks.modules, ['./register.js'])
   const session = hooks.hooks.SessionStart
-  assert.equal(session.length, 1)
-  assert.equal(session[0].matcher, 'startup|resume|clear|compact')
-  assert.equal(session[0].hooks[0].command, 'node')
-  assert.deepEqual(session[0].hooks[0].args, ['${CLAUDE_PLUGIN_ROOT}/hooks/scripts/contract.mjs', 'session'])
+  const contract = session.find((e) => e.hooks[0].args?.[0]?.endsWith('contract.mjs'))
+  assert.equal(contract.matcher, 'startup|resume|clear|compact')
+  assert.equal(contract.hooks[0].command, 'node')
+  assert.deepEqual(contract.hooks[0].args, ['${CLAUDE_PLUGIN_ROOT}/hooks/scripts/contract.mjs', 'session'])
   const sub = hooks.hooks.SubagentStart
   assert.deepEqual(sub[0].hooks[0].args, ['${CLAUDE_PLUGIN_ROOT}/hooks/scripts/contract.mjs', 'subagent'])
 })
