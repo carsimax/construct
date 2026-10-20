@@ -211,7 +211,7 @@ Design consequences:
 | T10 | S1 | Feature-state re-injection on SessionStart compact/resume (task sync dropped, L32) | delegated (`odd-worker`, sonnet): long-session context backstop | none | done | `feat: re-inject active feature state after compaction` (slice 15) |
 | T11 | S1 | `codegraph` skill and user-scope MCP setup docs; no plugin `.mcp.json` (option A, L33) | inline | none | done | `feat: add the codegraph skill and MCP setup docs` (slice 16) |
 | T12 | S2, S8 | Mod status band: statusline replica when no native statusLine is set, plus ODD and RDD state (L34) | delegated (`odd-worker`, sonnet): long-session context backstop | 6 | done (live visual check deferred by the user, L35) | `feat: add the status band mod` (slice 17) |
-| T13 | S1, S3, S4 | Migration runbook and README: back up `~/.claude`, remove `gentle-ai:*` blocks and gentle-ai hooks, run side by side with `--plugin-dir`, then `gentle-ai uninstall` keeping engram | inline | 5 | pending | — |
+| T13 | S1, S3, S4 | Migration runbook (`docs/MIGRATION.md`) with executable doc tests; written, not executed on the user's machine | inline | none (docs and tests only; the guide itself touches the user's environment when they run it) | done | `docs: add the gentle-ai migration guide` (slice 18) |
 | T14 | S9 | Rename the plugin from `odd-skills` to `construct` (manifest, marketplace, prefixes, mod, contract filter, tests, evals, docs) | inline | 3 (component prefix changes) | pending | — |
 
 Route evidence: no Writer trigger reason is known yet (units are sequential and depend on T0/T1); revisit if T6 and T7 run in parallel.
@@ -250,6 +250,7 @@ main
 | 15 | `odd-skills/15-feature-state` | T10 | `feat: re-inject active feature state after compaction` | about 400 | within |
 | 16 | `odd-skills/16-codegraph` | T11 | `feat: add the codegraph skill and MCP setup docs` | about 120 | within |
 | 17 | `odd-skills/17-status-mod` | T12 | `feat: add the status band mod` | about 840 | over budget; one mod unit with 27 tests |
+| 18 | `odd-skills/18-migration` | T13 | `docs: add the gentle-ai migration guide` | about 300 | within |
 
 Push and PR creation remain the user's decision.
 
@@ -824,3 +825,14 @@ Push and PR creation remain the user's decision.
   - The interactive visual check is deferred by the user.
   - F15, F16, and F17 stay open as follow-ups.
   - Next step: T13 (migration runbook), then T14 (rename to Construct).
+- **L36 (2026-10-20, user):** "Si dale" (start T13)
+  - Branch `odd-skills/18-migration`. The guide was written and **not** executed on the user's machine.
+  - **Findings from read-only inspection:**
+    - `~/.gentle-ai/state.json` components include `engram` and `context7`, so the guide forbids `gentle-ai uninstall --all` / `--agent claude-code`, which could remove their registrations.
+    - `~/.claude/skills/synced/` holds the user's claude.ai synced skills (`morning`, `pdf`, `xlsx`, …), not gentle-ai. It is kept.
+    - `settings.json` now also holds many Orca hooks plus herdr and `codegraph prompt-hook`. Only the 5 entries whose command starts with `gentle-ai ` are removed.
+    - Removing every managed block, including `local:odd-model-routing`, leaves `CLAUDE.md` empty. The guide therefore has the user save the personal "Expertise" lines of the persona block first; the plugin's Neutral style already carries the "Rules".
+  - `docs/MIGRATION.md` has nine reversible steps: backup, side-by-side trial, install, keep the personal lines, the `CLAUDE.md` perl cleanup (diff before replace), the `settings.json` jq cleanup (diff before replace), removal of the agents and skills the plugin ships, the output style and theme switch, and finally `brew uninstall gentle-ai` plus `rm -r ~/.gentle-ai`. It also has a checks table and a rollback.
+  - Dry runs on copies of the real files: `CLAUDE.md` went from 621 lines to empty; hooks went from 20 to 15, with all other keys equal. The leftovers check lists exactly the 5 gentle-ai hooks on the live settings (read-only).
+  - `tests/migration.test.mjs` executes the guide's perl and jq commands against fixtures. It covers the nested blocks, user content kept, only `^gentle-ai ` hooks removed, and other keys untouched. It also checks that every removed agent and skill is shipped by the plugin, and that `skills/synced` is never removed. It passed on the first run because the commands had been dry-run first. A mutation that dropped `local:odd-model-routing` from the guide's regex made it fail (`2 pass, 1 fail`). Restored: `node --test tests/` gave `504 pass`.
+  - Next step: T14 (rename to Construct). The guide uses `odd-skills` names that T14 renames.

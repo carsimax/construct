@@ -59,6 +59,10 @@ claude mcp add --scope user context7 -- npx -y --package=@upstash/context7-mcp@2
 
 Engram's MCP server comes from `engram setup claude-code` (see Quick path).
 
+## Migrating from gentle-ai
+
+See [`docs/MIGRATION.md`](docs/MIGRATION.md) for a step-by-step, reversible migration that keeps engram, your claude.ai skills, and other tools' hooks.
+
 ## Agents and model routing
 
 The plugin ships 13 agents. Each role's model and effort can be changed in `/config`, where every option appears as a row such as `ODD Worker model` or `RDD Risk effort`.
