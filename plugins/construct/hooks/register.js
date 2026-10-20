@@ -63,7 +63,8 @@ async function readRdd($, root) {
 
 // Gathers everything the band caches. Each source fails on its own: a gap leaves its segment out.
 async function collect($) {
-  const data = { hasStatusLine: false, style: null, agent: null, home: null, git: null, worktree: null, odd: null, rdd: null }
+  // The plugin forces its output style, which overrides settings.outputStyle
+  const data = { hasStatusLine: false, style: 'construct:Neutral', agent: null, home: null, git: null, worktree: null, odd: null, rdd: null }
   let cwd
   try {
     cwd = await $.session.cwd()
@@ -73,7 +74,6 @@ async function collect($) {
   try {
     const settings = await $.settings.read()
     data.hasStatusLine = Boolean(settings?.statusLine)
-    data.style = typeof settings?.outputStyle === 'string' ? settings.outputStyle : null
     data.agent = typeof settings?.agent === 'string' ? settings.agent : null
   } catch {
     // settings unreadable: treated as no statusLine

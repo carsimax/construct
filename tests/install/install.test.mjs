@@ -98,7 +98,6 @@ test('a clean machine gets every tool, in order, and the Construct settings', ()
   ])
   assert.deepEqual(readSettings(box), {
     theme: 'custom:construct:construct',
-    outputStyle: 'construct:Neutral',
     permissions: { allow: ['mcp__engram', 'mcp__plugin_engram_engram'] },
   })
   assert.deepEqual(backups(box), [], 'no backup when there was no file')
@@ -119,7 +118,6 @@ test('existing settings are merged, never overwritten, and backed up first', () 
     ...before,
     permissions: { allow: ['Bash(ls *)', 'mcp__engram', 'mcp__plugin_engram_engram'], deny: ['Bash(rm *)'] },
     theme: 'custom:construct:construct',
-    outputStyle: 'construct:Neutral',
   })
   const [backup] = backups(box)
   assert.ok(backup, 'a backup exists')
@@ -158,20 +156,19 @@ test('a failed codegraph install warns and still merges the settings', () => {
   assert.equal(readSettings(box).theme, 'custom:construct:construct')
 })
 
-test('a different theme or output style is kept with a warning unless --force', () => {
+test('a different theme is kept with a warning unless --force, and outputStyle is never touched', () => {
   const box = sandbox()
   writeSettings(box, { theme: 'dark', outputStyle: 'Explanatory' })
   const kept = install(box)
   assert.equal(kept.status, 0, kept.stderr)
   assert.equal(readSettings(box).theme, 'dark')
-  assert.equal(readSettings(box).outputStyle, 'Explanatory')
   assert.match(kept.stdout + kept.stderr, /theme.*--force/)
-  assert.match(kept.stdout + kept.stderr, /outputStyle.*--force/)
+  assert.doesNotMatch(kept.stdout + kept.stderr, /outputStyle/)
 
   const forced = install(box, ['--force'])
   assert.equal(forced.status, 0, forced.stderr)
   assert.equal(readSettings(box).theme, 'custom:construct:construct')
-  assert.equal(readSettings(box).outputStyle, 'construct:Neutral')
+  assert.equal(readSettings(box).outputStyle, 'Explanatory')
 })
 
 test('a second run changes nothing and installs nothing', () => {

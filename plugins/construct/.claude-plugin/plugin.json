@@ -1,7 +1,7 @@
 {
   "name": "construct",
   "displayName": "Construct",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Organic Driven Development orchestration, review lenses, and delivery skills for Claude Code",
   "author": {
     "name": "Maximiliano Carsi"

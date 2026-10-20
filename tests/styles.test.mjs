@@ -11,7 +11,7 @@ function frontmatter(text) {
   return Object.fromEntries(block.trim().split('\n').map((l) => l.split(/:\s*/, 2)))
 }
 
-test('the plugin ships only the Neutral output style, without forcing it', () => {
+test('the plugin ships only the Neutral output style and forces it', () => {
   const files = readdirSync(join(pluginRoot, 'output-styles')).sort()
   assert.deepEqual(files, ['neutral.md'])
   for (const [file, name] of [['neutral.md', 'Neutral']]) {
@@ -19,7 +19,7 @@ test('the plugin ships only the Neutral output style, without forcing it', () =>
     const fm = frontmatter(text)
     assert.equal(fm.name, name)
     assert.equal(fm['keep-coding-instructions'], 'true')
-    assert.equal(fm['force-for-plugin'], undefined, `${file} must not force itself`)
+    assert.equal(fm['force-for-plugin'], 'true', `${file} must apply in every project`)
     assert.match(text, /## Working Rules/)
     assert.match(text, /Co-Authored-By/)
     assert.doesNotMatch(text, /gentle[-_ ]?ai/i)
