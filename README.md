@@ -82,10 +82,15 @@ claude plugin test plugins/odd-skills    # mod tests (*.test.ts)
 | `.claude-plugin/marketplace.json` | Local marketplace `odd-skills`; allows the cross-marketplace `engram` dependency |
 | `plugins/odd-skills/` | The plugin (manifest name `odd-skills`) |
 | `plugins/odd-skills/agents/` | The 13 role agents |
+| `plugins/odd-skills/skills/` | Delivery and review skills (`branch-pr`, `chained-pr`, `work-unit-commits`, `judgment-day`, ...) |
 | `plugins/odd-skills/hooks/` | `hooks.json`, the mod (`register.js`), and its routing helpers |
 | `plugins/odd-skills/tests/` | Mod tests run by `claude plugin test` |
 | `tests/` | Repository tests run by `node --test` |
 | `odd/tasks/` | ODD feature documents (specs, tasks, log) |
+
+## License notice
+
+Part of the agents and skills are adapted from MIT-licensed material; see [`plugins/odd-skills/NOTICE`](plugins/odd-skills/NOTICE).
 
 ## Status
 

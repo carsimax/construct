@@ -187,7 +187,7 @@ Design consequences:
 | T0 | S2, S6 | Spike: confirm each unverified capability with a throwaway plugin via `claude --plugin-dir`; choose the script runtime and test runner | inline | none | done | no commit (not a git repo); evidence in Design → Capability results and L9 |
 | T1 | S2, S3, S7 | `git init`, plugin skeleton, `plugin.json` with the `engram@engram` dependency, local marketplace, `claude plugin validate --strict` | inline | none (reassessed, L10) | done | `feat: scaffold odd-skills plugin and marketplace` |
 | T2 | S1, S4, S6, S7 | Port agents (`review-*`, `jd-*`); create `odd-explorer`, `odd-worker`, `odd-verify`, `review-validator`, `odd-general`; apply the S6 model and effort table as static frontmatter; declare `model_<role>` / `effort_<role>` `userConfig` options; mod `agent.spawn` + `turn.step` routing with `claude plugin test` coverage | inline | none | done | `feat: port review lens and judgment-day agents` (slice 02) + `feat: add ODD role agents with configurable model routing` (slice 03) |
-| T3 | S1 | Port skills; remove `gentle-ai` command references; drop `skill-registry` | inline | none | pending | — |
+| T3 | S1, S4, S7 | Port skills; remove `gentle-ai` command references; drop `skill-registry` | inline | none | done | `feat: port delivery and review skills` (slice 04) |
 | T4 | S1, S2 | Split the orchestrator into the ≤8k session contract and the ODD skills; `SessionStart` and `SubagentStart` hooks; evals for small-inline, large-tracked, and Risk-line cases | inline | 6 | pending | — |
 | T5 | S1, S4 | Output styles (Neutral, Gentleman), theme, `userConfig` | inline | none | pending | — |
 | T6 | S1, S2 | `bin/odd-assess`: port `ClassifyRisk` with fixtures; differential check against `gentle-ai review assess` on the same diffs | inline | 6 | pending | — |
@@ -221,6 +221,7 @@ main
 | 01 | `odd-skills/01-scaffold` | T1 | `feat: scaffold odd-skills plugin and marketplace` | 338 | within |
 | 02 | `odd-skills/02-ported-agents` | T2 (ported agents) | `feat: port review lens and judgment-day agents` | 395 | within |
 | 03 | `odd-skills/03-role-routing` | T2 (new agents, userConfig, mod, tests, docs) | `feat: add ODD role agents with configurable model routing` | about 796 | `size:exception` recommended: 352 lines are the `userConfig` JSON generated from agent frontmatter; the mod cannot ship without its options |
+| 04 | `odd-skills/04-skills` | T3 | `feat: port delivery and review skills` | 1168 | over budget: about 1026 lines are verbatim skill ports; cohesive 3-way split possible (delivery 315, docs/comments + go-testing + judgment-day 395, skill authoring 316), `size:exception` accepted by the user (L14) |
 
 Push and PR creation remain the user's decision.
 
@@ -313,3 +314,24 @@ Push and PR creation remain the user's decision.
     - The tracker `feat/odd-skills-plugin` was moved back to `e639e15`.
   - Slice 03 exceeds the budget. The `size:exception` rationale is in Delivery slices.
   - Next step: T3 (port skills) on `odd-skills/04-skills`.
+- **L13 (2026-10-19, user):** "si sigue"
+  - Branch `odd-skills/04-skills` from `odd-skills/03-role-routing`.
+  - Ported 9 skills to `plugins/odd-skills/skills/` from the gentle-ai assets (identical to the installed copies): `chained-pr`, `work-unit-commits`, `cognitive-doc-design`, `comment-writer`, `skill-creator`, `skill-improver`, `go-testing`, `judgment-day`, `branch-pr`.
+  - Changes:
+    - Registry references were replaced with SKILL.md discovery and `/reload-skills` (in `skill-improver` and both style guides).
+    - `judgment-day` names the `odd-skills:` agents, has no skill-resolution reporting, and no longer links the `_shared/review-ledger-contract.md` RDD lifecycle, which moves to T8.
+    - `branch-pr` was rewritten as a generic skill. The original was specific to the gentle-ai repository (`status:approved` issues, mandatory `type:*` labels, Go and E2E checklist).
+  - `comment-writer` and `branch-pr` were not in the user's installed `~/.claude/skills`; they ship because the design lists them.
+  - `_shared/` is deferred: `odd-orchestrator-sections`, `research-lifecycle`, `persistence-contract`, and `engram-convention` go to T4, `review-ledger-contract` to T8, and `skill-resolver` is dropped with the registry.
+  - License: gentle-ai is MIT ("Copyright (c) 2025 Gentleman Programming"). `plugins/odd-skills/NOTICE` carries the full MIT text and lists the adapted files; the README links it. This is the only place that names gentle-ai, because the license requires it (deviation from S7 wording, by legal necessity).
+  - Checks:
+    - `tests/skills.test.mjs`: RED first (`3 fail`; the other 3 passed vacuously with no skills). After a verbatim copy, `4 fail`, showing the content rules bite. After the edits, the full `node --test tests/` gave `10 pass, 0 fail`.
+    - `claude plugin validate --strict plugins/odd-skills`: `✔ Validation passed`.
+    - `claude plugin test plugins/odd-skills`: `7 pass`.
+    - Real session (`claude -p --model haiku --plugin-dir`) listed all 9 `odd-skills:` skills.
+  - Slice 04 is 1168 changed lines. Breakdown: delivery skills 315, docs/comments 155, skill authoring 316, go-testing + judgment-day 240, notice/tests/docs 142.
+  - Open-slice `review assess --base-ref e639e15 --committed-only`: `medium`, `review_due: false`, `under_budget`, 2723 lines.
+  - Pending user decision: split slice 04 into three PRs, or accept `size:exception`.
+- **L14 (2026-10-19, user):** "size:exception"
+  - Slice 04 stays one PR with `size:exception`. Rationale: about 1026 of its 1168 lines are verbatim skill ports with low review cost.
+  - Next step: T4 (session contract and ODD skills) on `odd-skills/05-session-contract`.
