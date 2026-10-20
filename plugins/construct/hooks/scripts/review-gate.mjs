@@ -2,42 +2,15 @@
 // per session and target with a reminder to run the review flow. It fails open:
 // any error, and every uncertain state, means no output and exit 0.
 // Usage: node review-gate.mjs   (hook JSON on stdin: session_id, cwd, stop_hook_active)
-import { lstatSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { mkdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { dataDir, readInput, safeName } from './hook-io.mjs'
 
 const MAX_REASONS = 3
 
-function readInput() {
-  try {
-    return JSON.parse(readFileSync(0, 'utf8') || '{}')
-  } catch {
-    return null
-  }
-}
-
-// dataDir is the plugin data directory, or a private per-user directory in the
-// system temp dir when Claude Code does not provide one. A fallback directory
-// that is not a real directory owned by this user with no group or other
-// access is never trusted (another local user could pre-seed reminders).
-function dataDir() {
-  if (process.env.CLAUDE_PLUGIN_DATA) return process.env.CLAUDE_PLUGIN_DATA
-  const dir = join(tmpdir(), `construct-${process.getuid()}`)
-  try {
-    mkdirSync(dir, { mode: 0o700 })
-  } catch (error) {
-    if (error.code !== 'EEXIST') throw error
-  }
-  const stat = lstatSync(dir)
-  if (!stat.isDirectory() || stat.uid !== process.getuid() || (stat.mode & 0o077) !== 0) {
-    throw new Error(`untrusted reminder directory: ${dir}`)
-  }
-  return dir
-}
-
 const reminderFile = (session) => {
   const dir = join(dataDir(), 'review-gate')
-  return { dir, file: join(dir, `${String(session || 'unknown').replace(/[^A-Za-z0-9_-]/g, '_')}.json`) }
+  return { dir, file: join(dir, `${safeName(session)}.json`) }
 }
 
 // readReminders returns the reminded targets; a corrupt file throws (fail open).
