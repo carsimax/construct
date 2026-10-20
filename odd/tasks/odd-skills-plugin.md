@@ -210,7 +210,7 @@ Design consequences:
 | T9 | S1 | `secret-guard` `PreToolUse` deny list for file tools and Bash (Risk-line prompt hook dropped, L31) | delegated (`odd-worker`, sonnet): long-session context backstop | 2 | done | `feat: add a secret guard PreToolUse hook` + `fix: close secret guard glob leak and false positives` (slice 13) |
 | T10 | S1 | Feature-state re-injection on SessionStart compact/resume (task sync dropped, L32) | delegated (`odd-worker`, sonnet): long-session context backstop | none | done | `feat: re-inject active feature state after compaction` (slice 15) |
 | T11 | S1 | `codegraph` skill and user-scope MCP setup docs; no plugin `.mcp.json` (option A, L33) | inline | none | done | `feat: add the codegraph skill and MCP setup docs` (slice 16) |
-| T12 | S2, S8 | Mod status band: statusline replica when no native statusLine is set, plus ODD and RDD state (L34) | delegated (`odd-worker`, sonnet): long-session context backstop | 6 | done (pending live visual check) | `feat: add the status band mod` (slice 17) |
+| T12 | S2, S8 | Mod status band: statusline replica when no native statusLine is set, plus ODD and RDD state (L34) | delegated (`odd-worker`, sonnet): long-session context backstop | 6 | done (live visual check deferred by the user, L35) | `feat: add the status band mod` (slice 17) |
 | T13 | S1, S3, S4 | Migration runbook and README: back up `~/.claude`, remove `gentle-ai:*` blocks and gentle-ai hooks, run side by side with `--plugin-dir`, then `gentle-ai uninstall` keeping engram | inline | 5 | pending | — |
 | T14 | S9 | Rename the plugin from `odd-skills` to `construct` (manifest, marketplace, prefixes, mod, contract filter, tests, evals, docs) | inline | 3 (component prefix changes) | pending | — |
 
@@ -819,3 +819,8 @@ Push and PR creation remain the user's decision.
     - **F15 (parent review):** the band hook returns its own tree instead of composing with `next(e)`. Whatever Claude Code or another plugin draws in `AbovePrompt` is replaced while the band has content (it yields only when a survey is up). Compose with the engine's band, or yield when `next` has content. This needs a live check.
     - **F16:** `hooks/status/tasks.js` restates the `feature-state.mjs` active-task rule (a mod cannot import a Node script), so there is no automated parity check. Extract a shared pure module.
     - **F17:** the original `agent.spawn` and `turn.step` routing hooks still have no `.catch`. `validate` reports `agent.spawn`.
+- **L35 (2026-10-20, user):** "De momento dejaremos así el diseño"
+  - The status band design is kept as is.
+  - The interactive visual check is deferred by the user.
+  - F15, F16, and F17 stay open as follow-ups.
+  - Next step: T13 (migration runbook), then T14 (rename to Construct).
