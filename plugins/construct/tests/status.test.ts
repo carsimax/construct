@@ -211,7 +211,7 @@ test('with a native statusLine the band draws only the ODD and RDD lines', async
 
 test('without a statusLine the replica comes first, then the ODD and RDD lines', async ($, on) => {
   const { ui } = await drawBand($, on, {
-    settings: { outputStyle: 'Neutral' },
+    settings: { outputStyle: 'Explanatory' },
     usage: {
       startedAt: 0,
       context: { window: 1, percent: 12 },
@@ -233,7 +233,9 @@ test('without a statusLine the replica comes first, then the ODD and RDD lines',
   expect(text).toContain('↑2')
   expect(text).toContain('↓1')
   expect(text).toContain('◆ claude-opus-4')
-  expect(text).toContain('✎ Neutral')
+  // The plugin forces its style, so a settings outputStyle is not the one in effect
+  expect(text).toContain('✎ construct:Neutral')
+  expect(text).not.toContain('Explanatory')
   expect(text.indexOf('ctx')).toBeLessThan(text.indexOf('~/proj'))
   expect(text.indexOf('~/proj')).toBeLessThan(text.indexOf('feat'))
   expect(text.indexOf('feat')).toBeLessThan(text.indexOf('RDD'))
@@ -273,7 +275,6 @@ test('a segment whose data is missing is omitted', async ($, on) => {
   expect(text).not.toContain('7d')
   expect(text).toContain('5h')
   expect(text).not.toContain('↻')
-  expect(text).not.toContain('✎')
 })
 
 test('review due is drawn when the committed range classifies high and is not consumed', async ($, on) => {
