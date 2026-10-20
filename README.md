@@ -35,6 +35,7 @@ A plugin cannot ship a `CLAUDE.md`, so odd_skills loads its rules in three layer
 | Session contract | `SessionStart` hook (startup, resume, clear, compact) | ODD protocol, task size, high-risk list, Risk line, and delegation triggers, under 8,000 characters |
 | Subagent contract | `SubagentStart` hook | Artifact language, edit surfaces, scratch, and the `## Key Learnings` closing block. JSON-only reviewers (`review-*`, `jd-judge-*`) get nothing |
 | Skills | Loaded on demand | `odd-workflow`, `odd-delegation`, `task-size-risk`, `lossless-prompts` |
+| Output style | `/config` → Output style → `Neutral` | Reply tone, language, response length, verification, and working rules (no AI attribution in commits, one question at a time) |
 
 The contract texts live in `plugins/odd-skills/hooks/contract/`.
 
@@ -90,10 +91,11 @@ claude plugin test plugins/odd-skills    # mod tests (*.test.ts)
 Run the behavior evals (they spend real usage; each run is an isolated `claude -p` session):
 
 ```bash
-cd plugins/odd-skills
-claude plugin eval . --scaffold --trust-plugin --runs 1 --model sonnet \
-  --allow-tools Write Edit "Bash(npm test*)" "Bash(node *)" "Bash(git *)" "Bash(mkdir *)" "Bash(ls *)" "Bash(cat *)"
+scripts/eval.sh                 # all cases, 1 run per arm, sonnet
+scripts/eval.sh --case small-inline
 ```
+
+`scripts/eval.sh` evaluates a temporary copy of the plugin without the `engram@engram` dependency, because isolated eval runs cannot resolve it and the plugin would not load.
 
 ## Layout
 

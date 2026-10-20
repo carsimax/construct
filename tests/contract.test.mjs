@@ -76,7 +76,7 @@ test('SubagentStart gives worker agents the subagent contract', () => {
 })
 
 test('SubagentStart injects nothing into agents that must return a single JSON object', () => {
-  for (const agent of ['odd-skills:review-risk', 'odd-skills:review-refuter', 'odd-skills:review-validator', 'odd-skills:jd-judge-a', 'odd-skills:jd-judge-b']) {
+  for (const agent of ['odd-skills:review-risk', 'odd-skills:review-refuter', 'odd-skills:review-validator', 'odd-skills:jd-judge-a', 'odd-skills:jd-judge-b', 'review-risk', 'jd-judge-b']) {
     const { code, stdout } = run('subagent', { hook_event_name: 'SubagentStart', agent_type: agent })
     assert.equal(code, 0, agent)
     assert.equal(stdout, '', agent)

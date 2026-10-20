@@ -10,7 +10,7 @@ const KINDS = {
 }
 
 // Agents whose output contract is a single JSON object get no extra context
-const JSON_ONLY_AGENT = /^odd-skills:(review-|jd-judge-)/
+const JSON_ONLY_AGENT = /^(odd-skills:)?(review-|jd-judge-)/
 
 function readInput() {
   try {

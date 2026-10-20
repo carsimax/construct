@@ -189,7 +189,7 @@ Design consequences:
 | T2 | S1, S4, S6, S7 | Port agents (`review-*`, `jd-*`); create `odd-explorer`, `odd-worker`, `odd-verify`, `review-validator`, `odd-general`; apply the S6 model and effort table as static frontmatter; declare `model_<role>` / `effort_<role>` `userConfig` options; mod `agent.spawn` + `turn.step` routing with `claude plugin test` coverage | inline | none | done | `feat: port review lens and judgment-day agents` (slice 02) + `feat: add ODD role agents with configurable model routing` (slice 03) |
 | T3 | S1, S4, S7 | Port skills; remove `gentle-ai` command references; drop `skill-registry` | inline | none | done | `feat: port delivery and review skills` (slice 04) |
 | T4 | S1, S2 | Split the orchestrator into the ≤8k session contract and the ODD skills; `SessionStart` and `SubagentStart` hooks; evals for small-inline, large-tracked, and Risk-line cases | inline | none (reassessed, L15) | done | `feat: add ODD workflow, delegation, sizing, and prompt skills` (slice 05) + `feat: inject the ODD session and subagent contracts` (slice 06) |
-| T5 | S1, S4 | Output styles (Neutral, Gentleman), theme, `userConfig` | inline | none | pending | — |
+| T5 | S1, S4 | Output style (Neutral only, L16), themes, follow-ups F1–F3 | inline | none | done | `feat: add the Neutral output style and themes` (slice 07) |
 | T6 | S1, S2 | `bin/odd-assess`: port `ClassifyRisk` with fixtures; differential check against `gentle-ai review assess` on the same diffs | inline | 6 | pending | — |
 | T7 | S1, S2 | `bin/odd-review`: frozen tree via temp index, inspect, capture validation, receipt and acknowledgement | inline | 1 | pending | — |
 | T8 | S1, S2 | `rdd-review` skill, `review-4lens` and `judgment-day` workflows, `Stop` review gate | inline | 6 | pending | — |
@@ -224,6 +224,7 @@ main
 | 04 | `odd-skills/04-skills` | T3 | `feat: port delivery and review skills` | 1168 | over budget: about 1026 lines are verbatim skill ports; cohesive 3-way split possible (delivery 315, docs/comments + go-testing + judgment-day 395, skill authoring 316), `size:exception` accepted by the user (L14) |
 | 05 | `odd-skills/05-odd-skills` | T4 (skills) | `feat: add ODD workflow, delegation, sizing, and prompt skills` | about 465 | slightly over; best cohesive split (L15) |
 | 06 | `odd-skills/06-session-contract` | T4 (contract, hooks, evals) | `feat: inject the ODD session and subagent contracts` | about 500 | slightly over; best cohesive split (L15) |
+| 07 | `odd-skills/07-styles` | T5 + F1–F3 | `feat: add the Neutral output style and themes` | see L16 | within |
 
 Push and PR creation remain the user's decision.
 
@@ -381,3 +382,21 @@ Push and PR creation remain the user's decision.
       - **F3 (R3, WARNING):** make the eval graders robust: let the Risk-line regex accept bold markers; the `file_exists` glob was already observed working in the second eval run.
       - `R3-eval-results-ignore` needs no action: the reviewer itself concluded the rule behaves as intended.
   - Next step: T5 (output styles, theme, persona userConfig), plus follow-ups F1–F3.
+- **L16 (2026-10-19, user):** "si sigue con eso"; mid-task: "Podemos dejar solo el estilo neutral?"
+  - Output style: only `output-styles/neutral.md` ships, per the user's request; the Gentleman style is dropped.
+    - The file is identical to the installed Neutral style, plus a `## Working Rules` section carrying the persona rules gentle-ai put in `CLAUDE.md`: no AI attribution in commits, one question at a time, alternatives with tradeoffs, and the skill-match check before replying.
+    - `keep-coding-instructions: true`, no `force-for-plugin`. The user selects it in `/config`.
+  - Deviations from the plan:
+    - The persona is not a `userConfig` option. Output style selection is already native, and forcing it would override the user's choice.
+    - The `Expertise` line of the persona block is user-specific and is not shipped.
+  - Themes: `themes/gentleman.json` and `themes/gentleman-cute.json`, copied from the installed files, loaded from the default `themes/` directory. They are interface colors, not a reply style, so they stay.
+  - Follow-ups:
+    - **F1 done:** the JSON-only filter in `contract.mjs` is `/^(odd-skills:)?(review-|jd-judge-)/`, with tests for `review-risk` and `jd-judge-b`.
+    - **F2 done:** `scripts/eval.sh` grants `Bash(npm test*)`, `Bash(node --test*)`, `Bash(git status*)`, `Bash(git diff*)`, and `Bash(git log*)` instead of `Bash(node *)`, `Bash(git *)`, `Bash(mkdir *)`, `Bash(ls *)`, and `Bash(cat *)`. The README eval section now points to the script.
+    - **F3 done:** the Risk-line grader pattern accepts bold markers.
+  - Tests:
+    - `tests/styles.test.mjs` and the extended contract test were RED first (`5 fail`), then GREEN.
+    - One theme assertion of mine was wrong (theme `name` is the display name `Gentleman Cute`, not the file name) and was corrected.
+    - `node --test tests/`: `22 pass`. `claude plugin test`: `7 pass`. `validate --strict`: passed.
+  - Not verified live: theme loading and the plugin output style showing in `/config`. `validate` checks both paths.
+  - Next step: T6 (`bin/odd-assess`, port of `ClassifyRisk`).
