@@ -128,4 +128,13 @@ export const corpus = [
   ["x-and", "true && (bash <<'EOF'\ncat @E@\nEOF\n)", "DENY"],
   ["x-tee-a", "cat <<'EOF' | tee -a notes.md\nsee @E@\nEOF", "DENY"],
   ["x-27fix", "cat <<A; bash <<B\nx\nA\ncat @E@\nB", "DENY"],
+  ["l29-q1", "cat <<E\"O\"F\ncat @E@\nEOF", "DENY"],
+  ["l29-q2", "cat <<'E'OF\ncat @E@\nEOF", "DENY"],
+  ["l29-q3", "cat <<\"E\"OF\ncat @E@\nEOF", "DENY"],
+  ["l29-q4", "cat <<E'O'F\ncat @E@\nEOF", "DENY"],
+  ["l29-crlf", "cat <<EOF\r\nEOF\r\ncat @E@\nEOF", "DENY"],
+  ["l29-param", "cat ${x#<<EOF}\ncat @E@\nEOF", "DENY"],
+  ["l29-shell", "cat <<'EOF' > x\ncat @E@\nEOF\n$SHELL x", "DENY"],
+  ["l29-stdbuf", "cat <<'EOF' > x\ncat @E@\nEOF\nstdbuf -o0 sh x", "DENY"],
+  ["l29-while", "cat <<'EOF' > x\ncat @E@\nEOF\nwhile read -r l; do $l; done < x", "DENY"],
 ]

@@ -268,7 +268,7 @@ How each tool is read:
 - **Path-valued flags and flag arity.** Pattern-file and ignore-file flags take a path that is checked: `grep -f`/`--file`, `rg -f`/`--file`/`--ignore-file`, `ag --path-to-ignore`, `git grep -f`. Which flags take a value is modeled per command: `rg -t`/`-T` take a type, GNU `grep -T` and `ag -t` do not, so `grep -T KEY .env` is denied.
 - **Invalid globs.** A glob that does not compile (`[z-a]`) is matched permissively, with the broken bracket class standing for any characters, so it can only deny more and never allows because of the error.
 - **`rev:path` tokens.** For a token such as `HEAD:.env`, the part after `:` is also checked.
-- **Interpreter one-liners.** The `-c` argument of `python`/`python3` and the `-e` argument of `node`, `perl`, and `ruby` are scanned for quoted string literals that name a protected path; `bash -c` and `eval` strings are parsed as commands. Heredoc bodies are read as commands.
+- **Interpreter one-liners.** The `-c` argument of `python`/`python3` and the `-e` argument of `node`, `perl`, and `ruby` are scanned for quoted string literals that name a protected path; `bash -c` and `eval` strings are parsed as commands. Heredoc bodies are read as commands, so a heredoc that names a protected path is denied. To write a file or a commit message that names a protected path, use the Write tool (for a commit, write the message to a file and run `git commit -F <file>`).
 - **Prose.** A quoted multi-word string given to another command is not checked.
 
 The denial says which rule matched and that the user can run the command manually. Unreadable hook input is allowed with a stderr note.
