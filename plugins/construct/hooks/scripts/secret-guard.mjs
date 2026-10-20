@@ -111,6 +111,11 @@ function splitCommands(input) {
   let piped = false
   let here = false
   let comment = false
+  // Substitution tracking (fail closed): parenthesis depth, backtick state, and whether
+  // the current line has a process substitution or a heredoc opened inside a substitution.
+  let depth = 0
+  let tick = false
+  let subst = false
   const endWord = () => {
     if (has) words.push({ t: cur, r: redir })
     if (has) redir = false
@@ -151,13 +156,17 @@ function splitCommands(input) {
       endWord()
     } else if (';|&()`\n'.includes(c)) {
       endCommand()
+      if (c === '(') depth++
+      else if (c === ')') depth = Math.max(0, depth - 1)
+      else if (c === '`') tick = !tick
       if (c === '\n') {
         comment = false
         if (pending.length) {
-          const last = takeHeredocs(input, i, pending, commands, lineStart)
+          const last = takeHeredocs(input, i, pending, commands, lineStart, subst)
           if (last >= 0) i = last
         }
         pending = []
+        subst = false
         lineStart = commands.length
       }
       // `|` and `|&` feed the next command; `||` does not.
@@ -174,10 +183,12 @@ function splitCommands(input) {
       // Operators: >> >| >&N <<EOF; a here-string (<<<) takes data, not a file.
       const op = /^(<<<|<<-?|>>|>\||>&[0-9-]*|<&[0-9-]*|[<>])/.exec(input.slice(i))[0]
       i += op.length - 1
+      if ((op === '<' || op === '>') && input[i + 1] === '(') subst = true
       if (op === '<<' || op === '<<-') {
         const d = /^[ \t]*(?:'([^']*)'|"([^"]*)"|((?:\\.|[^\s;|&()<>'"])+))/.exec(input.slice(i + 1))
         // After an unquoted `#` that starts a word, `<<` is comment text, not a heredoc.
         if (d && !comment) here = true
+        if (d && !comment && (depth > 0 || tick)) subst = true
         if (d && !comment) pending.push({ word: d[1] ?? d[2] ?? d[3].replace(/\\(.)/g, '$1'), strip: op === '<<-', expands: d[3] !== undefined })
       }
       redir = op !== '<<<' && !/&[0-9-]*$/.test(op) || /^[<>]&$/.test(op)
@@ -194,7 +205,7 @@ function splitCommands(input) {
 // takeHeredocs consumes the bodies of the heredocs opened on the current line. `nl` is
 // the index of the newline that ends it. It returns the index of the last consumed
 // character, or -1 (nothing consumed) when a terminator line is missing.
-function takeHeredocs(input, nl, pending, commands, lineStart) {
+function takeHeredocs(input, nl, pending, commands, lineStart, subst) {
   let pos = nl + 1
   const bodies = []
   for (const { word, strip, expands } of pending) {
@@ -217,6 +228,7 @@ function takeHeredocs(input, nl, pending, commands, lineStart) {
   for (const c of line) {
     c.heredoc = bodies
     c.heredocLine = line
+    c.heredocSubst = subst
   }
   return pos - 1
 }
@@ -340,7 +352,9 @@ function pipedWordsVerdict(upstream, cwd, depth) {
 //   cat  copies stdin to stdout or a file (its file arguments are checked as usual);
 //   tee  copies stdin to stdout and files (file arguments are checked as usual);
 //   git commit|tag ... -F - / --file=-  reads a message from stdin and stores it.
-// Leading VAR=value assignments are skipped; no other prefix word is.
+// Leading VAR=value assignments are skipped; no other prefix word is. A heredoc whose
+// opening line has a process substitution (`<(` or `>(`), or that is opened inside a
+// `$(`, `<(`, `>(` or backtick substitution, is never data: its receiver is hidden.
 function isDataSink(texts) {
   let i = 0
   while (i < texts.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(texts[i])) i++
@@ -368,8 +382,8 @@ function heredocReceivers(line) {
 // the body is data; otherwise it is checked as shell text (plus its quoted literals, for
 // python -c style bodies). Even for data, an unquoted delimiter lets bash expand $(...)
 // and backticks inside the body, so those are checked as commands.
-function heredocVerdict(bodies, line, cwd, depth) {
-  const runs = !heredocReceivers(line).every(isDataSink)
+function heredocVerdict(bodies, line, cwd, depth, subst) {
+  const runs = subst || !heredocReceivers(line).every(isDataSink)
   for (const { text, expands } of bodies) {
     if (runs) {
       const verdict = bashVerdict(text, cwd, depth + 1) ?? literalRule(text, cwd)
@@ -399,7 +413,7 @@ function bashVerdict(command, cwd, depth = 0) {
       if (verdict) return verdict
     }
     if (words.heredoc && words.heredocLine[0] === words && depth < 3) {
-      const verdict = heredocVerdict(words.heredoc, words.heredocLine, cwd, depth)
+      const verdict = heredocVerdict(words.heredoc, words.heredocLine, cwd, depth, words.heredocSubst)
       if (verdict) return verdict
     }
     if (DATA_COMMANDS.has(cmd)) upstream = words.filter((w, i) => i > ci && !w.r).map((w) => w.t)

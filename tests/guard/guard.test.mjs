@@ -447,3 +447,33 @@ test('T13: a heredoc body is data only when every receiving command is a known d
   // an unquoted delimiter still expands command substitution for sinks
   assertDeny(bash('tee a.txt <<EOF\n$(cat .env)\nEOF'))
 })
+
+test('T16: process substitution on or around a heredoc opener hides the receiver, so the body is checked', () => {
+  const body = 'cat .env'
+  const denied = [
+    `bash <(cat <<'EOF'\n${body}\nEOF\n)`,
+    `source <(cat <<'EOF'\n${body}\nEOF\n)`,
+    `cat <<'EOF' > >(bash)\n${body}\nEOF`,
+    `cat <<'EOF' | tee >(bash)\n${body}\nEOF`,
+    `cat <<'EOF' > >(sh) | cat\n${body}\nEOF`,
+    `git commit -F - <<'EOF' 2> >(bash)\n${body}\nEOF`,
+    `echo $(cat <<'EOF'\n${body}\nEOF\n)`,
+    `echo \`cat <<'EOF'\n${body}\nEOF\n\``,
+    // gains from the T13 allowlist
+    `git -c core.editor=sh commit -F - <<'EOF'\n${body}\nEOF`,
+    `/bin/cat <<'EOF'\n${body}\nEOF`,
+    `command cat <<'EOF'\n${body}\nEOF`,
+    `$CAT <<'EOF'\n${body}\nEOF`,
+  ]
+  for (const c of denied) assertDeny(bash(c))
+  // previous behavior kept
+  assertAllow(bash("cat > .gitignore <<EOF\nnode_modules\n.env\nEOF"))
+  assertAllow(bash("cat >> .gitignore <<'EOF'\n.env\nEOF"))
+  assertAllow(bash("git commit -F - <<'EOF'\nchore: ignore\n.env\nEOF"))
+  assertAllow(bash('cat > notes.md <<"EOF"\n.env\nEOF'))
+  assertAllow(bash('cat > notes.md <<-EOF\n\t.env\n\tEOF'))
+  assertAllow(bash("cat <<'EOF' | tee notes.md\n.env\nEOF"))
+  assertAllow(bash("cat <<'EOF'; bash\n.env\nEOF"))
+  assertAllow(bash("cat <<'EOF' && bash\n.env\nEOF"))
+  assertAllow(bash("cat <<'EOF' > notes.md\n.env\nEOF"))
+})
