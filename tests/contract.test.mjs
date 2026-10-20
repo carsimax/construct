@@ -220,7 +220,7 @@ test('auto-index on: a git root without an index launches codegraph init --yes d
     const t0 = Date.now()
     const text = context('session', { ...SESSION, cwd: dir }, autoEnv(bin)).additionalContext
     assert.ok(Date.now() - t0 < 5000)
-    assert.ok(text.includes('indexing started in the background'))
+    assert.ok(text.includes('was requested and may still fail'))
     assert.ok(text.includes('file tools'))
     assert.ok(!text.includes('! codegraph init'))
     assert.ok(waitFor(marker), 'fake codegraph never ran')
@@ -321,7 +321,7 @@ test('auto-index never waits on a slow codegraph: the hook closes within 2 s and
     })
     assert.ok(Date.now() - t0 < 2000, `hook took ${Date.now() - t0} ms`)
     assert.equal(out.code, 0)
-    assert.ok(JSON.parse(out.stdout).hookSpecificOutput.additionalContext.includes('indexing started'))
+    assert.ok(JSON.parse(out.stdout).hookSpecificOutput.additionalContext.includes('was requested and may still fail'))
     assert.ok(waitFor(marker), 'slow fake codegraph never started')
   } finally {
     rmSync(dir, { recursive: true, force: true })
@@ -354,6 +354,28 @@ test('the indexing-started notice points at codegraph status, not at .codegraph/
     const text = context('session', { ...SESSION, cwd: dir }, autoEnv(bin)).additionalContext
     assert.ok(text.includes('codegraph status'))
     assert.ok(!/until `\.codegraph\/`/.test(text))
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+    rmSync(bin, { recursive: true, force: true })
+  }
+})
+
+test('auto-index launches only on startup (or a missing source); resume, clear, and compact get the manual notice with a failure clause', async () => {
+  const dir = project('.git')
+  const { bin, marker } = fakeCli()
+  try {
+    for (const source of ['resume', 'clear', 'compact']) {
+      const text = context('session', { ...SESSION, source, cwd: dir }, autoEnv(bin)).additionalContext
+      assert.ok(text.includes('! codegraph init'), source)
+      assert.ok(text.includes('earlier automatic init may have failed'), source)
+      assert.ok(!text.includes('was requested and may still fail'), source)
+    }
+    await new Promise((r) => setTimeout(r, 400))
+    assert.ok(!existsSync(marker), 'fake codegraph must not run outside startup')
+    const { source, ...noSource } = SESSION
+    const text = context('session', { ...noSource, cwd: dir }, autoEnv(bin)).additionalContext
+    assert.ok(text.includes('was requested and may still fail'))
+    assert.ok(waitFor(marker), 'missing source should launch')
   } finally {
     rmSync(dir, { recursive: true, force: true })
     rmSync(bin, { recursive: true, force: true })
