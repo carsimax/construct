@@ -561,3 +561,12 @@ Push and PR creation remain the user's decision.
     - `acknowledge` writes two files non-atomically.
     - A malformed `--lineage` exits 1, not 2.
     - `statSync` on a lock removed concurrently is unguarded.
+- **RDD on slice 09** (`--base-ref 7eccb37`, 1991 lines):
+  - `odd-assess` and `gentle-ai` agree: `high`, `executable_mode` on `bin/odd-review`.
+  - The user granted consent.
+  - Lenses `review-risk`, `review-reliability`, and `review-resilience`, lineage `review-06bc2aad43ea78a8`: **approved**, then acknowledged.
+  - Advisory findings (all WARNING), tracked as follow-ups:
+    - **F5 (R1):** `capture-refuter` results carry no `subject_hash`, so a refuter result is not bound to its lineage. Finding ids (F1, F2…) repeat across lineages. Bind refuter input and output to a per-lineage refuter subject hash, as lenses and the validator already are.
+    - **F6 (R3, R4):** `withLock` reads and stats the lock after `EEXIST` without guarding `ENOENT`, so a concurrent release surfaces as `internal_error`. Stale reclaim is not atomic. Guard and retry.
+    - **F7 (R3, R4):** `acknowledge` writes the receipt and then the transaction non-atomically. A crash between the two leaves an unrecoverable `approved` state with a receipt. Make the step idempotent: when a receipt exists for the same lineage, complete the transaction.
+    - **F8 (R3, deterministic):** `tests/review/invariants.test.mjs:80-86` asserts on a `captured` field that the transaction does not have, so "a rejected result stores nothing" is vacuously true. Assert on `results`.
