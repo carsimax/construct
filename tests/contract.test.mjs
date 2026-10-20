@@ -178,7 +178,7 @@ test('SessionStart notes a missing CodeGraph index for a git root, identically a
     const plain = context('session', { ...SESSION, cwd: project() }).additionalContext
     assert.ok(base.includes('CodeGraph:'))
     assert.ok(base.includes(`\`${dir}\` has no \`.codegraph/\` index`))
-    assert.ok(base.includes(`! codegraph init ${dir}`))
+    assert.ok(base.includes('`! codegraph init` (it runs in that directory)'))
     assert.ok(base.startsWith(plain.trim().split('\n\nCodeGraph:')[0]))
     assert.ok(base.length <= 8000, `length ${base.length}`)
     for (const source of ['resume', 'clear', 'compact']) {
@@ -276,7 +276,7 @@ test('auto-index off or unset: the S2 notice is unchanged and nothing is spawned
       if (value === undefined) delete env.CLAUDE_PLUGIN_OPTION_CODEGRAPH_AUTO_INDEX
       assert.equal(context('session', { ...SESSION, cwd: dir }, env).additionalContext, baseline)
     }
-    assert.ok(baseline.includes(`! codegraph init ${dir}`))
+    assert.ok(baseline.includes('`! codegraph init` (it runs in that directory)'))
     spawnSync('sleep', ['0.5'])
     assert.ok(!existsSync(marker))
   } finally {
@@ -420,7 +420,7 @@ test('every notice variant stays under 8,000 characters for long project paths, 
   const empty = mkdtempSync(join(tmpdir(), 'construct-emptybin-'))
   const roots = []
   try {
-    for (const target of [150, 200]) {
+    for (const target of [150, 200, 300]) {
       const base = project()
       roots.push(base)
       const dir = join(base, 'p'.repeat(target - base.length - 1))
@@ -432,7 +432,10 @@ test('every notice variant stays under 8,000 characters for long project paths, 
           context('session', { ...SESSION, source, cwd: dir }, autoEnv(bin)).additionalContext,
           context('session', { ...SESSION, source, cwd: dir }, { CLAUDE_PLUGIN_OPTION_CODEGRAPH_AUTO_INDEX: 'true', PATH: empty }).additionalContext,
         ]
-        for (const v of variants) assert.ok(v.length <= 8000, `${source} ${target}: ${v.length} chars`)
+        for (const v of variants) {
+          assert.ok(v.length <= 8000, `${source} ${target}: ${v.length} chars`)
+          assert.ok(v.split(dir).length - 1 <= 1, `${source} ${target}: path occurs more than once`)
+        }
       }
     }
   } finally {

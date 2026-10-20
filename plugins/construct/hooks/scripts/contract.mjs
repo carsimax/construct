@@ -58,11 +58,10 @@ function startIndexing(cli, dir) {
   }
 }
 
-// shortcut: the notice carries the path twice, so the 8,000-character budget holds for paths up to ~220 characters in the longest variant, when the contract text grows or paths exceed that, print the path once or truncate it
 // Session only: tell the agent when a git root has no CodeGraph index (and index it when opted in)
 function indexNotice(dir, source) {
   if (!existsSync(join(dir, '.git')) || existsSync(join(dir, '.codegraph'))) return ''
-  const manual = `Indexing is the user's decision: suggest \`! codegraph init ${dir}\` once, then use file tools.`
+  const manual = `Indexing is the user's decision: suggest \`! codegraph init\` (it runs in that directory) once, then use file tools.`
   const missing = `CodeGraph: \`${dir}\` has no \`.codegraph/\` index, so \`codegraph_explore\` cannot answer for it.`
   if (autoIndex) {
     const cli = findOnPath('codegraph')
