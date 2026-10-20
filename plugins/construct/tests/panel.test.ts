@@ -32,7 +32,9 @@ function world($, on, o: any = {}) {
   on('fs.read', () => value(o.tasks ? o.tasks() : TASKS))
   on('process.run', (_$, e) => {
     const a = e.argv
-    if (a[0] === 'git' && a.includes('status')) return value(ok('# branch.oid abc1234\n# branch.head main\n'))
+    if (a[0] === 'git' && a.includes('status')) return value(ok(o.git ?? '# branch.oid abc1234\n# branch.head main\n'))
+    if (a[0] === 'git' && a.includes('--no-index')) return value(o.untrackedCount ? { ...ok(o.untrackedCount), exitCode: 1 } : { ...ok(''), exitCode: 128 })
+    if (a[0] === 'git' && a.includes('--numstat')) return value(ok(o.numstat ?? ''))
     if (a[0] === 'git' && a.includes('rev-parse')) return value(ok('/home/me/proj\n.git\n.git\n'))
     if (a.includes('mode')) return value(ok(JSON.stringify({ mode: 'on', source: 'default' })))
     if (a.includes('boundary')) return value(ok(JSON.stringify({ commit: 'deadbeef', source: 'root' })))
@@ -175,7 +177,6 @@ test('spawn makes a card and passes the spawn result through', async ($, on) => 
   const text = await joined(p)
   expect(text).toContain('agents · 1 running · 1 total')
   expect(text).toContain('1: odd_worker')
-  expect(text).toContain('spawned')
 })
 
 test('new hooks pass events through unchanged', async ($, on) => {
@@ -245,7 +246,7 @@ test('a spawn from main sets the permission mode; a nested spawn does not', asyn
   expect(text).not.toContain('mode plan')
 })
 
-test('a tool.call after an ask settles it as cleared, and the log rows carry real times', async ($, on) => {
+test('a tool.call after an ask settles it as cleared', async ($, on) => {
   const seen: any = {}
   await start($, on, { decision: 'ask', seen })
   await $.tool.check({ tool: 'Bash', input: { command: 'ls' }, tool_use_id: 'tu-1' })
@@ -257,36 +258,55 @@ test('a tool.call after an ask settles it as cleared, and the log rows carry rea
   const text = await joined(p)
   expect(text).toContain('1 you')
   expect(text).not.toContain('pending')
-  expect(text).toMatch(/\d\d:\d\d:\d\d/)
   expect(text).toContain('inline write')
 })
 
-test('a refresh that loses the ODD task (a failed collect) logs no transition to none', async ($, on) => {
-  let doc = TASKS
-  await start($, on, { tasks: () => doc })
-  doc = ''
-  await $.turn.start({ text: 'go', turnId: 't2' })
-  await $.turn.complete({ answer: 'done', turnId: 't2' })
+test('no session log card is drawn', async ($, on) => {
+  await start($, on)
+  await $.agent.spawn({ subagentType: 'construct:odd-worker', model: 'opus', prompt: 'p', description: 'build it' })
   await settle()
   const p = await pane($)
   await p.redraw()
-  expect(await joined(p)).not.toContain('task none')
+  const text = await joined(p)
+  expect(text).not.toContain('session log')
+  expect(text).not.toContain('CONSTRUCT')
 })
 
-test('an ODD task change logs a row on refresh, not at first load', async ($, on) => {
-  let doc = TASKS
-  await start($, on, { tasks: () => doc })
-  let p = await pane($)
+test('the changes card shows the branch, ahead and behind, tracked and untracked files', async ($, on) => {
+  await start($, on, {
+    git: '# branch.oid abc1234\n# branch.head feat/x\n# branch.upstream o/feat/x\n# branch.ab +2 -1\n1 .M N... 100644 100644 100644 a b src/a.js\n? notes.md\n',
+    numstat: '12\t3\tsrc/a.js\n-\t-\tlogo.png\n',
+    untrackedCount: '7\t0\tnotes.md\n',
+  })
+  const p = await pane($)
   await p.redraw()
-  expect(await joined(p)).not.toContain('task T')
-  await p.unmount()
-  doc = TASKS.replace('| T2 | S1 | second | w | none | pending | - |', '| T2 | S1 | second | w | none | done | x |\n| T3 | S1 | third | w | none | pending | - |')
-  await $.turn.start({ text: 'go', turnId: 't2' })
-  await $.turn.complete({ answer: 'done', turnId: 't2' })
-  await settle()
-  p = await pane($)
+  const text = await joined(p)
+  expect(text).toContain('feat/x')
+  expect(text).toContain('↑2')
+  expect(text).toContain('↓1')
+  expect(text).toContain('src/a.js')
+  expect(text).toContain('+12')
+  expect(text).toContain('-3')
+  expect(text).toContain('logo.png')
+  expect(text).toContain('bin')
+  expect(text).toContain('notes.md')
+  expect(text).toContain('+7')
+})
+
+test('an untracked file whose count is unavailable shows new; a clean synced repo has no changes card', async ($, on) => {
+  await start($, on, { git: '# branch.oid abc1234\n# branch.head main\n# branch.ab +0 -0\n? notes.md\n' })
+  const p = await pane($)
   await p.redraw()
-  expect(await joined(p)).toContain('task T3')
+  const text = await joined(p)
+  expect(text).toContain('notes.md')
+  expect(text).toContain('new')
+})
+
+test('a clean repository in sync has no changes card', async ($, on) => {
+  await start($, on, { git: '# branch.oid abc1234\n# branch.head main\n# branch.ab +0 -0\n' })
+  const p = await pane($)
+  await p.redraw()
+  expect(await leaves(p)).not.toContain('main')
 })
 
 test('5h and 7d show the reset time next to the gauges', async ($, on) => {

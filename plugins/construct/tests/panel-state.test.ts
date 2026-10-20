@@ -6,8 +6,6 @@ import {
   isOutsideTasks,
   maskSecrets,
   merge,
-  noteOddTask,
-  noteRddState,
   mainBusy,
   onAgentSpawn,
   onCompact,
@@ -411,74 +409,29 @@ test('merge fills the new gate and main sections for a version 1 value', () => {
   expect(m.gate.cells).toEqual(['allowed'])
   expect(m.gate.verdicts).toEqual({ rule: 0, ask: 0, cleared: 0, deny: 0 })
   expect(m.main).toEqual({ steps: 0, model: null, effort: null, mode: null })
-  expect(m.log).toEqual([])
-  expect(merge({ ...initialState(), log: 'no' })).toEqual(initialState())
+  expect('log' in m).toBe(false)
   expect(merge({ ...initialState(), main: 3 })).toEqual(initialState())
 })
 
-// ---- S9 session log -------------------------------------------------------
 
-test('spawn and done append log rows, done with the duration', () => {
-  let s = spawn(initialState(), 'a1', { nowMs: 1000 })
-  expect(s.log).toEqual([{ atMs: 1000, who: 'odd_worker', what: 'spawned' }])
+test('the schema is version 3 and a stored version 2 value keeps its sections but drops the log', () => {
+  expect(SCHEMA_VERSION).toBe(3)
+  expect('log' in initialState()).toBe(false)
+  const v2: any = { ...initialState(), v: 2, compactions: 4, log: [{ atMs: 1, who: 'gate', what: 'x' }], main: { steps: 3, model: 'm', effort: null, mode: null } }
+  const m: any = merge(v2)
+  expect(m.v).toBe(3)
+  expect(m.compactions).toBe(4)
+  expect(m.main.steps).toBe(3)
+  expect('log' in m).toBe(false)
+  expect(merge({ ...v2, log: 'no' }).compactions).toBe(4)
+  expect(merge({ ...initialState(), v: 9 })).toEqual(initialState())
+})
+
+test('spawn, done, denied and inline write no longer touch a log', () => {
+  let s: any = spawn(initialState(), 'a1', { nowMs: 1000 })
   s = onTurnComplete(s, { agentId: 'a1', nowMs: 66000 })
-  expect(s.log[1]).toEqual({ atMs: 66000, who: 'odd_worker', what: 'done in 1m05s' })
-  s = onTurnComplete(s, { agentId: 'a1', nowMs: 67000 })
-  expect(s.log).toHaveLength(2)
-  expect(onTurnComplete(initialState(), { agentId: 'zz', nowMs: 5 }).log).toEqual([])
-  s = onTurnComplete(spawn(initialState(), 'b', { nowMs: 0 }), { agentId: 'b', nowMs: 4500 })
-  expect(s.log[1].what).toBe('done in 4s')
-})
-
-test('a denied tool logs masked; an allow or a query does not', () => {
-  let s = onToolCheck(initialState(), { tool: 'Bash', decision: 'deny', input: { command: 'curl -H "Authorization: Bearer abc123def456ghi789"' }, nowMs: 7 })
-  expect(s.log).toHaveLength(1)
-  expect(s.log[0]).toMatchObject({ atMs: 7, who: 'gate' })
-  expect(s.log[0].what).toContain('denied Bash')
-  expect(s.log[0].what).not.toContain('abc123def456ghi789')
-  s = onToolCheck(s, { tool: 'Read', decision: 'allow' })
-  s = onToolCheck(s, { tool: 'Bash', decision: 'deny', isQuery: true })
-  expect(s.log).toHaveLength(1)
-})
-
-test('an inline write logs its path; odd/tasks and subagent writes do not', () => {
-  let s = onToolCall(initialState(), { tool: 'Edit', path: '/p/src/a.ts', cwd: '/p', nowMs: 9 })
-  expect(s.log).toEqual([{ atMs: 9, who: 'main', what: 'inline write /p/src/a.ts' }])
-  s = onToolCall(s, { tool: 'Edit', path: '/p/odd/tasks/x.md', cwd: '/p', nowMs: 10 })
-  s = onToolCall(s, { tool: 'Edit', path: '/p/b.ts', cwd: '/p', agentId: 'a1', nowMs: 11 })
-  expect(s.log).toHaveLength(1)
-})
-
-test('the log is a ring of the latest 50 rows', () => {
-  let s = initialState()
-  for (let i = 0; i < 60; i++) s = onToolCall(s, { tool: 'Edit', path: `/p/f${i}.ts`, cwd: '/p', nowMs: i })
-  expect(s.log).toHaveLength(50)
-  expect(s.log[0].atMs).toBe(10)
-  expect(s.log[49].atMs).toBe(59)
-})
-
-test('an ODD task change appends one row only when it differs', () => {
-  let s = noteOddTask(initialState(), { id: 'T1', title: 'one' }, { id: 'T2', title: 'two' }, 5)
-  expect(s.log).toEqual([{ atMs: 5, who: 'odd', what: 'task T2 two' }])
-  expect(noteOddTask(s, { id: 'T2', title: 'two' }, { id: 'T2', title: 'two' }, 6)).toEqual(s)
-  expect(noteOddTask(s, 'T2', 'T2', 6)).toEqual(s)
-  expect(noteOddTask(s, null, null, 6)).toEqual(s)
-  expect(noteOddTask(s, { id: 'T2' }, null, 7).log[1]).toEqual({ atMs: 7, who: 'odd', what: 'task none' })
-})
-
-test('an RDD state change appends one row only when it differs', () => {
-  let s = noteRddState(initialState(), 'clear', 'due', 5)
-  expect(s.log).toEqual([{ atMs: 5, who: 'review', what: 'rdd clear → due' }])
-  expect(noteRddState(s, 'due', 'due', 6)).toEqual(s)
-  expect(noteRddState(s, undefined, undefined, 6)).toEqual(s)
-  expect(noteRddState(s, null, 'on', 7).log[1].what).toBe('rdd none → on')
-})
-
-test('log rows from odd input stay well formed', () => {
-  const s = noteRddState(noteOddTask(initialState(), {}, { id: 3, title: {} } as any, undefined as any), 5 as any, 'x', 'y' as any)
-  for (const r of s.log) {
-    expect(typeof r.atMs).toBe('number')
-    expect(typeof r.who).toBe('string')
-    expect(typeof r.what).toBe('string')
-  }
+  s = onToolCheck(s, { tool: 'Bash', decision: 'deny', input: { command: 'x' }, nowMs: 7 })
+  s = onToolCall(s, { tool: 'Edit', path: '/p/src/a.ts', cwd: '/p', nowMs: 9 })
+  expect('log' in s).toBe(false)
+  expect(s.inline).toEqual({ count: 1, last: '/p/src/a.ts' })
 })

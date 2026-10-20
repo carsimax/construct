@@ -28,7 +28,6 @@
 // That is a request: a width the user dragged or kept wins, so the layout reads the real width from
 // `columns` (never below 40). Top to bottom:
 //
-//   header   CONSTRUCT · <MODEL> <IDLE|BUSY> · ODD <task id>, then the five-item color legend
 //   main     round card: model, idle/busy, effort meter, mode, requests, ctx gauge, cost, 5h and 7d
 //   rail
 //   ODD      hidden without a feature: feature, current task, one checkpoint per task
@@ -37,7 +36,8 @@
 //   GATE     stacked verdict bar, allowed / decider / pending / denied, buckets, last denied, inline alert
 //   agents   one row per agent: mark, role, timeline bar on the session span, clock
 //   turn     round card: last (or running) turn duration, agents, edits, errors, cost added
-//   log      round `session log` card, rows clamped by logRows
+//   changes  round card titled with the branch, `↑N ↓N` on the right, one row per changed file
+//            (`+added -removed`), rows clamped by changeRows with a `+N more` row when cut
 //
 // Cards that have nothing to show are left out; the main card always shows (it does not depend on
 // a statusLine, S3). Colors are theme keys only (draw.js PALETTE). Rows are `Text` elements with
@@ -54,14 +54,13 @@
 // (hooks/panel/state.js), the session usage, a clock and the Pane's `bodyColumns` / `scroll.bodyRows`.
 
 import { agentsView, mainBusy, maskSecrets } from './state.js'
-import { PALETTE, card, effortMeter, fmtResetIn, gauge, laneBar, lanes, logRows, panelBox, stackBar } from './draw.js'
+import { PALETTE, card, changeRows, effortMeter, fmtResetIn, gauge, laneBar, lanes, panelBox, stackBar } from './draw.js'
 import { STATE_COLOR, text } from '../status/format.js'
 
 export const PANEL_COLUMNS = 66
 
 const MIN_COLUMNS = 40
 const MAX_AGENT_ROWS = 6
-const WHO_WIDTH = 14
 
 // ---- small helpers ---------------------------------------------------------
 
@@ -112,18 +111,6 @@ export function prettyModel(model) {
   return `${family[0].toUpperCase()}${family.slice(1)}${version.length > 0 ? ` ${version.join('.')}` : ''}`
 }
 
-// HH:MM:SS of an epoch time. A number `tzOffsetMin` formats in UTC plus that many minutes (tests, a
-// fixed zone); otherwise the machine's local time.
-export function formatClock(ms, tzOffsetMin) {
-  if (!isNum(ms)) return '--:--:--'
-  if (isNum(tzOffsetMin)) {
-    const d = new Date(ms + tzOffsetMin * 60_000)
-    return `${two(d.getUTCHours())}:${two(d.getUTCMinutes())}:${two(d.getUTCSeconds())}`
-  }
-  const d = new Date(ms)
-  return `${two(d.getHours())}:${two(d.getMinutes())}:${two(d.getSeconds())}`
-}
-
 // ---- elements --------------------------------------------------------------
 
 // A one-row piece list: Texts inside a truncating Text, as flightdeck draws its rows.
@@ -142,41 +129,6 @@ function height(node) {
 
 let seq = 0
 const key = (name) => `${name}-${seq++}`
-
-// ---- header ----------------------------------------------------------------
-
-const LEGEND = [
-  ['main', PALETTE.main],
-  ['agents', PALETTE.agent],
-  ['gate', PALETTE.gate],
-  ['odd', PALETTE.odd],
-  ['review', PALETTE.cleared],
-]
-
-function headerRows(model, busy, odd) {
-  const task = odd?.feature ? (odd.task?.id ?? odd.feature) : null
-  const title = {
-    type: 'Text',
-    props: { bold: true, wrap: 'truncate' },
-    children: [
-      text('CONSTRUCT'),
-      text(' · ', { color: PALETTE.dim }),
-      text(model.toUpperCase(), { color: PALETTE.main }),
-      text(busy ? ' BUSY' : ' IDLE'),
-      task ? text(' · ', { color: PALETTE.dim }) : null,
-      task ? text('ODD', { color: PALETTE.odd }) : null,
-      task ? text(` ${task}`) : null,
-    ].filter(Boolean),
-  }
-  return [
-    { type: 'Box', props: { justifyContent: 'center' }, children: [title] },
-    {
-      type: 'Box',
-      props: { justifyContent: 'center', columnGap: 2 },
-      children: LEGEND.map(([label, color]) => line(text('■', { color }), dim(` ${label}`))),
-    },
-  ]
-}
 
 // ---- main card (S3) ------------------------------------------------------------
 
@@ -402,33 +354,77 @@ function turnCard(receipt, nowMs, width, client) {
   return panelBox({ color: PALETTE.main, dim: !running, width, children: [body] })
 }
 
-// ---- session log (S9) ----------------------------------------------------------------
+// ---- changes card (S9) ----------------------------------------------------------------
 
-function whoColor(who) {
-  if (who === 'main') return PALETTE.main
-  if (who === 'gate') return PALETTE.gate
-  if (who === 'odd') return PALETTE.odd
-  if (who === 'review') return PALETTE.cleared
-  if (who === 'you') return PALETTE.text
-  return PALETTE.agent
+// eslint-disable-next-line no-control-regex
+const stripControl = (s) => String(s).replace(/[\u0000-\u001f\u007f-\u009f]/g, '')
+
+// `path` in `w` cells with its basename kept: leading directories fall away as `…/dir/name`, and a
+// basename longer than the room is itself clipped.
+function fitPath(path, w) {
+  if (path.length <= w) return path
+  const parts = path.split('/').filter(Boolean)
+  const base = parts.at(-1) ?? path
+  if (w <= 2 || base.length + 2 > w) return fit(base, w)
+  let out = base
+  for (let i = parts.length - 2; i >= 0; i--) {
+    const next = `${parts[i]}/${out}`
+    if (next.length + 2 > w) break
+    out = next
+  }
+  return `…/${out}`
 }
 
-function logCard({ log, bodyRows, used, width, tzOffsetMin }) {
-  const n = logRows(isNum(bodyRows) && bodyRows > 0 ? bodyRows : Infinity, used)
-  if (n < 1) return null
-  const rows = (Array.isArray(log) ? log : []).slice(-n)
-  const body = rows.map((r) =>
-    row([
-      faint(`${formatClock(r.atMs, tzOffsetMin)} `),
-      text(fit(r.who, WHO_WIDTH - 1).padEnd(WHO_WIDTH), { color: whoColor(r.who), bold: true }),
-      text(fit(r.what, Math.max(1, width - 4 - 9 - WHO_WIDTH))),
-    ]),
-  )
-  return panelBox({
-    color: PALETTE.faint,
-    marginTop: 1,
+const linesOf = (f) => (isNum(f.added) ? f.added : 0) + (isNum(f.removed) ? f.removed : 0)
+
+// The stat pieces of one file: `+added -removed`, `bin` for a binary file, `+added` for an untracked
+// file with a known count and `new` without one.
+function statPieces(f) {
+  if (f.binary) return { len: 3, pieces: [dim('bin')] }
+  if (f.untracked && !isNum(f.added)) return { len: 3, pieces: [dim('new')] }
+  const add = `+${f.added ?? 0}`
+  if (f.untracked) return { len: add.length, pieces: [text(add, { color: PALETTE.gate })] }
+  const del = `-${f.removed ?? 0}`
+  return { len: add.length + 1 + del.length, pieces: [text(add, { color: PALETTE.gate }), text(' '), text(del, { color: PALETTE.warn })] }
+}
+
+function changeRow(f, iw) {
+  const { len, pieces } = statPieces(f)
+  const room = Math.max(1, iw - len - 1)
+  return line(text(fitPath(stripControl(f.path), room).padEnd(room)), text(' '), pieces)
+}
+
+// Branch, ahead and behind, and the changed files (working tree against HEAD, untracked included),
+// biggest change first. Hidden when nothing changed and the branch is in sync; its rows fit
+// `changeRows`, the last one `+N more` when some are cut.
+function changesCard({ git, changes, rows, used, width }) {
+  const files = (Array.isArray(changes) ? changes : [])
+    .filter((f) => f && typeof f.path === 'string' && stripControl(f.path) !== '')
+    .sort((a, b) => linesOf(b) - linesOf(a))
+  const ahead = isNum(git?.ahead) && git.ahead > 0 ? git.ahead : 0
+  const behind = isNum(git?.behind) && git.behind > 0 ? git.behind : 0
+  if (files.length === 0 && ahead === 0 && behind === 0) return null
+  const room = changeRows(isNum(rows) && rows > 0 ? rows : Infinity, used)
+  if (room < 0) return null
+  const iw = width - 4
+  const status = [ahead > 0 ? `↑${ahead}` : null, behind > 0 ? `↓${behind}` : null].filter(Boolean).join(' ')
+  const name = stripControl(git?.branch ?? '') || 'changes'
+  let shown = files
+  let more = 0
+  if (files.length > room) {
+    shown = room >= 2 ? files.slice(0, room - 1) : []
+    more = files.length - shown.length
+    if (room === 0) more = 0
+  }
+  const body = shown.map((f) => changeRow(f, iw))
+  if (more > 0) body.push(line(faint(`+${more} more`)))
+  return card({
+    title: fit(name, Math.max(8, iw - status.length - 1)),
+    status: status === '' ? null : status,
+    color: PALETTE.git,
+    children: room === 0 ? [] : body,
     width,
-    children: [line(dim('session log')), ...(body.length > 0 ? body : [line(faint('nothing yet'))])],
+    marginTop: 1,
   })
 }
 
@@ -453,9 +449,9 @@ function rail(name, active, width, client) {
 // Builds the panel body; the main card always shows, so it is never null. `columns` and `rows` are
 // the Pane's bodyColumns and scroll.bodyRows. `usage` is `$.session.usage()`, `model` and `effort` are
 // the fallbacks for a main thread that has not made a request yet (the state's `main` wins). `client`
-// says the surface can draw `Client` elements. `tzOffsetMin` fixes the log's time zone (UTC plus
-// minutes); omitted, the log shows local time.
-export function buildPanel({ panel, usage, odd, rdd, nowMs, columns, rows, model, effort, client = false, tzOffsetMin }) {
+// says the surface can draw `Client` elements. `git` is parseGitStatus's result (branch, ahead, behind)
+// and `changes` the changed files ({ path, added, removed, binary, untracked }) for the changes card.
+export function buildPanel({ panel, usage, odd, rdd, nowMs, columns, rows, model, effort, client = false, git, changes }) {
   const state = panel ?? {}
   const width = isNum(columns) && columns > 0 ? Math.max(MIN_COLUMNS, Math.floor(columns)) : PANEL_COLUMNS
   const busy = mainBusy(state)
@@ -463,7 +459,7 @@ export function buildPanel({ panel, usage, odd, rdd, nowMs, columns, rows, model
   const name = prettyModel(state.main?.model ?? model)
   const showClient = client === true
 
-  const children = headerRows(name, busy, odd)
+  const children = []
   const push = (el) => {
     if (el) children.push(el)
     return Boolean(el)
@@ -478,6 +474,6 @@ export function buildPanel({ panel, usage, odd, rdd, nowMs, columns, rows, model
   children.push(...agentsRows(state, nowMs, width, showClient))
   push(turnCard(state.receipt, nowMs, width, showClient))
   const used = children.reduce((n, k) => n + height(k), 0)
-  push(logCard({ log: state.log, bodyRows: rows, used, width, tzOffsetMin }))
+  push(changesCard({ git, changes, rows, used, width }))
   return { type: 'Box', props: { flexDirection: 'column', width }, children }
 }

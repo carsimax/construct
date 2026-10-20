@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 import { bar, clampPct, formatReset5h, formatResetWeek, joinSegments, meterColor, shortDir } from '../hooks/status/format.js'
 import { activeFeature, unfinishedCount } from '../hooks/status/tasks.js'
-import { parseAssess, parseBoundary, parseGitStatus, parseMode, parseRevParse, reviewState } from '../hooks/status/data.js'
+import { parseAssess, parseBoundary, parseGitStatus, parseMode, parseNumstat, parseRevParse, reviewState } from '../hooks/status/data.js'
 
 // ---- fixtures ----------------------------------------------------------
 
@@ -172,7 +172,7 @@ test('activeFeature picks the newest document that still has unfinished tasks', 
 
 test('parsers read git, rev-parse, mode, boundary and assess output', async () => {
   const git = parseGitStatus('# branch.oid abc1234deadbeef\n# branch.head main\n# branch.upstream o/main\n# branch.ab +2 -1\n1 .M x\n? y\n')
-  expect(git).toEqual({ branch: 'main', dirty: 2, ahead: 2, behind: 1 })
+  expect(git).toEqual({ branch: 'main', dirty: 2, ahead: 2, behind: 1, untracked: ['y'] })
   expect(parseGitStatus('# branch.oid abc1234deadbeef\n# branch.head (detached)\n').branch).toBe('abc1234')
   expect(parseGitStatus('')).toBe(null)
   expect(parseRevParse('/r\n/r/.git/worktrees/w\n/r/.git\n')).toEqual({ root: '/r', worktree: 'r' })
@@ -337,4 +337,24 @@ test('the CLIs are not run on render, only on session.start and turn.complete', 
   await $.turn.complete({ turnId: 't', reason: 'answer', answer: 'ok', durationMs: 1, isAborted: false })
   await new Promise((r) => setTimeout(r, 30))
   expect(seen.length).toBeGreaterThan(after)
+})
+
+test('parseGitStatus lists untracked paths and keeps its other fields', async () => {
+  const git = parseGitStatus('# branch.oid abc1234deadbeef\n# branch.head main\n# branch.ab +2 -1\n1 .M x\n? new.txt\n? dir/\n? "sp\\"q.txt"\n')
+  expect(git).toEqual({ branch: 'main', dirty: 4, ahead: 2, behind: 1, untracked: ['new.txt', 'dir/', 'sp"q.txt'] })
+  expect(parseGitStatus('# branch.oid abc\n# branch.head main\n')?.untracked).toEqual([])
+  expect(parseGitStatus('# branch.oid abc\n# branch.head main\n? a\u001b[2Jb.txt\n')?.untracked).toEqual(['a[2Jb.txt'])
+})
+
+test('parseNumstat reads added and removed lines, binary files, and quoted paths', async () => {
+  expect(parseNumstat('12\t3\tsrc/a.js\n0\t4\tb.md\n-\t-\timg.png\n')).toEqual([
+    { path: 'src/a.js', added: 12, removed: 3, binary: false },
+    { path: 'b.md', added: 0, removed: 4, binary: false },
+    { path: 'img.png', added: null, removed: null, binary: true },
+  ])
+  expect(parseNumstat('1\t1\t"a b\\"c.txt"\n')).toEqual([{ path: 'a b"c.txt', added: 1, removed: 1, binary: false }])
+  expect(parseNumstat('1\t2\tdir/with\ttab.txt\n')[0].path).toBe('dir/with\ttab.txt'.replace('\t', ''))
+  expect(parseNumstat('')).toEqual([])
+  expect(parseNumstat(undefined)).toEqual([])
+  expect(parseNumstat('garbage\n\nx\ty\tz\n')).toEqual([])
 })

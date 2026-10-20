@@ -23,7 +23,7 @@
 // SOFTWARE.
 
 // Pure drawing primitives for the Construct panel: gauges, the effort meter, the
-// agent timeline geometry, the log row clamp and the bordered card. They return
+// agent timeline geometry, the changes row clamp and the bordered card. They return
 // strings, numbers and plain element objects ({ type, props, children }, as
 // layout.js and hooks/status/format.js build them), so they run and test without
 // `$`. The rail and the elapsed clock are Client modules next to this file.
@@ -40,6 +40,7 @@ export const PALETTE = {
   gate: 'success',
   cleared: 'permission',
   odd: 'merged',
+  git: 'remember',
   amber: 'warning',
   warn: 'error',
   dim: 'inactive',
@@ -99,10 +100,15 @@ export function laneBar(geo) {
   return { before: '·'.repeat(geo.before), bar: '━'.repeat(geo.bar), after: '·'.repeat(geo.after) }
 }
 
-// How many session log rows fit: what the other cards leave less the log card's own frame (margin 1,
-// border 2, title 1 = 4 rows), at most 8 and 0 when not even one row fits (the caller drops the log).
-export const LOG_FRAME_ROWS = 4
-export const logRows = (bodyRows, used) => Math.max(0, Math.min(8, Math.floor(bodyRows - used - LOG_FRAME_ROWS)))
+// How many file rows the changes card may show: what the other cards leave less its frame (margin 1,
+// border 2, title 1 = 4 rows), at most 10. -1 when not even the frame fits (the caller drops the card),
+// 0 when only the title fits.
+export const CHANGES_FRAME_ROWS = 4
+export const MAX_CHANGE_ROWS = 10
+export const changeRows = (bodyRows, used) => {
+  const free = Math.floor(bodyRows - used - CHANGES_FRAME_ROWS)
+  return free < 0 || Number.isNaN(free) ? -1 : Math.min(MAX_CHANGE_ROWS, free)
+}
 
 // Largest-remainder split of `width` cells among `counts` (an array of numbers, in drawing order):
 // each non-zero count gets at least one cell and the cells sum to `width` (none when every count is 0
@@ -143,7 +149,7 @@ export function panelBox({ color, dim, width, marginTop, children = [] }) {
 // A round bordered card: a bold title on the left and the status on the right of one
 // row, then `children` (element objects). `status` is a string (in the card color) or
 // { text, color, dim }; `width` is omitted to let the pane size the card; `dim` dims the border.
-export function card({ title, status, color, children = [], width, dim }) {
+export function card({ title, status, color, children = [], width, dim, marginTop }) {
   const head = [textNode(title, { color, bold: true })]
   if (status !== undefined && status !== null) {
     const s = typeof status === 'string' ? { text: status, color } : status
@@ -152,5 +158,5 @@ export function card({ title, status, color, children = [], width, dim }) {
     else if (s.color) props.color = s.color
     head.push(textNode(s.text, props))
   }
-  return panelBox({ color, dim, width, children: [{ type: 'Box', props: { justifyContent: 'space-between' }, children: head }, ...children] })
+  return panelBox({ color, dim, width, marginTop, children: [{ type: 'Box', props: { justifyContent: 'space-between' }, children: head }, ...children] })
 }

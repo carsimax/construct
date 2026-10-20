@@ -1,5 +1,5 @@
 import { expect, test } from 'claude-code/testing'
-import { card, effortMeter, fmtResetIn, gauge, laneBar, lanes, logRows, PALETTE } from '../hooks/panel/draw.js'
+import { card, effortMeter, fmtResetIn, gauge, laneBar, lanes, changeRows, PALETTE } from '../hooks/panel/draw.js'
 import Rail from '../hooks/panel/rail.tsx'
 import Elapsed from '../hooks/panel/elapsed.tsx'
 
@@ -61,16 +61,16 @@ test('laneBar draws · padding around a ━ run', () => {
   expect(laneBar(undefined)).toEqual({ before: '', bar: '━', after: '' })
 })
 
-// ---- log clamp ---------------------------------------------------------------
+// ---- changes clamp -------------------------------------------------------------
 
-test('logRows leaves what other cards use and the log card frame (4 rows), up to 8, 0 when none fit', () => {
-  expect(logRows(40, 10)).toBe(8)
-  expect(logRows(20, 10)).toBe(6)
-  expect(logRows(15, 10)).toBe(1)
-  expect(logRows(14, 10)).toBe(0)
-  expect(logRows(0, 30)).toBe(0)
+test('changeRows leaves what other cards use and the card frame (4 rows), up to 10, -1 when the frame does not fit', () => {
+  expect(changeRows(40, 10)).toBe(10)
+  expect(changeRows(20, 10)).toBe(6)
+  expect(changeRows(14, 10)).toBe(0)
+  expect(changeRows(13, 10)).toBe(-1)
+  expect(changeRows(0, 30)).toBe(-1)
+  expect(changeRows(Infinity, 30)).toBe(10)
 })
-
 // ---- card --------------------------------------------------------------------
 
 test('card is a round bordered column with a space-between title row', () => {
@@ -94,7 +94,7 @@ test('card status can carry its own color and dim, and may be absent', () => {
 })
 
 test('palette maps flightdeck roles to theme keys only', () => {
-  expect(PALETTE).toMatchObject({ main: 'claude', agent: 'suggestion', gate: 'success', dim: 'inactive', faint: 'subtle' })
+  expect(PALETTE).toMatchObject({ git: 'remember', main: 'claude', agent: 'suggestion', gate: 'success', dim: 'inactive', faint: 'subtle' })
   for (const v of Object.values(PALETTE)) expect(String(v).startsWith('#')).toBe(false)
 })
 

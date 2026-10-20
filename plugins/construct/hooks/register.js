@@ -6,8 +6,6 @@ import {
   filePathOf,
   initialState,
   merge,
-  noteOddTask,
-  noteRddState,
   onAgentSpawn,
   onCompact,
   onMainStep,
@@ -20,7 +18,7 @@ import {
   onTurnStep,
 } from './panel/state.js'
 import { activeWork } from './status/tasks.js'
-import { parseAssess, parseBoundary, parseGitStatus, parseMode, parseRevParse, reviewState } from './status/data.js'
+import { parseAssess, parseBoundary, parseGitStatus, parseMode, parseNumstat, parseRevParse, reviewState } from './status/data.js'
 
 // Role of each subagent this session spawned, keyed by agent id, so
 // turn.step can apply the role's effort to that subagent's requests
@@ -33,6 +31,7 @@ const roleByAgent = new Map()
 
 const GIT_MS = 3000
 const CLI_MS = 8000
+const MAX_UNTRACKED = 20
 const status = { data: null, effort: null, running: false, again: false }
 
 // ---- panel state ------------------------------------------------------------
@@ -90,6 +89,33 @@ async function runText($, argv, cwd, timeoutMs) {
   }
 }
 
+// Line count of one untracked file: `git diff --no-index --numstat /dev/null <file>`. It exits 1 when the
+// file differs from /dev/null, which is its normal answer, so 0 and 1 both count. A binary file gives
+// `-` (no count); a failure gives null and the panel shows `new`.
+async function untrackedFile($, cwd, path) {
+  try {
+    const r = await $.process.run(['git', '--no-optional-locks', 'diff', '--no-index', '--numstat', '--', '/dev/null', path], { cwd, timeoutMs: GIT_MS })
+    if (r.exitCode !== 0 && r.exitCode !== 1) return { path, added: null, removed: null, untracked: true }
+    const row = parseNumstat(r.stdout)[0]
+    return { path, added: row?.added ?? null, removed: null, binary: row?.binary === true, untracked: true }
+  } catch {
+    return { path, added: null, removed: null, untracked: true }
+  }
+}
+
+// The files changed against HEAD (staged and unstaged, numstat) and the untracked ones from status.
+// Only the first MAX_UNTRACKED untracked files are counted (one short git call each, in parallel);
+// the rest, and any directory entry (`dir/`), show as `new` without a count, so a tree of untracked
+// files never costs more than a bounded number of processes.
+async function collectChanges($, cwd, git, numstatText) {
+  const tracked = parseNumstat(numstatText).map((f) => ({ ...f, untracked: false }))
+  const paths = git?.untracked ?? []
+  const counted = await Promise.all(
+    paths.map((path, i) => (i < MAX_UNTRACKED && !path.endsWith('/') ? untrackedFile($, cwd, path) : { path, added: null, removed: null, untracked: true })),
+  )
+  return [...tracked, ...counted]
+}
+
 async function readDocs($, root) {
   const docs = []
   try {
@@ -128,18 +154,20 @@ async function readRdd($, root) {
 // Gathers everything the panel caches. Each source fails on its own: a gap leaves its segment out.
 async function collect($) {
   // The plugin forces its output style, which overrides settings.outputStyle
-  const data = { git: null, root: null, odd: null, rdd: null }
+  const data = { git: null, changes: [], root: null, odd: null, rdd: null }
   let cwd
   try {
     cwd = await $.session.cwd()
   } catch {
     // no directory known
   }
-  const [gitText, revText] = await Promise.all([
+  const [gitText, revText, numstatText] = await Promise.all([
     runText($, ['git', '--no-optional-locks', 'status', '--porcelain=v2', '--branch'], cwd, GIT_MS),
     runText($, ['git', 'rev-parse', '--show-toplevel', '--git-dir', '--git-common-dir'], cwd, GIT_MS),
+    runText($, ['git', '--no-optional-locks', 'diff', '--numstat', '--no-renames', 'HEAD'], cwd, GIT_MS),
   ])
   data.git = parseGitStatus(gitText)
+  data.changes = data.git ? await collectChanges($, cwd, data.git, numstatText) : []
   const rev = parseRevParse(revText)
   const root = rev?.root ?? cwd
   data.root = root ?? null
@@ -148,27 +176,6 @@ async function collect($) {
     data.rdd = rev ? await readRdd($, root) : null
   }
   return data
-}
-
-// One log row per ODD task or RDD state change between two refreshes. The first load has no
-// previous value, so it logs nothing. Observe only.
-async function noteChanges($, prev, next) {
-  if (!prev) return
-  try {
-    const at = await nowMs($)
-    const rddWord = (d) => (d?.rdd ? (d.rdd.state ?? d.rdd.mode ?? null) : null)
-    // A side that is null may be a collect that failed, not a real change: no row for it.
-    const [t0, t1] = [prev.odd?.task ?? null, next.odd?.task ?? null]
-    const [r0, r1] = [rddWord(prev), rddWord(next)]
-    await feed($, (s) => {
-      let out = s
-      if (t0 !== null && t1 !== null) out = noteOddTask(out, t0, t1, at)
-      if (r0 !== null && r1 !== null) out = noteRddState(out, r0, r1, at)
-      return out
-    })
-  } catch {
-    // observe only
-  }
 }
 
 // Refreshes the cache and asks for a redraw. Runs detached from the hook that
@@ -183,9 +190,7 @@ async function refresh($) {
     do {
       status.again = false
       const next = await collect($)
-      const prev = status.data
       status.data = next
-      await noteChanges($, prev, next)
       try {
         await $.ui.invalidate('ui.render')
       } catch {
@@ -266,6 +271,8 @@ async function drawPane($, e, next) {
     usage: live.usage,
     model: live.model,
     effort: status.effort,
+    git: data?.git ?? null,
+    changes: data?.changes ?? [],
     odd: data?.odd ?? null,
     rdd: data?.rdd ?? null,
     nowMs: live.nowMs,

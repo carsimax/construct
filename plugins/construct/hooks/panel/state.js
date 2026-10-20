@@ -25,14 +25,14 @@
 // Adapted here: the file /
 // shell / other bucketing of tool calls and the allow / ask / cleared / deny tallies per bucket
 // (core.ts bucketOf, recordCheck, settleCheck), the main-thread request count and the permission
-// mode note (register.tsx turn.step, agent.spawn), and the session log.
+// mode note (register.tsx turn.step, agent.spawn).
 //
 // Pure state for the Construct panel: one reducer per engine event the panel
 // observes, plus selectors. No `$` calls live here and nothing throws on odd
 // input, so these run (and test) in isolation. The wiring passes plain data
 // (ids, usage, a clock, a cost number); every reducer returns a new state.
 //
-// Stored shape (SCHEMA_VERSION 2):
+// Stored shape (SCHEMA_VERSION 3; version 3 dropped the session log, S9 as rewritten by L14):
 //   v            schema version
 //   agents[]     { id, role, type, description, model, effort, ctx, steps,
 //                  startedMs, endedMs, status: 'running' | 'done' }, oldest first, at most 20
@@ -54,16 +54,14 @@
 //                'cleared' (the call ran: classifier or approval) or 'deny' (it did not), deny is denied
 //   gate.pending  { [callId]: bucket }  asks not yet settled, by tool_use_id (capped at 100)
 //   gate.buckets { file, shell, other }  each { rule, ask, cleared, deny }
-//   log          [{ atMs, who, what }] session log ring, at most 50 rows, oldest first (S9)
 
 import { roleFor } from '../routing.js'
 
-export const SCHEMA_VERSION = 2
+export const SCHEMA_VERSION = 3
 
 const MAX_AGENTS = 20
 const MAX_CELLS = 60
 const MAX_DETAIL = 80
-const MAX_LOG = 50
 const MAX_PENDING = 100
 const FILE_TOOLS = ['Read', 'Edit', 'Write', 'NotebookEdit', 'MultiEdit', 'Glob', 'Grep']
 const SHELL_TOOLS = ['Bash', 'PowerShell']
@@ -90,21 +88,20 @@ export function initialState() {
     receipt: null,
     compactions: 0,
     main: { steps: 0, model: null, effort: null, mode: null },
-    log: [],
   }
 }
 
 const isObj = (x) => typeof x === 'object' && x !== null && !Array.isArray(x)
 const isNum = (x) => typeof x === 'number' && Number.isFinite(x)
-const isLogRow = (r) => isObj(r) && isNum(r.atMs) && typeof r.who === 'string' && typeof r.what === 'string'
 const str = (x) => (typeof x === 'string' && x !== '' ? x : null)
 
 // A stored value merged over the defaults; the defaults when the version is unknown or the shape is off.
-// A version 1 value (no main, log, verdicts or buckets) is read with those sections defaulted.
+// A version 1 value (no main, verdicts or buckets) is read with those sections defaulted; a version 2
+// value is read as is and its `log` section is dropped.
 export function merge(stored) {
   const base = initialState()
-  if (!isObj(stored) || (stored.v !== SCHEMA_VERSION && stored.v !== 1)) return base
-  const { agents, inline, gate, receipt, compactions, main, log } = stored
+  if (!isObj(stored) || (stored.v !== SCHEMA_VERSION && stored.v !== 2 && stored.v !== 1)) return base
+  const { agents, inline, gate, receipt, compactions, main } = stored
   if (agents !== undefined && !Array.isArray(agents)) return base
   if (inline !== undefined && !isObj(inline)) return base
   if (gate !== undefined && !isObj(gate)) return base
@@ -115,7 +112,6 @@ export function merge(stored) {
   if (gate?.buckets !== undefined && !isObj(gate.buckets)) return base
   if (compactions !== undefined && !isNum(compactions)) return base
   if (main !== undefined && !isObj(main)) return base
-  if (log !== undefined && !Array.isArray(log)) return base
   const buckets = isObj(gate?.buckets) ? gate.buckets : {}
   return {
     v: SCHEMA_VERSION,
@@ -134,7 +130,6 @@ export function merge(stored) {
     receipt: receipt ?? null,
     compactions: compactions ?? 0,
     main: { ...base.main, ...main },
-    log: (log ?? base.log).filter(isLogRow).slice(-MAX_LOG),
   }
 }
 
@@ -197,43 +192,6 @@ export function isOutsideTasks(path, root) {
   return !(inside && inTasks(segs.slice(rootSegs.length)))
 }
 
-// ---- session log (S9) ---------------------------------------------------
-
-const addLog = (state, atMs, who, what) => ({
-  ...state,
-  log: [...state.log, { atMs: isNum(atMs) ? atMs : 0, who, what }].slice(-MAX_LOG),
-})
-
-function duration(ms) {
-  const sec = Math.max(0, Math.floor(ms / 1000))
-  return sec < 60 ? `${sec}s` : `${Math.floor(sec / 60)}m${String(sec % 60).padStart(2, '0')}s`
-}
-
-// A task or state as one label: a string, or { id, title } joined; null for anything empty.
-function labelOf(x) {
-  if (typeof x === 'string') return str(x)
-  if (!isObj(x)) return null
-  const id = str(x.id)
-  const title = str(x.title)
-  return id && title ? `${id} ${title}` : (id ?? title)
-}
-
-// ODD task changed (called with the previous and next task; a row only when the label differs).
-export function noteOddTask(state, prev, next, nowMs) {
-  const s = merge(state)
-  const a = labelOf(prev)
-  const b = labelOf(next)
-  return a === b ? s : addLog(s, nowMs, 'odd', `task ${b ?? 'none'}`)
-}
-
-// RDD state changed (previous and next state words; a row only when they differ).
-export function noteRddState(state, prev, next, nowMs) {
-  const s = merge(state)
-  const a = labelOf(prev)
-  const b = labelOf(next)
-  return a === b ? s : addLog(s, nowMs, 'review', `rdd ${a ?? 'none'} → ${b ?? 'none'}`)
-}
-
 // ---- main vitals (S3) ----------------------------------------------------
 
 // One request of the main loop: count it, keep its model and effort.
@@ -286,7 +244,7 @@ export function onAgentSpawn(state, e) {
     status: 'running',
   }
   const agents = [...s.agents.filter((a) => a.id !== id), card].slice(-MAX_AGENTS)
-  return addLog(openReceipt({ ...s, agents }, (r) => ({ ...r, agents: r.agents + 1 })), card.startedMs, card.role, 'spawned')
+  return openReceipt({ ...s, agents }, (r) => ({ ...r, agents: r.agents + 1 }))
 }
 
 // One request of a subagent: count the step, ctx is the request's whole input.
@@ -325,10 +283,7 @@ export function onTurnComplete(state, e) {
   const nowMs = isNum(e?.nowMs) ? e.nowMs : 0
   const id = str(e?.agentId)
   if (id) {
-    const a = s.agents.find((x) => x.id === id)
-    const next = patchAgent(s, id, (x) => ({ ...x, status: 'done', endedMs: nowMs }))
-    if (!a || a.status === 'done') return next
-    return addLog(next, nowMs, a.role ?? 'agent', `done in ${duration(isNum(a.startedMs) ? nowMs - a.startedMs : 0)}`)
+    return patchAgent(s, id, (x) => ({ ...x, status: 'done', endedMs: nowMs }))
   }
   const turnId = str(e?.turnId)
   if (turnId && s.receipt?.turnId && s.receipt.turnId !== turnId) return s
@@ -364,7 +319,7 @@ export function onToolCall(state, e) {
   if (e?.isError === true) s = openReceipt(s, (r) => ({ ...r, errors: r.errors + 1 }))
   const path = str(e?.path)
   if (isWrite && !str(e?.agentId) && path && isOutsideTasks(path, e?.cwd)) {
-    s = addLog({ ...s, inline: { count: s.inline.count + 1, last: path } }, e?.nowMs, 'main', `inline write ${shorten(maskSecrets(path))}`)
+    s = { ...s, inline: { count: s.inline.count + 1, last: path } }
   }
   return s
 }
@@ -423,7 +378,7 @@ export function onToolCheck(state, e) {
   const bucket = bucketOf(str(e.tool))
   const callId = str(e.callId)
   const pending = e.decision === 'ask' && callId ? Object.fromEntries([...Object.entries(gate.pending), [callId, bucket]].slice(-MAX_PENDING)) : gate.pending
-  const next = {
+  return {
     ...s,
     gate: {
       ...gate,
@@ -435,7 +390,6 @@ export function onToolCheck(state, e) {
       lastDenied: denied ? { tool, detail } : gate.lastDenied,
     },
   }
-  return denied ? addLog(next, e.nowMs, 'gate', shorten(`denied ${tool}${detail ? ` ${detail}` : ''}`)) : next
 }
 
 // ---- session -------------------------------------------------------------

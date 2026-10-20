@@ -62,8 +62,6 @@ const buckets = {
   shell: { rule: 1, ask: 0, cleared: 4, deny: 0 },
   other: { rule: 1, ask: 0, cleared: 11, deny: 1 },
 }
-const at = (h, m, s) => Date.UTC(2026, 9, 20, h, m, s)
-
 const full = () => ({
   ...initialState(),
   agents: [agent(), agent({ id: 'a2', role: 'odd_explorer', status: 'done', endedMs: NOW - 15_000, startedMs: NOW - 30_000 })],
@@ -72,13 +70,18 @@ const full = () => ({
   receipt: { turnId: 't', startedMs: NOW - 17_000, endedMs: NOW - 1000, agents: 0, edits: 1, errors: 0, costStart: 1, cost: 0.44 },
   compactions: 2,
   main: { steps: 7, model: 'claude-opus-5-5', effort: 'medium', mode: 'auto' },
-  log: [
-    { atMs: at(14, 1, 44), who: 'odd_explorer', what: 'spawned' },
-    { atMs: at(14, 2, 9), who: 'gate', what: 'denied Bash curl x' },
-  ],
 })
 
-const args = (o: any = {}) => ({ panel: full(), usage, odd, rdd, nowMs: NOW, columns: 66, rows: 60, tzOffsetMin: 0, ...o })
+const git = { branch: 'feat/x', dirty: 5, ahead: 2, behind: 1 }
+const changes = [
+  { path: 'plugins/construct/hooks/panel/layout.js', added: 120, removed: 80 },
+  { path: 'README.md', added: 8, removed: 12 },
+  { path: 'plugins/construct/hooks/register.js', added: 30, removed: 5 },
+  { path: 'assets/logo.png', added: null, removed: null, binary: true },
+  { path: 'notes/new-file.md', added: 14, removed: 0, untracked: true },
+]
+
+const args = (o: any = {}) => ({ panel: full(), usage, odd, rdd, nowMs: NOW, columns: 66, rows: 60, git, changes, ...o })
 const rowsOf = (o: any = {}) => lines(buildPanel(args(o)))
 const idx = (rows: string[], needle: string) => rows.findIndex((r) => r.includes(needle))
 
@@ -88,28 +91,22 @@ test('PANEL_COLUMNS is 66', async () => {
   expect(PANEL_COLUMNS).toBe(66)
 })
 
-test('header names the model, idle or busy, and the ODD task, with the five-item legend', async () => {
+test('no header and no legend: the panel starts with the main card', async () => {
   const rows = rowsOf()
-  expect(rows[0]).toBe('CONSTRUCT · OPUS 5.5 IDLE · ODD T4')
-  expect(rows[1]).toBe('■ main■ agents■ gate■ odd■ review')
+  expect(rows[0]).toBe('Opus 5.5 · main ○ idle')
+  expect(rows.some((r) => r.startsWith('CONSTRUCT'))).toBe(false)
+  expect(rows.some((r) => r.includes('■ main'))).toBe(false)
   const tree = buildPanel(args())
   expect(tree.props.width).toBe(66)
-  const busy = { ...full(), receipt: { ...full().receipt, endedMs: null } }
-  expect(rowsOf({ panel: busy })[0]).toBe('CONSTRUCT · OPUS 5.5 BUSY · ODD T4')
-  expect(rowsOf({ odd: null })[0]).toBe('CONSTRUCT · OPUS 5.5 IDLE')
-})
-
-test('the legend squares use the card colors', async () => {
-  const squares = leaves(buildPanel(args())).filter((l) => l.text === '■' && Object.keys(l.props).length === 1).slice(0, 5)
-  expect(squares.map((l) => l.props.color)).toEqual(['claude', 'suggestion', 'success', 'merged', 'permission'])
+  expect(tree.children[0].props.borderStyle).toBe('round')
 })
 
 // ---- card order ------------------------------------------------------------
 
-test('cards come in order: main, ODD, REVIEW, GATE, agents, last turn, session log', async () => {
+test('cards come in order: main, ODD, REVIEW, GATE, agents, last turn, changes', async () => {
   const rows = rowsOf()
-  const at = ['Opus 5.5 · main', 'ODD · flightdeck-panel', 'REVIEW', 'GATE · permissions', 'agents · 1 running · 2 total', 'last turn', 'session log'].map((n) => idx(rows, n))
-  for (const i of at) expect(i).toBeGreaterThan(1)
+  const at = ['Opus 5.5 · main', 'ODD · flightdeck-panel', 'REVIEW', 'GATE · permissions', 'agents · 1 running · 2 total', 'last turn', 'feat/x'].map((n) => idx(rows, n))
+  for (const i of at) expect(i).toBeGreaterThanOrEqual(0)
   expect([...at].sort((a, b) => a - b)).toEqual(at)
 })
 
@@ -284,35 +281,69 @@ test('last turn card: duration, agents, edits, errors, cost added', async () => 
   expect(rowsOf({ panel: nocost })).toContain('✓ last turn 16s · 0 agents · 1 edit · 0 errors')
 })
 
-// ---- session log ---------------------------------------------------------------
+// ---- changes card (S9) -----------------------------------------------------------
 
-test('session log rows show HH:MM:SS (UTC plus the offset), who and what', async () => {
+test('changes card: branch title, ↑N ↓N on the right, rows sorted by changed lines with +added -removed', async () => {
   const rows = rowsOf()
-  const i = idx(rows, 'session log')
-  expect(rows[i]).toBe('session log')
-  expect(rows[i + 1]).toBe('14:01:44 odd_explorer  spawned')
-  expect(rows[i + 2]).toBe('14:02:09 gate          denied Bash curl x')
-  expect(rowsOf({ tzOffsetMin: -300 })[i + 1]).toBe('09:01:44 odd_explorer  spawned')
-  const tree = buildPanel(args())
-  expect(leaves(tree).find((l) => l.text === 'odd_explorer  ')?.props).toMatchObject({ color: 'suggestion', bold: true })
-  expect(leaves(tree).find((l) => l.text === 'gate          ')?.props.color).toBe('success')
-  const box = (tree.children as any[]).at(-1)
-  expect(box.props).toMatchObject({ borderStyle: 'round', borderColor: 'subtle' })
+  const i = idx(rows, 'feat/x')
+  expect(rows[i]).toBe('feat/x ↑2 ↓1')
+  const body = rows.slice(i + 1, i + 6)
+  expect(body.map((r) => r.replace(/\s+/g, ' '))).toEqual([
+    'plugins/construct/hooks/panel/layout.js +120 -80',
+    'plugins/construct/hooks/register.js +30 -5',
+    'README.md +8 -12',
+    'notes/new-file.md +14',
+    'assets/logo.png bin',
+  ])
+  for (const r of body) expect(r.length).toBe(62)
+  expect(rows.some((r) => r.includes('session log'))).toBe(false)
 })
 
-test('session log is empty-safe, colors odd and review rows, and its rows clamp to the space left', async () => {
-  const empty = rowsOf({ panel: { ...full(), log: [] } })
-  expect(empty.at(-1)).toBe('nothing yet')
-  const log = Array.from({ length: 30 }, (_, i) => ({ atMs: at(10, 0, i), who: i % 2 ? 'odd' : 'review', what: `row ${i}` }))
-  const panel = { ...full(), log }
-  const count = (rows: number | undefined) => rowsOf({ panel, rows }).filter((r) => /^10:00:\d\d /.test(r)).length
-  expect(count(200)).toBe(8)
-  expect(count(10)).toBe(0)
-  expect(count(undefined)).toBe(8)
-  expect(rowsOf({ panel, rows: 200 }).filter((r) => /^10:00:\d\d /.test(r)).at(-1)).toContain('row 29')
-  const tree = buildPanel(args({ panel, rdd: null }))
-  expect(find(tree, 'odd ')?.props.color).toBe('merged')
-  expect(find(tree, 'review ')?.props.color).toBe('permission')
+test('changes card colors: branch git color, + success, - error; round card', async () => {
+  const tree = buildPanel(args())
+  expect(find(tree, 'feat/x')?.props).toMatchObject({ bold: true, color: 'remember' })
+  expect(leaves(tree).find((l) => l.text === '+120')?.props.color).toBe('success')
+  expect(leaves(tree).find((l) => l.text === '-80')?.props.color).toBe('error')
+  expect(leaves(tree).find((l) => l.text === 'bin')?.props.dimColor ?? leaves(tree).find((l) => l.text === 'bin')?.props.dim).toBeTruthy()
+})
+
+test('changes card status shows only the nonzero side and nothing when in sync', async () => {
+  expect(rowsOf({ git: { ...git, ahead: 3, behind: 0 } }).some((r) => r === 'feat/x ↑3')).toBe(true)
+  expect(rowsOf({ git: { ...git, ahead: 0, behind: 4 } }).some((r) => r === 'feat/x ↓4')).toBe(true)
+  expect(rowsOf({ git: { ...git, ahead: 0, behind: 0 } }).some((r) => r === 'feat/x')).toBe(true)
+})
+
+test('untracked files count as added, or show new when the count is unknown', async () => {
+  const rows = rowsOf({ changes: [{ path: 'a.txt', added: 3, removed: 0, untracked: true }, { path: 'dir/', added: null, removed: null, untracked: true }] })
+  expect(rows.some((r) => /^a\.txt\s+\+3$/.test(r))).toBe(true)
+  expect(rows.some((r) => /^dir\/\s+new$/.test(r))).toBe(true)
+})
+
+test('a long path is shortened and keeps its basename; control characters are dropped', async () => {
+  const long = 'a/very/deep/directory/tree/that/goes/on/and/on/forever/and/ever/amen/final-name.ts'
+  const rows = rowsOf({ changes: [{ path: long, added: 1, removed: 1 }, { path: 'x\u001b[31m/ev\nil.ts', added: 2, removed: 0 }] })
+  const r = rows.find((x) => x.includes('final-name.ts'))!
+  expect(r.startsWith('…/')).toBe(true)
+  expect(r.length).toBe(62)
+  expect(rows.some((x) => /[\u0000-\u001f]/.test(x))).toBe(false)
+  expect(rows.some((x) => x.includes('evil.ts'))).toBe(true)
+})
+
+test('rows that do not fit end with +N more', async () => {
+  const many = Array.from({ length: 30 }, (_, i) => ({ path: `src/f${i}.ts`, added: 30 - i, removed: 0 }))
+  const rows = rowsOf({ changes: many, rows: 200 })
+  const i = idx(rows, 'feat/x')
+  expect(rows.slice(i + 1).filter((r) => r.startsWith('src/')).length).toBe(9)
+  expect(rows.at(-1)).toBe('+21 more')
+  expect(rows[i + 1].startsWith('src/f0.ts')).toBe(true)
+})
+
+test('the changes card is hidden when clean and in sync, and shown when only ahead or behind', async () => {
+  const clean = { branch: 'main', dirty: 0, ahead: 0, behind: 0 }
+  expect(textOf(buildPanel(args({ git: clean, changes: [] }))).includes('main\n')).toBe(false)
+  expect(rowsOf({ git: clean, changes: [] }).some((r) => r === 'main')).toBe(false)
+  expect(rowsOf({ git: { ...clean, ahead: 1 }, changes: [] }).some((r) => r === 'main ↑1')).toBe(true)
+  expect(rowsOf({ git: null, changes: undefined }).some((r) => r.includes('feat/x'))).toBe(false)
 })
 
 test('a narrow pane keeps one column at 40 columns and long text does not widen a card', async () => {
@@ -321,7 +352,7 @@ test('a narrow pane keeps one column at 40 columns and long text does not widen 
   for (const c of tree.children as any[]) if (c.props?.borderStyle) expect(c.props.width).toBe(40)
   // the engine clips the truncating rows; the rest are sized here, so they never pass the inner width
   const rows = rowsOf({ columns: 40, odd: long })
-  expect(rows.filter((r) => r.startsWith('T12') || r.startsWith('ODD ·') || /^\d\d:\d\d:\d\d /.test(r)).filter((r) => r.length > 40)).toEqual([])
+  expect(rows.filter((r) => r.startsWith('T12') || r.startsWith('ODD ·') ).filter((r) => r.length > 40)).toEqual([])
   expect(rows.find((r) => r.startsWith('T12'))!.length).toBe(36)
 })
 
@@ -376,22 +407,24 @@ function rowsHigh(node): number {
   return (node.props.borderStyle ? 2 : 0) + (node.props.marginTop ?? 0) + (node.children ?? []).reduce((n, k) => n + rowsHigh(k), 0)
 }
 
-test('the panel never takes more rows than the pane has: the log shrinks, then goes', async () => {
-  const log = Array.from({ length: 30 }, (_, i) => ({ atMs: at(10, 0, i), who: 'odd', what: `row ${i}` }))
-  const lean = { ...initialState(), log }
-  const logged = (rows: number) => rowsOf({ panel: lean, odd: null, rdd: null, rows }).filter((r) => /^10:00:\d\d /.test(r)).length
-  for (const rows of [20, 24, 26, 30, 60]) {
-    const tree = buildPanel(args({ panel: lean, odd: null, rdd: null, rows }))
-    expect(rowsHigh(tree)).toBeLessThanOrEqual(rows)
+test('the panel never takes more rows than the pane has: the changes rows shrink, then the card goes', async () => {
+  const many = Array.from({ length: 30 }, (_, i) => ({ path: `src/f${i}.ts`, added: 30 - i, removed: 0 }))
+  const lean = { odd: null, rdd: null, panel: initialState(), changes: many }
+  for (const rows of [9, 10, 11, 12, 13, 14, 20, 24, 26, 30, 60]) {
+    expect(rowsHigh(buildPanel(args({ ...lean, rows })))).toBeLessThanOrEqual(rows)
   }
-  expect(logged(26)).toBe(8)
-  expect(logged(12)).toBe(0)
-  expect(rowsHigh(buildPanel(args({ panel: lean, odd: null, rdd: null, rows: 12 })))).toBeLessThanOrEqual(12)
-  expect(rowsHigh(buildPanel(args({ panel: lean, odd: null, rdd: null, rows: 13 })))).toBeLessThanOrEqual(13)
-  // a full panel on a short pane: the log goes, the other cards stay
-  for (const rows of [20, 24, 26]) {
-    const tree = buildPanel(args({ panel: { ...full(), log }, rows }))
-    expect(textOf(tree).includes('session log')).toBe(false)
+  const shown = (rows: number) => rowsOf({ ...lean, rows }).filter((r) => r.startsWith('src/')).length
+  expect(shown(26)).toBeGreaterThan(0)
+  expect(rowsOf({ ...lean, rows: 9 }).some((r) => r.includes('feat/x'))).toBe(false)
+  // only the frame fits: the title (branch, ↑↓) stays, the rows go
+  expect(rowsOf({ ...lean, rows: 10 }).some((r) => r.includes('feat/x'))).toBe(true)
+  expect(shown(10)).toBe(0)
+  expect(rowsOf({ ...lean, rows: 11 }).at(-1)).toBe('+30 more')
+  expect(rowsOf({ ...lean, rows: 26 }).at(-1)).toMatch(/^\+\d+ more$/)
+  // a full panel on a short pane: the changes go, the other cards stay
+  for (const rows of [20, 24]) {
+    const tree = buildPanel(args({ rows }))
+    expect(textOf(tree).includes('feat/x')).toBe(false)
     expect(textOf(tree).includes('last turn')).toBe(true)
   }
 })
