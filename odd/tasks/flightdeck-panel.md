@@ -28,6 +28,8 @@ Reference: github.com/scasella/claude-flightdeck (MIT, "Copyright (c) 2026 Steph
 | T4 | S2-S9 | Card layout: header, legend, main, ODD, REVIEW, GATE, agents, last turn, session log in `hooks/panel/` with mod tests | odd-worker (after T3) | none | done | `94f97cc` |
 | T5 | S2, S3, S9, S10, S11 | Wiring in `register.js`: new event feeds (usage/cost, permission mode, log entries incl. ODD/RDD changes), Client modules, `columns: 66`, README and attribution | odd-worker (after T4) | 6 | done | `4075815` |
 | T6 | S2, S9 | Remove header and legend; replace the session log card with the git changes card (per-file +/-, ↑↓, branch) | odd-worker | none | pending | — |
+
+
 Route evidence: T3 and T4 render T2's state, T5 wires all, so they run in sequence. Risk item 6 for T5: hook wiring and terminal rendering (`round` borders, Client modules) have no end-to-end check against a real session.
 
 ## Log
