@@ -97,10 +97,18 @@ describe('context hook', () => {
     assert.equal(r.stdout, '')
   })
 
-  test('a prompt that already carries the context passes through', () => {
-    const { repo, data } = lineage()
-    const r = hook(CONTEXT_HOOK, spawnInput(repo, 'ODD_REVIEW_BINDING {}\nODD_REVIEW_CONTEXT\n...'), data)
+  test('a prompt that starts with the binding line passes through and is recorded for capture', () => {
+    const { repo, txn, data } = lineage()
+    const pasted = `ODD_REVIEW_BINDING ${JSON.stringify({ lineage: txn.lineage, lens: 'review-risk' })}\nODD_REVIEW_CONTEXT\n...`
+    const r = hook(CONTEXT_HOOK, spawnInput(repo, pasted), data)
     assert.equal(r.stdout, '')
+    assert.ok(existsSync(join(data, 'review-hooks', 's1', 'construct_review-risk.json')))
+  })
+
+  test('a prompt that only mentions ODD_REVIEW_CONTEXT still gets the context for its lineage', () => {
+    const { repo, txn, data } = lineage()
+    const r = hook(CONTEXT_HOOK, spawnInput(repo, `use ODD_REVIEW_CONTEXT for ${txn.lineage}`), data)
+    assert.match(r.json.hookSpecificOutput.updatedInput.prompt, /^ODD_REVIEW_BINDING /)
   })
 
   test('a review agent without a lineage is denied with the fix', () => {

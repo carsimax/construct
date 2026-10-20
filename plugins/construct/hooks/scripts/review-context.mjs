@@ -3,7 +3,7 @@
 // prompt, so the orchestrator never pastes or transcribes the evidence. It also
 // records the lineage for review-capture.mjs. A review agent without a lineage,
 // or one odd-review refuses, is denied with the reason; other agents and
-// prompts that already carry the context pass through. Errors fail open.
+// prompts that start with the binding line pass through. Errors fail open.
 // Usage: node review-context.mjs   (hook JSON on stdin)
 import { spawnSync } from 'node:child_process'
 import { rmSync } from 'node:fs'
@@ -36,10 +36,11 @@ function main() {
   const [agent, lens] = match
   const pending = pendingFile(input.session_id, agent)
 
-  // The orchestrator pasted the context itself: record its lineage, change nothing.
-  if (toolInput.prompt.includes('ODD_REVIEW_CONTEXT')) {
-    const lineage = bindingLineage(toolInput.prompt)
-    if (lineage) atomicWrite(pending, `${JSON.stringify({ lineage, lens, cwd: input.cwd, attempts: 0 })}\n`)
+  // The orchestrator pasted the context itself (it starts with the binding
+  // line): record its lineage, change nothing.
+  const pasted = bindingLineage(toolInput.prompt)
+  if (pasted) {
+    atomicWrite(pending, `${JSON.stringify({ lineage: pasted, lens, cwd: input.cwd, attempts: 0 })}\n`)
     return
   }
 
