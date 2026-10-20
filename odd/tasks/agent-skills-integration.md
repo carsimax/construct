@@ -25,14 +25,14 @@ Common rules for every spec (assumptions from the analysis the user accepted wit
 
 | ID | Specs | Task | Route | Risk | Status | Commit |
 |---|---|---|---|---|---|---|
-| T1 | S1 | `skills/debugging/**` | odd-worker, wave A | none | done | uncommitted |
-| T2 | S2 | `skills/constraint-driven/**` | odd-worker, wave A | none | done | uncommitted |
-| T3 | S4 | `skills/source-driven/**`, link in `odd-workflow/references/research.md` | odd-worker, wave A | none | done | uncommitted |
-| T4 | S5 | `skills/migration/**`, links in `task-size-risk` | odd-worker, wave A | none | done | uncommitted |
-| T5 | S6 | `skills/judgment-day/**` decision mode | odd-worker, wave A | none | done | uncommitted |
-| T6 | S7 | `odd-verify.md`, `review-risk.md`, `rdd-review/references/security-checklist.md`, `odd-workflow/references/testing.md` | odd-worker, wave A | none | done | uncommitted |
-| T7 | S3 | `lib/assess/**`, `tests/assess/**`, `bin/odd-assess` help, README assess section, `rdd-review` | odd-worker, wave A (disjoint surfaces) | 3 | correction (L5) | — |
-| T8 | S8, attribution | `tests/skills.test.mjs`, README, `session.md`, `NOTICE`, evals, `scripts/eval.sh` | odd-worker, wave C | none | pending | — |
+| T1 | S1 | `skills/debugging/**` | odd-worker, wave A | none | done | `5c953ed` |
+| T2 | S2 | `skills/constraint-driven/**` | odd-worker, wave A | none | done | `5c953ed` |
+| T3 | S4 | `skills/source-driven/**`, link in `odd-workflow/references/research.md` | odd-worker, wave A | none | done | `5c953ed` |
+| T4 | S5 | `skills/migration/**`, links in `task-size-risk` | odd-worker, wave A | none | done | `5c953ed` |
+| T5 | S6 | `skills/judgment-day/**` decision mode | odd-worker, wave A | none | done | `2882cb8` |
+| T6 | S7 | `odd-verify.md`, `review-risk.md`, `rdd-review/references/security-checklist.md`, `odd-workflow/references/testing.md` | odd-worker, wave A | none | done (S7b partial, L8) | `62803ef` |
+| T7 | S3 | `lib/assess/**`, `tests/assess/**`, `bin/odd-assess` help, README assess section, `rdd-review` | odd-worker, wave A (disjoint surfaces) | 3 | done | `88a993c` |
+| T8 | S8, attribution | `tests/skills.test.mjs`, README, `session.md`, `NOTICE`, evals, `scripts/eval.sh` | odd-worker, wave C | none | done (evals not run) | `9cd99f1` |
 
 ## Log
 
@@ -43,3 +43,5 @@ Common rules for every spec (assumptions from the analysis the user accepted wit
 - **L5 (2026-10-20, finding):** `odd-assess --json` on the working tree flagged `verifier_weakening` on `lib/assess/cli.mjs`: its own usage text has `, # noqa` and ` //nolint` inside a template string. One correction batch to T7: markers keyed on language (JS/TS `@ts-*` and `eslint-disable`, Python `# noqa` and `# type: ignore`, Go `//nolint`).
 - **L6 (2026-10-20, finding):** `review-risk` has `tools: []`, so it cannot read `rdd-review/references/security-checklist.md`; T8 adds an `rdd-review` step that has the parent include the checklist for the risk lens. Follow-ups outside this scope: (a) `secret-guard` denies Bash heredocs whose text only mentions the protected patterns (hit by two workers and by the parent; Write/Edit work); (b) `hot_path` flags a Markdown file named `security-checklist.md`; (c) the Risk-line Stop gate fires on writes by background workers during waiting turns.
 - **L7 (2026-10-20, review):** The Stop gate reported review due for the uncommitted changes. Deferred because the candidate was unstable while T7 ran; consent for an RDD review is asked on the committed range after the work-unit commits.
+- **L8 (2026-10-20, progress):** T7 correction RED 3 → GREEN; `node --test tests/assess/ tests/review/ tests/gate/`: 581 pass. T8: `node --test tests/`: 774 pass, 0 fail; `claude plugin validate --strict ./plugins/construct` and `.`: pass. Evals `debugging-fires` / `debugging-stays-quiet` written, not run (real usage). `session.md` trimmed three phrases to stay under 8,000 in the long-path notice variants (7,397 chars). S7b partial: `review-context.mjs` replaces the lens prompt, so the security checklist does not reach `review-risk`; `rdd-review` says so and the agent keeps its inline triage. Delivering it needs a `review-context.mjs` change (follow-up, needs a decision). Known shortcut: markers inside string literals on the same line still flag (`tests/assess/fixtures.mjs` is flagged; fails toward high).
+- **L9 (2026-10-20, review):** User consent: "Revisar este cambio" (granted). Candidate `c76cca9..9cd99f1` (41 paths, 1,034 lines), lineage `review-c92fb0e7475df467`, four lenses → `approved`, acknowledged. Advisory follow-ups: (a) readability SUGGESTION — `skills/constraint-driven/SKILL.md:38` cites `odd/tasks/agent-skills-integration.md` S3, which the installed plugin does not ship; (b) reliability WARNING — `TEST_SKIP_LINE` matches skip markers quoted inside string literals in real test files (`content.mjs:40-42`), raising them to high.
