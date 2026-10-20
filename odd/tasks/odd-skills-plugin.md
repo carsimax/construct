@@ -100,17 +100,17 @@ A plugin cannot ship `CLAUDE.md`. The current managed `~/.claude/CLAUDE.md` is 6
 | `~/.gentle-ai/state.json` (`claude_phase_assignments`, `persona`, `rdd_mode`) | `userConfig` (persona, RDD on/off, model per role) |
 | `gentle-ai review assess` | `bin/odd-assess` (port of `ClassifyRisk`; same tiers, escalation items 1–6) |
 | `gentle-ai review start / capture-* / acknowledge` | `bin/odd-review` (freeze tree, inspect, validate captures, write receipt under `${CLAUDE_PLUGIN_DATA}`), driven by the `rdd-review` skill |
-| Four-lens fan-out | `workflows/review-4lens.js` with a per-lens JSON `schema` (equivalent of `lens-result/v1`); the skill path is the fallback when workflows are disabled |
+| Four-lens fan-out | Parallel `Agent` calls from `rdd-review`; `review-context.mjs` (PreToolUse) and `review-capture.mjs` (SubagentStop) hand context in and results out. Workflows dropped (L29) |
 | `review stop-hook` | `Stop` hook: blocks with `{"decision":"block"}` when a high-risk diff has no receipt |
 | Risk line and closure discipline | `Stop` hook of type `prompt` checking for a `Risk:` line and undeclared pending checks |
 | `skill-registry refresh` and `.atl/skill-registry.md` | Removed. Agent `skills:` frontmatter preloads skills |
 | `permissions` deny list (`.env`, `.ssh`, `*.pem`, `*.key`, `secrets/*`, cloud credentials) | `PreToolUse` hook `secret-guard.sh` |
 | context7 and codegraph MCP entries | Plugin `.mcp.json` |
 | `codegraph init` guidance | `codegraph` skill (calls the upstream CLI) |
-| `judgment-day` skill | Skill plus `workflows/judgment-day.js` |
+| `judgment-day` skill | Skill (workflow dropped, L29) |
 | Skills `chained-pr`, `work-unit-commits`, `branch-pr`, `comment-writer`, `cognitive-doc-design`, `skill-creator`, `skill-improver`, `go-testing` | `skills/` (copied; drop references to `gentle-ai` commands) |
 | Feature tracking across compaction | `PreCompact` / `PostCompact` hooks re-inject the active `odd/tasks/*.md` |
-| Todo sync | `TaskCreated` / `TaskCompleted` hooks update the feature document `## Tasks` |
+| Todo sync | Dropped (see Dropped). The feature document stays the tracker |
 | statusline | Mod panel showing ODD task progress and RDD state (experimental) |
 
 ### Model routing (S6)
@@ -136,6 +136,8 @@ Note: a user or project agent with the same name overrides a plugin agent (docs:
 - Every non-Claude agent adapter.
 - The provider defect handoff, which files issues against gentle-ai.
 - Legacy `review-*` v1 commands.
+- Workflows `review-4lens.js` and `judgment-day.js` (L29): `agent()` cannot select a plugin agent type, and the `Workflow` tool runs only on an explicit user request, so it cannot run by default.
+- Todo sync through `TaskCreated` / `TaskCompleted`: the Task tools exist by default only on Opus 4.7, Sonnet 4.6, Haiku 4.5, and earlier models (tools reference, "Task tool availability"), and the events do not fire in a session without them. Opting in with `CLAUDE_CODE_ENABLE_TODO_TOOLS=1` adds a checklist that newer models do not need.
 
 ### Engram contract
 
@@ -897,3 +899,4 @@ Push and PR creation remain the user's decision.
     - linear history required;
     - force pushes and deletion blocked.
   - From now on every change to `main` goes through a pull request, including the owner's.
+- **L42 (2026-10-20, user):** "La mejor decicion que favorezca al flujo y aprovechando las capacidades de claude" — after the proposal to drop the last two parity rows. Todo sync and workflows moved to Dropped with evidence; the component map rows now name what replaces them.

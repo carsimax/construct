@@ -3,9 +3,13 @@
 // documentation, fixtures, and README-shaped files are kept out of name signals.
 import { compareBytes, isGeneratedGoldenPath } from './stats.mjs'
 
+// The one JavaScript and TypeScript extension family. Sinks and extension lists
+// spread it, so adding an extension here reaches every one of them.
+export const JS_TS_EXTENSIONS = Object.freeze(['.js', '.jsx', '.mjs', '.cjs', '.ts', '.tsx', '.mts', '.cts'])
+
 export const SEMANTIC_SOURCE_EXTENSIONS = new Set([
-  '.c', '.cc', '.cpp', '.cs', '.go', '.h', '.hpp', '.java', '.js', '.jsx', '.mjs', '.cjs', '.kt', '.kts', '.php', '.py',
-  '.rb', '.rs', '.sh', '.bash', '.zsh', '.ts', '.tsx', '.mts', '.cts',
+  '.c', '.cc', '.cpp', '.cs', '.go', '.h', '.hpp', '.java', ...JS_TS_EXTENSIONS, '.kt', '.kts', '.php', '.py',
+  '.rb', '.rs', '.sh', '.bash', '.zsh',
 ])
 
 // Go path.Ext semantics: the suffix from the last dot of the final element, so

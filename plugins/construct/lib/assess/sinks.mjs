@@ -1,15 +1,17 @@
 // Dangerous-sink catalog and comment syntax. Each entry identifies a concrete
 // sink, not a suspicious word, and is gated by file extension so identical API
 // names in unrelated runtimes do not become lexical false positives.
-import { asciiLower, goBase, goExt, isTestRiskPath } from './signals.mjs'
+import { JS_TS_EXTENSIONS, asciiLower, goBase, goExt, isTestRiskPath } from './signals.mjs'
 import { goTrimSpace } from './text.mjs'
+
+const JS_TS = JS_TS_EXTENSIONS.join(' ')
 
 const sink = (name, extensions, expression) => ({ name, extensions: ` ${extensions} `, expression })
 
 export const DANGEROUS_SINK_CATALOG = [
   // CWE-295: disabled certificate validation.
   sink('TLS Go', '.go', /\bInsecureSkipVerify\s*:\s*true\b/),
-  sink('TLS JS', '.js .jsx .mjs .cjs .ts .tsx .mts .cts', /\brejectUnauthorized\s*:\s*false\b|\bNODE_TLS_REJECT_UNAUTHORIZED\s*=\s*['"]?0\b/),
+  sink('TLS JS', JS_TS, /\brejectUnauthorized\s*:\s*false\b|\bNODE_TLS_REJECT_UNAUTHORIZED\s*=\s*['"]?0\b/),
   sink('TLS Python', '.py', /\bverify\s*=\s*False\b|\bCERT_NONE\b|\bcheck_hostname\s*=\s*False\b/),
   sink('TLS Rust', '.rs', /\.danger_accept_invalid_certs\s*\(\s*true\s*\)/),
   sink('TLS Ruby', '.rb', /OpenSSL::SSL::VERIFY_NONE\b/),
@@ -27,11 +29,11 @@ export const DANGEROUS_SINK_CATALOG = [
   sink('Ruby marshal', '.rb', /\bMarshal\.load\s*\(/),
   sink('Ruby YAML', '.rb', /\bYAML\.load\s*\(/),
   sink('C sharp type names', '.cs', /\bTypeNameHandling\s*(?:=|:)\s*TypeNameHandling\.(?:All|Auto)\b/),
-  sink('node serialize', '.js .jsx .mjs .cjs .ts .tsx .mts .cts', /\b(?:serialize|nodeSerialize)\.unserialize\s*\(/),
+  sink('node serialize', JS_TS, /\b(?:serialize|nodeSerialize)\.unserialize\s*\(/),
   // CWE-94: runtime evaluation of supplied code.
-  sink('eval', '.js .jsx .mjs .cjs .ts .tsx .mts .cts .py .php .rb', /(?:^|[^\w.])eval\s*\(/),
-  sink('Function constructor', '.js .jsx .mjs .cjs .ts .tsx .mts .cts', /\bnew\s+Function\s*\(/),
-  sink('node VM', '.js .jsx .mjs .cjs .ts .tsx .mts .cts', /\bvm\.runInNewContext\s*\(/),
+  sink('eval', `${JS_TS} .py .php .rb`, /(?:^|[^\w.])eval\s*\(/),
+  sink('Function constructor', JS_TS, /\bnew\s+Function\s*\(/),
+  sink('node VM', JS_TS, /\bvm\.runInNewContext\s*\(/),
   sink('PHP create_function', '.php', /\bcreate_function\s*\(/),
   sink('Ruby string eval', '.rb', /\b(?:instance_eval|class_eval)\s*\(\s*["'`]/),
   // CWE-78: shell interpretation of composed commands.
@@ -39,13 +41,13 @@ export const DANGEROUS_SINK_CATALOG = [
   sink('Python system composition', '.py', /\bos\.system\s*\(\s*(?:f["']|[^)\n]*(?:\+\s*[A-Za-z_]\w*|[A-Za-z_]\w*\s*\+|%\s*[A-Za-z_]\w*|\.format\s*\(\s*[A-Za-z_]\w*))/),
   sink('PHP shell variable', '.php', /\b(?:system|exec|shell_exec|passthru)\s*\(\s*\$\w+|`[^`]*\$\w+[^`]*`/),
   sink('Ruby interpolated shell', '.rb', /`[^`]*#\{[^}]+\}[^`]*`|%x[({][^)}]*#\{[^}]+\}/),
-  sink('composed sh -c', '.go .java .kt .kts .js .jsx .mjs .cjs .ts .tsx .mts .cts .py .rb .rs .cs', /(?:["'](?:sh|bash)["']\s*,\s*["']-c["']\s*,\s*(?:\w+|["'][^"']*["']\s*\+|f["']|`))/),
+  sink('composed sh -c', `.go .java .kt .kts ${JS_TS} .py .rb .rs .cs`, /(?:["'](?:sh|bash)["']\s*,\s*["']-c["']\s*,\s*(?:\w+|["'][^"']*["']\s*\+|f["']|`))/),
   // CWE-327: weak digest specifically for a credential, not a file checksum.
-  sink('weak credential hash', '.go .java .kt .kts .js .jsx .mjs .cjs .ts .tsx .mts .cts .py .php .rb .rs .cs', /\b(?:hashlib\.)?(?:md5|sha1)(?:\.Sum)?\s*\(\s*\$?\w*(?:password|passwd|secret|token)\w*\b|\bcreateHash\s*\(\s*['"](?:md5|sha1)['"]\s*\)\s*\.update\s*\(\s*\w*(?:password|passwd|secret|token)\w*\b|\bMessageDigest\.getInstance\s*\(\s*['"](?:MD5|SHA-1)['"]\s*\)\.digest\s*\(\s*\w*(?:password|passwd|secret|token)\w*\b/i),
+  sink('weak credential hash', `.go .java .kt .kts ${JS_TS} .py .php .rb .rs .cs`, /\b(?:hashlib\.)?(?:md5|sha1)(?:\.Sum)?\s*\(\s*\$?\w*(?:password|passwd|secret|token)\w*\b|\bcreateHash\s*\(\s*['"](?:md5|sha1)['"]\s*\)\s*\.update\s*\(\s*\w*(?:password|passwd|secret|token)\w*\b|\bMessageDigest\.getInstance\s*\(\s*['"](?:MD5|SHA-1)['"]\s*\)\.digest\s*\(\s*\w*(?:password|passwd|secret|token)\w*\b/i),
   // CWE-942: wildcard origin combined with credential sharing (same line).
-  sink('credentialed wildcard CORS', '.go .java .kt .kts .js .jsx .mjs .cjs .ts .tsx .mts .cts .py .php .rb .rs .cs', /Access-Control-Allow-Origin[^;\n]*\*[^;\n]*;[^\n]*Access-Control-Allow-Credentials[^\n]*true/i),
+  sink('credentialed wildcard CORS', `.go .java .kt .kts ${JS_TS} .py .php .rb .rs .cs`, /Access-Control-Allow-Origin[^;\n]*\*[^;\n]*;[^\n]*Access-Control-Allow-Credentials[^\n]*true/i),
   // CWE-732: world-writable modes.
-  sink('world writable API', '.go .js .jsx .mjs .cjs .ts .tsx .mts .cts .py .php .rb .rs .cs', /\b(?:chmod|Chmod|mkdir|WriteFile)\s*\([^\n]*\b(?:0o777|0777|0666)\b|\bumask\s*\(\s*0\s*\)/i),
+  sink('world writable API', `.go ${JS_TS} .py .php .rb .rs .cs`, /\b(?:chmod|Chmod|mkdir|WriteFile)\s*\([^\n]*\b(?:0o777|0777|0666)\b|\bumask\s*\(\s*0\s*\)/i),
   sink('world writable shell', '.sh .bash .zsh', /\bchmod\s+(?:-R\s+)?(?:777\b|o\+w\b)/),
   // CWE-347: decoded tokens are not verified signatures.
   sink('JWT Python bypass', '.py', /\bjwt\.decode\s*\([^\n]*(?:\bverify\s*=\s*False\b|["']verify_signature["']\s*:\s*False\b|\balgorithms\s*=\s*\[\s*["']none["']\s*\])/),
@@ -55,7 +57,7 @@ export const DANGEROUS_SINK_CATALOG = [
   sink('CSRF Python', '.py', /@csrf_exempt\b|\bWTF_CSRF_ENABLED\s*=\s*False\b/),
   sink('CSRF Spring', '.java .kt .kts', /\.csrf\s*\(\s*\)\.disable\s*\(/),
   sink('CSRF Rails', '.rb', /\bskip_before_action\s+:verify_authenticity_token\b/),
-  sink('CSRF config', '.js .jsx .mjs .cjs .ts .tsx .mts .cts .php .rb', /\bcsrf\s*:\s*false\b|\bcsrf\s*=>\s*false\b/),
+  sink('CSRF config', `${JS_TS} .php .rb`, /\bcsrf\s*:\s*false\b|\bcsrf\s*=>\s*false\b/),
   sink('CSRF C sharp', '.cs', /\[IgnoreAntiforgeryToken\]/),
   // CWE-611: external entities and DTD expansion.
   sink('XXE Python', '.py', /\bresolve_entities\s*=\s*True\b/),
@@ -81,7 +83,7 @@ function commentSyntaxFor(logicalPath) {
   const extension = asciiLower(goExt(logicalPath))
   if (['.sh', '.bash', '.zsh', '.py', '.rb', '.pl', '.pm', '.r', '.ps1', '.psm1', '.yaml', '.yml', '.toml', '.ini', '.conf', '.cfg', '.cmake', '.mk', '.tf', '.nix'].includes(extension)) return HASH
   if (['.sql', '.lua', '.hs', '.adb', '.ads'].includes(extension)) return DASH
-  if (['.c', '.cc', '.cpp', '.h', '.hpp', '.cs', '.go', '.java', '.js', '.jsx', '.mjs', '.cjs', '.kt', '.kts', '.php', '.rs', '.swift', '.ts', '.tsx', '.mts', '.cts', '.scala', '.dart'].includes(extension)) return SLASH
+  if (['.c', '.cc', '.cpp', '.h', '.hpp', '.cs', '.go', '.java', ...JS_TS_EXTENSIONS, '.kt', '.kts', '.php', '.rs', '.swift', '.scala', '.dart'].includes(extension)) return SLASH
   return null
 }
 
