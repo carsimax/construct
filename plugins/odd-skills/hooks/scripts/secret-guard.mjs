@@ -142,7 +142,11 @@ function splitCommands(input) {
       // `|` and `|&` feed the next command; `||` does not.
       if (c === '|') {
         if (input[i + 1] === '|') i++
-        else piped = true
+        else {
+          // `|&` pipes stderr too: consume the `&` so it does not end a command.
+          if (input[i + 1] === '&') i++
+          piped = true
+        }
       }
     } else if (c === '<' || c === '>') {
       endWord()

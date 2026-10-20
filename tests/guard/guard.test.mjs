@@ -330,6 +330,7 @@ test('verifier probes', () => {
 test('F11: data piped into a command that executes or reads its words is checked as paths', () => {
   for (const command of [
     'echo .env | xargs cat',
+    'echo .env |& xargs cat',
     "printf '%s\\n' ~/.ssh/id_rsa | xargs cat",
     'printf .env | xargs cat',
     'echo "cat .env" | sh',

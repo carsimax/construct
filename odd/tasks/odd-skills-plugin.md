@@ -246,6 +246,7 @@ main
 | 11 | `odd-skills/11-rdd-review` | T8 | the three T8 commits | about 1130 | over budget: two parallel units plus one correction batch; see L30 |
 | 12 | `odd-skills/12-gate-followups` | F9, F10 | `fix: scope mode status and protect the gate fallback dir` | 76 | within |
 | 13 | `odd-skills/13-secret-guard` | T9 | the two T9 commits | about 620 | slightly over; one unit plus one correction batch |
+| 14 | `odd-skills/14-guard-followups` | F11–F14 | `fix: close secret guard pipe, pattern-file, and glob bypasses` + `fix: treat \|& as a pipe in the secret guard` | about 175 | within |
 
 Push and PR creation remain the user's decision.
 
@@ -728,3 +729,14 @@ Push and PR creation remain the user's decision.
     - **F12 (R3):** `grep -f .env target` takes `.env` as the pattern. Pattern-file flags (`grep -f`/`--file`, `rg -f`/`--file`) take a path value that must be checked.
     - **F13 (R1-001):** `-T`/`-t` are shared in `ARG_FLAGS`, but take no value in GNU grep (`--initial-tab`) or ag (`--all-text`). This mis-assigns the pattern. Flag arity must be per command.
     - **F14 (R3):** a malformed glob such as `[z-a]` throws in `segmentRegex`, and the catch allows unless keywords match. An invalid glob must be treated conservatively: deny when any segment could still match a protected name (a literal fallback), and never fail open on a glob error.
+  - Slice 14: the same worker fixed F11–F14.
+    - Piped `echo`/`printf` data into `xargs`, shells, `source`, `eval`, or `while read` is checked.
+    - Pattern-file and ignore-file flag values are checked.
+    - Flag arity is per command.
+    - An invalid glob class compiles to `[^/]*`, so it can only match more.
+    - RED was observed for all four. The F14 RED needed probes without literal keywords, because the keyword fallback had hidden the bug.
+    - `node --test tests/` gave `484 pass`.
+  - Independent `odd-verify`, scoped to F11–F14: **all resolved, no blockers.** 125 probes, plus 30 regression probes that all held.
+    - Advisory: `|&` was not treated as a pipe, contradicting the code's own comment. The parent fixed it (RED, then GREEN; `484 pass`, as the probe joined an existing test).
+    - Remaining advisories, which need deliberate indirection: `| (xargs cat)`, `| parallel cat`, and going through a temp file.
+  - The native review was not escalated for slice 14: these are follow-ups of an approved review, already independently verified with 125 probes.
