@@ -205,7 +205,7 @@ Design consequences:
 | T4 | S1, S2 | Split the orchestrator into the ≤8k session contract and the ODD skills; `SessionStart` and `SubagentStart` hooks; evals for small-inline, large-tracked, and Risk-line cases | inline | none (reassessed, L15) | done | `feat: add ODD workflow, delegation, sizing, and prompt skills` (slice 05) + `feat: inject the ODD session and subagent contracts` (slice 06) |
 | T5 | S1, S4 | Output style (Neutral only, L16), single `odd` theme (L22), follow-ups F1–F3 | inline | none | done | `feat: add the Neutral output style and themes` (slice 07) |
 | T6 | S1, S2 | `bin/odd-assess`: port `ClassifyRisk` with fixtures; differential check against `gentle-ai review assess` on the same diffs | delegated (`odd-worker`, sonnet): long-session context backstop | 2 (it decides whether review runs) | done | `feat: add odd-assess risk classifier` + `fix: match Go whitespace trimming in odd-assess` (slice 08) |
-| T7 | S1, S2 | `bin/odd-review`: frozen tree via temp index, inspect, capture validation, receipt and acknowledgement; plus F4 | delegated (`odd-worker`, sonnet): long-session context backstop | 1 and 2 (persisted receipts; it gates delivery confidence) | in progress | — |
+| T7 | S1, S2 | `bin/odd-review`: frozen tree via temp index, inspect, capture validation, receipt and acknowledgement; plus F4 | delegated (`odd-worker`, sonnet): long-session context backstop | 1 and 2 (persisted receipts; it gates delivery confidence) | done | `feat: add odd-review lifecycle with receipts` + `fix: refute mixed severe findings and escalate unknown causality` (slice 09) |
 | T8 | S1, S2 | `rdd-review` skill, `review-4lens` and `judgment-day` workflows, `Stop` review gate | inline | 6 | pending | — |
 | T9 | S1 | `secret-guard.sh` `PreToolUse` deny list; `Stop` prompt hook for the Risk line | inline | 2 | pending | — |
 | T10 | S1 | Compaction re-injection and task sync hooks | inline | none | pending | — |
@@ -241,6 +241,7 @@ main
 | 06 | `odd-skills/06-session-contract` | T4 (contract, hooks, evals) | `feat: inject the ODD session and subagent contracts` | about 500 | slightly over; best cohesive split (L15) |
 | 07 | `odd-skills/07-styles` | T5 + F1–F3 | `feat: add the Neutral output style and themes` | see L16 | within |
 | 08 | `odd-skills/08-assess` | T6 | `feat: add odd-assess risk classifier` | 2092 | `size:exception` accepted by the user (L21): CLI tests need every module, so no cohesive split fits; 1297 lines code (147 verbatim sink catalog), 722 lines tests |
+| 09 | `odd-skills/09-review` | T7 + F4 | `feat: add odd-review lifecycle with receipts` | 1863 | `size:exception` accepted by the user (L27): one behavior (lifecycle plus its odd-assess integration), no cohesive split under budget |
 
 Push and PR creation remain the user's decision.
 
@@ -528,3 +529,35 @@ Push and PR creation remain the user's decision.
     - **odd-assess integration:** `candidate.consumed` and `review_due_reason: already_reviewed` now come from the receipts store, closing the T6 deferral.
     - **Consent stays in the T8 `rdd-review` skill.** `odd-review` has no consent step.
     - **F4 is folded in:** `odd-assess --committed-only` without `--base-ref` becomes a usage error (exit 2).
+- **L27 (2026-10-19, user):** "size:exceptio"
+  - Slice 09 (`1d1e1b6`, 1863 changed lines) ships as one PR with `size:exception`.
+  - Worker evidence: `node --test tests/` gave `390 pass` (64 new review tests, 1 F4 test). Behavioral RED came from a stub binary; F4 RED came from a baseline copy.
+  - Parent spot check in a throwaway repo:
+    - start → context (binding line) → capture → `approved` → acknowledge.
+    - odd-assess then reports `already_reviewed` with `consumed: true`.
+    - `git status --porcelain` stays empty, and the state lives only in `.git/odd-review/`.
+  - Choices the parent flagged to the verifier:
+    - Inferential severe findings are not refuted when deterministic ones coexist.
+    - `unknown` causality is treated as advisory. In the original, unknown causality escalates.
+  - Independent `odd-verify` (opus) running for Risk items 1 and 2.
+  - Independent `odd-verify` (opus):
+    - **S2: pass.**
+    - All L26 commands and invariants pass: `context` matches plain `git diff` byte for byte, an 8-way lock race produced 1 winner, and HEAD, the index, and the worktree stay untouched.
+    - **S1: fail**, with two blockers:
+      - **B1:** inferential severe findings were dropped to advisory when deterministic ones coexisted, so an unrefuted CRITICAL reached a receipt.
+      - **B2:** a severe finding with `unknown` causality reached `approved`.
+    - B2 followed the parent's own L26 wording ("everything else is advisory"), which contradicts the original ("unknown causality escalates"). S1 wins, so this L26 rule is superseded: a BLOCKER or CRITICAL with `unknown` causality escalates.
+  - One correction batch by the same worker:
+    - B1: inferential severe findings always go to one refuter batch. Deterministic ones are held as confirmed. `to_correct` = confirmed ∪ corroborated.
+    - B2: unknown causality → terminal `escalated` (`reason: unknown_causality`).
+    - Advisory 3: an empty lock older than 10 s is reclaimed.
+    - RED: 5 behavior failures. Then `node --test tests/` gave `395 pass`.
+  - Verifier recheck, limited to B1 and B2: **both resolved**.
+    - The corroborated variant gives `to_correct` {F1, F2}, and a partial validation is refused.
+    - The refuted variant gives {F1}.
+    - Unknown causality escalates even next to a correctable finding.
+  - Open advisories:
+    - A refuter `inconclusive` result yields `approved`, per L26.
+    - `acknowledge` writes two files non-atomically.
+    - A malformed `--lineage` exits 1, not 2.
+    - `statSync` on a lock removed concurrently is unguarded.
