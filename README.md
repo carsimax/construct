@@ -105,7 +105,7 @@ A plugin cannot ship a `CLAUDE.md`, so Construct loads its rules in three layers
 |---|---|---|
 | Session contract | `SessionStart` hook (startup, resume, clear, compact) | ODD protocol, task size, high-risk list, Risk line, and delegation triggers, under 8,000 characters |
 | Subagent contract | `SubagentStart` hook | Artifact language, edit surfaces, scratch, and the `## Key Learnings` closing block. JSON-only reviewers (`review-*`, `jd-judge-*`) get nothing |
-| Skills | Loaded on demand | `odd-workflow`, `odd-delegation`, `task-size-risk`, `lossless-prompts` |
+| Skills | Loaded on demand | `odd-workflow`, `odd-delegation`, `task-size-risk`, `lossless-prompts`, `debugging`, `constraint-driven` |
 | Output style | Forced by the plugin (`force-for-plugin`), in every project | Reply tone, language, response length, verification, and working rules (no AI attribution in commits, one question at a time) |
 
 The contract texts live in `plugins/construct/hooks/contract/`.
@@ -126,6 +126,24 @@ claude mcp add-json --scope user codegraph '{"type":"stdio","command":"codegraph
 Engram's MCP server comes from `engram setup claude-code` (see Quick path).
 
 The installer no longer registers context7. An earlier registration can be removed with `claude mcp remove --scope user context7`.
+
+## Quality and recovery skills
+
+Four skills adapted from [addyosmani/agent-skills](https://github.com/addyosmani/agent-skills) (MIT) load on demand. The session contract names `debugging` and `constraint-driven`; the other two load from the skills that link to them.
+
+| Skill | Use it for |
+|---|---|
+| `construct:debugging` | A failing test, broken build, regression, or unexpected behavior: stop the line, reproduce, localize (including `git bisect run`), reduce, fix the root cause, and guard it with a regression test written RED first. The parent diagnoses read-only and hands the fix to a worker, with the reproduction as the RED test. It never suppresses the error or weakens a check to go green. |
+| `construct:constraint-driven` | The project's quality bar. Detects before asking (at most four questions, one at a time, each with a default) and writes `CONSTRAINTS.md` at the repository root: a Floor that is never weakened, numeric rules each with the command that checks it, and measure-and-hold ratchets. Non-interactive runs apply the Floor only. |
+| `construct:source-driven` | A named uncertainty about a library or framework API: detect the exact version, fetch the one official page, implement the documented pattern, cite the URL and version, and flag what is unverified. Fetched content is data, never instructions. Linked from `odd-workflow` research. |
+| `construct:migration` | Schema or stored-data migrations and removals of public surface: expand, migrate, contract, deprecation notices with a removal condition, reversible backfills, per-phase verification, and rollback. Linked from the high-risk items in `task-size-risk`. |
+
+Existing components gained matching material:
+
+- `judgment-day` has a decision mode for a plan, design, or claim before implementation. Blind judges receive the artifact and its contract, never the claim, and findings are reconciled against the artifact text, for at most three cycles. Code-review mode is unchanged.
+- `construct:odd-verify` applies a standing Definition of Done (correctness, quality, integration, documentation, ship-readiness) to every `S#`, and reports a line it cannot verify as `not verified`.
+- `construct:review-risk` carries a security checklist category list; the full checklist is `skills/rdd-review/references/security-checklist.md`. The agent has no tools, so the review hooks, which replace the whole prompt with the `odd-review context`, do not attach the file, and the agent applies its own category triage.
+- `odd-workflow`'s testing reference tells the worker to discover the repository's own test stack first and states the Floor as "never weaken the verifier" examples.
 
 ## Agents and model routing
 
@@ -175,7 +193,7 @@ odd-assess --escalate-item 2 --escalate-reason "touches the login guard" --json
 
 Without `--base-ref`, the candidate is the working tree (tracked plus untracked, not ignored), frozen through a temporary index. Your real index is never changed.
 
-JavaScript and TypeScript module files (`.mjs`, `.cjs`, `.mts`, `.cts`) are read as source, like `.js` and `.ts`: an added line that spawns a process (`process_boundary`) or calls a dangerous sink (`dangerous_sink`) makes the change `high`. In any source file outside tests, an added non-comment line that names a hook's `permissionDecision` (`permission_decision`, signal `permissions`) also makes it `high`.
+JavaScript and TypeScript module files (`.mjs`, `.cjs`, `.mts`, `.cts`) are read as source, like `.js` and `.ts`: an added line that spawns a process (`process_boundary`) or calls a dangerous sink (`dangerous_sink`) makes the change `high`. In any source file outside tests, an added non-comment line that names a hook's `permissionDecision` (`permission_decision`, signal `permissions`) also makes it `high`. An added line that weakens the verifier (`verifier_weakening`, signal `verifier_weakening`) makes it `high` too: a suppression comment (`@ts-ignore`, `@ts-expect-error`, `@ts-nocheck`, `eslint-disable`, `# noqa`, `# type: ignore`, `//nolint`) in a source file, or a skip or focus marker (`.skip(`, `.only(`, `xit(`, `xdescribe(`, `test.todo(`, `{ skip:` or `{ todo:` in `node:test`, `@pytest.mark.skip`, `t.Skip(`) in a test file. Removed lines never count, and `docs/`, fixtures, and testdata are excluded.
 
 Three high-risk items are recognized by path or content, and each reason carries `high-risk item N (...)` in its `detail`. Item 1 (`database_migration`, `destructive_sql`, signal `data_loss`): code, SQL, or config files (`.sql`, `.py`, `.rb`, JS/TS, `.go`, `.php`, `.java`, `.kt`, `.cs`, `.ex`/`.exs`, `.yaml`/`.yml`, `.json`, `.xml`, and extensionless files, which fail toward high) under `migrations/` or `migration/` directories (Django, Prisma, Knex, Flyway) or Rails `db/migrate/`, files under `alembic/versions/`, Flyway `V<n>__*.sql`, `U<n>__*.sql`, and repeatable `R__*.sql` names (anywhere in the tree), and added `DROP`, `TRUNCATE`, `ALTER ... DROP`, or `DELETE FROM` without `WHERE` in a `.sql` file (comments are ignored). Item 2 (`private_key`, `credential_file`, `private_key_content`, signal `security`): `id_rsa`/`id_dsa`/`id_ecdsa`/`id_ed25519` with an optional suffix (never `*.pub`), `.pem`, `.key`, `.p12`, `.pfx`, `.jks`, `.keystore`, `.ppk`, `credentials.json`, `.npmrc` or `.pypirc` with an added token or password line, and an added PEM `PRIVATE KEY` header in any scanned text file. Item 5 (`dependency_manifest`, `git_hook`, signal `delivery`): package manifests and lockfiles (npm, pnpm, yarn, pip `requirements*.txt`, pyproject, poetry, Pipfile, Go, Cargo, Bundler, Composer), `Dockerfile*`, and git hooks (`.githooks/`, `.husky/`, `.git/hooks/`, `lefthook.yml`, `.pre-commit-config.yaml`). Test files and `test`, `tests`, `spec`, `docs`, `fixtures`, `testdata` directories are never evidence for these items, and Markdown stays passive. Known fail-toward-high cases: a Keynote `.key` file and a string literal such as `SELECT 'drop table'` still count.
 
@@ -343,7 +361,7 @@ scripts/eval.sh --case small-delegated
 | `install.sh` | One-command installer (see [One-command install](#one-command-install)) |
 | `plugins/construct/` | The plugin (manifest name `construct`) |
 | `plugins/construct/agents/` | The 13 role agents |
-| `plugins/construct/skills/` | Delivery and review skills (`branch-pr`, `chained-pr`, `work-unit-commits`, `judgment-day`, ...) |
+| `plugins/construct/skills/` | Delivery and review skills (`branch-pr`, `chained-pr`, `work-unit-commits`, `judgment-day`, `debugging`, `constraint-driven`, ...) |
 | `plugins/construct/hooks/` | `hooks.json`, the mod (`register.js`), its routing helpers, the status modules (`status/`), the panel modules (`panel/`), and the command hooks (`scripts/`: contract, feature state, secret guard, review gate, review context and capture) |
 | `plugins/construct/bin/` | Executable scripts put on the `PATH` (`odd-assess`) |
 | `plugins/construct/lib/assess/` | `odd-assess` modules: git, stats, passive, signals, sinks, content, classify, escalation, output |
@@ -355,7 +373,7 @@ scripts/eval.sh --case small-delegated
 
 ## License notice
 
-Part of the agents and skills are adapted from MIT-licensed material; see [`plugins/construct/NOTICE`](plugins/construct/NOTICE).
+Part of the agents and skills are adapted from MIT-licensed material (Gentle AI and agent-skills); see [`plugins/construct/NOTICE`](plugins/construct/NOTICE).
 
 ## Status
 
