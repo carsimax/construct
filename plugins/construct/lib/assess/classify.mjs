@@ -9,7 +9,7 @@ import {
 } from './signals.mjs'
 import { collectDiffStats, countChangedLines, isGeneratedGoldenPath } from './stats.mjs'
 
-const VALID_SIGNALS = ['auth', 'update', 'security', 'payments', 'data_exposure', 'data_loss', 'permissions', 'shell_process', 'dangerous_sink', 'delivery']
+const VALID_SIGNALS = ['auth', 'update', 'security', 'payments', 'data_exposure', 'data_loss', 'permissions', 'shell_process', 'dangerous_sink', 'delivery', 'verifier_weakening']
 
 // classifyRisk: high on any signal or hot path, low when every path is proven
 // passive and none is configuration, otherwise medium. Counting still runs so
