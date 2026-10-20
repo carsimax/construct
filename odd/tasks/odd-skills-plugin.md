@@ -242,6 +242,7 @@ main
 | 07 | `odd-skills/07-styles` | T5 + F1–F3 | `feat: add the Neutral output style and themes` | see L16 | within |
 | 08 | `odd-skills/08-assess` | T6 | `feat: add odd-assess risk classifier` | 2092 | `size:exception` accepted by the user (L21): CLI tests need every module, so no cohesive split fits; 1297 lines code (147 verbatim sink catalog), 722 lines tests |
 | 09 | `odd-skills/09-review` | T7 + F4 | `feat: add odd-review lifecycle with receipts` | 1863 | `size:exception` accepted by the user (L27): one behavior (lifecycle plus its odd-assess integration), no cohesive split under budget |
+| 10 | `odd-skills/10-review-hardening` | F5–F8 | `fix: harden odd-review refuter binding, locks, and acknowledge` + `fix: serialize stale lock reclaim in odd-review` | see L28 | within |
 
 Push and PR creation remain the user's decision.
 
@@ -570,3 +571,17 @@ Push and PR creation remain the user's decision.
     - **F6 (R3, R4):** `withLock` reads and stats the lock after `EEXIST` without guarding `ENOENT`, so a concurrent release surfaces as `internal_error`. Stale reclaim is not atomic. Guard and retry.
     - **F7 (R3, R4):** `acknowledge` writes the receipt and then the transaction non-atomically. A crash between the two leaves an unrecoverable `approved` state with a receipt. Make the step idempotent: when a receipt exists for the same lineage, complete the transaction.
     - **F8 (R3, deterministic):** `tests/review/invariants.test.mjs:80-86` asserts on a `captured` field that the transaction does not have, so "a rejected result stores nothing" is vacuously true. Assert on `results`.
+- **L28 (2026-10-19, user):** "ok" (fix F5–F8 before T8)
+  - The same worker fixed F5 (per-lineage refuter subject hash; `agents/review-refuter.md` gained `subject_hash`), F6 (lock ENOENT retry), F7 (idempotent acknowledge with `recovered: true`), and F8 (a real invariant assertion, proven by a deliberately broken refusal path that made 7 tests fail). `node --test tests/` gave `406 pass`.
+  - Independent `odd-verify`, scoped to F5–F8:
+    - F5, F7, and F8 pass.
+    - **F6 failed:** stale reclaim was path-based, so a reclaimer could remove a winner's live lock. A capture that exited 0 was lost in 11/150 trials at P=4, with double captures at P=12. The baseline had the same flaw.
+  - One correction batch:
+    - Stale reclaim takes an exclusive `<lock>.reclaim` (never waits) and unlinks only if dev, inode, content, and mtime still match the inspected stale lock. The tombstone rename is removed.
+    - A deterministic seam test (`ODD_REVIEW_TEST_FAULT=reclaim-interleave`) and a 50-trial parallel probe were added. RED: lost capture at trial 12 on the old code. Then `node --test tests/` gave `408 pass`.
+  - Verifier recheck: **resolved.** 0 lost and 0 double captures across 360 contended trials; no leftover lock files; both seams are inert unless their exact env value is set.
+  - Open advisories:
+    - A `.reclaim` file left by a crashed reclaimer is removed after 10 s by path. The main-lock identity check still prevents deleting a live lock.
+    - Transactions in `refutation_required` from before this change have no refuter subject and fail closed.
+    - Refuter mismatches use the code `subject_mismatch`; lens and validator mismatches use `invalid_result`.
+    - A corrupt receipt blocks `acknowledge`.
