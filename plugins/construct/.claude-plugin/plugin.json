@@ -16,6 +16,7 @@
   "dependencies": [
     "engram@engram"
   ],
+  "types": "./types/construct.d.ts",
   "userConfig": {
     "model_odd_explorer": {
       "type": "string",
@@ -354,6 +355,12 @@
         "max"
       ],
       "default": "medium"
+    },
+    "panel_open_on_start": {
+      "type": "boolean",
+      "title": "Open the Construct panel on start",
+      "description": "Open the docked Construct panel when a session starts; /construct opens it any time",
+      "default": false
     }
   }
 }
