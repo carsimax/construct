@@ -10,8 +10,9 @@ import { dataDir, readInput, safeName } from './hook-io.mjs'
 
 const MAX_PATHS = 3
 // Optional list marker (-, *, +, 1., 1)) and emphasis around the label and the
-// value, then `none` or `item 1-6`; the space after the colon is optional.
-const RISK_LINE = /^[ \t]*(?:(?:[-*+]|\d+[.)])[ \t]+)?[*_`]*Risk[*_`]*:[*_`]*[ \t]*[*_`]*(?:none|item [1-6])\b/m
+// value, then `none` or `item 1-6` that ends the line or is followed by
+// whitespace or `(`; the space after the colon is optional.
+const RISK_LINE = /^[ \t]*(?:(?:[-*+]|\d+[.)])[ \t]+)?[*_`]*Risk[*_`]*:[*_`]*[ \t]*[*_`]*(?:none|item [1-6])[*_`]*(?=$|\s|\()/m
 
 const recordFile = (session) => {
   const dir = join(dataDir(), 'risk-line')

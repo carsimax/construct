@@ -3,7 +3,8 @@
 // prompt, so the orchestrator never pastes or transcribes the evidence. It also
 // records the lineage for review-capture.mjs. A review agent without a lineage,
 // or one odd-review refuses, is denied with the reason; other agents and
-// prompts that start with the binding line pass through. A prompt naming two
+// prompts that start with a valid binding line pass through. A malformed binding
+// line, or one whose lineage differs from another in the prompt, is denied. A prompt naming two
 // distinct lineages is denied. A new spawn overwrites the lens's pending record.
 // Errors fail open.
 // Usage: node review-context.mjs   (hook JSON on stdin)
@@ -15,18 +16,26 @@ import { pendingFile, readInput } from './hook-io.mjs'
 const ODD_REVIEW = new URL('../../bin/odd-review', import.meta.url).pathname
 const REVIEW_AGENT = /^construct:(review-(?:risk|resilience|readability|reliability|refuter|validator))$/
 const LINEAGE = /\breview-[0-9a-f]{16}\b/g
+const BINDING = 'ODD_REVIEW_BINDING '
 
 const decide = (permissionDecision, extra) =>
   process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision, ...extra } })}\n`)
 
-function bindingLineage(prompt) {
+// bindingOf reads a leading binding line: null when the prompt has none,
+// { error } when the line is malformed, { lineage } otherwise.
+function bindingOf(prompt) {
   const first = prompt.split('\n', 1)[0]
-  if (!first.startsWith('ODD_REVIEW_BINDING ')) return null
+  if (!first.startsWith(BINDING)) return null
+  let lineage
   try {
-    return JSON.parse(first.slice('ODD_REVIEW_BINDING '.length)).lineage ?? null
+    lineage = JSON.parse(first.slice(BINDING.length))?.lineage
   } catch {
-    return null
+    return { error: 'the binding line is not valid JSON' }
   }
+  if (typeof lineage !== 'string' || !/^review-[0-9a-f]{16}$/.test(lineage)) {
+    return { error: 'its lineage is not a string of the form review-<16 hex>' }
+  }
+  return { lineage }
 }
 
 function main() {
@@ -40,9 +49,17 @@ function main() {
 
   // The orchestrator pasted the context itself (it starts with the binding
   // line): record its lineage, change nothing.
-  const pasted = bindingLineage(toolInput.prompt)
+  const pasted = bindingOf(toolInput.prompt)
   if (pasted) {
-    atomicWrite(pending, `${JSON.stringify({ lineage: pasted, lens, cwd: input.cwd, attempts: 0 })}\n`)
+    const others = [...new Set(toolInput.prompt.match(LINEAGE) ?? [])].filter((id) => id !== pasted.lineage)
+    const problem = pasted.error ?? (others.length > 0 ? `its lineage ${pasted.lineage} differs from ${others.join(', ')} named in the prompt` : null)
+    if (problem) {
+      decide('deny', {
+        permissionDecisionReason: `${agent} has a malformed ODD_REVIEW_BINDING line: ${problem}. Paste the \`odd-review context\` output unchanged, or name one lineage (review-<16 hex>) and let this hook inject it.`,
+      })
+      return
+    }
+    atomicWrite(pending, `${JSON.stringify({ lineage: pasted.lineage, lens, cwd: input.cwd, attempts: 0 })}\n`)
     return
   }
 
