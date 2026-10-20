@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { spawnSync } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -289,4 +289,73 @@ test('plugin.json declares codegraph_auto_index as a boolean defaulting to false
   assert.equal(cfg.codegraph_auto_index?.type, 'boolean')
   assert.equal(cfg.codegraph_auto_index?.default, false)
   assert.ok(cfg.codegraph_auto_index.title && cfg.codegraph_auto_index.description)
+})
+
+test('stdin that parses to a non-object (null, array, number, string) is treated as {}', () => {
+  for (const kind of ['session', 'subagent']) {
+    const expected = context(kind, {}).additionalContext
+    for (const raw of ['null', '[]', '[1]', '42', '"x"', 'true']) {
+      const res = run(kind, raw)
+      assert.equal(res.code, 0, `${kind} ${raw}: ${res.stderr}`)
+      assert.equal(JSON.parse(res.stdout).hookSpecificOutput.additionalContext.startsWith(expected.slice(0, 200)), true)
+      if (kind === 'subagent') assert.equal(JSON.parse(res.stdout).hookSpecificOutput.additionalContext, expected)
+    }
+  }
+})
+
+test('auto-index never waits on a slow codegraph: the hook closes within 2 s and the child started', async () => {
+  const dir = project('.git')
+  const bin = mkdtempSync(join(tmpdir(), 'construct-slowbin-'))
+  const marker = join(bin, 'marker.txt')
+  writeFileSync(join(bin, 'codegraph'), `#!/bin/sh\nprintf started > "${marker}"\nsleep 5\n`, { mode: 0o755 })
+  try {
+    const env = { ...process.env, CLAUDE_PLUGIN_ROOT: pluginRoot, ...autoEnv(bin) }
+    const t0 = Date.now()
+    const out = await new Promise((resolve, reject) => {
+      const child = spawn(process.execPath, [script, 'session'], { env, stdio: ['pipe', 'pipe', 'pipe'] })
+      let stdout = ''
+      child.stdout.on('data', (d) => (stdout += d))
+      child.on('error', reject)
+      child.on('close', (code) => resolve({ code, stdout }))
+      child.stdin.end(JSON.stringify({ ...SESSION, cwd: dir }))
+    })
+    assert.ok(Date.now() - t0 < 2000, `hook took ${Date.now() - t0} ms`)
+    assert.equal(out.code, 0)
+    assert.ok(JSON.parse(out.stdout).hookSpecificOutput.additionalContext.includes('indexing started'))
+    assert.ok(waitFor(marker), 'slow fake codegraph never started')
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+    rmSync(bin, { recursive: true, force: true })
+  }
+})
+
+test('every CodeGraph notice variant keeps the session contract under 8,000 characters', () => {
+  const dir = project('.git')
+  const { bin } = fakeCli()
+  const empty = mkdtempSync(join(tmpdir(), 'construct-emptybin-'))
+  try {
+    const variants = [
+      context('session', { ...SESSION, cwd: dir }).additionalContext,
+      context('session', { ...SESSION, cwd: dir }, autoEnv(bin)).additionalContext,
+      context('session', { ...SESSION, cwd: dir }, { CLAUDE_PLUGIN_OPTION_CODEGRAPH_AUTO_INDEX: 'true', PATH: empty }).additionalContext,
+    ]
+    const longest = variants.reduce((a, b) => (b.length > a.length ? b : a))
+    assert.ok(longest.includes('not on the PATH'), 'CLI-missing variant should be the longest')
+    for (const v of variants) assert.ok(v.length <= 8000, `${v.length} chars`)
+  } finally {
+    for (const d of [dir, bin, empty]) rmSync(d, { recursive: true, force: true })
+  }
+})
+
+test('the indexing-started notice points at codegraph status, not at .codegraph/ appearing', () => {
+  const dir = project('.git')
+  const { bin } = fakeCli()
+  try {
+    const text = context('session', { ...SESSION, cwd: dir }, autoEnv(bin)).additionalContext
+    assert.ok(text.includes('codegraph status'))
+    assert.ok(!/until `\.codegraph\/`/.test(text))
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+    rmSync(bin, { recursive: true, force: true })
+  }
 })

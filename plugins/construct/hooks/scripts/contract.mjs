@@ -15,7 +15,8 @@ const JSON_ONLY_AGENT = /^(construct:)?(review-|jd-judge-)/
 
 function readInput() {
   try {
-    return JSON.parse(readFileSync(0, 'utf8') || '{}')
+    const parsed = JSON.parse(readFileSync(0, 'utf8') || '{}')
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}
   } catch {
     return {}
   }
@@ -66,7 +67,7 @@ function indexNotice(dir) {
     const cli = findOnPath('codegraph')
     if (!cli) return `${missing} Auto-index is on, but the \`codegraph\` CLI is not on the PATH. ${manual}`
     if (startIndexing(cli, dir)) {
-      return `CodeGraph: \`${dir}\` has no \`.codegraph/\` index yet; indexing started in the background (\`codegraph init --yes\`). Use file tools until \`.codegraph/\` is ready.`
+      return `CodeGraph: \`${dir}\` has no \`.codegraph/\` index yet; indexing started in the background (\`codegraph init --yes\`). Use file tools until \`codegraph status\` reports the index complete.`
     }
   }
   return `${missing} ${manual}`
