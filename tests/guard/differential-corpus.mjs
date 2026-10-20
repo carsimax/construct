@@ -1,6 +1,7 @@
 // Differential corpus for the secret-guard. Placeholders: @E@ env file, @S@ ssh dir, @K@ key file,
 // @R@ destructive rm (substituted at runtime so no protected name is typed here).
 // Third field: the verdict of the guard at main 548b47d, recorded statically.
+// Optional fourth field: the reason the candidate deliberately differs (main allow, candidate DENY).
 export const corpus = [
   ["L23-1", "bash <(cat <<'EOF'\ncat @E@\nEOF\n)", "DENY"],
   ["L23-2", "source <(cat <<'EOF'\ncat @E@\nEOF\n)", "DENY"],
@@ -137,4 +138,9 @@ export const corpus = [
   ["l29-shell", "cat <<'EOF' > x\ncat @E@\nEOF\n$SHELL x", "DENY"],
   ["l29-stdbuf", "cat <<'EOF' > x\ncat @E@\nEOF\nstdbuf -o0 sh x", "DENY"],
   ["l29-while", "cat <<'EOF' > x\ncat @E@\nEOF\nwhile read -r l; do $l; done < x", "DENY"],
+  // Named differences from main (S1): a quote opened by an apostrophe swallowed the next lines on main.
+  ["s1-heredoc-apostrophe", "bash <<'EOF'\necho it's ok\ncat @E@\nEOF", "allow", "an apostrophe in the heredoc body hid the following lines from the check"],
+  ["s1-shell-c-newline", "sh -c \"echo it's\ncat ~/secrets/x\"", "allow", "a quoted span crossing a newline hid a protected path on a later line"],
+  ["s1-python-heredoc", "python3 - <<'EOF'\n# it's here\nopen('@E@').read()\nEOF", "allow", "an apostrophe in the body hid the line that opens the protected file"],
+  ["s1-echo-multiline", "echo \"it's\ncat @E@\"", "allow", "multi-line quoted text that names a protected path on a later line is now checked line by line"],
 ]

@@ -275,7 +275,21 @@ function pipedWordsVerdict(upstream, cwd, depth) {
   return null
 }
 
+// bashVerdict adds one pass to the quote-aware verdict: an apostrophe in prose (a heredoc
+// body, `echo it's`) opens a quote that swallows the following lines, so each physical
+// line is also checked on its own. This only adds denies: a quoted span that crosses a
+// newline and names a protected path on one of its lines is denied.
 function bashVerdict(command, cwd, depth = 0) {
+  const whole = quotedVerdict(command, cwd, depth)
+  if (whole || !command.includes('\n')) return whole
+  for (const line of command.split(/\r?\n/)) {
+    const verdict = line.trim() ? quotedVerdict(line, cwd, depth) : null
+    if (verdict) return verdict
+  }
+  return null
+}
+
+function quotedVerdict(command, cwd, depth) {
   let upstream = []
   for (const words of splitCommands(command)) {
     const texts = words.map((w) => w.t)

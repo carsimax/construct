@@ -287,7 +287,7 @@ How each tool is read:
 - **Invalid globs.** A glob that does not compile (`[z-a]`) is matched permissively, with the broken bracket class standing for any characters, so it can only deny more and never allows because of the error.
 - **`rev:path` tokens.** For a token such as `HEAD:.env`, the part after `:` is also checked.
 - **Interpreter one-liners.** The `-c` argument of `python`/`python3` and the `-e` argument of `node`, `perl`, and `ruby` are scanned for quoted string literals that name a protected path; `bash -c` and `eval` strings are parsed as commands. Heredoc bodies are read as commands, so a heredoc that names a protected path is denied. To write a file or a commit message that names a protected path, use the Write tool (for a commit, write the message to a file and run `git commit -F <file>`).
-- **Prose.** A quoted multi-word string given to another command is not checked.
+- **Prose.** A quoted multi-word string given to another command is not checked. Each line of a multi-line command is also checked on its own, so quoted text that spans lines and names a protected path on any line (for example a heredoc body with an apostrophe followed by `cat .env`) is denied; use the Write tool for such text.
 
 The denial says which rule matched and that the user can run the command manually. Unreadable hook input is allowed with a stderr note.
 

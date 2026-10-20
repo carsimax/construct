@@ -27,11 +27,30 @@ function verdict(command) {
 test('every corpus command gets the verdict main 548b47d recorded', () => {
   assert.ok(corpus.length > 100)
   const diffs = []
-  for (const [id, raw, main] of corpus) {
+  for (const [id, raw, main, reason] of corpus) {
     const got = verdict(subst(raw))
-    if (got !== main) diffs.push(`${id}: main ${main}, candidate ${got}`)
+    // A named difference only ever turns a main allow into a deny.
+    const want = reason ? 'DENY' : main
+    if (reason && main !== 'allow') diffs.push(`${id}: a named difference must record main allow`)
+    if (got !== want) diffs.push(`${id}: main ${main}, candidate ${got}`)
   }
   assert.deepEqual(diffs, [])
+})
+
+test('S1: every difference from main is a deny that main allowed, with a reason', () => {
+  const named = corpus.filter((r) => r[3])
+  assert.ok(named.length >= 4)
+  for (const [id, raw, main, reason] of named) {
+    assert.equal(main, 'allow', id)
+    assert.ok(reason.length > 20, id)
+    assert.equal(verdict(subst(raw)), 'DENY', id)
+  }
+})
+
+test('S1: single-line quoted apostrophes and a multi-line quote without a protected path stay allowed as on main', () => {
+  for (const c of ["echo it's ok", "git commit -m \"it's fine\"", "echo \"one\ntwo's\nthree\"", "bash <<'EOF'\necho it's ok\nls\nEOF"]) {
+    assert.equal(verdict(c), 'allow', c)
+  }
 })
 
 test('the L29 final-verify bypass shapes are in the corpus and denied as on main', () => {
