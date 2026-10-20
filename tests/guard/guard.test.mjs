@@ -326,3 +326,69 @@ test('verifier probes', () => {
   for (const command of ['rm -rf ./', 'rm -rf ~/projects/old']) assertAllow(bash(command))
   assertAllow(call('Edit', { file_path: 'config/keys/index.ts' }))
 })
+
+test('F11: data piped into a command that executes or reads its words is checked as paths', () => {
+  for (const command of [
+    'echo .env | xargs cat',
+    "printf '%s\\n' ~/.ssh/id_rsa | xargs cat",
+    'printf .env | xargs cat',
+    'echo "cat .env" | sh',
+    'echo "cat .env" | bash',
+    'echo ".env" | source /dev/stdin',
+    'echo "cat .env" | eval',
+    'echo .env | while read f; do cat "$f"; done',
+    'echo .env | tr a a | xargs cat',
+    'cat <<EOF | xargs cat\n.env\nEOF',
+  ]) {
+    assertDeny(bash(command))
+  }
+  for (const command of [
+    'echo .env >> .gitignore',
+    'echo .env | wc -c',
+    'echo hello | xargs cat',
+    'echo .env; xargs cat < list.txt',
+    'echo .env || cat README.md',
+  ]) {
+    assertAllow(bash(command))
+  }
+})
+
+test('F12: pattern-file and path-valued flags are checked as paths', () => {
+  for (const command of [
+    'grep -f .env src',
+    'grep --file=.env src',
+    'grep --file .env src',
+    'grep -rf .env src',
+    'rg --file=.env src',
+    'rg -f .env src',
+    'rg --ignore-file .env KEY',
+    'ag --path-to-ignore .env KEY',
+    'git grep -f .env',
+  ]) {
+    assertDeny(bash(command))
+  }
+  assertAllow(bash('grep -f patterns.txt src'))
+  assertAllow(bash('rg --ignore-file .gitignore ".env" src'))
+})
+
+test('F13: flag arity is per command', () => {
+  assertDeny(bash('grep -T KEY .env'))
+  assertDeny(bash('ag -t KEY .env'))
+  assertDeny(bash('git grep -T KEY .env'))
+  assertAllow(bash('rg -t js "\\.env" src'))
+  assertAllow(bash('rg -T js ".env" src'))
+  assertAllow(bash('grep -T ".env" src'))
+  assertAllow(bash('ag -t ".env" src'))
+  assertAllow(bash('grep -A 2 ".env" src'))
+})
+
+test('F14: a malformed glob never fails open', () => {
+  assertDeny(call('Grep', { pattern: 'x', glob: '[z-a].env' }))
+  assertDeny(call('Glob', { pattern: '**/[z-a]*.pem' }))
+  assertDeny(bash('rg -g "[z-a].env" KEY'))
+  // no protected keyword appears literally, so only a real glob check can deny these
+  assertDeny(call('Glob', { pattern: '**/.s[z-a]h/**' }))
+  assertDeny(call('Grep', { pattern: 'x', glob: 'secr[z-a]ts/*' }))
+  assertAllow(call('Glob', { pattern: 'src/[z-a].ts' }))
+  assertAllow(call('Glob', { pattern: 'src/[a-z].ts' }))
+})

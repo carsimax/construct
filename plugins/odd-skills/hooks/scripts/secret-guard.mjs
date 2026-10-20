@@ -44,19 +44,28 @@ function expandBraces(glob, depth = 0) {
   return m[1].split(',').flatMap((alt) => expandBraces(glob.slice(0, m.index) + alt + glob.slice(m.index + m[0].length), depth + 1))
 }
 
+// segmentRegex compiles one glob segment. A bracket class that does not compile
+// (`[z-a]`) becomes `[^/]*`, so the segment can only match more, never less.
 function segmentRegex(seg) {
-  let re = ''
-  for (let i = 0; i < seg.length; i++) {
-    const c = seg[i]
-    if (c === '*') re += '[^/]*'
-    else if (c === '?') re += '[^/]'
-    else if (c === '[' && seg.indexOf(']', i + 2) !== -1) {
-      const end = seg.indexOf(']', i + 2)
-      re += `[${seg.slice(i + 1, end).replace(/^!/, '^').replace(/\\/g, '\\\\')}]`
-      i = end
-    } else re += c.replace(/[.+^${}()|\\\]\[]/g, '\\$&')
+  for (const strict of [true, false]) {
+    let re = ''
+    for (let i = 0; i < seg.length; i++) {
+      const c = seg[i]
+      if (c === '*') re += '[^/]*'
+      else if (c === '?') re += '[^/]'
+      else if (c === '[' && seg.indexOf(']', i + 2) !== -1) {
+        const end = seg.indexOf(']', i + 2)
+        re += strict ? `[${seg.slice(i + 1, end).replace(/^!/, '^').replace(/\\/g, '\\\\')}]` : '[^/]*'
+        i = end
+      } else re += c.replace(/[.+^${}()|\\\]\[]/g, '\\$&')
+    }
+    try {
+      return new RegExp(`^${re}$`, 'i')
+    } catch {
+      // retry with the permissive form
+    }
   }
-  return new RegExp(`^${re}$`, 'i')
+  return /^.*$/
 }
 
 const DIR_NAMES = [['.ssh', '.ssh directory'], ['.credentials', '.credentials directory'], ['secrets', 'secrets directory']]
@@ -91,6 +100,7 @@ function splitCommands(input) {
   let cur = ''
   let has = false
   let redir = false
+  let piped = false
   const endWord = () => {
     if (has) words.push({ t: cur, r: redir })
     if (has) redir = false
@@ -100,8 +110,12 @@ function splitCommands(input) {
   const endCommand = () => {
     endWord()
     redir = false
-    if (words.length) commands.push(words)
+    if (words.length) {
+      words.piped = piped
+      commands.push(words)
+    }
     words = []
+    piped = false
   }
   for (let i = 0; i < input.length; i++) {
     const c = input[i]
@@ -125,6 +139,11 @@ function splitCommands(input) {
       endWord()
     } else if (';|&()`\n'.includes(c)) {
       endCommand()
+      // `|` and `|&` feed the next command; `||` does not.
+      if (c === '|') {
+        if (input[i + 1] === '|') i++
+        else piped = true
+      }
     } else if (c === '<' || c === '>') {
       endWord()
       // Operators: >> >| >&N <<EOF; a here-string (<<<) takes data, not a file.
@@ -172,9 +191,22 @@ function catastrophicRm(words, cwd) {
 
 const PREFIXES = new Set(['sudo', 'command', 'builtin', 'env', 'nohup', 'time', 'exec', 'xargs'])
 const DATA_COMMANDS = new Set(['echo', 'printf'])
-const SEARCH = new Set(['grep', 'egrep', 'fgrep', 'rg', 'ag', 'ack'])
-const ARG_FLAGS = new Set(['-A', '-B', '-C', '-m', '-t', '-T', '-d', '-D', '--max-count', '--type', '--context'])
+const GREP_VALUES = ['-A', '-B', '-C', '-m', '-d', '-D', '--max-count', '--context', '--after-context', '--before-context', '--directories', '--devices', '--label']
+// Per command, like each tool's real CLI: GNU grep -T and ag -t take no value, rg -t/-T do.
+const SEARCH = {
+  grep: { values: new Set(GREP_VALUES), paths: new Set(['-f', '--file']), patternFile: true },
+  rg: {
+    values: new Set([...GREP_VALUES, '-t', '-T', '-j', '-M', '-E', '-r', '--type', '--type-not', '--threads', '--max-depth', '--max-filesize', '--encoding', '--replace']),
+    paths: new Set(['-f', '--file', '--ignore-file']),
+    patternFile: true,
+  },
+  ag: { values: new Set(['-A', '-B', '-C', '-m', '-G', '--depth', '--context', '--after', '--before', '--max-count']), paths: new Set(['--path-to-ignore']) },
+  ack: { values: new Set(['-A', '-B', '-C', '-m', '-t', '--type', '--context']), paths: new Set() },
+}
+for (const name of ['egrep', 'fgrep']) SEARCH[name] = SEARCH.grep
 const GLOB_FLAGS = new Set(['-g', '--glob', '--include', '--exclude'])
+// Commands that run, source, or read the words piped into them.
+const STDIN_READERS = new Set(['xargs', 'sh', 'bash', 'zsh', 'dash', 'ksh', 'source', '.', 'eval', 'while'])
 const INTERPRETERS = { python: '-c', python3: '-c', ruby: '-e', node: '-e', perl: '-e' }
 
 function commandIndex(texts) {
@@ -186,7 +218,7 @@ function commandIndex(texts) {
 // searchRoles marks the words of a grep-like command that are not file paths: the
 // pattern (first non-option word, or the -e / --regexp value) and flag values.
 // Glob-valued flags (-g, --include) are returned separately and checked as globs.
-function searchRoles(texts, from) {
+function searchRoles(texts, from, spec) {
   const data = new Set()
   const globs = new Set()
   let patternGiven = false
@@ -196,11 +228,17 @@ function searchRoles(texts, from) {
       if (!patternGiven && i + 1 < texts.length) data.add(++i)
       break
     }
+    const [long, attached] = w.startsWith('--') ? [w.slice(0, w.indexOf('=') === -1 ? undefined : w.indexOf('=')), w.includes('=')] : [w, false]
     if (/^--regexp=/.test(w)) { data.add(i); patternGiven = true }
     else if (w === '--regexp' || /^-[A-Za-z]*e$/.test(w)) { data.add(++i); patternGiven = true }
+    else if (spec.paths.has(long) || (spec.patternFile && /^-[A-Za-z]*f$/.test(w))) {
+      // The value is a file read by the tool: left unmarked, so it is checked as a path.
+      if (long !== '--ignore-file' && spec.patternFile) patternGiven = true
+      if (!attached) i++
+    }
     else if (/^--(glob|include|exclude)=/.test(w)) { globs.add(i); data.add(i) }
     else if (GLOB_FLAGS.has(w)) { globs.add(++i); data.add(i) }
-    else if (ARG_FLAGS.has(w)) data.add(++i)
+    else if (spec.values.has(long)) { data.add(attached ? i : ++i) }
     else if (w.startsWith('-') && w.length > 1) continue
     else if (!patternGiven) { data.add(i); patternGiven = true }
   }
@@ -216,7 +254,25 @@ function literalRule(text, cwd) {
   return null
 }
 
+// pipedWordsVerdict checks the data words an upstream echo/printf feeds a command
+// that executes or reads them: they become paths or commands there.
+function pipedWordsVerdict(upstream, cwd, depth) {
+  for (const word of upstream) {
+    if (/\s/.test(word)) {
+      const verdict = depth < 3 ? bashVerdict(word, cwd, depth + 1) : null
+      if (verdict) return verdict
+      continue
+    }
+    for (const candidate of new Set([word, ...word.split(/[=:]/)])) {
+      const rule = candidate && ruleFor(candidate, cwd)
+      if (rule) return { rule, target: candidate }
+    }
+  }
+  return null
+}
+
 function bashVerdict(command, cwd, depth = 0) {
+  let upstream = []
   for (const words of splitCommands(command)) {
     const texts = words.map((w) => w.t)
     if (catastrophicRm(texts, cwd)) return { rule: 'rm -rf of / or the home directory', target: command }
@@ -224,9 +280,15 @@ function bashVerdict(command, cwd, depth = 0) {
     let cmd = basename(texts[ci] ?? '')
     let argFrom = ci + 1
     if (cmd === 'git' && texts[ci + 1] === 'grep') { cmd = 'grep'; argFrom = ci + 2 }
+    if (!words.piped) upstream = []
+    if (upstream.length && texts.slice(0, ci + 1).some((w) => STDIN_READERS.has(basename(w)))) {
+      const verdict = pipedWordsVerdict(upstream, cwd, depth)
+      if (verdict) return verdict
+    }
+    if (DATA_COMMANDS.has(cmd)) upstream = words.filter((w, i) => i > ci && !w.r).map((w) => w.t)
     const shell = (SHELLS.has(cmd) && texts.includes('-c')) || cmd === 'eval'
     const flag = INTERPRETERS[cmd]
-    const roles = SEARCH.has(cmd) ? searchRoles(texts, argFrom) : { data: new Set(), globs: new Set() }
+    const roles = SEARCH[cmd] ? searchRoles(texts, argFrom, SEARCH[cmd]) : { data: new Set(), globs: new Set() }
     for (let i = 0; i < words.length; i++) {
       const { t: word, r } = words[i]
       if (DATA_COMMANDS.has(cmd) && !r && i >= ci) continue
