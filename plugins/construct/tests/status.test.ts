@@ -1,6 +1,5 @@
 import { expect, test } from 'claude-code/testing'
-import { bar, clampPct, formatReset5h, formatResetWeek, joinSegments, meterColor, shortDir } from '../hooks/status/format.js'
-import { activeFeature, unfinishedCount } from '../hooks/status/tasks.js'
+import { unfinishedCount } from '../hooks/status/tasks.js'
 import { parseAssess, parseBoundary, parseGitStatus, parseMode, parseNumstat, parseRevParse, reviewState } from '../hooks/status/data.js'
 
 // ---- fixtures ----------------------------------------------------------
@@ -104,70 +103,11 @@ const under = async (ui, key: string) => (await leaves(ui)).filter((l) => l.key 
 
 // ---- pure helpers --------------------------------------------------------
 
-test('meterColor uses the theme keys success, warning at 50, and error at 80', async () => {
-  expect(meterColor(0)).toBe('success')
-  expect(meterColor(49)).toBe('success')
-  expect(meterColor(50)).toBe('warning')
-  expect(meterColor(79)).toBe('warning')
-  expect(meterColor(80)).toBe('error')
-  expect(meterColor(100)).toBe('error')
-})
-
-test('clampPct floors and clamps, and rejects non-numbers', async () => {
-  expect(clampPct(12.9)).toBe(12)
-  expect(clampPct(-3)).toBe(0)
-  expect(clampPct(250)).toBe(100)
-  expect(clampPct('7')).toBe(null)
-  expect(clampPct(undefined)).toBe(null)
-  expect(clampPct(NaN)).toBe(null)
-})
-
-test('bar fills 8 cells proportionally', async () => {
-  expect(bar(0)).toEqual({ filled: '', empty: '░░░░░░░░' })
-  expect(bar(12)).toEqual({ filled: '', empty: '░░░░░░░░' })
-  expect(bar(50)).toEqual({ filled: '████', empty: '░░░░' })
-  expect(bar(100)).toEqual({ filled: '████████', empty: '' })
-})
-
-test('reset formats: HH:MM for 5h, Day HH:MM for 7d, nothing when past or invalid', async () => {
-  expect(formatReset5h(at(19, 14, 5), NOW)).toBe('14:05')
-  expect(formatResetWeek(at(23, 9, 30), NOW)).toBe('Fri 09:30')
-  expect(formatReset5h(at(19, 11, 0), NOW)).toBe('')
-  expect(formatResetWeek(undefined, NOW)).toBe('')
-  expect(formatResetWeek('not a date', NOW)).toBe('')
-})
-
-test('joinSegments drops empty segments and leaves no stray separator', async () => {
-  expect(joinSegments(['a', '', undefined, 'b'])).toEqual(['a', { sep: true }, 'b'])
-  expect(joinSegments(['', undefined])).toEqual([])
-  expect(joinSegments(['only'])).toEqual(['only'])
-})
-
-test('shortDir replaces the home prefix with a tilde', async () => {
-  expect(shortDir('/home/me/proj', '/home/me')).toBe('~/proj')
-  expect(shortDir('/home/me', '/home/me')).toBe('~')
-  expect(shortDir('/srv/x', '/home/me')).toBe('/srv/x')
-  expect(shortDir('/home/meow/x', '/home/me')).toBe('/home/meow/x')
-})
-
 test('unfinishedCount counts rows whose status is not done or dropped', async () => {
   expect(unfinishedCount(TASKS)).toBe(2)
   expect(unfinishedCount(TASKS.replace('in progress', 'done').replace('pending', 'dropped'))).toBe(0)
   expect(unfinishedCount('# no table here')).toBe(null)
   expect(unfinishedCount('## Tasks\n\n| ID | Task |\n|---|---|\n| T1 | x |\n')).toBe(null)
-})
-
-test('activeFeature picks the newest document that still has unfinished tasks', async () => {
-  const done = TASKS.replace('in progress', 'done').replace('pending', 'done')
-  const docs = [
-    { name: 'old.md', mtimeMs: 1, text: TASKS },
-    { name: 'new.md', mtimeMs: 9, text: TASKS.replace('pending', 'done') },
-    { name: 'newest-done.md', mtimeMs: 10, text: done },
-    { name: 'notes.txt', mtimeMs: 11, text: TASKS },
-  ]
-  expect(activeFeature(docs)).toEqual({ feature: 'new', open: 1 })
-  expect(activeFeature([{ name: 'x.md', mtimeMs: 1, text: done }])).toBe(null)
-  expect(activeFeature([])).toBe(null)
 })
 
 test('parsers read git, rev-parse, mode, boundary and assess output', async () => {

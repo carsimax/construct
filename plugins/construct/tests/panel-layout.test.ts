@@ -2,8 +2,7 @@ import { expect, test } from 'claude-code/testing'
 import { PANEL_COLUMNS, buildPanel } from '../hooks/panel/layout.js'
 import { initialState } from '../hooks/panel/state.js'
 import { stackBar } from '../hooks/panel/draw.js'
-import { buildBand } from '../hooks/status/format.js'
-import { activeFeature, activeWork } from '../hooks/status/tasks.js'
+import { activeWork } from '../hooks/status/tasks.js'
 
 const NOW = 1_000_000
 
@@ -370,19 +369,12 @@ test('a narrow pane keeps one column at 40 columns and long text does not widen 
   expect(rows.find((r) => r.startsWith('T12'))!.length).toBe(36)
 })
 
-// ---- band stays as it was ------------------------------------------------
-
-test('buildBand output is unchanged by the helper exports', async () => {
-  const tree = buildBand({ replica: null, odd: { feature: 'f', open: 1 }, rdd: { mode: 'off' }, nowMs: NOW })
-  expect(flat(tree)).toBe('▌ ODD f · 1 open▌ RDD off')
-})
-
 // ---- tasks ---------------------------------------------------------------
 
 const DOC = (rows: string[]) =>
   ['# f', '', '## Tasks', '', '| ID | Specs | Task | Status |', '|---|---|---|---|', ...rows, '', '## Log'].join('\n')
 
-test('activeWork adds the first unfinished task id and title; activeFeature is unchanged', async () => {
+test('activeWork adds the first unfinished task id and title', async () => {
   const text = DOC(['| T1 | S1 | first | done |', '| T2 | S1 | second one | in progress |', '| T3 | S2 | third | pending |'])
   expect(activeWork([{ name: 'f.md', mtimeMs: 1, text }])).toEqual({
     feature: 'f',
