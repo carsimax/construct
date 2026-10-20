@@ -11,19 +11,31 @@ function frontmatter(text) {
   return Object.fromEntries(block.trim().split('\n').map((l) => l.split(/:\s*/, 2)))
 }
 
-test('the plugin ships only the Neutral output style and forces it', () => {
+test('the plugin ships only the Principal Engineer output style and forces it', () => {
   const files = readdirSync(join(pluginRoot, 'output-styles')).sort()
-  assert.deepEqual(files, ['neutral.md'])
-  for (const [file, name] of [['neutral.md', 'Neutral']]) {
-    const text = readFileSync(join(pluginRoot, 'output-styles', file), 'utf8')
-    const fm = frontmatter(text)
-    assert.equal(fm.name, name)
-    assert.equal(fm['keep-coding-instructions'], 'true')
-    assert.equal(fm['force-for-plugin'], 'true', `${file} must apply in every project`)
-    assert.match(text, /## Working Rules/)
-    assert.match(text, /Co-Authored-By/)
-    assert.doesNotMatch(text, /gentle[-_ ]?ai/i)
-  }
+  assert.deepEqual(files, ['principal-engineer.md'])
+  const text = readFileSync(join(pluginRoot, 'output-styles', 'principal-engineer.md'), 'utf8')
+  const fm = frontmatter(text)
+  assert.equal(fm.name, 'Principal Engineer')
+  assert.equal(fm['keep-coding-instructions'], 'true')
+  assert.equal(fm['force-for-plugin'], 'true', 'the style must apply in every project')
+  assert.doesNotMatch(text, /gentle[-_ ]?ai/i)
+})
+
+test('the Principal Engineer style keeps the working rules and the Risk-line close', () => {
+  const text = readFileSync(join(pluginRoot, 'output-styles', 'principal-engineer.md'), 'utf8')
+  assert.match(text, /## Working Rules/)
+  assert.match(text, /Co-Authored-By/)
+  assert.match(text, /Conventional Commits/)
+  assert.match(text, /check whether an available skill matches/)
+  assert.match(text, /Risk: item N \(reason\)/)
+  assert.match(text, /Risk: none/)
+  assert.match(text, /what was verified/)
+  assert.match(text, /subagent contract/)
+  assert.doesNotMatch(text, /do not act\./i, 'No verifier must not forbid acting unconditionally')
+  assert.match(text, /reviewed diff is the verifier/)
+  assert.doesNotMatch(text, /Use CAPS/)
+  assert.doesNotMatch(text, /## Own Every Line|## Simplicity Over Cleverness/)
 })
 
 // Override tokens documented for custom themes (terminal-config, Color token reference).
