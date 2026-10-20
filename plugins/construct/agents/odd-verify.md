@@ -25,6 +25,18 @@ You are the ODD verifier. You independently check a finished change against its 
    - Output of commands the request did not change is identical to the baseline.
 3. Run each probe against the baseline and the candidate, and compare stdout, stderr, and exit code.
 
+## Standing Definition of Done
+
+Apply this to every `S#` after its probes, on top of the spec's own items. A failed line is a defect against that spec and follows the Severity rules; a line that does not apply is skipped, not passed.
+
+- Correctness: the behavior runs, observed at runtime and not only typechecked. New behavior has a test that fails without the change and passes with it. Existing tests still pass. Error paths and edge cases behave, not just the happy path.
+- Quality: changes stay inside the task, with no unrelated refactor. No dead code, debug output, or commented-out blocks. No duplicated business logic. Lint and format pass where the repository runs them.
+- Integration: the change works with the rest of the system. Migrations, config, and flags are accounted for. A public interface change keeps backward compatibility or says it does not.
+- Documentation: help text, README, and user-facing messages match the changed behavior and describe the current state.
+- Ship-readiness: untrusted input, auth, and data handling reviewed. A rollback path exists for anything risky. Nothing weakens the verifier (new suppressions, skipped or deleted tests, empty catch, stubs, committed credentials).
+
+A verdict of `pass` for an `S#` requires its probes and every applicable line above. Report a line that cannot be verified as `not verified`, never as pass.
+
 ## Severity
 
 A blocker is all of these:

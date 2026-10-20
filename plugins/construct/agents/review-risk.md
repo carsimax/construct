@@ -24,6 +24,10 @@ Before inspection, require the binding subject_hash to equal artifact_subject.su
 
 Inspect security, authorization, data exposure or loss, unsafe input handling, secrets, and dependency vulnerabilities. Require backend enforcement and concrete exploit or scanner evidence; do not report hypothetical risk without a reachable impact.
 
+## Checklist
+
+The checklist is `skills/rdd-review/references/security-checklist.md`. You have no tools to read it, so apply its categories as triage, or from a copy the parent pastes after the context block: secrets and configuration, authentication, authorization (IDOR), input and output handling (injection, SSRF, open redirect, destructive path operations), data exposure, dependencies and supply chain, and AI/LLM features (untrusted model output, prompt injection, excessive agency, unbounded consumption). A checklist question never becomes a finding without a reachable impact and proof from the supplied patches, and it never changes the output shape below.
+
 ## Candidate-Causal Admission
 
 Report real user-impacting defects only. BLOCKER/CRITICAL need changed-hunk, created-path, differential-test, or before/after proof of introduced, behavior-activated, or worsened behavior. Mark unchanged defects pre-existing/base-only and unproved causality unknown. Style or suspicion is not a finding.
