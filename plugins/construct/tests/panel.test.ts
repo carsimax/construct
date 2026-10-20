@@ -51,11 +51,12 @@ function world($, on, o: any = {}) {
   on('agent.spawn', (_$, e) => ({ model: e.model, agentId: 'ag-1' }))
   on('session.compact', (_$, e) => ((seen.compact = e), { messages: [{ role: 'user', text: 's', toolUses: [] }] }))
   // The engine's own ui.open / ui.close: record what the mod asked for
-  on('ui.open', (_$, e) => (open.add(e.id), value({ isPlaced: true })))
+  on('ui.open', (_$, e) => (open.add(e.id), opens.push(e), value({ isPlaced: true })))
   on('ui.close', (_$, e) => (open.delete(e.id), value(undefined)))
 }
 
 const open = new Set<string>()
+const opens: any[] = []
 
 const BAND = { hasSurvey: false, isWorking: false, maxRows: 20, bodyColumns: 100, scroll: {}, view: {} }
 const PANE = { title: 'Construct', isFocused: false, bodyColumns: 80, placement: 'dock', scroll: { offset: 0, bodyRows: 30 }, view: {} }
@@ -92,7 +93,7 @@ async function band($) {
 }
 const isUp = async (_$) => open.has('construct')
 
-test('/construct opens the pane and /construct close closes it', async ($, on) => {
+test('/construct opens the pane and /construct close closes it', { options: { panel_open_on_start: false } }, async ($, on) => {
   await start($, on)
   expect(await isUp($)).toBe(false)
   await $.command.run({ command: 'construct' })
@@ -113,17 +114,11 @@ test('the Pane draws the panel for the construct pane id', async ($, on) => {
   expect(text).toContain('odd_worker')
 })
 
-test('the AbovePrompt band is one summary line', async ($, on) => {
+test('the AbovePrompt band is not drawn by the plugin', async ($, on) => {
   await start($, on)
   const ui = await band($)
   await ui.redraw()
-  const lines = await leaves(ui)
-  const text = lines.join('')
-  expect(text).toContain('ctx')
-  expect(text).toContain('33%')
-  expect(text).toContain('T2')
-  expect(text).not.toContain('~/proj')
-  expect(text).not.toContain('5h')
+  expect((await leaves(ui)).join('')).toBe('')
 })
 
 test('a main-thread Write outside odd/tasks shows the inline alert', async ($, on) => {
@@ -131,11 +126,9 @@ test('a main-thread Write outside odd/tasks shows the inline alert', async ($, o
   await $.turn.start({ text: 'go', turnId: 't1' })
   await $.tool.call({ tool: 'Write', file_path: '/home/me/proj/src/a.js', content: 'x' })
   await settle()
-  const ui = await band($)
-  await ui.redraw()
-  expect(await joined(ui)).toContain('inline 1')
   const p = await pane($)
   await p.redraw()
+  expect(await joined(p)).toMatch(/inline writes\s+1/)
   expect(await joined(p)).toContain('a.js')
 })
 
@@ -143,9 +136,9 @@ test('a write under odd/tasks is not an inline write', async ($, on) => {
   await start($, on)
   await $.tool.call({ tool: 'Write', file_path: '/home/me/proj/odd/tasks/x.md', content: 'x' })
   await settle()
-  const ui = await band($)
-  await ui.redraw()
-  expect(await joined(ui)).not.toContain('inline')
+  const p = await pane($)
+  await p.redraw()
+  expect(await joined(p)).not.toContain('inline')
 })
 
 test('a tool.check deny appears in the panel and passes the verdict through', async ($, on) => {
@@ -177,9 +170,7 @@ test('spawn makes a card and passes the spawn result through', async ($, on) => 
   const p = await pane($)
   await p.redraw()
   expect(await joined(p)).toContain('sonnet')
-  const ui = await band($)
-  await ui.redraw()
-  expect(await joined(ui)).toContain('1 agent')
+  expect(await joined(p)).toContain('0 steps')
 })
 
 test('new hooks pass events through unchanged', async ($, on) => {
@@ -203,7 +194,15 @@ test('panel_open_on_start opens the pane when the session starts', { options: { 
   expect(await isUp($)).toBe(true)
 })
 
-test('without panel_open_on_start the pane stays closed on start', async ($, on) => {
+test('with panel_open_on_start false the pane stays closed on start', { options: { panel_open_on_start: false } }, async ($, on) => {
   await start($, on)
   expect(await isUp($)).toBe(false)
+})
+
+test('the pane is requested at 56 columns, titled Construct', { options: { panel_open_on_start: true } }, async ($, on) => {
+  opens.length = 0
+  await start($, on)
+  expect(opens.length).toBeGreaterThan(0)
+  expect(opens[0].columns).toBe(56)
+  expect(opens[0].title).toBe('Construct')
 })

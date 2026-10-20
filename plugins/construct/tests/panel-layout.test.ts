@@ -1,5 +1,5 @@
 import { expect, test } from 'claude-code/testing'
-import { buildPanel, buildSummary, layoutFor } from '../hooks/panel/layout.js'
+import { buildPanel } from '../hooks/panel/layout.js'
 import { initialState } from '../hooks/panel/state.js'
 import { buildBand } from '../hooks/status/format.js'
 import { activeWork } from '../hooks/status/tasks.js'
@@ -63,42 +63,35 @@ const args = (o: any = {}) => ({ panel: full(), replica, odd, rdd, nowMs: NOW, c
 
 // ---- layout --------------------------------------------------------------
 
-test('layoutFor picks mini below 56, compact to 109, wide from 110', async () => {
-  expect(layoutFor(40)).toBe('mini')
-  expect(layoutFor(55)).toBe('mini')
-  expect(layoutFor(56)).toBe('compact')
-  expect(layoutFor(109)).toBe('compact')
-  expect(layoutFor(110)).toBe('wide')
-  expect(layoutFor(undefined)).toBe('compact')
-})
-
 test('buildPanel is null when nothing has anything to show', async () => {
   expect(buildPanel({ panel: initialState(), replica: null, odd: null, rdd: null, nowMs: NOW, columns: 80, rows: 30 })).toBe(null)
 })
 
 test('empty sections take no room', async () => {
   const tree = buildPanel({ panel: initialState(), replica: null, odd, rdd: null, nowMs: NOW, columns: 80, rows: 30 })
-  const text = textOf(tree)
-  expect(text).toContain('ODD')
-  for (const word of ['inline', 'denied', 'turn', 'agents', 'ctx', 'RDD']) expect(text).not.toContain(word)
-  expect(rowsOf(tree).length).toBe(1)
+  const rows = rowsOf(tree).map((r) => r.trim())
+  expect(rows[0]).toBe('ODD')
+  for (const word of ['alerts', 'inline', 'denied', 'turn', 'agents', 'ctx', 'review', 'gate', 'session']) expect(rows.join('\n')).not.toContain(word)
 })
 
-test('main section follows the replica rule and shows the compaction counter', async () => {
+test('session and context follow the replica rule; compactions show only above zero', async () => {
   const without = textOf(buildPanel(args({ replica: null })))
-  expect(without).not.toContain('ctx')
-  expect(without).not.toContain('5h')
+  for (const w of ['ctx', '5h', 'session', 'compactions']) expect(without).not.toContain(w)
   const withR = textOf(buildPanel(args()))
   for (const w of ['ctx', '5h', '7d', '~/proj', 'main', 'opus', '⟲2']) expect(withR).toContain(w)
   expect(textOf(buildPanel(args({ panel: { ...full(), compactions: 0 } })))).not.toContain('⟲')
 })
 
-test('ODD row carries feature, task id and title, and open count; RDD shows mode and state', async () => {
-  const text = textOf(buildPanel(args()))
-  expect(text).toContain('ODD construct-panel · T2 Pure panel layout · 2 open')
-  expect(text).toContain('RDD on')
-  expect(find(buildPanel(args()), 'review due')?.props.color).toBe('error')
-  expect(textOf(buildPanel(args({ odd: { feature: 'x', open: 1 } })))).toContain('ODD x · 1 open')
+test('ODD block carries feature, task id (bold) and title, and open count; review shows mode and state', async () => {
+  const tree = buildPanel(args())
+  const text = textOf(tree)
+  expect(text).toMatch(/feature\s+construct-panel/)
+  expect(text).toMatch(/T2\s+Pure panel layout/)
+  expect(text).toMatch(/open\s+2/)
+  expect(find(tree, 'T2')?.props.bold).toBe(true)
+  expect(text).toMatch(/rdd\s+on/)
+  expect(find(tree, 'review due')?.props.color).toBe('error')
+  expect(textOf(buildPanel(args({ odd: { feature: 'x', open: 1 } })))).toMatch(/feature\s+x\s+open\s+1/)
 })
 
 test('agent cards show role, model, effort, ctx in k, steps, elapsed or done, and a +N more row', async () => {
@@ -106,26 +99,34 @@ test('agent cards show role, model, effort, ctx in k, steps, elapsed or done, an
   const tree = buildPanel(args({ panel: many }))
   const text = textOf(tree)
   expect(find(tree, 'odd-worker')?.props.bold).toBe(true)
-  for (const w of ['sonnet', 'high', '42k', '7', '1:01', 'done', '+2 more']) expect(text).toContain(w)
-  expect(rowsOf(tree).filter((r) => r.startsWith('odd-worker')).length).toBe(3)
+  for (const w of ['sonnet', 'high', '42k', '7 steps', '1:01', 'done', '+2 more']) expect(text).toContain(w)
+  expect(rowsOf(tree).filter((r) => r.trim().startsWith('odd-worker')).length).toBe(3)
+})
+
+test('agent details wrap to a second row when they do not fit beside the role', async () => {
+  const rows = rowsOf(buildPanel(args({ columns: 30, rows: 80 }))).map((r) => r.trim())
+  const i = rows.indexOf('odd-worker')
+  expect(i).toBeGreaterThan(0)
+  expect(rows[i + 1]).toContain('sonnet')
 })
 
 test('inline writes show count and a shortened last path in the error color, only when > 0', async () => {
   const tree = buildPanel(args())
-  const hit = find(tree, 'inline writes 3')!
-  expect(hit.props.color).toBe('error')
-  expect(hit.text).toContain('register.js')
-  expect(hit.text).not.toContain('/home/me/proj/plugins')
+  expect(find(tree, 'inline writes')?.props.color).toBe('error')
+  const path = find(tree, 'register.js')!
+  expect(path.text).not.toContain('/home/me/proj/plugins')
+  expect(textOf(tree)).toMatch(/inline writes\s+3/)
   expect(textOf(buildPanel(args({ panel: { ...full(), inline: { count: 0, last: null } } })))).not.toContain('inline writes')
 })
 
-test('gate strip colors cells by verdict and shows the denied count with the masked detail', async () => {
+test('gate strip colors cells by verdict; denied count and masked detail are alerts', async () => {
   const tree = buildPanel(args())
   const cells = leaves(tree).filter((l) => l.text === '●')
   expect(cells.map((c) => c.props.color)).toEqual(['success', 'suggestion', 'error', 'inactive', 'success'])
   const text = textOf(tree)
-  expect(text).toContain('denied 1')
+  expect(text).toMatch(/denied\s+1/)
   expect(text).toContain('Bash: curl -H token=*** x')
+  expect(find(tree, 'denied')?.props.color).toBe('error')
 })
 
 test('gate cells fit the width and keep the latest ones', async () => {
@@ -139,80 +140,63 @@ test('gate cells fit the width and keep the latest ones', async () => {
   }
 })
 
-test('receipt shows duration, agents, edits, errors in error color, cost, and running', async () => {
+test('turn shows time, running, counts above zero, errors in error color, and cost', async () => {
   const tree = buildPanel(args())
   const text = textOf(tree)
-  for (const w of ['running', '1:30', '2 agents', '3 edits', '1 errors', '$0.50']) expect(text).toContain(w)
-  expect(find(tree, '1 errors')?.props.color).toBe('error')
+  expect(text).toContain('running')
+  expect(text).toContain('1:30')
+  for (const re of [/agents\s+2/, /edits\s+3/, /errors\s+1/, /cost\s+\$0\.50/]) expect(text).toMatch(re)
+  expect(find(tree, 'errors')?.props.color).toBe(undefined)
+  expect(leaves(tree).find((l) => l.text === '1' && l.props.color === 'error')).toBeTruthy()
   const done = { ...full(), receipt: { ...full().receipt, endedMs: NOW - 30_000, errors: 0, cost: null } }
-  const t2 = buildPanel(args({ panel: done }))
-  expect(textOf(t2)).not.toContain('running')
-  expect(textOf(t2)).toContain('1:00')
-  expect(textOf(t2)).not.toContain('$')
-  expect(find(t2, '0 errors')?.props.color).toBe(undefined)
+  const t2 = textOf(buildPanel(args({ panel: done })))
+  expect(t2).not.toContain('running')
+  expect(t2).toContain('1:00')
+  expect(t2).not.toContain('$')
+  expect(t2).not.toContain('errors')
 })
 
 // ---- widths --------------------------------------------------------------
 
-test('120 columns puts sections in two columns; 80 stacks them', async () => {
-  const wide = buildPanel(args({ columns: 120 }))
-  const cols = (wide.children as any[]).filter((c) => c.props?.flexDirection === 'column')
-  expect(cols.length).toBe(2)
-  expect(textOf(cols[0])).toContain('ODD')
-  expect(textOf(cols[0])).toContain('running')
-  expect(textOf(cols[1])).toContain('odd-worker')
-  expect(textOf(cols[1])).toContain('inline writes')
-  expect(textOf(cols[1])).toContain('denied')
-  const compact = buildPanel(args({ columns: 80 }))
-  expect(compact.props.flexDirection).toBe('column')
-  expect((compact.children as any[]).every((c) => c.props?.flexDirection !== 'column')).toBe(true)
+test('every width draws one column of rows; a wide pane does not split in two', async () => {
+  for (const columns of [40, 80, 140]) {
+    const tree = buildPanel(args({ columns }))
+    expect(tree.props.flexDirection).toBe('column')
+    expect((tree.children as any[]).every((c) => c.props?.flexDirection === 'row')).toBe(true)
+  }
 })
 
-test('40 columns is mini: at most 8 rows, inline alert and ODD first, none wider than 40', async () => {
-  const tree = buildPanel(args({ columns: 40, rows: 40 }))
-  const rows = rowsOf(tree)
-  expect(rows.length).toBeLessThanOrEqual(8)
-  expect(rows[0]).toContain('inline writes')
-  expect(rows[1]).toContain('ODD')
-  expect(rows.join('\n')).toContain('ctx')
+test('narrow widths show the full content too, in block order, within the width', async () => {
+  const rows = rowsOf(buildPanel(args({ columns: 40, rows: 80 })))
+  expect(rows[0]).toBe('alerts')
+  const text = rows.join('\n')
+  for (const w of ['ODD', '5h', '7d', '~/proj', 'rdd', 'denied', 'edits']) expect(text).toContain(w)
   for (const r of rows) expect(r.length).toBeLessThanOrEqual(40)
 })
 
-test('rows caps the output and no row exceeds the width at 80 and 120', async () => {
-  for (const columns of [56, 80, 120]) {
-    for (const r of rowsOf(buildPanel(args({ columns, rows: 60 })))) expect(r.length).toBeLessThanOrEqual(columns)
+test('no fixed row cap: many rows render when rows allows, and rows caps them', async () => {
+  expect(rowsOf(buildPanel(args({ columns: 80, rows: 80 }))).length).toBeGreaterThan(8)
+  expect(rowsOf(buildPanel(args({ columns: 80, rows: 12 }))).length).toBeLessThanOrEqual(12)
+  expect(rowsOf(buildPanel(args({ columns: 80, rows: undefined }))).length).toBeGreaterThan(8)
+})
+
+test('the first block may be cut by rows; no row exceeds the width at 40, 56, 80 and 120', async () => {
+  for (const columns of [40, 56, 80, 120]) {
+    for (const r of rowsOf(buildPanel(args({ columns, rows: 80 })))) expect(r.length).toBeLessThanOrEqual(columns)
   }
-  expect(rowsOf(buildPanel(args({ columns: 80, rows: 5 }))).length).toBeLessThanOrEqual(5)
+  const rows = rowsOf(buildPanel(args({ columns: 80, rows: 3 })))
+  expect(rows.length).toBe(3)
+  expect(rows[0]).toBe('alerts')
 })
 
 test('a long directory and branch never make a row wider than its column', async () => {
   const dir = '/Users/me/' + 'd'.repeat(60)
   const longReplica = { usage, dir, home: '/Users/me', git: { branch: 'feat/' + 'b'.repeat(70), dirty: 2, ahead: 1 }, worktree: null, model: 'claude-opus-4', effort: 'high' }
   for (const columns of [56, 120]) {
-    const tree = buildPanel(args({ columns, rows: 60, replica: longReplica }))
-    const cols = (tree.children as any[]).filter((c) => c.props?.flexDirection === 'column')
-    const limit = cols.length === 2 ? Math.floor(columns / 2) : columns
-    const all = cols.length === 2 ? cols.flatMap((c) => rowsOf(c)) : rowsOf(tree)
+    const all = rowsOf(buildPanel(args({ columns, rows: 80, replica: longReplica })))
     expect(all.length).toBeGreaterThan(0)
-    for (const r of all) expect(r.length).toBeLessThanOrEqual(limit)
+    for (const r of all) expect(r.length).toBeLessThanOrEqual(columns)
   }
-})
-
-// ---- summary -------------------------------------------------------------
-
-test('buildSummary is one row with ctx, running agents, ODD task id, RDD state, and inline alert', async () => {
-  const tree = buildSummary({ panel: full(), usage, odd, rdd, nowMs: NOW })
-  const text = textOf(tree)
-  for (const w of ['12%', '1 agent', 'T2', 'review due', 'inline 3']) expect(text).toContain(w)
-  expect(find(tree, 'inline 3')?.props.color).toBe('error')
-  expect(rowsOf(tree).length).toBe(1)
-})
-
-test('buildSummary leaves out what is absent and is null when nothing shows', async () => {
-  expect(buildSummary({ panel: initialState(), usage: null, odd: null, rdd: null, nowMs: NOW })).toBe(null)
-  const text = textOf(buildSummary({ panel: initialState(), usage, odd: null, rdd: { mode: 'off' }, nowMs: NOW }))
-  expect(text).toContain('12%')
-  for (const w of ['agent', 'inline', 'review']) expect(text).not.toContain(w)
 })
 
 // ---- band stays as it was ------------------------------------------------
@@ -232,4 +216,75 @@ test('activeWork adds the first unfinished task id and title; activeFeature is u
   expect(activeWork([{ name: 'f.md', mtimeMs: 1, text }])).toEqual({ feature: 'f', open: 2, task: { id: 'T2', title: 'second one' } })
   expect(activeWork([{ name: 'f.md', mtimeMs: 1, text: DOC(['| T1 | S1 | a | done |']) }])).toBe(null)
   expect(activeWork([])).toBe(null)
+})
+
+// ---- blocks --------------------------------------------------------------
+
+const rows56 = (o: any = {}) => rowsOf(buildPanel(args({ columns: 56, rows: 80, ...o })))
+
+test('blocks are titled, in order, with exactly one blank row between them', async () => {
+  const rows = rows56()
+  const titles = ['alerts', 'ODD', 'context', 'session', 'review', 'agents', 'gate', 'turn']
+  const at = titles.map((t) => rows.findIndex((r) => r.trim() === t))
+  for (const i of at) expect(i).toBeGreaterThanOrEqual(0)
+  expect([...at].sort((a, b) => a - b)).toEqual(at)
+  for (const i of at.slice(1)) expect(rows[i - 1].trim()).toBe('')
+  for (let i = 1; i < rows.length; i++) expect(rows[i].trim() === '' && rows[i - 1].trim() === '').toBe(false)
+  expect(rows[rows.length - 1].trim()).not.toBe('')
+})
+
+test('label left, value right-aligned so it ends at column 56', async () => {
+  const rows = rows56()
+  const row = rows.find((r) => r.trim().startsWith('open'))!
+  expect(row.length).toBe(56)
+  expect(row.endsWith('2')).toBe(true)
+  const model = rows.find((r) => r.trim().startsWith('model'))!
+  expect(model.length).toBe(56)
+  expect(model.endsWith('opus high')).toBe(true)
+})
+
+test('zero counters are hidden and empty blocks are omitted', async () => {
+  const quiet = { ...initialState(), receipt: { turnId: 't', startedMs: NOW - 5000, endedMs: NOW, agents: 0, edits: 0, errors: 0, costStart: 0, cost: null } }
+  const text = rows56({ panel: quiet, replica: null, rdd: null }).join('\n')
+  for (const w of ['alerts', 'agents', 'edits', 'errors', 'gate', 'context', 'session', 'review', 'inline', 'denied', 'compactions']) expect(text).not.toContain(w)
+  expect(text).toContain('turn')
+  expect(text).toContain('0:05')
+})
+
+test('a long feature name wraps instead of ending in an ellipsis at 56 columns', async () => {
+  const feature = 'a-very-long-feature-name-that-cannot-fit-on-a-single-row-of-the-panel'
+  const rows = rows56({ odd: { feature, open: 1, task: { id: 'T12', title: 'A task title that is also quite long and has to wrap around' } } })
+  const odds = rows.slice(rows.indexOf('ODD'), rows.findIndex((r) => r.trim().startsWith('open')))
+  expect(odds.join('')).not.toContain('…')
+  expect(odds.map((r) => r.trim()).join('')).toContain(feature)
+  expect(odds.map((r) => r.trim()).join(' ')).toContain('around')
+  for (const r of rows) expect(r.length).toBeLessThanOrEqual(56)
+  expect(find(buildPanel(args({ columns: 56, odd: { feature, open: 1, task: { id: 'T12', title: 'x' } } })), 'T12')?.props.bold).toBe(true)
+})
+
+test('rdd mode and state are rows of the review block', async () => {
+  const rows = rows56()
+  const i = rows.findIndex((r) => r.trim() === 'review')
+  expect(rows[i + 1].trim()).toMatch(/^rdd\s+on$/)
+  expect(rows[i + 2].trim()).toMatch(/^state\s+review due$/)
+  expect(rows[i + 3].trim()).toBe('')
+})
+
+test('reset time and effort are never cut at 56 columns', async () => {
+  const resetsAt = new Date(NOW + 3 * 3600_000 + 5 * 60_000).toISOString()
+  const u = { ...usage, rateLimits: [{ kind: 'five_hour', percentUsed: 40, resetsAt }, { kind: 'seven_day', percentUsed: 85, resetsAt }] }
+  const text = rows56({ replica: { ...replica, usage: u }, panel: { ...full(), inline: { count: 0, last: null } } }).join('\n')
+  expect(text).not.toContain('…')
+  expect(text).toContain('↻')
+})
+
+test('rows drops whole trailing blocks instead of cutting one', async () => {
+  const all = rows56()
+  const idx = all.findIndex((r) => r.trim() === 'review')
+  const rows = rows56({ rows: idx + 1 })
+  // 'review' needs 3 rows, so it does not fit; the block before it is complete
+  expect(rows.some((r) => r.trim() === 'review')).toBe(false)
+  expect(rows.length).toBeLessThanOrEqual(idx + 1)
+  expect(rows[rows.length - 1].trim()).not.toBe('')
+  expect(rows.some((r) => r.trim() === 'session')).toBe(true)
 })

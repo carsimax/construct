@@ -55,7 +55,7 @@ test('userConfig declares model and effort options whose defaults match each age
   }
   // The panel's switch is the one key that is not a model or effort option
   assert.equal(cfg.panel_open_on_start?.type, 'boolean')
-  assert.equal(cfg.panel_open_on_start?.default, false)
+  assert.equal(cfg.panel_open_on_start?.default, true)
   assert.equal(Object.keys(cfg).length, Object.keys(S6).length * 2 + 1)
 })
 

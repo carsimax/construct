@@ -23,7 +23,6 @@ const TASKS = [
   '## Log',
 ].join('\n')
 
-const BAND = { hasSurvey: false, isWorking: false, maxRows: 20, bodyColumns: 100, scroll: {}, view: {} }
 
 const entry = (name: string, mtimeMs = 1) => ({ name, kind: 'file', size: 1, mtimeMs, isLink: false })
 const ok = (stdout: string) => ({ exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false })
@@ -31,7 +30,7 @@ const ok = (stdout: string) => ({ exitCode: 0, stdout, stderr: '', isStdoutTrunc
 const assessJson = (risk: string, reason: string, due: boolean, consumed = false) =>
   JSON.stringify({ schema: 'x', risk, reasons: [{ code: 'sink' }], candidate: { kind: 'k', consumed }, review_due: due, review_due_reason: reason })
 
-// Registers stubs for everything the band reads. `o` overrides pieces; a function
+// Registers stubs for everything the panel reads. `o` overrides pieces; a function
 // for `process` answers each argv, and `fail` makes every call reject.
 function world($, on, o: any = {}) {
   const settings = o.settings ?? {}
@@ -73,18 +72,11 @@ function world($, on, o: any = {}) {
 
 const PANE = { title: 'Construct', isFocused: false, bodyColumns: 80, placement: 'dock', scroll: { offset: 0, bodyRows: 40 }, view: {} }
 
-// Mounts the docked panel (the pane id is the requestId) over the same world as the band.
-async function mountPane($) {
-  const ui = await $.ui.mount({ plugin: 'construct', surface: 'terminal', component: 'Pane', requestId: 'construct', props: PANE })
-  await ui.redraw()
-  return ui
-}
-
-// Mounts the band and waits for the refresh a session.start starts to land.
+// Mounts the panel and waits for the refresh a session.start starts to land.
 async function drawBand($, on, o: any = {}) {
   const seen = world($, on, o)
   await $.session.start({ cwd: '/home/me/proj', source: 'startup' })
-  const ui = await $.ui.mount({ plugin: 'construct', surface: 'terminal', component: 'AbovePrompt', props: BAND })
+  const ui = await $.ui.mount({ plugin: 'construct', surface: 'terminal', component: 'Pane', requestId: 'construct', props: PANE })
   for (let i = 0; i < 40 && !(await leaves(ui)).some((l) => l.text.includes('ODD') || l.text.includes('clear')); i++) {
     await ui.redraw()
     await new Promise((r) => setTimeout(r, 5))
@@ -202,29 +194,28 @@ test('reviewState: due beats reviewed, reviewed beats clear', async () => {
   expect(reviewState([])).toBe(null)
 })
 
-// ---- mounted band --------------------------------------------------------
+// ---- mounted panel --------------------------------------------------------
 
-// The band is one summary line now; the replica and the ODD and RDD sections live in the panel.
-test('with a native statusLine the summary leaves the context figure to the statusLine', async ($, on) => {
+test('with a native statusLine the panel leaves the replica to the statusLine', async ($, on) => {
   const { ui } = await drawBand($, on, {
     settings: { statusLine: { type: 'command', command: 'x' } },
     usage: { startedAt: 0, context: { window: 1, percent: 40 }, rateLimits: [] },
   })
   const text = await joined(ui)
-  expect(text).toContain('ODD T2')
+  expect(text).toContain('T2')
   expect(text).toContain('clear')
   expect(text).not.toContain('ctx')
   expect(text).not.toContain('◆')
   expect(text).not.toContain('⎇')
-  const pane = await joined(await mountPane($))
+  const pane = text
   expect(pane).toContain('feat')
-  expect(pane).toContain('2 open')
-  expect(pane).toContain('RDD')
+  expect(pane).toMatch(/open\s+2/)
+  expect(pane).toContain('rdd')
   expect(pane).not.toContain('⎇')
   expect(pane).not.toContain('◆')
 })
 
-test('without a statusLine the panel draws the replica and the band one summary line', async ($, on) => {
+test('without a statusLine the panel draws the replica', async ($, on) => {
   const { ui } = await drawBand($, on, {
     settings: { outputStyle: 'Explanatory' },
     usage: {
@@ -236,12 +227,8 @@ test('without a statusLine the panel draws the replica and the band one summary 
       ],
     },
   })
-  const line = await joined(ui)
-  expect(line).toContain('ctx')
-  expect(line).toContain('12%')
-  expect(line).toContain('ODD T2')
-  expect(line).not.toContain('~/proj')
-  const text = await joined(await mountPane($))
+  const text = await joined(ui)
+  expect(text).toMatch(/ODD\s+feature\s+feat\s+T2/)
   expect(text).toContain('ctx')
   expect(text).toContain('12%')
   expect(text).toContain('5h')
@@ -252,45 +239,45 @@ test('without a statusLine the panel draws the replica and the band one summary 
   expect(text).toContain('±2')
   expect(text).toContain('↑2')
   expect(text).toContain('↓1')
-  expect(text).toContain('◆ claude-opus-4')
+  expect(text).toContain('claude-opus-4')
   // The plugin forces its style, so a settings outputStyle is not the one in effect
-  expect(text).toContain('✎ construct:Neutral')
+  expect(text).toContain('construct:Neutral')
   expect(text).not.toContain('Explanatory')
+  expect(text.indexOf('feat')).toBeLessThan(text.indexOf('ctx'))
   expect(text.indexOf('ctx')).toBeLessThan(text.indexOf('~/proj'))
-  expect(text.indexOf('~/proj')).toBeLessThan(text.indexOf('feat'))
 })
 
 for (const [pct, color] of [[49, 'success'], [50, 'warning'], [79, 'warning'], [80, 'error']] as const) {
   test(`the context meter at ${pct}% is ${color}`, async ($, on) => {
     const { ui } = await drawBand($, on, { usage: { startedAt: 0, context: { window: 1, percent: pct }, rateLimits: [] } })
-    const shown = (await under(ui, 'ctx')).find((l) => l.text.includes('%'))
+    const shown = (await leaves(ui)).find((l) => l.text.includes('%'))
     expect(shown.text).toContain(`${pct}%`)
     expect(shown.props.color).toBe(color)
   })
 }
 
-// Theme keys documented for custom themes; the band colors with these so it follows the active theme.
+// Theme keys documented for custom themes; the panel colors with these so it follows the active theme.
 const THEME_KEYS = new Set(['claude', 'text', 'inverseText', 'inactive', 'subtle', 'suggestion', 'permission', 'remember', 'success', 'error', 'warning', 'merged', 'promptBorder', 'planMode', 'autoAccept', 'bashBorder', 'ide', 'fastMode'])
 
-test('every color the band draws is a theme key, so it follows the active theme', async ($, on) => {
+test('every color the panel draws is a theme key, so it follows the active theme', async ($, on) => {
   const { ui } = await drawBand($, on, { committed: assessJson('high', 'high_risk', true) })
   const colors = (await leaves(ui)).map((l) => l.props.color).filter(Boolean)
   expect(colors.length).toBeDefined()
   for (const color of colors) expect(THEME_KEYS.has(color)).toBe(true)
 })
 
-test('each band line starts with the matrix mark and segments are joined by a faint rail', async ($, on) => {
+test('the panel draws no matrix mark and no inline rail: one element per row', async ($, on) => {
   const { ui } = await drawBand($, on)
   const text = await joined(ui)
-  expect(text).toContain('▌')
-  expect(text).toContain(' ┊ ')
+  expect(text).not.toContain('▌')
+  expect(text).not.toContain('┊')
   expect(text).not.toContain(' │ ')
 })
 
 test('a segment whose data is missing is omitted', async ($, on) => {
   const { ui } = await drawBand($, on, { usage: { startedAt: 0, context: { window: 1 }, rateLimits: [{ kind: 'five_hour', percentUsed: 5 }] } })
   expect(await joined(ui)).not.toContain('ctx')
-  const text = await joined(await mountPane($))
+  const text = await joined(ui)
   expect(text).not.toContain('ctx')
   expect(text).not.toContain('7d')
   expect(text).toContain('5h')
@@ -329,7 +316,7 @@ test('a root-source boundary is not assessed', async ($, on) => {
 
 test('with the RDD switch off the line says so and nothing is assessed', async ($, on) => {
   const { ui, seen } = await drawBand($, on, { mode: 'off', dirty: assessJson('high', 'high_risk', true) })
-  expect((await joined(await mountPane($))).includes('RDD off')).toBe(true)
+  expect(await joined(ui)).toMatch(/rdd\s+off/)
   expect(await joined(ui)).not.toContain('review due')
   expect(seen.some((a) => a.some((x) => x.endsWith('odd-assess')))).toBe(false)
 })
@@ -337,17 +324,17 @@ test('with the RDD switch off the line says so and nothing is assessed', async (
 test('a failing process draws no git or RDD segments and does not throw', async ($, on) => {
   const { ui } = await drawBand($, on, { fail: true, usage: { startedAt: 0, context: { window: 1, percent: 12 }, rateLimits: [] } })
   expect(await joined(ui)).toContain('ctx')
-  const text = await joined(await mountPane($))
+  const text = await joined(ui)
   expect(text).toContain('ctx')
-  expect(text).toContain('◆ claude-opus-4')
+  expect(text).toContain('claude-opus-4')
   expect(text).not.toContain('⎇')
-  expect(text).not.toContain('RDD')
+  expect(text).not.toContain('review')
 })
 
 test('with a native statusLine and a failing process nothing extra is drawn', async ($, on) => {
   world($, on, { fail: true, settings: { statusLine: { type: 'command', command: 'x' } }, tasks: [] })
   await $.session.start({ cwd: '/home/me/proj', source: 'startup' })
-  const ui = await $.ui.mount({ plugin: 'construct', surface: 'terminal', component: 'AbovePrompt', props: BAND })
+  const ui = await $.ui.mount({ plugin: 'construct', surface: 'terminal', component: 'Pane', requestId: 'construct', props: PANE })
   await new Promise((r) => setTimeout(r, 30))
   await ui.redraw()
   expect(await joined(ui)).toBe('')
@@ -363,11 +350,4 @@ test('the CLIs are not run on render, only on session.start and turn.complete', 
   await $.turn.complete({ turnId: 't', reason: 'answer', answer: 'ok', durationMs: 1, isAborted: false })
   await new Promise((r) => setTimeout(r, 30))
   expect(seen.length).toBeGreaterThan(after)
-})
-
-test('the band yields to a survey', async ($, on) => {
-  const { ui } = await drawBand($, on, {})
-  expect(await joined(ui)).toContain('ODD')
-  const surveyed = await $.ui.mount({ plugin: 'construct', surface: 'terminal', component: 'AbovePrompt', props: { ...BAND, hasSurvey: true } })
-  expect(await joined(surveyed)).toBe('')
 })

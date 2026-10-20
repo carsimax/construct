@@ -1,6 +1,6 @@
 import { atom, read, update } from 'claude-code'
 import { effortFor, modelFor, roleFor } from './routing.js'
-import { buildPanel, buildSummary } from './panel/layout.js'
+import { PANEL_COLUMNS, buildPanel } from './panel/layout.js'
 import {
   SCHEMA_VERSION,
   filePathOf,
@@ -21,8 +21,8 @@ import { parseAssess, parseBoundary, parseGitStatus, parseMode, parseRevParse, r
 // turn.step can apply the role's effort to that subagent's requests
 const roleByAgent = new Map()
 
-// ---- status band ------------------------------------------------------------
-// What the band shows from outside the session (git, the plugin CLIs, the feature
+// ---- panel data -------------------------------------------------------------
+// What the panel shows from outside the session (git, the plugin CLIs, the feature
 // documents) is read only on session.start and turn.complete and kept here, so a
 // redraw never runs a command. A mod's `$` calls must be written in this file.
 
@@ -120,7 +120,7 @@ async function readRdd($, root) {
   return { mode, state: reviewState([parseAssess(dirty), parseAssess(range)]) }
 }
 
-// Gathers everything the band caches. Each source fails on its own: a gap leaves its segment out.
+// Gathers everything the panel caches. Each source fails on its own: a gap leaves its segment out.
 async function collect($) {
   // The plugin forces its output style, which overrides settings.outputStyle
   const data = { hasStatusLine: false, style: 'construct:Neutral', agent: null, home: null, git: null, worktree: null, root: null, odd: null, rdd: null }
@@ -209,17 +209,6 @@ async function readLive($) {
   return live
 }
 
-// The one-line summary above the prompt; the panel holds the rest.
-async function drawBand($, e, next) {
-  const data = status.data
-  if (e.props?.hasSurvey || !data) return next(e)
-  const live = await readLive($)
-  const panel = merge(await read($, PANEL))
-  // The context figure belongs to the replica: with a statusLine it would show twice.
-  const tree = buildSummary({ panel, usage: data.hasStatusLine ? null : live.usage, odd: data.odd, rdd: data.rdd, nowMs: live.nowMs })
-  return tree ?? next(e)
-}
-
 // The docked panel body, drawn only for this plugin's pane (its requestId is the pane id).
 async function drawPane($, e, next) {
   const data = status.data
@@ -244,7 +233,7 @@ async function drawPane($, e, next) {
 }
 
 async function openPane($) {
-  return $.ui.open({ id: PANEL_ID, title: 'Construct' })
+  return $.ui.open({ id: PANEL_ID, title: 'Construct', columns: PANEL_COLUMNS })
 }
 
 // /construct opens the pane, /construct close closes it.
@@ -288,7 +277,7 @@ export function register(on, options) {
     return result
   })
 
-  // Fill the band's cache when the session starts. Detached, so the start is never held up.
+  // Fill the panel's cache when the session starts. Detached, so the start is never held up.
   on('session.start', async ($, e, next) => {
     const result = await next(e)
     void refresh($)
@@ -353,9 +342,6 @@ export function register(on, options) {
 
   // The docked panel.
   on('ui.render', { component: 'Pane' }, async ($, e, next) => drawPane($, e, next)).catch(($, e, next) => next(e))
-
-  // Draw the summary line above the prompt; any failure leaves the engine's own band.
-  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => drawBand($, e, next)).catch(($, e, next) => next(e))
 }
 
 // A subagent started: add its card. Observe only; the routing above has already run.

@@ -6,7 +6,7 @@ Construct is a Claude Code plugin for Organic Driven Development (ODD). It ships
 
 | Requirement | Why |
 |---|---|
-| Claude Code 2.1.304 or later, signed in | The panel and status band are a mod, and the panel needs 2.1.304. Tested on 2.1.304 |
+| Claude Code 2.1.304 or later, signed in | The panel is a mod, and the panel needs 2.1.304. Tested on 2.1.304 |
 | Node.js 20 or later, with npm | The plugin's scripts and hooks (`odd-assess`, `odd-review`, the hook scripts). Claude Code's native install does not bundle Node.js |
 | `git` on the PATH | `odd-assess` and `odd-review` read the repository |
 | Homebrew (macOS or Linux) | Installs the engram binary |
@@ -77,7 +77,7 @@ The manual steps the installer runs, for when you want to run them yourself:
    - Ask "what does your Construct contract say about Risk lines?". The answer quotes the `Risk: item N` rule.
    - `/agents` lists the `construct:` agents, such as `construct:odd-worker` and `construct:review-risk`.
    - Ask Claude to run `odd-review mode status`; it prints `{"mode":"on","source":"default"}`. The plugin's `bin/` is on the PATH of Claude's Bash tool only, not your own shell.
-   - After a turn ends, the band above the prompt shows the RDD state (`clear`, `review due` or `reviewed`), and `/construct` opens the panel with the full `RDD` section.
+   - After a turn ends, the panel shows the RDD state (`clear`, `review due` or `reviewed`); `/construct` opens it.
 
 ## Update
 
@@ -268,27 +268,28 @@ The denial says which rule matched and that the user can run the command manuall
 
 Known lexical limits: the guard reads the command text and cannot see through whole-directory searches such as `grep -rn KEY .`, symlinks, shell globs (`cat .e*`), variables, or obfuscation (`cat $(echo .e)nv`, encoded payloads).
 
-## Construct panel and status band (mod)
+## Construct panel (mod)
 
-The mod draws two things. A docked **panel** (a `Pane` with id `construct`) holds the detail, and the **band** above the prompt (`AbovePrompt`) shrinks to one summary line. The panel is modeled on [claude-flightdeck](https://github.com/scasella/claude-flightdeck) (read-only study, no code copied) and adapted to the ODD flow. Both need Claude Code 2.1.304 or later and do not appear in `claude -p` runs, which draw no interface.
+The mod draws one thing: a docked **panel** (a `Pane` with id `construct`), one column of titled **blocks** (`alerts`, `ODD`, `context`, `session`, `review`, `agents`, `gate`, `turn`). Each block is a title row, its items indented two spaces (dim label on the left, value right-aligned), and one blank row before the next block. Counters at zero and blocks with nothing to show are left out. When rows run out, whole blocks are dropped from the bottom, so alerts and the ODD task come first. The band above the prompt is no longer drawn. The panel is modeled on [claude-flightdeck](https://github.com/scasella/claude-flightdeck) (read-only study, no code copied) and adapted to the ODD flow. It needs Claude Code 2.1.304 or later and does not appear in `claude -p` runs, which draw no interface.
 
-**Commands.** `/construct` opens the panel and `/construct close` closes it. The panel docks beside the transcript from 110 columns in fullscreen, else it sits above the prompt. To open it at every session start, turn on the plugin option `panel_open_on_start` (boolean, default `false`).
+**Commands.** `/construct` opens the panel and `/construct close` closes it. The panel opens at every session start; to turn that off, set the plugin option `panel_open_on_start` (boolean, default `true`) to `false`.
 
-**The band: one line.** `▌ ctx 12% ┊ ⚙ 2 agents ┊ ODD T2 ┊ review due ┊ inline 1`. Each segment shows only when it has something to say: context %, running subagents, the first unfinished task id of the active feature, the RDD state (`review due`, `reviewed`, `clear`, shown when the switch is on), and an `inline N` alert in the error color. The band yields to a survey. Segments are joined by a faint `┊`, and all colors are theme keys (`claude`, `success`, `warning`, `error`, `suggestion`, `inactive`, `subtle`), so it follows the active theme.
+**Colors.** All colors are theme keys (`claude`, `success`, `warning`, `error`, `suggestion`, `inactive`, `subtle`), so the panel follows the active theme.
 
-**The panel, by section.** A section with nothing to show takes no room.
+**The panel, by block.** A block with nothing to show takes no room.
 
-1. **Main** (replica): context window, 5-hour and 7-day plan limits as 8-cell meters (theme `success` below 50%, `warning` below 80%, `error` above), each limit with its reset (`↻HH:MM`, and `↻Day HH:MM` for 7d); `~`-shortened directory, git state (`⎇ branch`, `±dirty`, `↑ahead`, `↓behind`, `wt:<worktree>`), `◆ model effort`, `✎ output style`, and `@agent`.
-2. **ODD**: the active feature document (newest `odd/tasks/*.md` with a task whose status is not `done` or `dropped`, the rule of `feature-state.mjs`), its first unfinished task (id and title), and the open count.
-3. **RDD**: the switch (`RDD on` or `RDD off`) and, when on, `review due` (the committed range since `odd-review boundary`, or the uncommitted changes, classify high and have no receipt), `reviewed`, or `clear`. A `root` boundary is not assessed.
-4. **Agents**: one card per subagent (up to 3, then one summary row): role (construct role, else the subagent type), routed model and effort, ctx (the latest request's whole input), steps, elapsed time, running or done.
-5. **Inline writes**: a main-thread `Edit`, `Write`, `MultiEdit` or `NotebookEdit` on a path outside `odd/tasks/` counts; the panel shows the count and the last path. It only observes and never blocks.
-6. **Gate**: one cell per permission verdict in the session (allowed, asked, denied, or made inside a subagent), the deny count, and the last denied tool with credential-like values masked.
-7. **Turn receipt**: duration, agents spawned, edits, errors, and the cost added by the running or last main-thread turn.
+1. **alerts** (error color, only when present): inline writes (a main-thread `Edit`, `Write`, `MultiEdit` or `NotebookEdit` on a path outside `odd/tasks/` counts; the count and the last path), and denied calls (the count and the last denied tool, with credential-like values masked). It only observes and never blocks.
+2. **ODD**: the active feature document (newest `odd/tasks/*.md` with a task whose status is not `done` or `dropped`, the rule of `feature-state.mjs`), its first unfinished task (id and title), and the `open` count.
+3. **context** (replica): context window, 5-hour and 7-day plan limits as 8-cell meters in aligned columns (theme `success` below 50%, `warning` below 80%, `error` above), each limit with its reset (`↻HH:MM`, and `↻Day HH:MM` for 7d).
+4. **session** (replica): `~`-shortened `dir`, `git` state (`⎇ branch`, `±dirty`, `↑ahead`, `↓behind`, `wt:<worktree>`), `model` and effort, output `style`, `@agent`, and `compactions` when above zero.
+5. **review**: `rdd` (`on` or `off`) and, when on, `state`: `review due` (the committed range since `odd-review boundary`, or the uncommitted changes, classify high and have no receipt), `reviewed`, or `clear`. A `root` boundary is not assessed.
+6. **agents**: one card per subagent (up to 3, then a `+N more` row): role (construct role, else the subagent type), routed model and effort, ctx (the latest request's whole input), steps, elapsed time, running or done. Details that do not fit beside the role wrap to a second row.
+7. **gate**: one cell per permission verdict in the session (allowed, asked, denied, or made inside a subagent).
+8. **turn**: time (with `running` while the turn runs), and, above zero, agents spawned, edits, errors and the cost added by the running or last main-thread turn.
 
-**Width.** Two columns from 110 columns, compact from 56 to 109, and a mini layout below 56.
+**Width and height.** The panel asks for 56 columns when it opens (`columns: 56` on `ui.open`). That is a request, not a guarantee: a width you drag or keep wins, and the layout reads the real width and degrades when narrower. Long values (feature, task title, paths, details) wrap onto indented rows instead of being cut; nothing is ellipsized except a path shortened to its last parts. Rows are capped only by the pane height: when the panel would not fit, whole blocks are dropped from the bottom, in the order above (the first block may be cut).
 
-**When the replica is hidden.** Budget and where (the Main section) are drawn only when your merged settings have no `statusLine`; with one, they would show everything twice, and the band's `ctx` segment is left out for the same reason. The ODD and RDD sections are always drawn.
+**When the replica is hidden.** The `context` and `session` blocks are drawn only when your merged settings have no `statusLine`; with one, they would show everything twice. The `alerts`, `ODD`, `review`, `agents`, `gate` and `turn` blocks are always drawn.
 
 **Data gaps.** The mods API has no source for these fields of a statusline script, so the panel leaves them out: lines added and removed, PR number and state, and vim mode. Other fields differ from a statusline's:
 
@@ -298,11 +299,11 @@ The mod draws two things. A docked **panel** (a `Pane` with id `construct`) hold
 - The worktree name comes from git.
 - Resets and meters are omitted when the figure is missing, for example off a subscription.
 
-**Refresh and fail-open.** Git, `odd-review`, `odd-assess`, and the feature documents are read only on `session.start` and after each main-thread `turn.complete`, in the background with a timeout, never on a redraw. The panel's own state (agents, writes, gate, receipt) is kept in a versioned `atom` fed from engine events (`agent.spawn`, `turn.start`, `turn.step`, `tool.call`, `tool.check`, `turn.complete`, `session.compact`); the panel redraws on those events, not per token. These hooks only observe: each passes its event on unchanged and swallows its own failures, and the model and effort routing is untouched. Every hook has a `.catch` where it can; any error leaves out the affected segment (or the whole band) and never blocks or delays a turn.
+**Refresh and fail-open.** Git, `odd-review`, `odd-assess`, and the feature documents are read only on `session.start` and after each main-thread `turn.complete`, in the background with a timeout, never on a redraw. The panel's own state (agents, writes, gate, receipt) is kept in a versioned `atom` fed from engine events (`agent.spawn`, `turn.start`, `turn.step`, `tool.call`, `tool.check`, `turn.complete`, `session.compact`); the panel redraws on those events, not per token. These hooks only observe: each passes its event on unchanged and swallows its own failures, and the model and effort routing is untouched. Every hook has a `.catch` where it can; any error leaves out the affected segment (or the whole panel) and never blocks or delays a turn.
 
 ## Theme: Construct
 
-The plugin ships one color theme, **Construct**, in the style of *The Matrix*: phosphor green `#00FF41` for the accent, success, permissions, and the usage meter; deeper greens for borders, hints, and backgrounds; pale green text on near-black. Errors stay red and warnings yellow, so they still stand out. Select it with `/theme` (it is listed as from this plugin); the panel and the band turn matrix green with it, since it colors with theme keys.
+The plugin ships one color theme, **Construct**, in the style of *The Matrix*: phosphor green `#00FF41` for the accent, success, permissions, and the usage meter; deeper greens for borders, hints, and backgrounds; pale green text on near-black. Errors stay red and warnings yellow, so they still stand out. Select it with `/theme` (it is listed as from this plugin); the panel turns matrix green with it, since it colors with theme keys.
 
 ## Local development
 
