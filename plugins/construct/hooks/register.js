@@ -6,10 +6,15 @@ import {
   filePathOf,
   initialState,
   merge,
+  noteOddTask,
+  noteRddState,
   onAgentSpawn,
   onCompact,
+  onMainStep,
+  onPermissionMode,
   onToolCall,
   onToolCheck,
+  onToolSettle,
   onTurnComplete,
   onTurnStart,
   onTurnStep,
@@ -123,24 +128,12 @@ async function readRdd($, root) {
 // Gathers everything the panel caches. Each source fails on its own: a gap leaves its segment out.
 async function collect($) {
   // The plugin forces its output style, which overrides settings.outputStyle
-  const data = { hasStatusLine: false, style: 'construct:Neutral', agent: null, home: null, git: null, worktree: null, root: null, odd: null, rdd: null }
+  const data = { git: null, root: null, odd: null, rdd: null }
   let cwd
   try {
     cwd = await $.session.cwd()
   } catch {
     // no directory known
-  }
-  try {
-    const settings = await $.settings.read()
-    data.hasStatusLine = Boolean(settings?.statusLine)
-    data.agent = typeof settings?.agent === 'string' ? settings.agent : null
-  } catch {
-    // settings unreadable: treated as no statusLine
-  }
-  try {
-    data.home = (await $.env.get('HOME')) ?? null
-  } catch {
-    // no home known
   }
   const [gitText, revText] = await Promise.all([
     runText($, ['git', '--no-optional-locks', 'status', '--porcelain=v2', '--branch'], cwd, GIT_MS),
@@ -148,7 +141,6 @@ async function collect($) {
   ])
   data.git = parseGitStatus(gitText)
   const rev = parseRevParse(revText)
-  data.worktree = rev?.worktree ?? null
   const root = rev?.root ?? cwd
   data.root = root ?? null
   if (root) {
@@ -156,6 +148,19 @@ async function collect($) {
     data.rdd = rev ? await readRdd($, root) : null
   }
   return data
+}
+
+// One log row per ODD task or RDD state change between two refreshes. The first load has no
+// previous value, so it logs nothing. Observe only.
+async function noteChanges($, prev, next) {
+  if (!prev) return
+  try {
+    const at = await nowMs($)
+    const rddWord = (d) => (d?.rdd ? (d.rdd.state ?? d.rdd.mode ?? null) : null)
+    await feed($, (s) => noteRddState(noteOddTask(s, prev.odd?.task ?? null, next.odd?.task ?? null, at), rddWord(prev), rddWord(next), at))
+  } catch {
+    // observe only
+  }
 }
 
 // Refreshes the cache and asks for a redraw. Runs detached from the hook that
@@ -169,7 +174,10 @@ async function refresh($) {
   try {
     do {
       status.again = false
-      status.data = await collect($)
+      const next = await collect($)
+      const prev = status.data
+      status.data = next
+      await noteChanges($, prev, next)
       try {
         await $.ui.invalidate('ui.render')
       } catch {
@@ -209,11 +217,36 @@ async function readLive($) {
   return live
 }
 
+// The engine reads a Client's `module` off this file's source, as a string literal relative to it, so the
+// Client elements are made here (`els.Client`) from the placeholders layout.js leaves ({ type: 'Client',
+// props.module './rail.tsx' | './elapsed.tsx' }). A Client may not sit inside a Text, so a row that holds
+// one becomes a row Box. Only reached when the surface has Client.
+function realize(node, els) {
+  if (!node || typeof node === 'string') return node
+  if (node.type === 'Client') {
+    const { module, ...rest } = node.props ?? {}
+    if (module === './rail.tsx') return els.Client({ ...rest, module: './panel/rail.tsx' })
+    if (module === './elapsed.tsx') return els.Client({ ...rest, module: './panel/elapsed.tsx' })
+    return node
+  }
+  if (!Array.isArray(node.children)) return node
+  const children = node.children.map((k) => realize(k, els))
+  const hasClient = node.type === 'Text' && node.children.some((k) => k?.type === 'Client')
+  return hasClient ? { type: 'Box', props: { flexDirection: 'row' }, children } : { ...node, children }
+}
+
 // The docked panel body, drawn only for this plugin's pane (its requestId is the pane id).
 async function drawPane($, e, next) {
   const data = status.data
   if (e.requestId !== PANEL_ID) return next(e)
   const live = await readLive($)
+  let els = null
+  try {
+    const table = $.ui.resolve(e)
+    if ('Client' in table) els = table
+  } catch {
+    // no element table: draw static
+  }
   const panel = merge(await read($, PANEL))
   const tree = buildPanel({
     panel,
@@ -223,10 +256,11 @@ async function drawPane($, e, next) {
     odd: data?.odd ?? null,
     rdd: data?.rdd ?? null,
     nowMs: live.nowMs,
+    client: els !== null,
     columns: e.props?.bodyColumns,
     rows: e.props?.scroll?.bodyRows,
   })
-  return tree ?? next(e)
+  return tree ? (els ? realize(tree, els) : tree) : next(e)
 }
 
 async function openPane($) {
@@ -262,6 +296,7 @@ export function register(on, options) {
     const result = await next(model ? { ...e, model } : e)
     if (role && result?.agentId) roleByAgent.set(result.agentId, role)
     await noteSpawn($, e, result, role, options)
+    if (!e.parentAgentId && e.permissionMode) await feed($, (s) => onPermissionMode(s, { mode: e.permissionMode }))
     return result
   })
 
@@ -270,6 +305,7 @@ export function register(on, options) {
     noteEffort(e)
     const effort = effortFor(roleByAgent.get(e.agentId), options)
     const result = yield* next(effort ? { ...e, effort } : e)
+    if (e.agentId === undefined) await feed($, (s) => onMainStep(s, { agentId: e.agentId, model: e.model, effort: e.effort }))
     if (e.agentId !== undefined) await feed($, (s) => onTurnStep(s, { agentId: e.agentId, usage: result?.usage }))
     return result
   })
@@ -314,7 +350,11 @@ export function register(on, options) {
     const result = await next(e)
     try {
       const cwd = await projectRoot($)
-      await feed($, (s) => onToolCall(s, { tool: e.tool, path: filePathOf(e), cwd, agentId: e.agentId, isError: result?.isError === true }))
+      const at = await nowMs($)
+      const didRun = result?.deny === undefined
+      await feed($, (s) =>
+        onToolCall(onToolSettle(s, { tool: e.tool, didRun }), { tool: e.tool, path: filePathOf(e), cwd, agentId: e.agentId, isError: result?.isError === true, nowMs: at }),
+      )
     } catch {
       // observe only
     }
@@ -324,7 +364,8 @@ export function register(on, options) {
   // The permission verdict, whoever decided it.
   on('tool.check', async ($, e, next) => {
     const result = await next(e)
-    await feed($, (s) => onToolCheck(s, { tool: e.tool, input: e.input, agentId: e.agentId, decision: result?.decision, isQuery: typeof e.tool_use_id !== 'string' || e.tool_use_id === '' }))
+    const at = await nowMs($)
+    await feed($, (s) => onToolCheck(s, { tool: e.tool, input: e.input, agentId: e.agentId, decision: result?.decision, nowMs: at, isQuery: typeof e.tool_use_id !== 'string' || e.tool_use_id === '' }))
     return result
   }).catch(($, e, next) => next(e))
 

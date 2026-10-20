@@ -32,7 +32,7 @@
 // (hooks/panel/state.js), the session usage, a clock and the Pane's `bodyColumns` / `scroll.bodyRows`.
 
 import { agentsView, mainBusy, maskSecrets } from './state.js'
-import { PALETTE, card, effortMeter, gauge, laneBar, lanes, logRows, panelBox, stackBar } from './draw.js'
+import { PALETTE, card, effortMeter, fmtResetIn, gauge, laneBar, lanes, logRows, panelBox, stackBar } from './draw.js'
 import { STATE_COLOR, text } from '../status/format.js'
 
 export const PANEL_COLUMNS = 66
@@ -158,12 +158,15 @@ function headerRows(model, busy, odd) {
 
 // ---- main card (S3) ------------------------------------------------------------
 
-function limitPiece(label, pct) {
+// A gauge with its percent and, when the window's ISO `resetsAt` is in the future, `↻` and the time left.
+function limitPiece(label, pct, resetsAt, nowMs) {
   const g = gauge(pct, 5)
-  return [dim(`${label} `), text(g.on, { color: pct >= 80 ? PALETTE.warn : PALETTE.main }), faint(g.off), dim(` ${Math.round(pct)}%`)]
+  const at = typeof resetsAt === 'string' ? Date.parse(resetsAt) : NaN
+  const left = fmtResetIn(at, nowMs)
+  return [dim(`${label} `), text(g.on, { color: pct >= 80 ? PALETTE.warn : PALETTE.main }), faint(g.off), dim(` ${Math.round(pct)}%${left ? ` ↻${left}` : ''}`)]
 }
 
-function mainCard({ main, usage, model, busy, compactions, width }) {
+function mainCard({ main, usage, model, busy, compactions, width, nowMs }) {
   const effort = main?.effort ?? null
   const meter = effortMeter(effort)
   const ctx = usage?.context
@@ -192,7 +195,7 @@ function mainCard({ main, usage, model, busy, compactions, width }) {
   }
   const limits = (Array.isArray(usage?.rateLimits) ? usage.rateLimits : [])
     .filter((l) => isNum(l?.percentUsed) && (l.kind === 'five_hour' || l.kind === 'seven_day'))
-    .map((l) => limitPiece(l.kind === 'five_hour' ? '5h' : '7d', l.percentUsed))
+    .map((l) => limitPiece(l.kind === 'five_hour' ? '5h' : '7d', l.percentUsed, l.resetsAt, nowMs))
   const usd = usage?.cost?.usd
   if (isNum(usd) || limits.length > 0) {
     const parts = [isNum(usd) ? [text(money(usd), { color: PALETTE.text })] : null, ...limits].filter(Boolean)
@@ -423,8 +426,7 @@ function rail(name, active, width, client) {
 // the Pane's bodyColumns and scroll.bodyRows. `usage` is `$.session.usage()`, `model` and `effort` are
 // the fallbacks for a main thread that has not made a request yet (the state's `main` wins). `client`
 // says the surface can draw `Client` elements. `tzOffsetMin` fixes the log's time zone (UTC plus
-// minutes); omitted, the log shows local time. `replica` is accepted and ignored: the panel no longer
-// shows dir, git or style (S3).
+// minutes); omitted, the log shows local time.
 export function buildPanel({ panel, usage, odd, rdd, nowMs, columns, rows, model, effort, client = false, tzOffsetMin }) {
   const state = panel ?? {}
   const width = isNum(columns) && columns > 0 ? Math.max(MIN_COLUMNS, Math.floor(columns)) : PANEL_COLUMNS
@@ -438,7 +440,7 @@ export function buildPanel({ panel, usage, odd, rdd, nowMs, columns, rows, model
     if (el) children.push(el)
     return Boolean(el)
   }
-  push(mainCard({ main, usage, model: name, busy, compactions: state.compactions ?? 0, width }))
+  push(mainCard({ main, usage, model: name, busy, compactions: state.compactions ?? 0, width, nowMs }))
   const above = [oddCard(odd, width), reviewCard(rdd, width)].filter(Boolean)
   const gate = gateCard({ gate: state.gate, inline: state.inline, mode: state.main?.mode, width })
   if (above.length > 0) {

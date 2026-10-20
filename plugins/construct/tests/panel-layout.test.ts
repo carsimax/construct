@@ -349,3 +349,20 @@ test('activeWork adds the first unfinished task id and title; activeFeature is u
   expect(activeWork([])).toBe(null)
 })
 
+
+test('5h and 7d gauges show the time to reset from an ISO resetsAt', async () => {
+  const iso = (min: number) => new Date(NOW + min * 60_000).toISOString()
+  const withReset = {
+    ...usage,
+    rateLimits: [
+      { kind: 'five_hour', percentUsed: 4, resetsAt: iso(190) },
+      { kind: 'seven_day', percentUsed: 13, resetsAt: iso(4 * 1440 + 125) },
+    ],
+  }
+  const rows = rowsOf({ usage: withReset })
+  expect(rows[idx(rows, '$104')]).toBe('$104   5h ▱▱▱▱▱ 4% ↻3h10m   7d ▰▱▱▱▱ 13% ↻4d2h')
+  // a past, missing or unparsable reset leaves the gauge as it was
+  const none = { ...usage, rateLimits: [{ kind: 'five_hour', percentUsed: 4, resetsAt: 'soon' }, { kind: 'seven_day', percentUsed: 13, resetsAt: iso(-5) }] }
+  const rows2 = rowsOf({ usage: none })
+  expect(rows2[idx(rows2, '$104')]).toBe('$104   5h ▱▱▱▱▱ 4%   7d ▰▱▱▱▱ 13%')
+})

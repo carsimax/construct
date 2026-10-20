@@ -1,5 +1,5 @@
 import { expect, test } from 'claude-code/testing'
-import { card, effortMeter, gauge, laneBar, lanes, logRows, PALETTE } from '../hooks/panel/draw.js'
+import { card, effortMeter, fmtResetIn, gauge, laneBar, lanes, logRows, PALETTE } from '../hooks/panel/draw.js'
 import Rail from '../hooks/panel/rail.tsx'
 import Elapsed from '../hooks/panel/elapsed.tsx'
 
@@ -151,4 +151,17 @@ test('Elapsed stops at its end time and shows hours past 60 minutes', () => {
   expect(textsOf(Elapsed(p, s)).join('')).toBe('0:10')
   const g = fakeSurface()
   expect(textsOf(Elapsed({ since: 0, now: 3_900_000, endAt: null, color: 'x' }, g.s)).join('')).toBe('1h05')
+})
+
+test('fmtResetIn shows the two largest units, or nothing when unknown or past', async () => {
+  const now = 1_000_000
+  const min = 60_000
+  expect(fmtResetIn(now + 25 * min, now)).toBe('25m')
+  expect(fmtResetIn(now + 190 * min, now)).toBe('3h10m')
+  expect(fmtResetIn(now + 60 * min, now)).toBe('1h00m')
+  expect(fmtResetIn(now + (4 * 1440 + 125) * min, now)).toBe('4d2h')
+  expect(fmtResetIn(now + 5_000, now)).toBe('1m')
+  expect(fmtResetIn(now - 1, now)).toBe('')
+  expect(fmtResetIn(null, now)).toBe('')
+  expect(fmtResetIn(undefined, now)).toBe('')
 })

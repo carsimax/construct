@@ -270,36 +270,29 @@ Known lexical limits: the guard reads the command text and cannot see through wh
 
 ## Construct panel (mod)
 
-The mod draws one thing: a docked **panel** (a `Pane` with id `construct`), one column of titled **blocks** (`alerts`, `ODD`, `context`, `session`, `review`, `agents`, `gate`, `turn`). Each block is a title row, its items indented two spaces (dim label on the left, value right-aligned), and one blank row before the next block. Counters at zero and blocks with nothing to show are left out. When rows run out, whole blocks are dropped from the bottom, so alerts and the ODD task come first. The band above the prompt is no longer drawn. The panel is modeled on [claude-flightdeck](https://github.com/scasella/claude-flightdeck) (read-only study, no code copied) and adapted to the ODD flow. It needs Claude Code 2.1.304 or later and does not appear in `claude -p` runs, which draw no interface.
+The mod draws one thing: a docked **panel** (a `Pane` with id `construct`) laid out as [claude-flightdeck](https://github.com/scasella/claude-flightdeck) cards and adapted to the ODD flow: one column at any width, `round` bordered cards, the bold title on the left and the status on the right. The band above the prompt is not drawn. It needs Claude Code 2.1.304 or later and does not appear in `claude -p` runs, which draw no interface.
 
-**Commands.** `/construct` opens the panel and `/construct close` closes it. The panel opens at every session start; to turn that off, set the plugin option `panel_open_on_start` (boolean, default `true`) to `false`.
+**Commands and opening.** `/construct` opens the panel and `/construct close` closes it. The panel opens at every session start; to turn that off, set the plugin option `panel_open_on_start` (boolean, default `true`) to `false`.
 
-**Colors.** All colors are theme keys (`claude`, `success`, `warning`, `error`, `suggestion`, `inactive`, `subtle`), so the panel follows the active theme.
+**Width.** The panel asks for 66 columns when it opens (`columns: 66` on `ui.open`). That is a request, not a guarantee: a width you drag or keep wins, and the layout reads the real width (never below 40). Rows that do not fit are clipped, and the session log keeps only the rows that fit the pane height.
 
-**The panel, by block.** A block with nothing to show takes no room.
+**Colors.** All colors are theme keys, so the panel follows the active theme.
 
-1. **alerts** (error color, only when present): inline writes (a main-thread `Edit`, `Write`, `MultiEdit` or `NotebookEdit` on a path outside `odd/tasks/` counts; the count and the last path), and denied calls (the count and the last denied tool, with credential-like values masked). It only observes and never blocks.
-2. **ODD**: the active feature document (newest `odd/tasks/*.md` with a task whose status is not `done` or `dropped`, the rule of `feature-state.mjs`), its first unfinished task (id and title), and the `open` count.
-3. **context** (replica): context window, 5-hour and 7-day plan limits as 8-cell meters in aligned columns (theme `success` below 50%, `warning` below 80%, `error` above), each limit with its reset (`↻HH:MM`, and `↻Day HH:MM` for 7d).
-4. **session** (replica): `~`-shortened `dir`, `git` state (`⎇ branch`, `±dirty`, `↑ahead`, `↓behind`, `wt:<worktree>`), `model` and effort, output `style`, `@agent`, and `compactions` when above zero.
-5. **review**: `rdd` (`on` or `off`) and, when on, `state`: `review due` (the committed range since `odd-review boundary`, or the uncommitted changes, classify high and have no receipt), `reviewed`, or `clear`. A `root` boundary is not assessed.
-6. **agents**: one card per subagent (up to 3, then a `+N more` row): role (construct role, else the subagent type), routed model and effort, ctx (the latest request's whole input), steps, elapsed time, running or done. Details that do not fit beside the role wrap to a second row.
-7. **gate**: one cell per permission verdict in the session (allowed, asked, denied, or made inside a subagent).
-8. **turn**: time (with `running` while the turn runs), and, above zero, agents spawned, edits, errors and the cost added by the running or last main-thread turn.
+**The panel, top to bottom.** A card with nothing to show takes no room.
 
-**Width and height.** The panel asks for 56 columns when it opens (`columns: 56` on `ui.open`). That is a request, not a guarantee: a width you drag or keep wins, and the layout reads the real width and degrades when narrower. Long values (feature, task title, paths, details) wrap onto indented rows instead of being cut; nothing is ellipsized except a path shortened to its last parts. Rows are capped only by the pane height: when the panel would not fit, whole blocks are dropped from the bottom, in the order above (the first block may be cut).
+1. **header**: `CONSTRUCT · <MODEL> <IDLE|BUSY> · ODD <task>` centered, with a `■` legend (main, agents, gate, odd, review).
+2. **main card** (always drawn, with or without a `statusLine`): `<Model> · main` and idle or busy; the effort meter (`▮▯`), the permission mode (from the main thread's spawns), and the main request count; the context gauge with tokens used and window; the session cost; the 5-hour and 7-day gauges (`▰▱`) with the time to each reset (`↻3h10m`, `↻4d2h`), omitted when the figure is missing, for example off a subscription.
+3. **rail**: a connector between cards, animated while the main thread is busy on terminals that can draw `Client` elements, a static line otherwise.
+4. **ODD card** (only with an active feature): the feature (newest `odd/tasks/*.md` with an unfinished task, the rule of `feature-state.mjs`), the current task, one checkpoint per task (done filled, current highlighted) and the open count.
+5. **REVIEW card** (only when RDD is on): the state `review due`, `reviewed` or `clear` (a `root` boundary is not assessed).
+6. **GATE card**: a stacked bar of permission verdicts, allowed / asked (`you`, or `classifier` in `auto` mode) / pending / denied counts, `file`, `shell` and `other` bucket counts, the last denied tool with credential-like values masked, and the inline-write alert (a main-thread `Edit`, `Write`, `MultiEdit` or `NotebookEdit` outside `odd/tasks/`: the count and last path, error color). It only observes and never blocks.
+7. **agents**: `agents · N running · M total`, one row per subagent (up to 6) with a status mark, its construct role (else the subagent type), a timeline bar placed on the session's time span and its duration; running clocks tick live where `Client` is available.
+8. **last turn card**: duration of the running or last main-thread turn, agents, edits, errors and the cost added.
+9. **session log**: a bordered `session log` with `HH:MM:SS` rows (who, what): agent spawned and done, denied tool, inline write, and ODD additions: the ODD task changed and the RDD state changed. The log is a bounded ring buffer; the first load writes no row.
 
-**When the replica is hidden.** The `context` and `session` blocks are drawn only when your merged settings have no `statusLine`; with one, they would show everything twice. The `alerts`, `ODD`, `review`, `agents`, `gate` and `turn` blocks are always drawn.
+**Refresh and fail-open.** Git, `odd-review`, `odd-assess`, and the feature documents are read only on `session.start` and after each main-thread `turn.complete`, in the background with a timeout, never on a redraw. The ODD task and RDD state log rows come from comparing two consecutive refreshes. Context, cost and the plan limits are read from the session usage on each redraw. The panel's own state is kept in a versioned `atom` fed from engine events (`agent.spawn`, `turn.start`, `turn.step`, `tool.call`, `tool.check`, `turn.complete`, `session.compact`); the panel redraws on those events, not per token. These hooks only observe: each passes its event on unchanged and swallows its own failures, and the model and effort routing is untouched. Any error leaves out the affected card and never blocks or delays a turn.
 
-**Data gaps.** The mods API has no source for these fields of a statusline script, so the panel leaves them out: lines added and removed, PR number and state, and vim mode. Other fields differ from a statusline's:
-
-- The model is the id `$.session.model()` returns, not a display name.
-- Effort is the one seen on the main thread's last request, so it appears after the first turn.
-- The output style is the plugin's forced `construct:Neutral`; the agent comes from your settings (`agent`), not from a flag.
-- The worktree name comes from git.
-- Resets and meters are omitted when the figure is missing, for example off a subscription.
-
-**Refresh and fail-open.** Git, `odd-review`, `odd-assess`, and the feature documents are read only on `session.start` and after each main-thread `turn.complete`, in the background with a timeout, never on a redraw. The panel's own state (agents, writes, gate, receipt) is kept in a versioned `atom` fed from engine events (`agent.spawn`, `turn.start`, `turn.step`, `tool.call`, `tool.check`, `turn.complete`, `session.compact`); the panel redraws on those events, not per token. These hooks only observe: each passes its event on unchanged and swallows its own failures, and the model and effort routing is untouched. Every hook has a `.catch` where it can; any error leaves out the affected segment (or the whole panel) and never blocks or delays a turn.
+**Credit.** The drawing code (gauges, effort meter, timeline geometry, log rows, the animated rail and the elapsed clock) is adapted from [claude-flightdeck](https://github.com/scasella/claude-flightdeck) by Stephen Casella, MIT License. The copyright and permission notice are in [`plugins/construct/LICENSE-flightdeck`](plugins/construct/LICENSE-flightdeck) and at the top of each adapted file.
 
 ## Theme: Construct
 

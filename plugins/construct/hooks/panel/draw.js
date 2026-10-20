@@ -27,6 +27,17 @@ export const PALETTE = {
 
 const isNum = (x) => typeof x === 'number' && Number.isFinite(x)
 
+// Time left until a window resets, its two largest units: 25m, 3h10m, 4d2h. Empty when unknown or past.
+// Adapted from claude-flightdeck's fmtResetIn (core.ts).
+export function fmtResetIn(resetsAt, nowMs) {
+  if (!isNum(resetsAt) || !isNum(nowMs) || resetsAt <= nowMs) return ''
+  const m = Math.max(1, Math.floor((resetsAt - nowMs) / 60_000))
+  const d = Math.floor(m / 1440)
+  const h = Math.floor((m % 1440) / 60)
+  if (d > 0) return `${d}d${h}h`
+  return h > 0 ? `${h}h${String(m % 60).padStart(2, '0')}m` : `${m}m`
+}
+
 // A gauge of `width` cells: ▰ filled, ▱ empty. An unknown or out-of-range pct is clamped.
 export function gauge(pct, width) {
   const w = Math.max(0, Math.floor(isNum(width) ? width : 0))

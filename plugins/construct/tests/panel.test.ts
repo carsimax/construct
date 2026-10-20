@@ -22,14 +22,14 @@ const entry = (name: string) => ({ name, kind: 'file', size: 1, mtimeMs: 5, isLi
 
 // Stubs for everything the wiring reads. `usage` overrides the session usage.
 function world($, on, o: any = {}) {
-  on('session.usage', () => value({ startedAt: 0, context: { window: 200000, percent: 33 }, rateLimits: [], cost: { usd: o.cost ?? 1 } }))
+  on('session.usage', () => value({ startedAt: 0, context: { window: 200000, tokens: 66000, percent: 33 }, rateLimits: o.rateLimits ?? [], cost: { usd: o.cost ?? 1 } }))
   on('session.model', () => value('claude-opus-4'))
   on('session.cwd', () => value('/home/me/proj'))
   on('settings.read', () => value(o.settings ?? {}))
   on('env.get', () => value('/home/me'))
   on('clock.now', () => value(NOW))
   on('fs.list', () => value([entry('feat.md')]))
-  on('fs.read', () => value(TASKS))
+  on('fs.read', () => value(o.tasks ? o.tasks() : TASKS))
   on('process.run', (_$, e) => {
     const a = e.argv
     if (a[0] === 'git' && a.includes('status')) return value(ok('# branch.oid abc1234\n# branch.head main\n'))
@@ -49,6 +49,9 @@ function world($, on, o: any = {}) {
   on('tool.call', (_$, e) => ((seen.call = e), { ref: 'r', result: {}, text: 'ok', ...(o.isError ? { isError: true } : {}) }))
   on('tool.check', (_$, e) => ((seen.check = e), { decision: o.decision ?? 'allow' }))
   on('agent.spawn', (_$, e) => ({ model: e.model, agentId: 'ag-1' }))
+  on('turn.step', async function* (_$, e) {
+    return { turnId: e.turnId, index: e.index, answer: 'ok', toolUses: [], stopReason: 'end_turn', usage: null }
+  })
   on('session.compact', (_$, e) => ((seen.compact = e), { messages: [{ role: 'user', text: 's', toolUses: [] }] }))
   // The engine's own ui.open / ui.close: record what the mod asked for
   on('ui.open', (_$, e) => (open.add(e.id), opens.push(e), value({ isPlaced: true })))
@@ -207,4 +210,89 @@ test('the pane is requested at 66 columns, titled Construct', { options: { panel
   expect(opens.length).toBeGreaterThan(0)
   expect(opens[0].columns).toBe(66)
   expect(opens[0].title).toBe('Construct')
+})
+
+async function step($, e: any = {}) {
+  const stream = $.turn.step({ turnId: 't1', index: 0, ...e })
+  let r = await stream.next()
+  while (r.done !== true) r = await stream.next()
+  return r.value
+}
+
+test('a main-thread turn.step shows its request count, model and effort in the main card', async ($, on) => {
+  await start($, on)
+  await step($, { model: 'claude-opus-5-5', effort: 'high' })
+  await step($, { model: 'claude-opus-5-5', effort: 'high', index: 1 })
+  await step($, { model: 'claude-haiku-4-5', effort: 'low', agentId: 'sub-1', index: 2 })
+  await settle()
+  const p = await pane($)
+  await p.redraw()
+  const text = await joined(p)
+  expect(text).toContain('Opus 5.5 · main')
+  expect(text).toContain('2 req')
+  expect(text).toContain('▮▮▮▯')
+})
+
+test('a spawn from main sets the permission mode; a nested spawn does not', async ($, on) => {
+  await start($, on)
+  await $.agent.spawn({ subagentType: 'construct:odd-worker', prompt: 'p', description: 'd', permissionMode: 'auto' })
+  await $.agent.spawn({ subagentType: 'construct:odd-worker', prompt: 'p', description: 'd', permissionMode: 'plan', parentAgentId: 'x' })
+  await settle()
+  const p = await pane($)
+  await p.redraw()
+  const text = await joined(p)
+  expect(text).toContain('mode auto')
+  expect(text).not.toContain('mode plan')
+})
+
+test('a tool.call after an ask settles it as cleared, and the log rows carry real times', async ($, on) => {
+  await start($, on, { decision: 'ask' })
+  await $.tool.check({ tool: 'Bash', input: { command: 'ls' }, tool_use_id: 'tu-1' })
+  await $.tool.call({ tool: 'Bash', command: 'ls' })
+  await $.tool.call({ tool: 'Write', file_path: '/home/me/proj/src/a.js', content: 'x' })
+  await settle()
+  const p = await pane($)
+  await p.redraw()
+  const text = await joined(p)
+  expect(text).toContain('1 you')
+  expect(text).not.toContain('pending')
+  expect(text).toMatch(/\d\d:\d\d:\d\d/)
+  expect(text).toContain('inline write')
+})
+
+test('an ODD task change logs a row on refresh, not at first load', async ($, on) => {
+  let doc = TASKS
+  await start($, on, { tasks: () => doc })
+  let p = await pane($)
+  await p.redraw()
+  expect(await joined(p)).not.toContain('task T')
+  await p.unmount()
+  doc = TASKS.replace('| T2 | S1 | second | w | none | pending | - |', '| T2 | S1 | second | w | none | done | x |\n| T3 | S1 | third | w | none | pending | - |')
+  await $.turn.start({ text: 'go', turnId: 't2' })
+  await $.turn.complete({ answer: 'done', turnId: 't2' })
+  await settle()
+  p = await pane($)
+  await p.redraw()
+  expect(await joined(p)).toContain('task T3')
+})
+
+test('5h and 7d show the reset time next to the gauges', async ($, on) => {
+  const iso = (min: number) => new Date(NOW + min * 60_000).toISOString()
+  await start($, on, { rateLimits: [{ kind: 'five_hour', percentUsed: 10, resetsAt: iso(190) }, { kind: 'seven_day', percentUsed: 20, resetsAt: iso(4 * 1440 + 125) }] })
+  const p = await pane($)
+  await p.redraw()
+  const text = await joined(p)
+  expect(text).toContain('↻3h10m')
+  expect(text).toContain('↻4d2h')
+  expect(text).toContain('66k/200k')
+})
+
+test('a surface with Client support draws the rail as a Client of ./rail.tsx', async ($, on) => {
+  await start($, on)
+  await $.turn.start({ text: 'go', turnId: 't3' })
+  const p = await pane($)
+  await p.redraw()
+  const tree = JSON.stringify(await p.drawn())
+  expect(tree).toContain('"type":"Client"')
+  expect(tree).toContain('panel/rail.tsx')
 })
