@@ -210,7 +210,7 @@ Design consequences:
 | T9 | S1 | `secret-guard` `PreToolUse` deny list for file tools and Bash (Risk-line prompt hook dropped, L31) | delegated (`odd-worker`, sonnet): long-session context backstop | 2 | done | `feat: add a secret guard PreToolUse hook` + `fix: close secret guard glob leak and false positives` (slice 13) |
 | T10 | S1 | Feature-state re-injection on SessionStart compact/resume (task sync dropped, L32) | delegated (`odd-worker`, sonnet): long-session context backstop | none | done | `feat: re-inject active feature state after compaction` (slice 15) |
 | T11 | S1 | `codegraph` skill and user-scope MCP setup docs; no plugin `.mcp.json` (option A, L33) | inline | none | done | `feat: add the codegraph skill and MCP setup docs` (slice 16) |
-| T12 | S2, S8 | Mod status panel: replica of the user's statusline (S8) plus ODD task progress and RDD state (experimental; must fail open) | inline | 6 | pending | — |
+| T12 | S2, S8 | Mod status band: statusline replica when no native statusLine is set, plus ODD and RDD state (L34) | delegated (`odd-worker`, sonnet): long-session context backstop | 6 | in progress | — |
 | T13 | S1, S3, S4 | Migration runbook and README: back up `~/.claude`, remove `gentle-ai:*` blocks and gentle-ai hooks, run side by side with `--plugin-dir`, then `gentle-ai uninstall` keeping engram | inline | 5 | pending | — |
 | T14 | S9 | Rename the plugin from `odd-skills` to `construct` (manifest, marketplace, prefixes, mod, contract filter, tests, evals, docs) | inline | 3 (component prefix changes) | pending | — |
 
@@ -776,3 +776,24 @@ Push and PR creation remain the user's decision.
     - The session contract gained one line pointing structural questions at `odd-skills:codegraph`.
     - NOTICE updated.
   - Tests: RED first (expected-skills list plus a content test asserting no plugin `.mcp.json`), then GREEN. `node --test tests/` gave `501 pass`.
+- **L34 (2026-10-19, user):** "Ok" (start T12)
+  - Branch `odd-skills/17-status-mod`.
+  - **Reference:** the user's `~/.claude/statusline.sh`.
+    - Line 1 (budget): context % meter; the 5h and 7d rate-limit meters with reset time (`HH:MM`; for 7d, `Day HH:MM`); `+added −removed`. Meters are 8-cell bars colored green below 50, yellow below 80, red otherwise.
+    - Line 2 (where and with what): `~`-shortened dir; git `⎇ branch`, `±dirty`, `↑ahead`, `↓behind`, `wt:<worktree>`, `PR #n state`; `◆ model effort`, `✎ style`; `@agent`, vim mode. Segments are joined by a dim `│`.
+  - **Design decision:**
+    - The user already has a native `statusLine`, so a full replica would show everything twice.
+    - The mod draws the statusline replica only when the user's settings have no `statusLine`.
+    - The ODD and RDD lines are always drawn, because they are new information: the active feature and its unfinished tasks; the RDD switch and whether `odd-review boundary..HEAD` or uncommitted work is high and unreviewed.
+  - **T12 design:**
+    - Mod hooks in `hooks/register.js`. The existing routing hooks stay; status code lives in separate modules.
+    - Draw into the band above the prompt (`AbovePrompt`), or the `PromptHint` if the band is not available. Use the render-site props the types declare.
+    - Data:
+      - `$.session.usage()` for context and rate limits with `resetsAt`;
+      - `$.session.model()` and `$.session.cwd()`;
+      - the effort observed on main-thread `turn.step`;
+      - `$.settings.read` for `statusLine` and `outputStyle`;
+      - `$.process.run` for git, `odd-review mode status`, and `odd-review boundary`;
+      - the classification for the review state, cached and refreshed at most once per turn completion.
+    - Lines added/removed, PR, worktree, vim mode, and agent name are shown only when a documented mods API provides them. Otherwise they are left out and the gap is reported, never invented.
+    - It must fail open: a `.catch` on every hook, and on any error it draws nothing extra and never blocks a turn.
