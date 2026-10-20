@@ -247,3 +247,14 @@ describe('the real index is never touched', () => {
     assert.equal(sh(repo, 'git', ['ls-files', '--stage']).stdout.includes('untracked.go'), false)
   })
 })
+
+describe('--committed-only', () => {
+  test('without --base-ref it is a usage error, not silently ignored', () => {
+    for (const args of [['--committed-only'], ['--committed-only', '--base-ref', '  ']]) {
+      const result = assess(passiveRepo(), args)
+      assert.equal(result.status, 2)
+      assert.match(result.stderr, /--committed-only requires --base-ref/)
+      assert.equal(result.stdout, '')
+    }
+  })
+})

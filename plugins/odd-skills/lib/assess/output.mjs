@@ -25,9 +25,10 @@ export function publicReasons(reasons) {
 }
 
 // reviewDue: automatic review is for high risk only. Medium is covered by
-// verification and passive needs none. already_reviewed is never produced until
-// receipts exist.
-export function reviewDue(risk) {
+// verification and passive needs none. A candidate whose exact target already
+// has a receipt (consumed) is already_reviewed whatever its tier.
+export function reviewDue(risk, consumed = false) {
+  if (consumed) return { review_due: false, review_due_reason: 'already_reviewed' }
   if (risk === 'high') return { review_due: true, review_due_reason: 'high_risk' }
   if (risk === 'medium') return { review_due: false, review_due_reason: 'under_budget' }
   return { review_due: false, review_due_reason: 'passive' }
@@ -37,15 +38,15 @@ export function reviewDue(risk) {
 // canonical lenses for high.
 export const lensesFor = (risk) => (risk === 'high' ? [...CANONICAL_LENSES] : [])
 
-export function buildResult({ risk, reasons, changedPaths, changedLines, candidate }) {
+export function buildResult({ risk, reasons, changedPaths, changedLines, candidate, consumed = false }) {
   return {
     schema: SCHEMA,
     risk,
     reasons,
     changed_paths: changedPaths,
     changed_lines: changedLines,
-    candidate: { kind: candidate.kind, ...(candidate.baseRef ? { base_ref: candidate.baseRef } : {}), consumed: false },
-    ...reviewDue(risk),
+    candidate: { kind: candidate.kind, ...(candidate.baseRef ? { base_ref: candidate.baseRef } : {}), consumed },
+    ...reviewDue(risk, consumed),
     lenses: lensesFor(risk),
   }
 }

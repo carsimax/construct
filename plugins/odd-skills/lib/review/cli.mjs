@@ -1,0 +1,147 @@
+// odd-review command line: argument handling, exit codes, and output.
+//   exit 0  success; JSON on stdout (context prints the evidence text)
+//   exit 1  refused transition; {"error":{code,message},"next":[...]} on stderr
+//   exit 2  bad usage; message and usage on stderr
+import { parseArgs } from 'node:util'
+import { repositoryRoot } from '../assess/git.mjs'
+import { requireBaseRefForCommittedOnly } from '../assess/cli.mjs'
+import { UsageError } from '../assess/escalation.mjs'
+import { goTrimSpace } from '../assess/text.mjs'
+import * as commands from './commands.mjs'
+import { DEFAULT_CONTEXT_BYTES } from './evidence.mjs'
+import { Refusal } from './errors.mjs'
+import { canonicalLenses } from './identity.mjs'
+
+export const USAGE = `Usage: odd-review [--cwd DIR] <command> [options]
+
+Review lifecycle. State lives under the git common directory (odd-review/), never
+in the worktree. Each command prints JSON that names the exact next command.
+
+  start --lenses LIST --lenses-reason TEXT [--base-ref REF [--committed-only]]
+        freeze the candidate and open a transaction (LIST: risk,resilience,
+        readability,reliability or the review-* names)
+  context --lineage L --lens LENS [--max-bytes N]
+        print the binding and evidence for one lens (also review-refuter and
+        review-validator in their states); default budget ${DEFAULT_CONTEXT_BYTES} bytes
+  capture --lineage L --lens LENS --input FILE|-
+  capture-refuter --lineage L --input FILE|-
+  correct --lineage L [--base-ref REF]       the one bounded correction
+  capture-validation --lineage L --input FILE|-
+  status --lineage L
+  acknowledge --lineage L                    needs approved; writes the receipt
+
+Exit codes: 0 success, 1 refused transition (JSON on stderr), 2 bad usage.
+`
+
+const OPTIONS = {
+  cwd: { type: 'string' },
+  lineage: { type: 'string' },
+  lens: { type: 'string' },
+  lenses: { type: 'string' },
+  'lenses-reason': { type: 'string' },
+  'base-ref': { type: 'string' },
+  'committed-only': { type: 'boolean' },
+  input: { type: 'string' },
+  'max-bytes': { type: 'string' },
+  help: { type: 'boolean', short: 'h' },
+}
+
+// Options each command accepts besides --cwd; required ones are checked by the command.
+const ACCEPTS = {
+  start: ['lenses', 'lenses-reason', 'base-ref', 'committed-only'],
+  context: ['lineage', 'lens', 'max-bytes'],
+  capture: ['lineage', 'lens', 'input'],
+  'capture-refuter': ['lineage', 'input'],
+  correct: ['lineage', 'base-ref'],
+  'capture-validation': ['lineage', 'input'],
+  status: ['lineage'],
+  acknowledge: ['lineage'],
+}
+
+const need = (values, ...names) => {
+  for (const name of names) if (values[name] === undefined) throw new UsageError(`--${name} is required`)
+}
+
+function parseBytes(value) {
+  if (value === undefined) return DEFAULT_CONTEXT_BYTES
+  if (!/^\d+$/.test(value) || Number(value) === 0) throw new UsageError('--max-bytes must be a positive integer')
+  return Number(value)
+}
+
+function dispatch(command, values, root) {
+  const cwd = values.cwd
+  const common = { root, cwd, lineage: values.lineage }
+  switch (command) {
+    case 'start': {
+      need(values, 'lenses', 'lenses-reason')
+      requireBaseRefForCommittedOnly(values['base-ref'], values['committed-only'] === true)
+      if (goTrimSpace(values['lenses-reason']) === '') throw new UsageError('--lenses-reason must not be blank')
+      const parsed = canonicalLenses(values.lenses)
+      if (parsed.error) throw new UsageError(parsed.error)
+      return { json: commands.start({ root, cwd, baseRef: values['base-ref'], committedOnly: values['committed-only'] === true, lenses: parsed.lenses, lensesReason: values['lenses-reason'] }) }
+    }
+    case 'context':
+      need(values, 'lineage', 'lens')
+      return { text: commands.context({ ...common, lens: values.lens, maxBytes: parseBytes(values['max-bytes']) }) }
+    case 'capture':
+      need(values, 'lineage', 'lens', 'input')
+      return { json: commands.capture({ ...common, lens: values.lens, input: values.input }) }
+    case 'capture-refuter':
+      need(values, 'lineage', 'input')
+      return { json: commands.captureRefuter({ ...common, input: values.input }) }
+    case 'correct':
+      need(values, 'lineage')
+      return { json: commands.correct({ ...common, baseRef: values['base-ref'] }) }
+    case 'capture-validation':
+      need(values, 'lineage', 'input')
+      return { json: commands.captureValidation({ ...common, input: values.input }) }
+    case 'status':
+      need(values, 'lineage')
+      return { json: commands.status(common) }
+    default:
+      need(values, 'lineage')
+      return { json: commands.acknowledge(common) }
+  }
+}
+
+export function run(argv, { stdout = process.stdout, stderr = process.stderr } = {}) {
+  let parsed
+  try {
+    parsed = parseArgs({ args: argv, options: OPTIONS, allowPositionals: true, strict: true })
+  } catch (error) {
+    stderr.write(`odd-review: ${error.message}\n\n${USAGE}`)
+    return 2
+  }
+  const { values, positionals } = parsed
+  if (values.help) {
+    stdout.write(USAGE)
+    return 0
+  }
+  try {
+    const [command, ...rest] = positionals
+    if (!command || !Object.hasOwn(ACCEPTS, command)) {
+      throw new UsageError(command ? `unknown command ${JSON.stringify(command)}` : 'a command is required')
+    }
+    if (rest.length > 0) throw new UsageError(`unexpected argument ${JSON.stringify(rest[0])}`)
+    for (const name of Object.keys(values)) {
+      if (name !== 'cwd' && !ACCEPTS[command].includes(name)) throw new UsageError(`--${name} does not apply to ${command}`)
+    }
+    let root
+    try {
+      root = repositoryRoot(values.cwd ?? '.')
+    } catch (error) {
+      throw new Refusal('not_a_repository', error.message)
+    }
+    const out = dispatch(command, values, root)
+    stdout.write(out.text ?? `${JSON.stringify(out.json, null, 2)}\n`)
+    return 0
+  } catch (error) {
+    if (error instanceof UsageError) {
+      stderr.write(`odd-review: ${error.message}\n\n${USAGE}`)
+      return 2
+    }
+    const refusal = error instanceof Refusal ? error : new Refusal('internal_error', error.message)
+    stderr.write(`${JSON.stringify({ error: { code: refusal.code, message: refusal.message, ...refusal.extra } }, null, 2)}\n`)
+    return 1
+  }
+}

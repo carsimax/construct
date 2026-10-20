@@ -55,5 +55,5 @@ export function assessSnapshotRisk({ root, baseTree, candidateTree, isolation })
   // be shown honestly to the person who has to act on them.
   const explained = riskLevelFromReasons(reasons)
   if (explained !== level) throw new Error(`risk tier ${level} is not explained by its reasons (${explained})`)
-  return { level, changedLines, changedPaths: stats.length, reasons }
+  return { level, changedLines, changedPaths: stats.length, reasons, manifest: stats.map((stat) => stat.path) }
 }
