@@ -126,6 +126,35 @@ describe('context hook', () => {
   })
 })
 
+describe('context hook ambiguity', () => {
+  const pendingPath = (data, agent = 'construct_review-risk') => join(data, 'review-hooks', 's1', `${agent}.json`)
+
+  test('a prompt naming two distinct lineages is denied with a message to name one', () => {
+    const { repo, txn, data } = lineage()
+    const r = hook(CONTEXT_HOOK, spawnInput(repo, `Review ${txn.lineage} and review-0123456789abcdef`), data)
+    assert.equal(r.json.hookSpecificOutput.permissionDecision, 'deny')
+    assert.match(r.json.hookSpecificOutput.permissionDecisionReason, /exactly one lineage/)
+    assert.equal(existsSync(pendingPath(data)), false)
+  })
+
+  test('the same lineage named twice is allowed and gets the context', () => {
+    const { repo, txn, data } = lineage()
+    const r = hook(CONTEXT_HOOK, spawnInput(repo, `Review ${txn.lineage} (again: ${txn.lineage})`), data)
+    assert.equal(r.json.hookSpecificOutput.permissionDecision, 'allow')
+    assert.match(r.json.hookSpecificOutput.updatedInput.prompt, /^ODD_REVIEW_BINDING /)
+  })
+
+  test('a lens spawn after an empty-reply stop is allowed and gets the context again', () => {
+    const { repo, txn, data } = lineage()
+    const prompt = `Review lineage ${txn.lineage}`
+    assert.equal(hook(CONTEXT_HOOK, spawnInput(repo, prompt), data).json.hookSpecificOutput.permissionDecision, 'allow')
+    hook(CAPTURE_HOOK, stopInput(repo, ''), data)
+    const again = hook(CONTEXT_HOOK, spawnInput(repo, prompt), data)
+    assert.equal(again.json.hookSpecificOutput.permissionDecision, 'allow')
+    assert.match(again.json.hookSpecificOutput.updatedInput.prompt, /^ODD_REVIEW_BINDING /)
+  })
+})
+
 describe('capture hook', () => {
   const spawned = (repo, txn, data, agent = 'construct:review-risk') =>
     hook(CONTEXT_HOOK, spawnInput(repo, `Review lineage ${txn.lineage}`, agent), data)

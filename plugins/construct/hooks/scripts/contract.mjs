@@ -59,15 +59,19 @@ function startIndexing(cli, dir) {
 }
 
 // Session only: tell the agent when a git root has no CodeGraph index (and index it when opted in)
-function indexNotice(dir) {
+function indexNotice(dir, source) {
   if (!existsSync(join(dir, '.git')) || existsSync(join(dir, '.codegraph'))) return ''
   const manual = `Indexing is the user's decision: suggest \`! codegraph init ${dir}\` once, then fall back to file tools.`
   const missing = `CodeGraph: \`${dir}\` has no \`.codegraph/\` index, so \`codegraph_explore\` cannot answer for it.`
   if (autoIndex) {
     const cli = findOnPath('codegraph')
     if (!cli) return `${missing} Auto-index is on, but the \`codegraph\` CLI is not on the PATH. ${manual}`
+    // Launch only on a fresh startup; a later source means an earlier launch already had its chance
+    if (source !== 'startup') {
+      return `${missing} An earlier automatic init may have failed (for example in a directory codegraph refuses, such as $HOME). ${manual}`
+    }
     if (startIndexing(cli, dir)) {
-      return `CodeGraph: \`${dir}\` has no \`.codegraph/\` index yet; indexing started in the background (\`codegraph init --yes\`). Use file tools until \`codegraph status\` reports the index complete.`
+      return `CodeGraph: \`${dir}\` has no \`.codegraph/\` index yet; a background \`codegraph init --yes\` was requested and may still fail. Use file tools until \`codegraph status\` reports the index complete.`
     }
   }
   return `${missing} ${manual}`
@@ -76,7 +80,8 @@ function indexNotice(dir) {
 const root = process.env.CLAUDE_PLUGIN_ROOT || join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 let text = readFileSync(join(root, 'hooks', 'contract', kind.file), 'utf8').trim()
 if (process.argv[2] === 'session') {
-  const notice = indexNotice(typeof input.cwd === 'string' && input.cwd ? input.cwd : process.cwd())
+  const notice = indexNotice(typeof input.cwd === 'string' && input.cwd ? input.cwd : process.cwd(),
+    typeof input.source === 'string' && input.source ? input.source : 'startup')
   if (notice) text += `\n\n${notice}`
 }
 

@@ -60,6 +60,21 @@ version_ge() {
   done
 }
 
+# check_writable: the merge needs to write ~/.claude and settings.json (through
+# a symlink, to its target); say so before any change instead of failing later.
+check_writable() {
+  local dir="$HOME/.claude" file="$HOME/.claude/settings.json" target
+  if [ -e "$dir" ] && [ ! -w "$dir" ]; then
+    fail "$dir exists but is not writable, so nothing was installed; fix its permissions and run the installer again"
+  fi
+  if [ -e "$file" ]; then
+    target=$(node -p 'require("fs").realpathSync(process.argv[1])' "$file" 2>/dev/null) || target=$file
+    if [ ! -w "$target" ]; then
+      fail "$file is not writable, so nothing was installed; fix its permissions and run the installer again"
+    fi
+  fi
+}
+
 preflight() {
   has claude || fail "Claude Code (claude) is not on the PATH. Install it from https://claude.com/claude-code"
   local version
@@ -69,6 +84,7 @@ preflight() {
   version=$(run node -p 'process.versions.node')
   version_ge "$version" "$MIN_NODE" || fail "Node.js $version is too old; Construct needs $MIN_NODE or later"
   has git || fail "git is required and is not on the PATH"
+  check_writable
   settings_tool check || fail "nothing was installed"
   if ! has engram; then
     has brew || fail "engram is not installed and Homebrew (brew) is not available to install it. See https://brew.sh"
@@ -172,7 +188,8 @@ try {
   if (error.code !== 'ENOENT') throw error
 }
 let settings = {}
-if (text !== null) {
+// An empty or whitespace-only file counts as {}.
+if (text !== null && text.trim() !== '') {
   try {
     settings = JSON.parse(text)
   } catch (error) {

@@ -68,13 +68,8 @@ function newest(docs) {
   return best
 }
 
-// The newest document (by mtime) that still has unfinished tasks: { feature, open }, or null.
-export function activeFeature(docs) {
-  const best = newest(docs)
-  return best ? { feature: best.feature, open: best.open } : null
-}
-
-// Same document as activeFeature, plus its first unfinished task and every task row as
+// The newest document (by mtime) that still has unfinished tasks, with its first unfinished
+// task and every task row, as
 // { feature, open, task: { id, title }, tasks: [{ id, done }] }, or null.
 export function activeWork(docs) {
   const best = newest(docs)

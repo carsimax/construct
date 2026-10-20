@@ -3,7 +3,9 @@
 // prompt, so the orchestrator never pastes or transcribes the evidence. It also
 // records the lineage for review-capture.mjs. A review agent without a lineage,
 // or one odd-review refuses, is denied with the reason; other agents and
-// prompts that start with the binding line pass through. Errors fail open.
+// prompts that start with the binding line pass through. A prompt naming two
+// distinct lineages is denied. A new spawn overwrites the lens's pending record.
+// Errors fail open.
 // Usage: node review-context.mjs   (hook JSON on stdin)
 import { spawnSync } from 'node:child_process'
 import { rmSync } from 'node:fs'
@@ -12,7 +14,7 @@ import { pendingFile, readInput } from './hook-io.mjs'
 
 const ODD_REVIEW = new URL('../../bin/odd-review', import.meta.url).pathname
 const REVIEW_AGENT = /^construct:(review-(?:risk|resilience|readability|reliability|refuter|validator))$/
-const LINEAGE = /\breview-[0-9a-f]{16}\b/
+const LINEAGE = /\breview-[0-9a-f]{16}\b/g
 
 const decide = (permissionDecision, extra) =>
   process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision, ...extra } })}\n`)
@@ -44,7 +46,14 @@ function main() {
     return
   }
 
-  const lineage = LINEAGE.exec(toolInput.prompt)?.[0]
+  const lineages = [...new Set(toolInput.prompt.match(LINEAGE) ?? [])]
+  if (lineages.length > 1) {
+    decide('deny', {
+      permissionDecisionReason: `${agent} was given ${lineages.length} lineages (${lineages.join(', ')}): name exactly one lineage (review-<16 hex>) in the prompt.`,
+    })
+    return
+  }
+  const lineage = lineages[0]
   if (!lineage) {
     decide('deny', {
       permissionDecisionReason: `${agent} needs a review lineage: put its id (review-<16 hex>) from \`odd-review start\` in the prompt, and this hook injects the evidence.`,
