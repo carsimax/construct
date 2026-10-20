@@ -3,7 +3,7 @@
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { applyFiles, captureAll, commitAll, git, highRepo, makeRepo, review, scratchDir, start } from '../review/helpers.mjs'
 
@@ -214,6 +214,27 @@ describe('blocking', () => {
     const repo = highRepo()
     const r = gate(repo, e)
     assert.match(r.json.reason, /the uncommitted changes are high risk and have no review receipt/)
+  })
+
+  test('without CLAUDE_PLUGIN_DATA the reminders use a private per-user temp directory', () => {
+    const tmp = scratchDir('odd-gate-tmp-')
+    const e = { XDG_CONFIG_HOME: scratchDir('odd-gate-xdg-'), TMPDIR: tmp, CLAUDE_PLUGIN_DATA: '' }
+    const repo = highRepo()
+    assert.equal(gate(repo, e).json.decision, 'block')
+    const dir = join(tmp, `odd-skills-${process.getuid()}`)
+    assert.ok(existsSync(join(dir, 'review-gate', 's1.json')))
+    assert.equal(statSync(dir).mode & 0o077, 0, 'no group or other access')
+    silent(gate(repo, e))
+  })
+
+  test('a fallback directory with group or other access is not trusted and the gate stays silent', () => {
+    const tmp = scratchDir('odd-gate-tmp-')
+    const dir = join(tmp, `odd-skills-${process.getuid()}`)
+    mkdirSync(dir, { mode: 0o777 })
+    chmodSync(dir, 0o777)
+    const e = { XDG_CONFIG_HOME: scratchDir('odd-gate-xdg-'), TMPDIR: tmp, CLAUDE_PLUGIN_DATA: '' }
+    silent(gate(highRepo(), e))
+    assert.equal(existsSync(join(dir, 'review-gate')), false)
   })
 
   test('a corrupt reminder file fails open and is left alone', () => {

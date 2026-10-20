@@ -244,6 +244,7 @@ main
 | 09 | `odd-skills/09-review` | T7 + F4 | `feat: add odd-review lifecycle with receipts` | 1863 | `size:exception` accepted by the user (L27): one behavior (lifecycle plus its odd-assess integration), no cohesive split under budget |
 | 10 | `odd-skills/10-review-hardening` | F5–F8 | `fix: harden odd-review refuter binding, locks, and acknowledge` + `fix: serialize stale lock reclaim in odd-review` | see L28 | within |
 | 11 | `odd-skills/11-rdd-review` | T8 | the three T8 commits | about 1130 | over budget: two parallel units plus one correction batch; see L30 |
+| 12 | `odd-skills/12-gate-followups` | F9, F10 | `fix: scope mode status and protect the gate fallback dir` | 76 | within |
 
 Push and PR creation remain the user's decision.
 
@@ -646,3 +647,11 @@ Push and PR creation remain the user's decision.
   - The parent fixed the last grammar advisory ("are high risk and have no review receipt"): RED, then GREEN.
   - Workflows were dropped (L29).
   - Slice 11 is over budget at about 1130 lines, because it holds two units and one correction batch.
+- **RDD on slice 11** (`--base-ref 0d13c6e`, 1057 lines):
+  - `odd-assess` said `medium`. The parent escalated with item 2 (the Stop gate and switch decide when review is required) → `high`.
+  - The user granted consent.
+  - Lenses `review-risk`, `review-reliability`, and `review-resilience`, lineage `review-5174d24e974c1011`: **approved**, then acknowledged.
+  - Advisories, fixed by the parent in slice 12 (`odd-skills/12-gate-followups`):
+    - **F10 (R3, WARNING):** `odd-review mode status --scope X` silently ignored `--scope` and returned the effective mode. Silently ignoring an explicit option is a blocker class under the verify rules. Now `status --scope` reports that scope's own setting (`{scope, mode, set, effective}`); plain `status` is unchanged. The clone scope outside a repository is refused for `status` too.
+    - **F9 (R1, SUGGESTION):** without `CLAUDE_PLUGIN_DATA`, gate reminders went to a predictable shared `/tmp/odd-skills`. They now go to `<tmpdir>/odd-skills-<uid>`, created with mode 0700. A directory that is not a real directory owned by the user with no group or other access is not trusted, and the gate fails open (silent).
+  - Tests: RED first (3 behavior failures), then GREEN. `node --test tests/` gave `454 pass`; `validate --strict` passed.

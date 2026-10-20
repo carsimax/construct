@@ -9,7 +9,7 @@ import { UsageError } from '../assess/escalation.mjs'
 import { goTrimSpace } from '../assess/text.mjs'
 import * as commands from './commands.mjs'
 import { reviewBoundary } from './boundary.mjs'
-import { readMode, writeMode } from './mode.mjs'
+import { readMode, readScope, writeMode } from './mode.mjs'
 import { DEFAULT_CONTEXT_BYTES } from './evidence.mjs'
 import { Refusal } from './errors.mjs'
 import { canonicalLenses } from './identity.mjs'
@@ -80,8 +80,12 @@ function modeCommand(action, values, root) {
   const scope = values.scope ?? 'global'
   if (!['global', 'clone'].includes(scope)) throw new UsageError('--scope must be global or clone')
   if (!['enable', 'disable', 'status'].includes(action)) throw new UsageError('mode needs enable, disable, or status')
-  if (action === 'status') return { json: readMode(root) }
   if (scope === 'clone' && !root) throw new Refusal('not_a_repository', 'the clone scope needs a git repository')
+  if (action === 'status') {
+    // Without --scope, report the effective switch; with it, report that scope's own setting.
+    if (values.scope === undefined) return { json: readMode(root) }
+    return { json: { ...readScope(scope, root), effective: readMode(root) } }
+  }
   const file = writeMode(scope, action === 'enable' ? 'on' : 'off', { root })
   return { json: { ...readMode(root), scope, file } }
 }

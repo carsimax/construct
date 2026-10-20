@@ -36,6 +36,12 @@ export function readMode(root, env = process.env) {
   return { mode: 'on', source: 'default' }
 }
 
+// readScope reports one scope's own setting, ignoring the others: {scope, mode, set}.
+export function readScope(scope, root, env = process.env) {
+  const mode = readFile(scope === 'clone' ? cloneModePath(root) : globalModePath(env))
+  return { scope, mode, set: mode !== null }
+}
+
 // writeMode records the switch for one scope and returns the file written.
 export function writeMode(scope, mode, { root, env = process.env }) {
   const file = scope === 'clone' ? cloneModePath(root) : globalModePath(env)

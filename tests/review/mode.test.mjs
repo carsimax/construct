@@ -12,6 +12,19 @@ const xdgEnv = () => ({ XDG_CONFIG_HOME: scratchDir('odd-review-mode-xdg-') })
 const mode = (repo, env, ...args) => review(repo, ['mode', ...args], { env })
 
 describe('mode switch', () => {
+  test('status --scope reports only that scope, not the effective mode', () => {
+    const env = xdgEnv()
+    const repo = highRepo()
+    assert.equal(mode(repo, env, 'disable', '--scope', 'clone').status, 0)
+    const clone = mode(repo, env, 'status', '--scope', 'clone')
+    assert.deepEqual([clone.json.scope, clone.json.mode, clone.json.set], ['clone', 'off', true])
+    const global = mode(repo, env, 'status', '--scope', 'global')
+    assert.deepEqual([global.json.scope, global.json.mode, global.json.set], ['global', null, false])
+    assert.deepEqual([global.json.effective.mode, global.json.effective.source], ['off', 'clone'])
+    const plain = mode(repo, env, 'status')
+    assert.deepEqual([plain.json.mode, plain.json.source], ['off', 'clone'])
+  })
+
   test('the default is on and status writes nothing', () => {
     const env = xdgEnv()
     const r = mode(highRepo(), env, 'status')
