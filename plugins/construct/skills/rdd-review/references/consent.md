@@ -8,7 +8,7 @@ Build one blocking prompt and present it under `construct:lossless-prompts`. Pre
 - Reason: why it is due, in one sentence.
 - Risk evidence: each item of `reasons` as `code` plus `path` (and `detail` when present).
 - Candidate size: `changed_paths` files and `changed_lines` lines, range `<boundary>..HEAD`.
-- Selected lenses and the `--lenses-reason`.
+- The lenses `odd-assess` assigns (its `lenses` field).
 
 ## Choices (single select, closed domain)
 
