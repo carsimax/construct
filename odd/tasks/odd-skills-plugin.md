@@ -197,8 +197,8 @@ Design consequences:
 | T2 | S1, S4, S6, S7 | Port agents (`review-*`, `jd-*`); create `odd-explorer`, `odd-worker`, `odd-verify`, `review-validator`, `odd-general`; apply the S6 model and effort table as static frontmatter; declare `model_<role>` / `effort_<role>` `userConfig` options; mod `agent.spawn` + `turn.step` routing with `claude plugin test` coverage | inline | none | done | `feat: port review lens and judgment-day agents` (slice 02) + `feat: add ODD role agents with configurable model routing` (slice 03) |
 | T3 | S1, S4, S7 | Port skills; remove `gentle-ai` command references; drop `skill-registry` | inline | none | done | `feat: port delivery and review skills` (slice 04) |
 | T4 | S1, S2 | Split the orchestrator into the ≤8k session contract and the ODD skills; `SessionStart` and `SubagentStart` hooks; evals for small-inline, large-tracked, and Risk-line cases | inline | none (reassessed, L15) | done | `feat: add ODD workflow, delegation, sizing, and prompt skills` (slice 05) + `feat: inject the ODD session and subagent contracts` (slice 06) |
-| T5 | S1, S4 | Output style (Neutral only, L16), themes, follow-ups F1–F3 | inline | none | done | `feat: add the Neutral output style and themes` (slice 07) |
-| T6 | S1, S2 | `bin/odd-assess`: port `ClassifyRisk` with fixtures; differential check against `gentle-ai review assess` on the same diffs | delegated (`odd-worker`, sonnet): long-session context backstop | 2 (it decides whether review runs) | in progress | — |
+| T5 | S1, S4 | Output style (Neutral only, L16), single `odd` theme (L22), follow-ups F1–F3 | inline | none | done | `feat: add the Neutral output style and themes` (slice 07) |
+| T6 | S1, S2 | `bin/odd-assess`: port `ClassifyRisk` with fixtures; differential check against `gentle-ai review assess` on the same diffs | delegated (`odd-worker`, sonnet): long-session context backstop | 2 (it decides whether review runs) | done | `feat: add odd-assess risk classifier` + `fix: match Go whitespace trimming in odd-assess` (slice 08) |
 | T7 | S1, S2 | `bin/odd-review`: frozen tree via temp index, inspect, capture validation, receipt and acknowledgement | inline | 1 | pending | — |
 | T8 | S1, S2 | `rdd-review` skill, `review-4lens` and `judgment-day` workflows, `Stop` review gate | inline | 6 | pending | — |
 | T9 | S1 | `secret-guard.sh` `PreToolUse` deny list; `Stop` prompt hook for the Risk line | inline | 2 | pending | — |
@@ -233,6 +233,7 @@ main
 | 05 | `odd-skills/05-odd-skills` | T4 (skills) | `feat: add ODD workflow, delegation, sizing, and prompt skills` | about 465 | slightly over; best cohesive split (L15) |
 | 06 | `odd-skills/06-session-contract` | T4 (contract, hooks, evals) | `feat: inject the ODD session and subagent contracts` | about 500 | slightly over; best cohesive split (L15) |
 | 07 | `odd-skills/07-styles` | T5 + F1–F3 | `feat: add the Neutral output style and themes` | see L16 | within |
+| 08 | `odd-skills/08-assess` | T6 | `feat: add odd-assess risk classifier` | 2092 | `size:exception` accepted by the user (L21): CLI tests need every module, so no cohesive split fits; 1297 lines code (147 verbatim sink catalog), 722 lines tests |
 
 Push and PR creation remain the user's decision.
 
@@ -434,3 +435,40 @@ Push and PR creation remain the user's decision.
 - **L20 (2026-10-19, user):** "podemos agregar al plugin replicar mi configuracion actual del statusline?" then "ok vamos con el MOD"
   - Added S8 and widened T12 to cover it.
   - Option B (shipping the script plus a manual `statusLine` edit) was rejected by the user in favor of the mod.
+- **L21 (2026-10-19, user):** "si excepcion"
+  - Slice 08 (`27659c7`, 2092 lines) ships as one PR with `size:exception`.
+  - Worker evidence, re-checked by the parent:
+    - `node --test tests/`: `317 pass`. `validate --strict`: passed.
+    - Differential against `gentle-ai review assess`: 196 fixture rows plus 7 real slices all match, except 4 rows that are the two accepted deviations.
+    - Parent spot check: the working-tree candidate is `high` (`executable_mode` from the new `bin/odd-assess`), and the real index is unchanged.
+  - Honest notes:
+    - No true RED was observed; the worker wrote the implementation first. 7 deliberate mutations each failed the suite instead.
+    - The sink catalog has 45 entries, not 36 as stated in L19.
+    - The `internal/{runtime,assets,templates}` operational-markdown rule is kept (it only ever raises risk).
+  - Cleanup: the worker's mutation leftovers in `/tmp` were removed. `/tmp/g.bak` and `/tmp/mp.bak` belong to another user project and were left untouched.
+  - Independent `odd-verify` (opus) running for Risk item 2.
+  - Independent `odd-verify` (opus) ran about 230 probes against gentle-ai.
+    - **S2: pass.**
+    - **S1: fail, one blocker.** JavaScript `.trim()` strips U+FEFF, while Go `strings.TrimSpace` keeps it. A BOM-prefixed first line such as `// uses child_process` was skipped as a comment, lowering `high` to `medium`. The same cause in the MDX gate opened a hidden fence (`medium` to `passive`).
+  - One correction batch:
+    - New `lib/assess/text.mjs` `goTrimSpace`, replicating Go `unicode.IsSpace`: it keeps U+FEFF and strips U+0085. It replaces the Go-mirroring `.trim()` calls in `sinks.mjs`, `passive.mjs`, and `escalation.mjs`. This also fixes advisory 2 (NEL raised the tier).
+    - `tests/assess/unicode.test.mjs` pins the verifier's probes. True RED was observed: 6 behavior failures with the helper present but unwired. Then GREEN.
+    - Advisory 6 fixed: `scratchDir()` in the test helpers registers the CLI tests' temp dirs for removal, and the 60 leaked dirs were deleted.
+    - `node --test tests/`: `325 pass`.
+  - Verifier recheck, limited to the blocker: all 6 probes match gentle-ai. **Blocker resolved; S1 pass.**
+  - Advisories left open:
+    - 1: Unicode case folding (`ſ`, Kelvin sign); the input is adversarial and out of domain.
+    - 3: a bad escalation exits 2 without JSON.
+    - 4: the `unassessable` detail is not redacted.
+    - 5: working-tree mode includes untracked files, by design.
+    - 7: L19 says 36 sinks; there are 45.
+  - Scratch from the worker and the verifier removed.
+- **L22 (2026-10-19, user):** "podemos solo dejar el tema Gentleman Cute? y al final podemos quitar referencias a  Gentleman en su defecto renombrarlo simplemente como odd"
+  - `themes/odd.json` replaces both themes: the colors of Gentleman Cute, with `name: "odd"`. The test is updated; RED, then GREEN.
+  - References kept on purpose:
+    - the MIT `NOTICE` (required by the license);
+    - the engram install commands (they are engram's real tap and repository);
+    - `author: gentleman-programming` on the 9 ported skills (honest authorship).
+- **L23 (2026-10-19, user):** "por que como podriamos bautizar este plugin para que no sea odd? quiero nombres originales", "otrod nombres mas pro?", "y por ejemplo relacionado a la mitologia girega, nordica, japonesa?"
+  - Plugin renaming is under discussion. Candidates offered: Ariadne (recommended), Norns, Omoikane, Metis, Huginn, Keel, and Praxis.
+  - The rename is planned as one final commit across the manifest, marketplace, `odd-skills:` prefixes, the routing mod, the contract filter, tests, and docs. Collisions are to be checked first.
