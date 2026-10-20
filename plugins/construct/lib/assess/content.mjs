@@ -26,20 +26,48 @@ export const PERMISSION_DECISION_LINE = /(^|[^A-Za-z0-9_$])permissionDecision([^
 // skip/focus marker in a test file. A suppression is a comment, so it is matched where a comment opens (start of line
 // or after whitespace/punctuation, never inside a quote). shortcut: a marker spelled across two
 // lines or built from a string is not seen, upgrade with a per-language tokenizer.
-const OPENER = '(?:^|[\\s;{}),])'
-const JS_SUPPRESSION = new RegExp(`${OPENER}(?:\\/\\/|\\/\\*+)[\\s*]*(?:@ts-(?:ignore|expect-error|nocheck)\\b|eslint-disable\\b)`)
-const PY_SUPPRESSION = new RegExp(`${OPENER}#[\\s]*(?:noqa\\b|type:\\s*ignore\\b)`)
-const GO_SUPPRESSION = new RegExp(`${OPENER}\\/\\/[\\s]*nolint\\b`)
+const OPENER = '(?<=^|[\\s;{}),])'
+const JS_SUPPRESSION = new RegExp(`${OPENER}(?:\\/\\/|\\/\\*+)[\\s*]*(?:@ts-(?:ignore|expect-error|nocheck)\\b|eslint-disable\\b)`, 'g')
+const PY_SUPPRESSION = new RegExp(`${OPENER}#[\\s]*(?:noqa\\b|type:\\s*ignore\\b)`, 'g')
+const GO_SUPPRESSION = new RegExp(`${OPENER}\\/\\/[\\s]*nolint\\b`, 'g')
+
+// matchesOutsideStrings is true when a match of the global pattern starts outside every closed
+// same-line string literal (single, double, or backtick quotes; a backslash escapes the next char).
+// An unterminated quote is not a literal, so an apostrophe in a comment hides nothing.
+// shortcut: per line only; a template literal that spans lines or a regex literal holding a quote is not modeled, upgrade with a per-language tokenizer.
+function matchesOutsideStrings(pattern, line) {
+  const spans = []
+  for (let i = 0; i < line.length; i++) {
+    const quote = line[i]
+    if (quote !== "'" && quote !== '"' && quote !== '`') continue
+    let j = i + 1
+    while (j < line.length && line[j] !== quote) j += line[j] === '\\' ? 2 : 1
+    if (j >= line.length) continue
+    spans.push([i, j])
+    i = j
+  }
+  pattern.lastIndex = 0
+  for (const match of line.matchAll(pattern)) {
+    if (!spans.some(([start, end]) => match.index > start && match.index < end)) return true
+  }
+  return false
+}
 // Markers are keyed on the file's language: `#` never opens a JS comment and `//nolint` is Go only.
 export function suppressionLine(path, line) {
   const extension = asciiLower(goExt(path))
-  if (JS_TS_EXTENSIONS.includes(extension)) return JS_SUPPRESSION.test(line)
-  if (extension === '.py') return PY_SUPPRESSION.test(line)
-  if (extension === '.go') return GO_SUPPRESSION.test(line)
+  if (JS_TS_EXTENSIONS.includes(extension)) return matchesOutsideStrings(JS_SUPPRESSION, line)
+  if (extension === '.py') return matchesOutsideStrings(PY_SUPPRESSION, line)
+  if (extension === '.go') return matchesOutsideStrings(GO_SUPPRESSION, line)
   return false
 }
-export const TEST_SKIP_LINE =
-  /(?:^|[^\w.$])(?:(?:test|it|describe|context|suite)(?:\.\w+)*\.(?:skip|only|todo)(?:\s*\(|\.)|x(?:it|describe|test)\s*\()|\{\s*(?:skip|todo)\s*:|@pytest\.mark\.skip\b|\bt\.Skip(?:f|Now)?\s*\(/
+// An option object skips only with a literal: `{ skip: true }` or `{ skip: 'reason' }`.
+// `{ skip: 10 }` (a Prisma offset) and `{ skip: offset }` are data, not a skipped test.
+export const TEST_SKIP_LINE = new RegExp(
+  '(?<![\\w.$])(?:(?:test|it|describe|context|suite)(?:\\.\\w+)*\\.(?:skip|only|todo)(?:\\s*\\(|\\.)|x(?:it|describe|test)\\s*\\()' +
+    '|\\{\\s*(?:skip|todo)\\s*:\\s*(?:true\\b|[\'"`])|@pytest\\.mark\\.skip\\b|\\bt\\.Skip(?:f|Now)?\\s*\\(',
+  'g',
+)
+export const testSkipLine = (line) => matchesOutsideStrings(TEST_SKIP_LINE, line)
 const isSemanticSourcePath = (path) => SEMANTIC_SOURCE_EXTENSIONS.has(asciiLower(goExt(path)))
 
 const reason = (code, signal, path) => ({ code, signal, path })
@@ -130,7 +158,7 @@ export function processBoundaryRiskReasons(root, baseTree, candidateTree, stats)
         const isTest = !nonTest.has(currentPath)
         if (!weakSeen && isSemanticSourcePath(currentPath)) {
           // Suppressions are comments, so they ignore the comment-only skip; skips are code.
-          if (suppressionLine(currentPath, added) || (isTest && code && TEST_SKIP_LINE.test(added))) {
+          if (suppressionLine(currentPath, added) || (isTest && code && testSkipLine(added))) {
             reasons.push(reason('verifier_weakening', 'verifier_weakening', currentPath))
             weakSeen = true
           }

@@ -118,12 +118,16 @@ export function executableModeChanged(oldMode, newMode) {
   return (oldValue & 0o111) !== (newValue & 0o111)
 }
 
+// Prose files name a topic, they do not run it: `security-checklist.md` is not a sensitive area.
+const PROSE_EXTENSIONS = new Set(['.md', '.mdx', '.txt', '.rst'])
+
 const HOT_TOKENS = { auth: 'auth', security: 'security', webhook: 'security', payments: 'payments' }
 
 // hotPathRiskSignals names the sensitive areas a path token points at. Test
-// files only exercise those areas, so a token there is not evidence.
+// files only exercise those areas, and prose files only describe them, so a
+// token there is not evidence.
 export function hotPathRiskSignals(logicalPath) {
-  if (isTestRiskPath(logicalPath)) return []
+  if (isTestRiskPath(logicalPath) || PROSE_EXTENSIONS.has(asciiLower(goExt(logicalPath)))) return []
   const tokens = fieldsFunc(logicalPath.toLowerCase(), (c) => '/\\.-_'.includes(c))
   return canonicalRiskSignals(tokens.filter((token) => Object.hasOwn(HOT_TOKENS, token)).map((token) => HOT_TOKENS[token]))
 }
