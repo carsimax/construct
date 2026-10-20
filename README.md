@@ -125,6 +125,8 @@ claude mcp add-json --scope user codegraph '{"type":"stdio","command":"codegraph
 
 Engram's MCP server comes from `engram setup claude-code` (see Quick path).
 
+The installer no longer registers context7. An earlier registration can be removed with `claude mcp remove --scope user context7`.
+
 ## Agents and model routing
 
 The plugin ships 13 agents. Each role's model and effort can be changed in `/config`, where every option appears as a row such as `ODD Worker model` or `RDD Risk effort`.

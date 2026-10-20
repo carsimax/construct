@@ -184,10 +184,11 @@ test('a second run changes nothing and installs nothing', () => {
   assert.match(second.stdout, /Skipped:/)
 })
 
-test('--no-mcp leaves the MCP servers and the codegraph CLI alone', () => {
+test('--no-mcp leaves the codegraph MCP server and CLI alone', () => {
   const box = sandbox()
   const run = install(box, ['--no-mcp'])
   assert.equal(run.status, 0, run.stderr)
+  assert.match(run.stdout, /codegraph MCP server \(--no-mcp\)/)
   assert.deepEqual(run.calls.filter((c) => /^(npm|claude mcp)/.test(c)), [])
 })
 

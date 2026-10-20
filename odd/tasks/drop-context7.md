@@ -16,6 +16,8 @@ Historical feature documents (`odd-skills-plugin.md`, `curl-installer.md`) keep 
 |---|---|---|---|---|---|---|
 | T1 | S3 | CodeGraph worktree wording | odd-worker | none | done | — |
 | T2 | S1, S2 | Remove context7 from `install.sh`, `tests/install/install.test.mjs`, `README.md`, codegraph skill | odd-worker | 5 | done | `chore: drop the context7 MCP server` |
+| T4 | S1, S2 | Close the L6 follow-ups: `--no-mcp` test name and skip-message assertion; README removal hint for an existing context7 registration | odd-worker | none | done | `test: pin the --no-mcp skip message and document context7 removal` |
+| T5 | — | Release 0.7.2 (`plugin.json` version) | parent | 5 | done | `chore: release 0.7.2` |
 | T3 | S1 | Unregister context7 from the user's machine (`claude mcp remove --scope user context7`) | parent | none (reversible) | done | — |
 
 Risk item 5: the installer is delivery; a broken MCP step would fail installs.
@@ -28,3 +30,4 @@ Risk item 5: the installer is delivery; a broken MCP step would fail installs.
 - **L4 (2026-10-20):** T2 done. RED: the clean-machine installer test failed while `install.sh` still added context7; GREEN after removal, plus a negative assertion that no call names context7. The skill's tool sentence now names `mcp__codegraph__codegraph_explore`, which every agent lists. `node --test tests/` 625 pass; `claude plugin validate --strict ./plugins/construct` passed; `bash -n install.sh` OK; the only context7 hit left in delivered files is the negative assertion.
 - **L5 (2026-10-20, RDD):** `odd-assess` c7673a0..ad8c0d9: high (process_boundary, shell_source in `install.sh`), review due. Consent granted. Lineage `review-0b56b64ef86a17b7`: 4 lenses, 0 findings, approved and acknowledged.
 - **L6 (2026-10-20, odd-verify):** S1 PASS, S2 PASS, S3 PASS, no blockers. `--help` matches baseline except the `--no-mcp` line; `--no-mcp` and npm-failure tests pass; `git grep -i context7 HEAD -- . ':!odd/tasks'` hits only the negative assertion. Follow-ups (advisory, not done): the `--no-mcp` test name still says "MCP servers" and does not assert the new skip message (`tests/install/install.test.mjs:187`); the README does not say how to remove an existing context7 registration.
+- **L7 (2026-10-20):** T4 done: `--no-mcp` test renamed to singular and asserts the `codegraph MCP server (--no-mcp)` skip message (RED seen with a broken regex, then restored); README tells users how to remove an earlier context7 registration. T5: `plugin.json` 0.7.2. `node --test tests/` 625 pass; both `claude plugin validate --strict` passed. No open follow-ups.
