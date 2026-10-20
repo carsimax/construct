@@ -66,6 +66,9 @@ check_writable() {
   if [ -e "$dir" ] && [ ! -w "$dir" ]; then
     fail "$dir exists but is not writable, so nothing was installed; fix its permissions and run the installer again"
   fi
+  if [ -d "$file" ]; then
+    fail "$file is a directory, not a file, so nothing was installed; move it away and run the installer again"
+  fi
   if [ -e "$file" ]; then
     target=$(node -p 'require("fs").realpathSync(process.argv[1])' "$file" 2>/dev/null) || target=$file
     if [ ! -w "$target" ]; then
@@ -241,7 +244,16 @@ if (changed) {
   }
   // Write through a symlink to its target and keep the file's mode, so a
   // dotfiles link or a 0600 file survives the atomic rename.
-  const target = text === null ? file : fs.realpathSync(file)
+  // A dangling symlink has no realpath: follow its chain by hand so the write
+  // creates the target and the link stays a link.
+  let target = file
+  if (text !== null) target = fs.realpathSync(file)
+  else {
+    for (let hops = 0; hops < 40 && fs.lstatSync(target, { throwIfNoEntry: false })?.isSymbolicLink(); hops++) {
+      target = path.resolve(path.dirname(target), fs.readlinkSync(target))
+    }
+    fs.mkdirSync(path.dirname(target), { recursive: true })
+  }
   const mode = text === null ? 0o644 : fs.statSync(target).mode & 0o777
   const temp = `${target}.construct-${process.pid}`
   fs.writeFileSync(temp, JSON.stringify(settings, null, 2) + '\n', { mode })

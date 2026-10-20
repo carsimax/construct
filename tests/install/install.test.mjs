@@ -277,3 +277,26 @@ test('an empty or whitespace-only settings.json is treated as an empty object', 
     assert.equal(statSync(settingsPath(box)).mode & 0o777, 0o600)
   }
 })
+
+test('a settings.json that is a directory stops the preflight with one clear message and no change', () => {
+  const box = sandbox({ engram: false })
+  mkdirSync(settingsPath(box), { recursive: true })
+  const run = install(box)
+  assert.notEqual(run.status, 0)
+  assert.match(run.stderr, /construct-install: .*settings\.json is a directory/)
+  assert.doesNotMatch(run.stderr, /at .*\.js|node:internal|Error:|EISDIR/)
+  assert.deepEqual(NOTHING_INSTALLED(run), [])
+  assert.ok(statSync(settingsPath(box)).isDirectory(), 'the directory is untouched')
+})
+
+test('a dangling-symlink settings.json stays a link and its target is created with the merge', () => {
+  const box = sandbox()
+  const target = join(box.root, 'dotfiles', 'settings.json')
+  mkdirSync(join(box.home, '.claude'))
+  symlinkSync(target, settingsPath(box))
+  const run = install(box)
+  assert.equal(run.status, 0, run.stderr)
+  assert.ok(lstatSync(settingsPath(box)).isSymbolicLink(), 'still a symlink')
+  assert.equal(JSON.parse(readFileSync(target, 'utf8')).theme, 'custom:construct:construct')
+  assert.deepEqual(readSettings(box), JSON.parse(readFileSync(target, 'utf8')))
+})
