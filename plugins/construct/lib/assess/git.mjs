@@ -5,7 +5,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 
-export const DEFAULT_OUTPUT_LIMIT = 64 << 20
+const DEFAULT_OUTPUT_LIMIT = 64 << 20
 // Windows caps a command line near 32767 characters; the budget keeps every
 // batched pathspec invocation well under it (same figure as the original).
 const PATHSPEC_ARGV_BUDGET = 26000
@@ -80,7 +80,7 @@ function headTree(root) {
   return tree === '' ? null : tree
 }
 
-export function emptyTree(root) {
+function emptyTree(root) {
   return text(git(root, ['hash-object', '-t', 'tree', '--stdin'], { input: '' }))
 }
 

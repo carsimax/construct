@@ -71,7 +71,7 @@ export function isInspectableStat(stat) {
   return stat.additions + stat.deletions !== 0 && !stat.binary && !stat.modeOnly && !stat.generated && !isGeneratedGoldenPath(stat.path)
 }
 
-export function isSemanticRiskEligible(stat) {
+function isSemanticRiskEligible(stat) {
   if (!isInspectableStat(stat) || hasExcludedRiskSegment(stat.path)) return false
   if (asciiLower(goBase(stat.path)).startsWith('readme')) return false
   if (SEMANTIC_SOURCE_EXTENSIONS.has(asciiLower(goExt(stat.path)))) return true
@@ -132,9 +132,7 @@ export function hotPathRiskSignals(logicalPath) {
   return canonicalRiskSignals(tokens.filter((token) => Object.hasOwn(HOT_TOKENS, token)).map((token) => HOT_TOKENS[token]))
 }
 
-export const touchesHotPath = (stats) => stats.some((stat) => !isGeneratedGoldenPath(stat.path) && hotPathRiskSignals(stat.path).length !== 0)
-
-export function canonicalRiskSignals(signals) {
+function canonicalRiskSignals(signals) {
   return [...new Set(signals)].sort(compareBytes)
 }
 

@@ -30,7 +30,7 @@ export function publicReasons(reasons) {
 // reviewDue: automatic review is for high risk only. Medium is covered by
 // verification and passive needs none. A candidate whose exact target already
 // has a receipt (consumed) is already_reviewed whatever its tier.
-export function reviewDue(risk, consumed = false) {
+function reviewDue(risk, consumed = false) {
   if (consumed) return { review_due: false, review_due_reason: 'already_reviewed' }
   if (risk === 'high') return { review_due: true, review_due_reason: 'high_risk' }
   if (risk === 'medium') return { review_due: false, review_due_reason: 'under_budget' }

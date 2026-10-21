@@ -5,21 +5,21 @@ import { pathRiskItemReasons } from './items.mjs'
 import { activePassiveContentPaths, isPassiveContentCandidateStat } from './passive.mjs'
 import {
   canonicalRiskReasons, deriveSnapshotRiskReasons, isConfigurationReviewPath, removeFallbackRiskReasons,
-  riskSignalsFromReasons, touchesHotPath,
+  riskSignalsFromReasons,
 } from './signals.mjs'
 import { collectDiffStats, countChangedLines, isGeneratedGoldenPath } from './stats.mjs'
 
 const VALID_SIGNALS = ['auth', 'update', 'security', 'payments', 'data_exposure', 'data_loss', 'permissions', 'shell_process', 'dangerous_sink', 'delivery', 'verifier_weakening']
 
-// classifyRisk: high on any signal or hot path, low when every path is proven
+// classifyRisk: high on any signal, low when every path is proven
 // passive and none is configuration, otherwise medium. Counting still runs so
 // malformed or duplicated stats are rejected before a tier is published.
-export function classifyRisk({ stats, signals, onlyPassiveContentChanges, touchesConfiguration }) {
+function classifyRisk({ stats, signals, onlyPassiveContentChanges, touchesConfiguration }) {
   countChangedLines(stats)
   for (const signal of signals) {
     if (!VALID_SIGNALS.includes(signal)) throw new Error(`unknown risk signal ${JSON.stringify(signal)}`)
   }
-  if (signals.length > 0 || touchesHotPath(stats)) return 'high'
+  if (signals.length > 0) return 'high'
   if (onlyPassiveContentChanges && !touchesConfiguration) return 'low'
   return 'medium'
 }
