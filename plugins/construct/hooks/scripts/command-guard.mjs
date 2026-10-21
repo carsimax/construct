@@ -116,7 +116,7 @@ export function extractHeredocs(command) {
 
 // substitutionBodies lists the bodies of $(...), <(...), >(...), and backticks outside
 // single quotes. A body is a command line of its own.
-function substitutionBodies(command) {
+export function substitutionBodies(command) {
   const out = []
   let quote = null
   for (let i = 0; i < command.length; i++) {
@@ -142,6 +142,22 @@ function substitutionBodies(command) {
     }
   }
   return out
+}
+
+// nestedLines lists the command lines one simple command (its live words) runs as a string:
+// `env -S "..."` values (followed by the words after them), the body of `sh|bash|zsh -c [--] 'cmd'`,
+// and `eval` arguments. `at` and `name` are the head word's index and basename, `args` the words after it.
+export function nestedLines(live) {
+  const { at, strings } = unwrap(live)
+  const lines = strings.map((text) => [text, ...live.slice(at)].join(' '))
+  const name = basename(live[at] ?? '')
+  const args = live.slice(at + 1)
+  if (SHELLS.has(name)) {
+    const flag = args.findIndex((a) => /^-[a-z]*c[a-z]*$/.test(a))
+    const body = flag + 1 < args.length && args[flag + 1] === '--' ? flag + 2 : flag + 1
+    if (flag >= 0 && args[body] !== undefined) lines.push(args[body])
+  } else if (name === 'eval') lines.push((args[0] === '--' ? args.slice(1) : args).join(' '))
+  return { at, name, args, lines }
 }
 
 // shortcut: `~/sub` and `$HOME/sub` are an ask (rm -r), not a deny as upstream has them; S1 lists only
@@ -182,18 +198,12 @@ function findMatches(command, deps, depth = 0) {
   let previous = []
   for (const words of split(text)) {
     const live = words.filter((w) => !w.r).map((w) => w.t)
-    const { at, strings } = unwrap(live)
-    // `env -S "cmd args"` runs the string as a command, followed by the words after it.
-    for (const text of strings) nested([text, ...live.slice(at)].join(' '))
-    const name = basename(live[at] ?? '')
-    const args = live.slice(at + 1)
+    const { name, args, lines } = nestedLines(live)
+    for (const line of lines) nested(line)
     if (!words.piped) previous = []
-    if (SHELLS.has(name)) {
-      const flag = args.findIndex((a) => /^-[a-z]*c[a-z]*$/.test(a))
-      const body = flag + 1 < args.length && args[flag + 1] === '--' ? flag + 2 : flag + 1
-      if (flag >= 0 && args[body] !== undefined) nested(args[body])
-    } else if (name === 'eval') nested((args[0] === '--' ? args.slice(1) : args).join(' '))
-    else if (SQL_CLIENTS.has(name)) {
+    if (SHELLS.has(name) || name === 'eval') {
+      // Its string bodies were walked above.
+    } else if (SQL_CLIENTS.has(name)) {
       const payloads = args.map((a) => a.replace(/^(?:--command|--execute)=/, ''))
       if (previous.length) payloads.push(previous.join(' ').replace(/^%s\s*/, ''))
       if (payloads.some(sqlDestroys)) add('ask', 'SQL DROP/TRUNCATE/DELETE without WHERE')

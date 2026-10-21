@@ -9,35 +9,67 @@
 //                            unreadable input): the hook fails open, as the other gates do.
 // A push source containing `$` or a backtick (an unexpanded substitution or variable), or
 // one that does not resolve to a commit, is judged as HEAD.
-// Commands are found through `sh -c`, `eval`, `$(...)`, backticks, wrappers such as sudo or
-// env, `git -C DIR`, and a preceding `cd DIR`. A dry run and a branch deletion publish no
+// Commands are found through the unwrapping command-guard uses (`sh -c [--]`, `env -S`, `eval`,
+// `$(...)`, backticks, wrappers such as sudo or env), `git -C DIR`, and a preceding `cd DIR`. A
+// directory with a variable or substitution other than ~ or $HOME cannot be checked: it is denied. A dry run and a branch deletion publish no
 // work, so they are not gated.
 // Usage: node publication-gate.mjs   (hook JSON on stdin)
 import { spawnSync } from 'node:child_process'
 import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { extractHeredocs, headIndex } from './command-guard.mjs'
+import { extractHeredocs, nestedLines, substitutionBodies } from './command-guard.mjs'
 import { readInput } from './hook-io.mjs'
 import { splitCommands } from './shell-words.mjs'
 
 const BIN = join(dirname(fileURLToPath(import.meta.url)), '../../bin/odd-review')
 const TIMEOUT_MS = 25000
 const MAX_DEPTH = 4
-const SHELLS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh'])
 const GIT_VALUE_FLAGS = new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace', '--exec-path', '--super-prefix', '--config-env'])
 const PUSH_VALUE_FLAGS = new Set(['--repo', '-o', '--push-option', '--receive-pack', '--exec', '--force-with-lease-value'])
 const GH_VALUE_FLAGS = new Set(['-R', '--repo', '--hostname'])
 const RELEASE_VALUE_FLAGS = new Set(['-t', '--title', '-n', '--notes', '-F', '--notes-file', '--target', '--notes-start-tag', '--discussion-category', '-R', '--repo'])
 
-// Heredoc bodies are data, not commands.
-const stripHeredocs = (command) => extractHeredocs(command).text
-
-// substitutions lists the bodies of $(...) and backticks, which a quoted word can still hold.
-function substitutions(word) {
-  const out = []
-  for (const m of word.matchAll(/\$\(([^()]*)\)/g)) out.push(m[1])
-  for (const m of word.matchAll(/`([^`]*)`/g)) out.push(m[1])
+// quoteSubstitutions wraps each unquoted `$(...)` or backtick span in double quotes. The tokenizer
+// would split such a span into commands of its own, so a directory argument like `git -C $(pwd)`
+// would vanish; quoted, it stays one word and is seen as unresolvable.
+function quoteSubstitutions(text) {
+  let out = ''
+  let quote = null
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i]
+    let end = -1
+    if (quote === null && c === '$' && text[i + 1] === '(') {
+      let depth = 0
+      for (let j = i + 1; j < text.length && end < 0; j++) {
+        if (text[j] === '(') depth++
+        else if (text[j] === ')' && --depth === 0) end = j
+      }
+    } else if (quote === null && c === '`') end = text.indexOf('`', i + 1)
+    if (end > i) {
+      out += `"${text.slice(i, end + 1)}"`
+      i = end
+      continue
+    }
+    if (c === '\\' && quote !== "'") out += text[i++]
+    else if (c === "'" && quote !== '"') quote = quote === "'" ? null : "'"
+    else if (c === '"' && quote !== "'") quote = quote === '"' ? null : '"'
+    out += text[i] ?? ''
+  }
   return out
+}
+
+// Heredoc bodies are data, not commands.
+// Heredoc bodies are data, not commands.
+const stripHeredocs = (command) => quoteSubstitutions(extractHeredocs(command).text)
+
+// resolveDir returns the directory a `-C`/`cd` argument names, or null when it cannot be known:
+// `~`, `$HOME`, and `${HOME}` expand from HOME; any other `$` or backtick, or a relative path
+// from an unknown base, is unresolvable.
+function resolveDir(base, arg) {
+  const home = process.env.HOME
+  const expanded = home ? arg.replace(/^(?:~|\$HOME|\$\{HOME\})(?=\/|$)/, home) : arg
+  if (/[$`]/.test(expanded) || /^~/.test(expanded)) return null
+  return base === null && !expanded.startsWith('/') ? null : resolve(base ?? '/', expanded)
 }
 
 // option reads `--name value`, `--name=value`, or a short `-N value`; null when absent.
@@ -69,7 +101,7 @@ function gitPublication(args, cwd) {
   let dir = cwd
   let i = 0
   while (args[i]?.startsWith('-')) {
-    if (args[i] === '-C' && args[i + 1] !== undefined) dir = resolve(dir, args[i + 1])
+    if (args[i] === '-C' && args[i + 1] !== undefined) dir = resolveDir(dir, args[i + 1])
     i += GIT_VALUE_FLAGS.has(args[i]) ? 2 : 1
   }
   if (args[i] !== 'push') return null
@@ -102,15 +134,10 @@ function findPublications(command, cwd, depth = 0) {
   for (const tokens of splitCommands(stripHeredocs(command))) {
     // A redirection target is not a word.
     const words = tokens.filter((w) => !w.r).map((w) => w.t)
-    for (const word of words) for (const body of substitutions(word)) nested(body, where)
-    const at = headIndex(words)
-    const name = basename(words[at] ?? '')
-    const args = words.slice(at + 1)
-    if (SHELLS.has(name)) {
-      const flag = args.findIndex((a) => /^-[a-z]*c[a-z]*$/.test(a))
-      if (flag >= 0 && args[flag + 1] !== undefined) nested(args[flag + 1], where)
-    } else if (name === 'eval') nested((args[0] === '--' ? args.slice(1) : args).join(' '), where)
-    else if (name === 'cd' && args[0] && !args[0].startsWith('-')) where = resolve(where, args[0])
+    for (const word of words) for (const body of substitutionBodies(word)) nested(body, where)
+    const { name, args, lines } = nestedLines(words)
+    for (const line of lines) nested(line, where)
+    if (name === 'cd' && args[0] && !args[0].startsWith('-')) where = resolveDir(where, args[0])
     else if (name === 'git') {
       const push = gitPublication(args, where)
       if (push) found.push(push)
@@ -177,13 +204,15 @@ function verdict(pub) {
   return null
 }
 
+const unresolvable = (command) => `publication-gate: this publishes work from a directory the gate cannot resolve (${command}). Write the repository path literally (no variable or substitution besides ~ and $HOME), so the gate can check its review state.`
+
 function main() {
   const input = readInput()
   if (!input || input.tool_name !== 'Bash' || typeof input.cwd !== 'string' || input.cwd === '') return
   const command = input.tool_input?.command
   if (typeof command !== 'string' || command === '') return
   for (const pub of findPublications(command, input.cwd)) {
-    const reason = verdict(pub)
+    const reason = pub.dir === null ? unresolvable(pub.gate === 'pre-push' ? 'git push' : pub.gate === 'pre-pr' ? 'gh pr create' : 'gh release create') : verdict(pub)
     if (reason) {
       process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: reason } })}\n`)
       return

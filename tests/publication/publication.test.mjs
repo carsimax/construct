@@ -214,3 +214,61 @@ describe('the hook fails open', () => {
   test('a missing destination repository is not a denial when nothing is due', () => silent(hook('git push origin quiet', makeRepo({ 'src/app.js': 'export const a = 1\n' }))))
   test('a missing cwd', () => silent(hook('git push', undefined, env(), { input: JSON.stringify({ tool_name: 'Bash', tool_input: { command: 'git push' } }) })))
 })
+
+// T13 (F1, F2): the same unwrapping as command-guard, and unresolvable target directories.
+describe('shell wrappers are unwrapped like command-guard', () => {
+  const repo = featureRepo()
+  const cases = [
+    "bash -c -- 'git push origin feat'",
+    'sh -c -- "git push origin feat"',
+    'env -S "git push origin feat"',
+    'env --split-string="git push origin feat"',
+    'env -S"git push origin feat"',
+    'echo `git push origin feat`',
+  ]
+  for (const command of cases) test(`denies: ${command}`, () => denied(hook(command, repo)))
+})
+
+describe('target directories', () => {
+  const repo = featureRepo()
+  const home = scratchDir('odd-pub-home-')
+  const homed = join(home, 'work')
+  spawnSync('cp', ['-R', repo, homed])
+  const hh = () => ({ ...env(), HOME: home })
+  const elsewhere = () => scratchDir('odd-pub-elsewhere-')
+
+  test('~, $HOME, and ${HOME} expand from HOME', () => {
+    denied(hook('cd ~/work && git push', elsewhere(), hh()))
+    denied(hook('git -C ~/work push', elsewhere(), hh()))
+    denied(hook('git -C "$HOME/work" push', elsewhere(), hh()))
+    denied(hook('git -C "${HOME}/work" push', elsewhere(), hh()))
+  })
+
+  test('another variable or substitution is denied with a literal-path reason', () => {
+    for (const command of ['git -C "$REPO" push', 'git -C "$(pwd)" push', 'git -C `pwd` push', 'git -C $(pwd) push', 'cd `pwd` && git push', 'cd "$REPO" && git push', 'cd "$(pwd)"; git push origin feat']) {
+      const r = hook(command, repo)
+      assert.equal(r.status, 0)
+      assert.equal(r.decision, 'deny', command)
+      assert.match(r.reason, /publication-gate/)
+      assert.match(r.reason, /literal/)
+    }
+  })
+
+  test('an unresolvable directory does not deny a command that publishes nothing', () => {
+    silent(hook('git -C "$REPO" status', repo))
+    silent(hook('git -C "$REPO" push --dry-run', repo))
+    silent(hook('cd "$REPO" && git log', repo))
+  })
+
+  test('a literal directory that does not exist keeps the allow', () => {
+    silent(hook('git -C /nonexistent/odd-pub-dir push', repo))
+    silent(hook('cd /nonexistent/odd-pub-dir && git push', repo))
+  })
+
+  test('nothing due still allows a home-relative directory', () => {
+    const clean = makeRepo()
+    const cleanHome = scratchDir('odd-pub-home-')
+    spawnSync('cp', ['-R', clean, join(cleanHome, 'work')])
+    silent(hook('git -C ~/work push', elsewhere(), { ...env(), HOME: cleanHome }))
+  })
+})
