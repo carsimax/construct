@@ -48,6 +48,8 @@
 //                (turn.step without agentId, index.d.ts:14328-14354), model and effort are the latest
 //                request's, mode is the permission mode (agent.spawn permissionMode, index.d.ts:326,
 //                set only when the parent is main; classic hook permission_mode, index.d.ts:861)
+//   blocked      true while Claude waits on the human (S8b): set by a permission Notification or a
+//                PreToolUse on AskUserQuestion / ExitPlanMode, cleared by UserPromptSubmit, PostToolUse, Stop
 //   gate.verdicts { rule, ask, cleared, deny }  who decided (S6), subagents included. tool.check
 //                decision 'allow' | 'ask' | 'deny' (index.d.ts:13642): allow is a rule/allowed pass,
 //                ask went to the mode's decider and stays 'ask' until onToolSettle moves it to
@@ -88,6 +90,7 @@ export function initialState() {
     receipt: null,
     compactions: 0,
     main: { steps: 0, model: null, effort: null, mode: null },
+    blocked: false,
   }
 }
 
@@ -101,7 +104,7 @@ const str = (x) => (typeof x === 'string' && x !== '' ? x : null)
 export function merge(stored) {
   const base = initialState()
   if (!isObj(stored) || (stored.v !== SCHEMA_VERSION && stored.v !== 2 && stored.v !== 1)) return base
-  const { agents, inline, gate, receipt, compactions, main } = stored
+  const { agents, inline, gate, receipt, compactions, main, blocked } = stored
   if (agents !== undefined && !Array.isArray(agents)) return base
   if (inline !== undefined && !isObj(inline)) return base
   if (gate !== undefined && !isObj(gate)) return base
@@ -130,6 +133,7 @@ export function merge(stored) {
     receipt: receipt ?? null,
     compactions: compactions ?? 0,
     main: { ...base.main, ...main },
+    blocked: blocked === true,
   }
 }
 
@@ -212,6 +216,27 @@ export function onPermissionMode(state, e) {
 // Busy while a main turn's receipt is open.
 export function mainBusy(state) {
   return isObj(state) && isObj(state.receipt) && state.receipt.endedMs === null
+}
+
+// ---- blocked (S8b) --------------------------------------------------------
+// Port of gentle-agent-state scripts/hook-adapter.sh: Claude fires Notification for a permission
+// request and, about 60 s after Stop, for "waiting for your input". Only the first is a block.
+
+const BLOCKING_NOTIFICATION = /permission|needs your|approve/i
+const BLOCKING_TOOLS = ['AskUserQuestion', 'ExitPlanMode']
+
+export const isBlockingNotification = (message) => typeof message === 'string' && BLOCKING_NOTIFICATION.test(message)
+export const isBlockingTool = (tool) => BLOCKING_TOOLS.includes(tool)
+export const isBlocked = (state) => isObj(state) && state.blocked === true
+
+export function onBlocked(state) {
+  const s = merge(state)
+  return s.blocked ? s : { ...s, blocked: true }
+}
+
+export function onUnblocked(state) {
+  const s = merge(state)
+  return s.blocked ? { ...s, blocked: false } : s
 }
 
 // ---- agents (S2) -------------------------------------------------------

@@ -4,8 +4,9 @@
 // odd/tasks/ changed and the final message has no Risk line. It fails open: any
 // error, and every uncertain state, means no output and exit 0.
 // Usage: node risk-line.mjs mark|check   (hook JSON on stdin)
-import { mkdirSync, readFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, realpathSync } from 'node:fs'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { dataDir, hasOpenSubagents, readInput, safeName } from './hook-io.mjs'
 
 const MAX_PATHS = 3
@@ -14,13 +15,13 @@ const MAX_PATHS = 3
 // whitespace or `(`; the space after the colon is optional.
 const RISK_LINE = /^[ \t]*(?:(?:[-*+]|\d+[.)])[ \t]+)?[*_`]*Risk[*_`]*:[*_`]*[ \t]*[*_`]*(?:none|item [1-6])[*_`]*(?=$|\s|\()/m
 
-const recordFile = (session) => {
+export const recordFile = (session) => {
   const dir = join(dataDir(), 'risk-line')
   return { dir, file: join(dir, `${safeName(session)}.json`) }
 }
 
 // readRecord returns the turn's record or null when none exists; a corrupt file throws (fail open).
-function readRecord(file) {
+export function readRecord(file) {
   let text
   try {
     text = readFileSync(file, 'utf8')
@@ -86,9 +87,12 @@ async function main() {
   process.stdout.write(`${JSON.stringify({ decision: 'block', reason })}\n`)
 }
 
-try {
-  await main()
-} catch {
-  // Fail open: no output, exit 0.
+// Run only as a script; mirror-drift.mjs imports the record helpers above.
+if (process.argv[1] && fileURLToPath(import.meta.url) === realpathSync(process.argv[1])) {
+  try {
+    await main()
+  } catch {
+    // Fail open: no output, exit 0.
+  }
+  process.exitCode = 0
 }
-process.exitCode = 0

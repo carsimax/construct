@@ -51,6 +51,7 @@ function world($, on, o: any = {}) {
   on('tool.call', (_$, e) => ((seen.call = e), { ref: 'r', result: {}, text: 'ok', ...(o.isError ? { isError: true } : {}) }))
   on('tool.check', (_$, e) => ((seen.check = e), { decision: o.decision ?? 'allow' }))
   on('agent.spawn', (_$, e) => ({ model: e.model, agentId: 'ag-1' }))
+  for (const name of ['Notification', 'UserPromptSubmit', 'PostToolUse', 'Stop']) on(`classic.${name}`, () => ({}))
   on('turn.step', async function* (_$, e) {
     return { turnId: e.turnId, index: e.index, answer: 'ok', toolUses: [], stopReason: 'end_turn', usage: null }
   })
@@ -329,4 +330,61 @@ test('a surface with Client support draws the rail as a Client of ./rail.tsx', a
   const tree = JSON.stringify(await p.drawn())
   expect(tree).toContain('"type":"Client"')
   expect(tree).toContain('panel/rail.tsx')
+})
+
+// ---- S8b blocked state: the mod hears the classic events itself ----------------
+
+const NOTE = (message: string) => ({ message, notification_type: 'permission_prompt' })
+
+// One pane per test: mount it once, redraw it for each reading.
+const reader = async ($) => {
+  const p = await pane($)
+  return async () => (await p.redraw(), joined(p))
+}
+
+test('a permission Notification shows blocked; Stop, PostToolUse and UserPromptSubmit clear it', async ($, on) => {
+  await start($, on)
+  const status = await reader($)
+  expect(await status()).toContain('○ idle')
+  for (const clear of [
+    () => $.classic.Stop({ stop_hook_active: false }),
+    () => $.classic.PostToolUse({ tool_name: 'AskUserQuestion', tool_input: {}, tool_response: {}, tool_use_id: 'tu' }),
+    () => $.classic.UserPromptSubmit({ prompt: 'go' }),
+  ]) {
+    await $.classic.Notification(NOTE('Claude needs your permission to use Bash'))
+    await settle()
+    expect(await status()).toContain('◆ blocked')
+    await clear()
+    await settle()
+    const text = await status()
+    expect(text).not.toContain('blocked')
+  }
+})
+
+test('the idle waiting-for-input Notification does not block', async ($, on) => {
+  await start($, on)
+  const status = await reader($)
+  await $.classic.Notification({ message: 'Claude is waiting for your input', notification_type: 'idle_prompt' })
+  await settle()
+  expect(await status()).not.toContain('blocked')
+})
+
+test('a PreToolUse on AskUserQuestion or ExitPlanMode blocks; another tool does not', async ($, on) => {
+  await start($, on)
+  const status = await reader($)
+  await $.tool.call({ tool: 'Bash', command: 'ls' })
+  await settle()
+  expect(await status()).not.toContain('blocked')
+  for (const tool of ['AskUserQuestion', 'ExitPlanMode']) {
+    await $.classic.UserPromptSubmit({ prompt: 'go' })
+    await $.tool.call({ tool })
+    await settle()
+    expect(await status()).toContain('◆ blocked')
+  }
+})
+
+test('blocked-state hooks pass the classic events through unchanged', async ($, on) => {
+  await start($, on)
+  const r = await $.classic.Notification(NOTE('needs your permission'))
+  expect(r).toBeDefined()
 })

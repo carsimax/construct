@@ -449,3 +449,20 @@ test('a running turn at 40 columns holds no row wider than the card interior', a
   const width = (n: any): number => (typeof n === 'string' ? n.length : n.type === 'Client' ? 6 : (n.children ?? []).map(width).reduce((a: number, b: number) => a + b, 0))
   expect(width(row)).toBeLessThanOrEqual(40 - 4)
 })
+
+// ---- S8b blocked indicator ----------------------------------------------------
+
+test('blocked: the main card status reads blocked in place of busy or idle, with no extra row', async () => {
+  const plain = rowsOf({ panel: { ...full(), blocked: false } })
+  const rows = rowsOf({ panel: { ...full(), blocked: true } })
+  expect(rows[0]).toBe('Opus 5.5 ◆ blocked')
+  expect(rows.length).toBe(plain.length)
+  expect(rows.filter((r) => r.includes('blocked')).length).toBe(1)
+  const status = find(buildPanel(args({ panel: { ...full(), blocked: true } })), '◆ blocked')
+  expect(status.props.color).toBe('warning')
+})
+
+test('not blocked: the status is unchanged', async () => {
+  expect(rowsOf({ panel: { ...full(), blocked: false } })[0]).toBe(rowsOf()[0])
+  expect(rowsOf()[0]).not.toContain('blocked')
+})

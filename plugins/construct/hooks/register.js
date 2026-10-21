@@ -5,8 +5,11 @@ import {
   SCHEMA_VERSION,
   filePathOf,
   initialState,
+  isBlockingNotification,
+  isBlockingTool,
   merge,
   onAgentSpawn,
+  onBlocked,
   onCompact,
   onMainStep,
   onPermissionMode,
@@ -16,6 +19,7 @@ import {
   onTurnComplete,
   onTurnStart,
   onTurnStep,
+  onUnblocked,
 } from './panel/state.js'
 import { activeWork } from './status/tasks.js'
 import { parseAssess, parseBoundary, parseGitStatus, parseMode, parseNumstat, parseRevParse, reviewState } from './status/data.js'
@@ -307,6 +311,11 @@ function noteEffort(e) {
   }
 }
 
+async function clearBlocked($, e, next) {
+  await feed($, onUnblocked)
+  return next(e)
+}
+
 export function register(on, options) {
   // Send each construct agent on the model its role is configured for.
   // If this hook fails, the agent keeps its frontmatter model.
@@ -388,6 +397,24 @@ export function register(on, options) {
     await feed($, (s) => onToolCheck(s, { tool: e.tool, callId: e.tool_use_id, input: e.input, agentId: e.agentId, decision: result?.decision, nowMs: at, isQuery: typeof e.tool_use_id !== 'string' || e.tool_use_id === '' }))
     return result
   }).catch(($, e, next) => next(e))
+
+  // Claude is waiting on the human: a permission Notification, or a PreToolUse on AskUserQuestion or
+  // ExitPlanMode. The idle "waiting for your input" Notification is not a block. Observe only.
+  on('classic.Notification', async ($, e, next) => {
+    if (isBlockingNotification(e.message)) await feed($, onBlocked)
+    return next(e)
+  }).catch(($, e, next) => next(e))
+
+  on('classic.PreToolUse', async ($, e, next) => {
+    if (isBlockingTool(e.tool)) await feed($, onBlocked)
+    return next(e)
+  }).catch(($, e, next) => next(e))
+
+  // The human answered or the turn moved on: UserPromptSubmit, PostToolUse and Stop clear it.
+  // The `on` event names are string literals, so each is spelled out.
+  on('classic.UserPromptSubmit', clearBlocked).catch(($, e, next) => next(e))
+  on('classic.PostToolUse', clearBlocked).catch(($, e, next) => next(e))
+  on('classic.Stop', clearBlocked).catch(($, e, next) => next(e))
 
   on('session.compact', async ($, e, next) => {
     const result = await next(e)

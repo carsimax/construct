@@ -16,6 +16,7 @@ export type ConstructPanel = {
   receipt: Record<string, unknown> | null
   compactions: number
   main: { steps: number; model: string | null; effort: string | null; mode: string | null }
+  blocked: boolean
 }
 
 declare module 'claude-code' {

@@ -140,7 +140,7 @@ function limitPiece(label, pct, resetsAt, nowMs) {
   return [dim(`${label} `), text(g.on, { color: pct >= 80 ? PALETTE.warn : PALETTE.main }), faint(g.off), dim(` ${Math.round(pct)}%${left ? ` ↻${left}` : ''}`)]
 }
 
-function mainCard({ main, usage, model, busy, compactions, branch, width, nowMs }) {
+function mainCard({ main, usage, model, busy, blocked, compactions, branch, width, nowMs }) {
   const effort = main?.effort ?? null
   const meter = effortMeter(effort)
   const ctx = usage?.context
@@ -179,7 +179,8 @@ function mainCard({ main, usage, model, busy, compactions, branch, width, nowMs 
   }
   return card({
     title: model,
-    status: busy ? '● busy' : { text: '○ idle', color: PALETTE.dim },
+    // Waiting on the human outranks busy and idle: one indicator, no extra row (S8b).
+    status: blocked ? { text: '◆ blocked', color: PALETTE.amber } : busy ? '● busy' : { text: '○ idle', color: PALETTE.dim },
     color: PALETTE.main,
     children: rows.filter(Boolean),
     width,
@@ -466,7 +467,7 @@ export function buildPanel({ panel, usage, odd, rdd, nowMs, columns, rows, model
     if (el) children.push(el)
     return Boolean(el)
   }
-  push(mainCard({ main, usage, model: name, busy, compactions: state.compactions ?? 0, branch: git?.branch, width, nowMs }))
+  push(mainCard({ main, usage, model: name, busy, blocked: state.blocked === true, compactions: state.compactions ?? 0, branch: git?.branch, width, nowMs }))
   const above = [oddCard(odd, width), reviewCard(rdd, width)].filter(Boolean)
   const gate = gateCard({ gate: state.gate, inline: state.inline, mode: state.main?.mode, width })
   if (above.length > 0) {

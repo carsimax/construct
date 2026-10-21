@@ -198,6 +198,14 @@
               "check"
             ],
             "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/mirror-drift.mjs"
+            ],
+            "timeout": 30
           }
         ]
       }
