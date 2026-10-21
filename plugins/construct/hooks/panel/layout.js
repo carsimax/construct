@@ -64,7 +64,7 @@ const two = (n) => String(n).padStart(2, '0')
 const fit = (s, w) => (s.length <= w ? s : w <= 1 ? s.slice(0, Math.max(0, w)) : `${s.slice(0, w - 1)}…`)
 
 // m:ss, or XhYY from an hour on.
-function clock(ms) {
+export function clock(ms) {
   const s = Math.max(0, Math.floor((isNum(ms) ? ms : 0) / 1000))
   const m = Math.floor(s / 60)
   return m < 60 ? `${m}:${two(s % 60)}` : `${Math.floor(m / 60)}h${two(m % 60)}`

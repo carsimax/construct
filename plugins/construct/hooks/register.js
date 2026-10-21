@@ -20,6 +20,7 @@ import {
   onTurnStep,
   onUnblocked,
 } from './panel/state.js'
+import { agentDoneNotice, resumeNotice, turnDoneNotice } from './panel/notices.js'
 import { activeWork } from './status/tasks.js'
 import { parseAssess, parseBoundary, parseGitStatus, parseMode, parseNumstat, parseRevParse, reviewState } from './status/data.js'
 
@@ -35,7 +36,7 @@ const roleByAgent = new Map()
 const GIT_MS = 3000
 const CLI_MS = 8000
 const MAX_UNTRACKED = 20
-const status = { data: null, effort: null, running: false, again: false }
+const status = { data: null, effort: null, running: false, again: false, resume: false }
 
 // ---- panel state ------------------------------------------------------------
 // The panel's state lives in one atom. A `ui.render` hook that reads it is drawn
@@ -52,6 +53,28 @@ async function feed($, change) {
     await update($, PANEL, (stored) => change(merge(stored)))
   } catch {
     // never break the event
+  }
+}
+
+// ---- notifications ----------------------------------------------------------
+// Toasts and native notifications (S6, S7), gated by the `notifications` option (default on; only an
+// explicit false turns them off). Every failure is swallowed: a notice never delays or breaks an event.
+
+const notificationsOn = (options) => options?.notifications !== false
+
+function toast($, text) {
+  try {
+    if (text) $.ui.toast(text)
+  } catch {
+    // no surface to toast on
+  }
+}
+
+async function notify($, text) {
+  try {
+    if (text) await $.ui.notify(text)
+  } catch {
+    // no notification channel
   }
 }
 
@@ -185,6 +208,10 @@ async function refresh($) {
       status.again = false
       const next = await collect($)
       status.data = next
+      if (status.resume) {
+        status.resume = false
+        toast($, resumeNotice(next.odd))
+      }
       try {
         await $.ui.invalidate('ui.render')
       } catch {
@@ -296,6 +323,7 @@ export function register(on, options) {
   // Fill the panel's cache when the session starts. Detached, so the start is never held up.
   on('session.start', async ($, e, next) => {
     const result = await next(e)
+    status.resume = notificationsOn(options)
     void refresh($)
     void setUpPanel($, options)
     return result
@@ -307,7 +335,18 @@ export function register(on, options) {
     if (e.agentId === undefined) void refresh($)
     try {
       const at = await nowMs($)
+      // The state from before the completion, for the notice. A failed read only loses the notice: the feed
+      // below always runs.
+      let before = null
+      if (notificationsOn(options)) {
+        try {
+          before = merge(await read($, PANEL))
+        } catch {
+          // no notice without it
+        }
+      }
       await feed($, (s) => onTurnComplete(onUnblocked(s), { agentId: e.agentId, turnId: e.turnId, nowMs: at }))
+      if (before) await noteComplete($, e, before, at)
     } catch {
       // observe only
     }
@@ -369,6 +408,22 @@ export function register(on, options) {
 
   // The docked panel.
   on('ui.render', { component: 'Pane' }, async ($, e, next) => drawPane($, e, next)).catch(($, e, next) => next(e))
+}
+
+// A turn ended: a subagent toasts its short name and elapsed time, a main turn of 60 s or more toasts and
+// notifies. `before` is the panel state from before this completion cleared the turn.
+async function noteComplete($, e, before, at) {
+  try {
+    if (e.agentId !== undefined) {
+      toast($, agentDoneNotice(before.agents.find((a) => a.id === e.agentId), at))
+      return
+    }
+    const text = turnDoneNotice(before.turn?.startedMs, at)
+    toast($, text)
+    void notify($, text) // not awaited: a native notification never holds the hook's return
+  } catch {
+    // observe only
+  }
 }
 
 // A subagent started: add its card. Observe only; the routing above has already run.

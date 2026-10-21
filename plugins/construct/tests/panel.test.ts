@@ -27,7 +27,7 @@ function world($, on, o: any = {}) {
   on('session.cwd', () => value('/home/me/proj'))
   on('settings.read', () => value(o.settings ?? {}))
   on('env.get', () => value('/home/me'))
-  on('clock.now', () => value(NOW))
+  on('clock.now', () => value(o.clock ? o.clock() : NOW))
   on('fs.list', () => value([entry('feat.md')]))
   on('fs.read', () => value(o.tasks ? o.tasks() : TASKS))
   on('process.run', (_$, e) => {
@@ -424,4 +424,110 @@ test('the blocked-state wiring passes tool.check and tool.call results through u
   expect((await $.tool.check(CALL)).decision).toBe('ask')
   const r = await $.tool.call({ tool: 'AskUserQuestion' })
   expect(r.text).toBe('ok')
+})
+
+// ---- notifications (S6, S7) ---------------------------------------------------
+
+function notices($, on, o: any = {}) {
+  const toasts: string[] = []
+  const notes: string[] = []
+  on('ui.toast', (_$, e) => {
+    if (o.toastThrows) throw new Error('toast down')
+    toasts.push(e.text ?? e)
+    return value(undefined)
+  })
+  on('ui.notify', (_$, e) => (notes.push(e.text ?? e), value({ isSent: true, channel: 'x' })))
+  return { toasts, notes }
+}
+
+async function finishAgent($) {
+  await $.agent.spawn({ subagentType: 'construct:odd-worker', model: 'opus', prompt: 'p', description: 'build it' })
+  await settle()
+  await $.turn.complete({ turnId: 'a1', agentId: 'ag-1', answer: 'done' })
+  await settle()
+}
+
+test('a subagent turn.complete toasts its short name', async ($, on) => {
+  const n = notices($, on)
+  await start($, on)
+  await finishAgent($)
+  expect(n.toasts.some((t) => t.startsWith('worker done in'))).toBe(true)
+  expect(n.notes).toEqual([])
+})
+
+test('notifications false produces no toast and no notification', { options: { notifications: false } }, async ($, on) => {
+  const n = notices($, on)
+  await start($, on)
+  await finishAgent($)
+  await $.turn.start({ text: 'go', turnId: 't1' })
+  await $.turn.complete({ turnId: 't1', answer: 'done' })
+  await settle()
+  expect(n.toasts).toEqual([])
+  expect(n.notes).toEqual([])
+})
+
+test('a toast that throws does not break the turn.complete result', async ($, on) => {
+  notices($, on, { toastThrows: true })
+  await start($, on)
+  await $.agent.spawn({ subagentType: 'construct:odd-worker', model: 'opus', prompt: 'p', description: 'build it' })
+  const r = await $.turn.complete({ turnId: 'a1', agentId: 'ag-1', answer: 'done' })
+  expect(r.text).toBe('done')
+})
+
+test('a main turn under 60 seconds raises no notice', async ($, on) => {
+  const n = notices($, on)
+  await start($, on)
+  await $.turn.start({ text: 'go', turnId: 't1' })
+  await $.turn.complete({ turnId: 't1', answer: 'done' })
+  await settle()
+  expect(n.toasts.filter((t) => t.startsWith('Turn'))).toEqual([])
+  expect(n.notes).toEqual([])
+})
+
+test('a main turn of 60 seconds toasts and notifies', async ($, on) => {
+  const n = notices($, on)
+  let now = NOW
+  await start($, on, { clock: () => now })
+  await $.turn.start({ text: 'go', turnId: 't1' })
+  await settle()
+  now = NOW + 61_000
+  await $.turn.complete({ turnId: 't1', answer: 'done' })
+  await settle()
+  expect(n.toasts).toContain('Turn done in 1:01')
+  expect(n.notes).toEqual(['Turn done in 1:01'])
+})
+
+test('the session start toasts the resume notice once', async ($, on) => {
+  const n = notices($, on)
+  await start($, on)
+  expect(n.toasts).toEqual(['Resume feat: T2 second (1 open)'])
+  await $.turn.start({ text: 'go', turnId: 't1' })
+  await $.turn.complete({ turnId: 't1', answer: 'done' })
+  await settle()
+  expect(n.toasts.filter((t) => t.startsWith('Resume'))).toHaveLength(1)
+})
+
+test('a failed read of the panel before the completion still marks the subagent done', async ($, on) => {
+  const stored = new Map<string, unknown>()
+  const gate = { failNext: false }
+  on('state.get', (_$, a) => {
+    if (gate.failNext) {
+      gate.failNext = false
+      return value(undefined) // a malformed answer: the engine's read throws on it
+    }
+    return value(stored.has(a.key) ? { value: stored.get(a.key) } : { value: undefined })
+  })
+  on('state.set', (_$, a) => (stored.set(a.key, a.value), value(undefined)))
+  notices($, on)
+  await start($, on)
+  await $.agent.spawn({ subagentType: 'construct:odd-worker', model: 'opus', prompt: 'p', description: 'build it' })
+  await settle()
+  const status = await reader($)
+  expect(await status()).toContain('1 running')
+  gate.failNext = true
+  const r = await $.turn.complete({ turnId: 'a1', agentId: 'ag-1', answer: 'done' })
+  await settle()
+  expect(r.text).toBe('done')
+  expect(gate.failNext).toBe(false)
+  expect(await status()).toContain('0 running')
 })

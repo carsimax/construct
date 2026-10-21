@@ -134,6 +134,7 @@ Options are plugin settings, edited in `/config`:
 |---|---|
 | Model and effort per role | See the routing table below |
 | `panel_open_on_start` (boolean, default `true`) | Open the panel at every session start |
+| `notifications` (boolean, default `true`) | Toasts and native notifications when work finishes, and the resume notice at session start (see [Notifications](#notifications)) |
 | `codegraph_auto_index` (boolean, default `false`) | Index a git root with CodeGraph at session start (see [MCP servers](#mcp-servers)) |
 
 ### Agents and model routing
@@ -412,6 +413,16 @@ The mod draws one thing: a docked **panel** (a `Pane` with id `construct`) laid 
 4. **GATE card**: a stacked bar of permission verdicts, allowed / asked (`you`, or `classifier` in `auto` mode) / pending / denied counts, `file`, `shell` and `other` bucket counts, the last denied tool with credential-like values masked, and the inline-write alert (a main-thread `Edit`, `Write`, `MultiEdit` or `NotebookEdit` outside `odd/tasks/`: the count and last path, error color). It only observes and never blocks.
 5. **agents card**: titled `agents`, with `N running · M total` on the right, one row per subagent (up to 6, then `+N earlier`): a status mark, a short name (the construct role without the `odd_` prefix, as in `worker` or `review-risk`; the subagent type when there is no construct role), the routed model with its effort meter (for example `Sonnet 5.5 ▮▮▮▯`), and the elapsed time as static text.
 6. **changes card** (only with something to show): round card titled with the branch, `↑N` (commits to push) and `↓N` (commits to pull) on the right, each shown only when above 0. One row per changed file, biggest change first: the path (long paths keep their basename: `…/dir/name`) and `+added` / `-removed` lines (`bin` for a binary file). Changes are the working tree against `HEAD`, staged and unstaged; an untracked file shows `+lines` (counted for the first 20 untracked files) or `new` when it is a directory, past the first 20, or not countable. Rows fit the pane height; when some are cut the last row is `+N more`. The card is hidden when the repository is clean and in sync.
+
+#### Notifications
+
+With the plugin option `notifications` on (boolean, default `true`), the mod raises these notices; set it to `false` to silence all of them.
+
+- **Subagent done.** When a subagent completes: a toast `<short name> done in <elapsed>` (for example `worker done in 2:14`; the elapsed time is `m:ss`, or `XhYY` from an hour on).
+- **Turn done.** When a main turn completes after 60 seconds or more: a toast and a native notification, `Turn done in <duration>`. Shorter turns raise nothing. The native notification goes through your own notification channel (your `preferredNotifChannel` setting, with your `Notification` hooks run first), so where you have none it does not appear.
+- **Resume notice.** Once per session, after the first read of the feature documents at session start, when a feature document has unfinished tasks: a toast `Resume <feature>: <task id> <title> (<n> open)`, naming the first unfinished task.
+
+There is no notice for permission prompts (Claude Code raises its own) and no sound. A notice failure is swallowed and never delays or breaks the event.
 
 **Refresh and fail-open.** Git (status, `diff --numstat HEAD` and a line count per untracked file), `odd-review`, `odd-assess`, and the feature documents are read only on `session.start` and after each main-thread `turn.complete`, in the background with a timeout, never on a redraw. Context and the plan limits are read from the session usage on each redraw. Nothing is animated: the agents' elapsed times are static text computed at each redraw, which happens on the events below, not on a timer. The panel's own state is kept in a versioned `atom` fed from engine events (`agent.spawn`, `turn.start`, `turn.step`, `tool.call`, `tool.check`, `turn.complete`, and `session.compact`); the panel redraws on those events, not per token. These hooks only observe: each passes its event on unchanged and swallows its own failures, and the model and effort routing is untouched. Any error leaves out the affected card and never blocks or delays a turn.
 

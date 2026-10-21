@@ -363,6 +363,12 @@
       "description": "Open the docked Construct panel when a session starts (on by default); /construct opens it any time and /construct close closes it",
       "default": true
     },
+    "notifications": {
+      "type": "boolean",
+      "title": "Notify when work finishes",
+      "description": "Show a toast when a subagent completes and when a main turn of 60 seconds or more completes (also sent as a native notification), and a resume notice at session start when a feature has unfinished tasks (on by default)",
+      "default": true
+    },
     "codegraph_auto_index": {
       "type": "boolean",
       "title": "Index with CodeGraph at session start",
