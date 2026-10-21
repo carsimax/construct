@@ -1,5 +1,5 @@
 // Risk line gate. `mark` (UserPromptSubmit) records the working-state tree at the
-// start of a turn and prints nothing, because stdout would enter the model's
+// start of a turn (kept across repeated events of the same prompt_id) and prints nothing, because stdout would enter the model's
 // context. `check` (Stop) blocks the stop once per turn when paths outside
 // odd/tasks/ changed and the final message has no Risk line. It fails open: any
 // error, and every uncertain state, means no output and exit 0.
@@ -64,7 +64,17 @@ async function main() {
   }
 
   if (mode === 'mark') {
-    write({ root, tree: candidateTree, blocked: false })
+    // A task notification repeats UserPromptSubmit within one turn with the same prompt_id; the
+    // turn's baseline (and its spent block) must survive it. Without a prompt_id every mark re-marks.
+    const promptId = typeof input.prompt_id === 'string' && input.prompt_id !== '' ? input.prompt_id : null
+    let previous = null
+    try {
+      previous = promptId ? readRecord(file) : null
+    } catch {
+      // A corrupt record is replaced.
+    }
+    if (previous && previous.root === root && previous.prompt_id === promptId) return
+    write({ root, tree: candidateTree, blocked: false, ...(promptId ? { prompt_id: promptId } : {}) })
     return
   }
 

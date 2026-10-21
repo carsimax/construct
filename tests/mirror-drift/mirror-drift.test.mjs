@@ -156,3 +156,18 @@ describe('risk-line stays importable without running', () => {
     assert.equal(r.stdout.trim(), 'function function')
   })
 })
+
+describe('repeated UserPromptSubmit within one turn (T10)', () => {
+  test('a same-prompt_id mark after the change keeps the baseline, so the gate blocks', () => {
+    const repo = makeRepo({ 'odd/tasks/feat.md': '# feat\n' })
+    const e = { CLAUDE_PLUGIN_DATA: scratchDir('odd-mirror-data-') }
+    const input = { session_id: 's1', cwd: repo, stop_hook_active: false, prompt_id: 'p1' }
+    run(RISK, ['mark'], { ...input, prompt: 'do it' }, e)
+    applyFiles(repo, { 'odd/tasks/feat.md': '# feat\nchanged\n' })
+    run(RISK, ['mark'], { ...input, prompt: '<task-notification>\nx\n</task-notification>' }, e)
+    const transcript = join(scratchDir('odd-mirror-tr-'), 't.jsonl')
+    writeFileSync(transcript, `${JSON.stringify(user('do it'))}\n`)
+    const r = run(MIRROR, [], { ...input, transcript_path: transcript }, e)
+    assert.equal(r.json?.decision, 'block')
+  })
+})
