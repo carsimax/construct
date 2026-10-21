@@ -439,3 +439,15 @@ function child(args) {
     p.on('close', (status) => resolve({ status, stdout, stderr }))
   })
 }
+
+describe('hasHash', () => {
+  test('is true for a live observation with that normalized hash, false for unknown or soft-deleted', () => {
+    const { store } = open()
+    const { id } = store.save({ title: 'Hash me', content: 'Some   Content here', type: 'discovery' })
+    assert.equal(store.hasHash(normalizedHash('some content HERE')), true)
+    assert.equal(store.hasHash(normalizedHash('other')), false)
+    store.remove(id)
+    assert.equal(store.hasHash(normalizedHash('some content here')), false)
+    store.close()
+  })
+})

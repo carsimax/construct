@@ -374,6 +374,9 @@ function makeStore(db, path, now) {
     // lastSaveAt is the time of the newest save or update, or null.
     lastSaveAt: () => one('SELECT max(updated_at) AS t FROM observations').t,
 
+    // hasHash is true when a live (not soft-deleted) observation has this normalized_hash.
+    hasHash: (hash) => Boolean(one('SELECT 1 AS found FROM observations WHERE normalized_hash = ? AND deleted_at IS NULL', hash)),
+
     close: () => db.close(),
   }
   return api
