@@ -209,7 +209,7 @@ test('a tool.check query without tool_use_id is not a gate cell', async ($, on) 
 
 test('spawn makes a card and passes the spawn result through', async ($, on) => {
   await start($, on)
-  const r = await $.agent.spawn({ subagentType: 'construct:odd-worker', model: 'opus', prompt: 'p', description: 'd' })
+  const r = await $.agent.spawn({ subagentType: 'construct:odd-worker', prompt: 'p', description: 'd' })
   expect(r.agentId).toBe('ag-1')
   expect(r.model).toBe('sonnet')
   await settle()

@@ -3,7 +3,7 @@
 // the surfaces of its own prompt (S3).
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { mkdirSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, test } from 'node:test'
 import { makeRepo, scratchDir } from '../assess/helpers.mjs'
@@ -213,5 +213,30 @@ describe('A6: symlinks under odd/tasks are judged by where they write', () => {
     symlinkSync(join(repo, 'odd/tasks/loop-b'), join(repo, 'odd/tasks/loop-a'))
     symlinkSync(join(repo, 'odd/tasks/loop-a'), join(repo, 'odd/tasks/loop-b'))
     assert.equal(main('Write', { file_path: join(repo, 'odd/tasks/loop-a') }).status, 0)
+  })
+})
+
+// Path identity (S1, gentle-v2-parity): on a case-insensitive volume a differently-cased
+// path or cwd names the same file, so it must not slip past the main-thread ban or the
+// writer surfaces. Skipped where the filesystem is case-sensitive.
+const swapCase = (p) => [...p].map((c) => (c === c.toUpperCase() ? c.toLowerCase() : c.toUpperCase())).join('')
+const caseInsensitive = existsSync(swapCase(repo))
+describe('S1: path identity', { skip: !caseInsensitive && 'case-sensitive filesystem' }, () => {
+  test('main thread: a differently-cased file_path or cwd is still denied', () => {
+    denied(main('Write', { file_path: swapCase(join(repo, 'src/a.js')) }), /construct:odd-worker/)
+    denied(main('Write', { file_path: 'src/a.js' }, swapCase(repo)), /construct:odd-worker/)
+    denied(main('Write', { file_path: join(swapCase(repo), 'src/new.js') }), /construct:odd-worker/)
+  })
+  test('main thread: a differently-cased odd/tasks is still allowed', () => {
+    allowed(main('Write', { file_path: join(swapCase(repo), 'ODD/TASKS/x.md') }))
+    allowed(main('Write', { file_path: 'odd/tasks/x.md' }, swapCase(repo)))
+  })
+  test('writer: a differently-cased path or cwd is judged against the surfaces', () => {
+    const s = session(surfaces('src/a.js'))
+    const w = (file_path, cwd = repo) => sub(s, 'construct:odd-worker', 'Write', { file_path }, { cwd })
+    allowed(w(swapCase(join(repo, 'src/a.js'))))
+    allowed(w('src/a.js', swapCase(repo)))
+    denied(w(swapCase(join(repo, 'src/b.js'))), /Allowed edit surfaces/)
+    denied(w('src/b.js', swapCase(repo)), /Allowed edit surfaces/)
   })
 })

@@ -40,7 +40,11 @@ Keep temporary directories, `HOME`, `TMPDIR`, and tool caches outside the worktr
 
 Run every command listed under `## Verification` in the prompt, in the foreground. Report each as `<command>: <observed result>`. A failing required command that is not listed under `## Known environmental failures` makes your status `partial`.
 
+Make one correction attempt per failing check, and a second only if the same check still fails after a real fix. Then stop and report `partial` with the failing command and its output; never loop.
+
 Do not run repository-wide formatters, generators, or installs unless the prompt allows it. Do not commit unless the prompt says so.
+
+Before returning, run `git status --short` and confirm it lists no tool cache or scratch path from you. Report any leftover instead of deleting it.
 
 ## Self-review
 

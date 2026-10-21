@@ -380,14 +380,34 @@ test('F13: flag arity is per command', () => {
 })
 
 test('F14: a malformed glob never fails open', () => {
-  assertDeny(call('Grep', { pattern: 'x', glob: '[z-a].env' }))
+  // `[z-a].env` was replaced: a bracket class matches one character, never zero, so it cannot open `.env`.
+  assertDeny(call('Grep', { pattern: 'x', glob: '.e[z-a]v' }), /\.env file/)
   assertDeny(call('Glob', { pattern: '**/[z-a]*.pem' }))
-  assertDeny(bash('rg -g "[z-a].env" KEY'))
+  assertDeny(bash('rg -g ".e[z-a]v" KEY'))
   // no protected keyword appears literally, so only a real glob check can deny these
   assertDeny(call('Glob', { pattern: '**/.s[z-a]h/**' }))
   assertDeny(call('Grep', { pattern: 'x', glob: 'secr[z-a]ts/*' }))
   assertAllow(call('Glob', { pattern: 'src/[z-a].ts' }))
   assertAllow(call('Glob', { pattern: 'src/[a-z].ts' }))
+})
+
+test('T8: a bracketed word is one character, so a list in a heredoc or echo is not a glob over .ssh', () => {
+  const list = "['git','rev-parse','--short','HEAD']"
+  assertAllow(bash(`python3 - <<'EOF'\nimport subprocess\nprint(subprocess.check_output(${list}))\nEOF`))
+  assertAllow(bash(`cat >> notes.txt <<'EOF'\nrun ${list}\nEOF`))
+  assertAllow(bash('echo [git,rev-parse,--short,HEAD]'))
+  assertAllow(bash('echo [abc-]'))
+  assertAllow(bash('echo [z-a]'))
+  // Previous behavior holds: real globs that can match protected names still deny.
+  assertDeny(bash('cat ~/.ss[h]/id_rsa'), /\.ssh directory/)
+  assertDeny(bash('cat ~/.[s]sh/*'), /\.ssh directory/)
+  assertDeny(bash('cat ~/.ss?/config'), /\.ssh directory/)
+  assertDeny(bash('ls ~/.s*'), /\.ssh directory/)
+  assertDeny(bash('cat **/*.pe[m]'))
+  assertDeny(bash('cat .e[n]v'))
+  assertDeny(bash('cat ~/.ss[z-a]'), /\.ssh directory/)
+  // Heredoc bodies stay scanned.
+  assertDeny(bash(`python3 - <<'EOF'\nopen('~/.ssh/id_rsa').read()\nEOF`), /\.ssh directory/)
 })
 
 test('S1: an apostrophe in prose cannot hide a later line that names a protected path', () => {

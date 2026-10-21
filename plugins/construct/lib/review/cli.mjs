@@ -13,6 +13,7 @@ import { GATES, validateGate } from './gate.mjs'
 import { readMode, readScope, writeMode } from './mode.mjs'
 import { DEFAULT_CONTEXT_BYTES } from './evidence.mjs'
 import { Refusal } from './errors.mjs'
+import { readRequestContext } from './request-context.mjs'
 import { CANONICAL_LENSES, canonicalLens, canonicalLenses } from './identity.mjs'
 
 export const USAGE = `Usage: odd-review [--cwd DIR] <command> [options]
@@ -28,7 +29,9 @@ in the worktree. Each command prints JSON that names the exact next command.
         (1-6, with --escalate-reason) raises the tier to high first, as in
         odd-assess; it cannot be combined with --lenses. --focus LENS gives a
         medium candidate that one lens (a high one keeps all four); it cannot
-        be combined with --lenses
+        be combined with --lenses. --request-context FILE freezes the request
+        or spec text (at most 32 KiB, no line starting with ODD_REVIEW_) with its
+        sha256 into the review; context shows it to every lens before the patches
   context --lineage L --lens LENS [--max-bytes N]
         print the binding and evidence for one lens (also review-refuter and
         review-validator in their states); default budget ${DEFAULT_CONTEXT_BYTES} bytes
@@ -39,6 +42,8 @@ in the worktree. Each command prints JSON that names the exact next command.
   correct --lineage L [--base-ref REF]       the one bounded correction (budget
         min(200, ceil(lines/2)), at least 2); a second one escalates
   capture-validation --lineage L --input FILE|-
+        an inconclusive outcome may be captured again, up to 3 attempts; unresolved,
+        a regression, or the 3rd inconclusive escalates
   status --lineage L                         also counters and, once
         acknowledged, receipt_check (ok, mismatch, legacy, missing, unreadable)
   abandon --lineage L [--reason TEXT]        close an open review for good
@@ -59,6 +64,10 @@ in the worktree. Each command prints JSON that names the exact next command.
   mode enable|disable|status [--scope global|clone]
         the RDD switch (clone, then global, then default on)
 
+While RDD is off, start, capture, capture-refuter, capture-validation,
+capture-unachievable, correct, abandon, invalidate, and acknowledge refuse with
+rdd_disabled; status, context, boundary, validate, and mode still work.
+
 Counters full_reviews, refuter_batches, fix_batches, scoped_fix_validations, and
 final_verifications are one-shot: asking for a second batch of a kind in a live
 review makes it escalated. The lifecycle has no final verification step, so that
@@ -78,6 +87,7 @@ const OPTIONS = {
   'escalate-item': { type: 'string' },
   'escalate-reason': { type: 'string' },
   focus: { type: 'string' },
+  'request-context': { type: 'string' },
   reason: { type: 'string' },
   input: { type: 'string' },
   'max-bytes': { type: 'string' },
@@ -90,7 +100,7 @@ const OPTIONS = {
 
 // Options each command accepts besides --cwd; required ones are checked by the command.
 const ACCEPTS = {
-  start: ['lenses', 'lenses-reason', 'base-ref', 'committed-only', 'escalate-item', 'escalate-reason', 'focus'],
+  start: ['lenses', 'lenses-reason', 'base-ref', 'committed-only', 'escalate-item', 'escalate-reason', 'focus', 'request-context'],
   context: ['lineage', 'lens', 'max-bytes'],
   capture: ['lineage', 'lens', 'input'],
   'capture-refuter': ['lineage', 'input'],
@@ -135,8 +145,14 @@ function modeCommand(action, values, root) {
   return { json: { ...readMode(root), scope, file } }
 }
 
+// Commands that change a lineage; they refuse while the RDD switch is off.
+const MUTATING = new Set(['start', 'capture', 'capture-refuter', 'capture-validation', 'capture-unachievable', 'correct', 'abandon', 'invalidate', 'acknowledge'])
+
 function dispatch(command, values, root) {
   const cwd = values.cwd
+  if (MUTATING.has(command) && readMode(root).mode === 'off') {
+    throw new Refusal('rdd_disabled', 'RDD is off, so review changes are refused; run `odd-review mode enable` to resume')
+  }
   const common = { root, cwd, lineage: values.lineage }
   switch (command) {
     case 'start': {
@@ -158,7 +174,7 @@ function dispatch(command, values, root) {
         if (parsed.error) throw new UsageError(parsed.error)
         lenses = parsed.lenses
       }
-      return { json: commands.start({ root, cwd, baseRef: values['base-ref'], committedOnly: values['committed-only'] === true, lenses, lensesReason: values['lenses-reason'], escalation, focus }) }
+      return { json: commands.start({ root, cwd, baseRef: values['base-ref'], committedOnly: values['committed-only'] === true, lenses, lensesReason: values['lenses-reason'], escalation, focus, requestContext: values['request-context'] === undefined ? null : readRequestContext(values['request-context']) }) }
     }
     case 'context':
       need(values, 'lineage', 'lens')

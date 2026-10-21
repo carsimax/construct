@@ -4,11 +4,12 @@ import { goTrimSpace } from '../assess/text.mjs'
 import { Refusal } from './errors.mjs'
 
 const SEVERITIES = ['BLOCKER', 'CRITICAL', 'WARNING', 'SUGGESTION']
-const EVIDENCE_CLASSES = ['deterministic', 'inferential']
-const CAUSAL = ['introduced', 'pre-existing', 'base-only', 'unknown']
+// Vocabulary of upstream reviewtransaction/transaction.go:45-70.
+const EVIDENCE_CLASSES = ['deterministic', 'inferential', 'insufficient']
+const CAUSAL = ['introduced', 'behavior-activated', 'worsened', 'pre-existing', 'base-only', 'unknown']
 const REFUTER_OUTCOMES = ['corroborated', 'refuted', 'inconclusive']
 const VALIDATOR_OUTCOMES = ['resolved', 'unresolved', 'inconclusive']
-const LOCATION = /^.+:\d+(-\d+)?$/
+const LOCATION = /^(.+):(\d+)(?:-(\d+))?$/
 
 const invalid = (message) => new Refusal('invalid_result', message)
 const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -28,12 +29,28 @@ function stringList(value, where, { min = 0 } = {}) {
   return value
 }
 
-function validateFinding(finding, index) {
+// checkLocation admits a finding location: path:line or path:start-end, positive
+// ascending lines, a canonical relative path inside the candidate's manifest
+// (artifact_admission.go:539-565).
+function checkLocation(location, where, manifest) {
+  const match = typeof location === 'string' ? LOCATION.exec(location) : null
+  if (!match) throw invalid(`${where}.location must be path:line or path:start-end`)
+  const [, path, from, to] = match
+  const start = Number(from)
+  const end = to === undefined ? start : Number(to)
+  if (start < 1 || end < 1) throw invalid(`${where}.location lines must be positive`)
+  if (start > end) throw invalid(`${where}.location must satisfy start <= end`)
+  if (path.startsWith('/')) throw invalid(`${where}.location path must be relative, not absolute`)
+  if (path.split('/').some((segment) => segment === '' || segment === '.' || segment === '..')) {
+    throw invalid(`${where}.location path must be canonical (no "..", ".", or empty segments)`)
+  }
+  if (!manifest.includes(path)) throw invalid(`${where}.location path ${JSON.stringify(path)} is outside the candidate's changed paths`)
+}
+
+function validateFinding(finding, index, manifest) {
   const where = `findings[${index}]`
   exactKeys(finding, ['location', 'severity', 'claim', 'evidence_class', 'causal_disposition', 'proof_refs'], where)
-  if (typeof finding.location !== 'string' || !LOCATION.test(finding.location)) {
-    throw invalid(`${where}.location must be path:line or path:start-end`)
-  }
+  checkLocation(finding.location, where, manifest)
   if (!SEVERITIES.includes(finding.severity)) throw invalid(`${where}.severity must be one of ${SEVERITIES.join(', ')}`)
   if (!filled(finding.claim)) throw invalid(`${where}.claim must be a non-empty string`)
   if (!EVIDENCE_CLASSES.includes(finding.evidence_class)) throw invalid(`${where}.evidence_class must be one of ${EVIDENCE_CLASSES.join(', ')}`)
@@ -70,7 +87,7 @@ export function validateLensResult(result, { subjectHash, manifest }) {
   if (paths.length !== expected.size || !paths.every((path) => expected.has(path))) {
     throw invalid('inspection.paths must equal the changed-path manifest exactly when the status is "completed"')
   }
-  return { ...result, findings: result.findings.map(validateFinding) }
+  return { ...result, findings: result.findings.map((finding, index) => validateFinding(finding, index, manifest)) }
 }
 
 // idSet requires one entry per expected id: no missing, extra, or duplicate ids.

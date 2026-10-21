@@ -47,6 +47,8 @@ Each finding needs path:line or contiguous path:start-end, neutral claim, eviden
 
 ## Output
 
+Accepted `causal_disposition` values: `introduced`, `behavior-activated`, `worsened`, `pre-existing`, `base-only`, `unknown`. Accepted `evidence_class` values: `deterministic`, `inferential`, `insufficient`.
+
 Return one JSON object and no prose. Use exactly this result shape:
 
 {"subject_hash":"<artifact_subject.subject_hash>","inspection":{"status":"completed","paths":["<complete unique unordered set>"]},"findings":[{"location":"path:line or path:start-end","severity":"CRITICAL","claim":"observable incorrect behavior","evidence_class":"deterministic","causal_disposition":"introduced","proof_refs":["concrete proof"]}],"evidence":["what was inspected"]}

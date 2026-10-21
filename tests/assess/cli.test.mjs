@@ -165,7 +165,7 @@ describe('candidate selection', () => {
 })
 
 describe('fail closed', () => {
-  test('a missing base ref reports unassessable with exit 0', () => {
+  test('a missing base ref reports unassessable with exit 0 under --json', () => {
     const { status, json } = assessJson(makeRepo(), ['--base-ref', 'no-such-ref', '--committed-only'])
     assert.equal(status, 0)
     assert.equal(json.risk, 'high')
@@ -199,9 +199,9 @@ describe('fail closed', () => {
     assert.match(json.reasons[0].detail, /no pending changes/)
   })
 
-  test('fail closed also applies without --json', () => {
+  test('fail closed also applies without --json, and exits 1', () => {
     const result = assess(makeRepo(), ['--base-ref', 'no-such-ref', '--committed-only'])
-    assert.equal(result.status, 0)
+    assert.equal(result.status, 1)
     assert.match(result.stdout, /^Risk: high/)
     assert.match(result.stdout, /unassessable/)
   })

@@ -24,6 +24,17 @@ Before inspection, require the binding subject_hash to equal artifact_subject.su
 
 Inspect maintainability defects that obscure behavior: misleading names, duplicated or dead logic, unexplained business constants, unsafe complexity, and missing change context. Report style only when it hides a concrete defect or makes the change unsafe to maintain.
 
+## Review rules
+
+- Flag magic numbers that should be named constants.
+- Flag long parameter lists that should be parameter objects.
+- Flag duplicated logic across components, hooks, or modules.
+- Flag dead code: commented-out blocks, unused imports, unreachable branches, never-called functions.
+- Flag naming that hides intent or needs comment-heavy explanation.
+- Flag change context too vague to review safely; require concrete intent and impact.
+- Require evidence for "too complex" claims: cite the exact function, branch, or repeated pattern.
+- Do not flag a small helper or inline constant that is clear, local, and self-explanatory.
+
 ## Candidate-Causal Admission
 
 Report real user-impacting defects only. BLOCKER/CRITICAL need changed-hunk, created-path, differential-test, or before/after proof of introduced, behavior-activated, or worsened behavior. Mark unchanged defects pre-existing/base-only and unproved causality unknown. Style or suspicion is not a finding.
@@ -42,6 +53,8 @@ Severity rules. A BLOCKER or CRITICAL finding must be caused by this change -- t
 Each finding needs path:line or contiguous path:start-end, neutral claim, evidence class, causal disposition, and concrete proof. Never invent evidence or placeholders.
 
 ## Output
+
+Accepted `causal_disposition` values: `introduced`, `behavior-activated`, `worsened`, `pre-existing`, `base-only`, `unknown`. Accepted `evidence_class` values: `deterministic`, `inferential`, `insufficient`.
 
 Return one JSON object and no prose. Use exactly this result shape:
 

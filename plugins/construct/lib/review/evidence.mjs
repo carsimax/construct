@@ -38,7 +38,7 @@ const patchOf = (root, baseTree, candidateTree, path, isolation) => {
 
 // buildContext returns the complete text for one lens. findings, when given, is
 // appended as one ODD_REVIEW_FINDINGS line (refuter and validator inputs).
-export function buildContext({ root, isolation, baseTree, candidateTree, manifest, lineage, lens, subjectHash, findings, maxBytes }) {
+export function buildContext({ root, isolation, baseTree, candidateTree, manifest, lineage, lens, subjectHash, findings, maxBytes, requestContext }) {
   const stats = collectDiffStats(root, baseTree, candidateTree, isolation)
   const paths = stats.map((stat) => stat.path)
   if (paths.length !== manifest.length || !paths.every((path, index) => path === manifest[index])) {
@@ -61,6 +61,7 @@ export function buildContext({ root, isolation, baseTree, candidateTree, manifes
     ...stats.map((stat) => (stat.binary ? `-\t-\t${stat.path}` : `${stat.additions}\t${stat.deletions}\t${stat.path}`)),
   ]
   let text = `${lines.join('\n')}\n`
+  if (requestContext) text += `ODD_REVIEW_REQUEST_CONTEXT ${JSON.stringify({ sha256: requestContext.sha256 })}\n${requestContext.text}${requestContext.text.endsWith('\n') ? '' : '\n'}ODD_REVIEW_REQUEST_CONTEXT_END\n`
   manifest.forEach((path, index) => {
     text += `ODD_REVIEW_PATH ${JSON.stringify({ index, path })}\n${patchOf(root, baseTree, candidateTree, path, isolation)}ODD_REVIEW_PATH_END ${index}\n`
   })
