@@ -107,14 +107,14 @@ describe('refutation path', () => {
     assert.equal(json.to_correct.length, 1)
   })
 
-  test('an inconclusive outcome never corroborates', () => {
+  test('an inconclusive outcome joins the correction set (S2), unlike refuted', () => {
     const repo = highRepo()
     const txn = start(repo)
     const id = captureAll(repo, txn, { 'review-risk': [inferential] }).refutation_batch[0].id
     const { json } = review(repo, ['capture-refuter', '--lineage', txn.lineage, '--input', '-'], {
       input: JSON.stringify({ subject_hash: refuterSubject(repo, txn), results: [{ finding_id: id, outcome: 'inconclusive', proof_refs: ['no evidence'] }] }),
     })
-    assert.equal(json.state, 'approved')
+    assert.equal(json.state, 'correction_required')
   })
 
   test('the refuter result must cover the batch exactly', () => {
@@ -219,8 +219,8 @@ describe('refuter binding', () => {
 })
 
 describe('mixed and unknown severe findings', () => {
-  const f1 = finding({ location: 'a.txt:1', severity: 'BLOCKER' })
-  const f2 = finding({ location: 'a.txt:5', evidence_class: 'inferential', claim: 'inferred exposure' })
+  const f1 = finding({ location: 'scripts/build.sh:1', severity: 'BLOCKER' })
+  const f2 = finding({ location: 'docs/the guide.md:5', evidence_class: 'inferential', claim: 'inferred exposure' })
   const refute = (repo, txn, outcome) =>
     review(repo, ['capture-refuter', '--lineage', txn.lineage, '--input', '-'], {
       input: JSON.stringify({ subject_hash: refuterSubject(repo, txn), results: [{ finding_id: 'F2', outcome, proof_refs: ['checked'] }] }),

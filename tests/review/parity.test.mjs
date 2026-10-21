@@ -49,7 +49,7 @@ describe('one-shot counters', () => {
   test('each command spends its own counter once; final_verifications has no analogue and stays 0', () => {
     const repo = highRepo()
     const txn = start(repo, { lenses: 'risk' })
-    const f2 = finding({ evidence_class: 'inferential', location: 'scripts/build.sh:2' })
+    const f2 = finding({ evidence_class: 'inferential', location: 'docs/the guide.md:2' })
     const reduced = captureAll(repo, txn, { 'review-risk': [finding(), f2] })
     assert.equal(reduced.counters.full_reviews, 1)
     assert.equal(reduced.state, 'refutation_required')

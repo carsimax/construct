@@ -39,6 +39,8 @@ in the worktree. Each command prints JSON that names the exact next command.
   correct --lineage L [--base-ref REF]       the one bounded correction (budget
         min(200, ceil(lines/2)), at least 2); a second one escalates
   capture-validation --lineage L --input FILE|-
+        an inconclusive outcome may be captured again, up to 3 attempts; unresolved,
+        a regression, or the 3rd inconclusive escalates
   status --lineage L                         also counters and, once
         acknowledged, receipt_check (ok, mismatch, legacy, missing, unreadable)
   abandon --lineage L [--reason TEXT]        close an open review for good

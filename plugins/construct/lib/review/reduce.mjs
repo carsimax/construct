@@ -1,17 +1,23 @@
 // Reduction of the captured lens findings.
-// - A BLOCKER or CRITICAL with unknown causality cannot be judged by the tool:
-//   the review escalates to a human before anything else happens.
-// - A severe finding is BLOCKER or CRITICAL introduced by the candidate. All
+// - A BLOCKER or CRITICAL with unknown causality or insufficient evidence cannot
+//   be judged by the tool: the review escalates to a human before anything else
+//   happens. Upstream marks both inconclusive (reviewtransaction/compact.go:1317-1318)
+//   and an inconclusive finding outside the fix set escalates the review
+//   (compact.go:1850-1861, 1895-1900); the check precedes the pre-existing
+//   routing (:1319), so insufficient evidence wins over a pre-existing claim.
+// - A severe finding is BLOCKER or CRITICAL caused by the candidate (introduced,
+//   behavior-activated, or worsened; compact.go:1299). All
 //   severe findings share one flow: inferential ones go to one refuter batch
 //   while deterministic ones are held as confirmed; with no inferential finding
 //   the confirmed ones go straight to correction.
 // - Everything else (WARNING, SUGGESTION, pre-existing, base-only) is advisory.
-const SEVERE = ['BLOCKER', 'CRITICAL']
+export const SEVERE = ['BLOCKER', 'CRITICAL']
+export const CANDIDATE_CAUSED = ['introduced', 'behavior-activated', 'worsened']
 
 export const neutral = (finding) => ({ id: finding.id, location: finding.location, severity: finding.severity, claim: finding.claim, proof_refs: finding.proof_refs })
 
 export function reduceLenses(findings) {
-  const unknown = findings.filter((finding) => SEVERE.includes(finding.severity) && finding.causal_disposition === 'unknown')
+  const unknown = findings.filter((finding) => SEVERE.includes(finding.severity) && (finding.causal_disposition === 'unknown' || finding.evidence_class === 'insufficient'))
   if (unknown.length > 0) {
     return {
       state: 'escalated',
@@ -19,10 +25,10 @@ export function reduceLenses(findings) {
       to_correct: [],
       refutation_batch: [],
       advisory: findings.filter((finding) => !unknown.includes(finding)),
-      escalation: { reason: 'unknown_causality', finding_ids: unknown.map((finding) => finding.id) },
+      escalation: { reason: unknown.some((finding) => finding.causal_disposition === 'unknown') ? 'unknown_causality' : 'insufficient_evidence', finding_ids: unknown.map((finding) => finding.id) },
     }
   }
-  const severe = findings.filter((finding) => SEVERE.includes(finding.severity) && finding.causal_disposition === 'introduced')
+  const severe = findings.filter((finding) => SEVERE.includes(finding.severity) && CANDIDATE_CAUSED.includes(finding.causal_disposition))
   const confirmed = severe.filter((finding) => finding.evidence_class === 'deterministic')
   const inferential = severe.filter((finding) => finding.evidence_class !== 'deterministic')
   const advisory = findings.filter((finding) => !severe.includes(finding))

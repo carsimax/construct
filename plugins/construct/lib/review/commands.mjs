@@ -2,7 +2,8 @@
 //   collecting -> approved | refutation_required | correction_required
 //   refutation_required -> approved | correction_required
 //   correction_required -> validation_required (one correction per lineage)
-//   validation_required -> approved | escalated (terminal)
+//   validation_required -> approved | escalated (terminal); a validator inconclusive
+//     stays here for up to 3 attempts (validation_attempts)
 //   approved -> acknowledged (terminal; writes the receipt)
 // Every function returns the JSON to print; a refusal throws a Refusal.
 import { readFileSync } from 'node:fs'
@@ -17,12 +18,15 @@ import { buildContext, DEFAULT_CONTEXT_BYTES } from './evidence.mjs'
 import { Refusal } from './errors.mjs'
 import { REFUTER, VALIDATOR, newLineage, refuterSubjectHashOf, subjectHashOf, targetOf, manifestDigest, canonicalLens } from './identity.mjs'
 import { checkReceipt, correctionBudget, emptyCounters, isSound, MAX_CORRECTION_LINES, receiptHashes, receiptState } from './receipt.mjs'
-import { neutral, reduceLenses } from './reduce.mjs'
+import { changedRanges, touchesChange } from './admission.mjs'
+import { CANDIDATE_CAUSED, SEVERE, neutral, reduceLenses } from './reduce.mjs'
 import { atomicCreate, atomicWrite, readTransaction, receiptPath, TERMINAL_STATES, withLock, writeTransaction } from './store.mjs'
 import { validateLensResult, validateRefuterResult, validateValidatorResult } from './validate.mjs'
 
 export const SCHEMA = 'construct.review-transaction/v1'
 export const RECEIPT_SCHEMA = 'construct.review-receipt/v1'
+
+const MAX_VALIDATION_ATTEMPTS = 3
 
 const quote = (value) => `'${value.replaceAll("'", "'\\''")}'`
 
@@ -106,7 +110,7 @@ function view(transaction, cwd, extra = {}) {
     } else if (transaction.escalation) {
       out.reason = transaction.escalation.reason
       out.finding_ids = transaction.escalation.finding_ids
-      out.message = 'a BLOCKER or CRITICAL finding has unknown causality: a human decision is required'
+      out.message = 'a BLOCKER or CRITICAL finding has unknown causality or insufficient evidence: a human decision is required'
     } else {
       out.message = 'the correction did not resolve every finding: a human decision is required'
     }
@@ -292,6 +296,22 @@ export function readInput(input) {
   }
 }
 
+// downgrade turns a candidate-caused severe claim that touches no changed line
+// into unknown (artifact_admission.go:618-668); the claim is kept for the record.
+function downgrade(found, ranges) {
+  if (!SEVERE.includes(found.severity) || !CANDIDATE_CAUSED.includes(found.causal_disposition) || touchesChange(found.location, ranges)) return found
+  return { ...found, causal_disposition: 'unknown', claimed_causal_disposition: found.causal_disposition }
+}
+
+function candidateRanges(root, transaction) {
+  const isolation = createIsolation(root)
+  try {
+    return changedRanges(root, transaction.base_tree, transaction.candidate_tree, isolation)
+  } finally {
+    isolation.cleanup()
+  }
+}
+
 export function capture({ root, cwd, lineage, lens: lensName, input }) {
   const result = readInput(input)
   return modify(root, lineage, (transaction) => {
@@ -303,8 +323,9 @@ export function capture({ root, cwd, lineage, lens: lensName, input }) {
     if (Object.hasOwn(transaction.results, lens)) throw new Refusal('lens_already_captured', `${lens} was already captured; a lens is captured once`)
     const valid = validateLensResult(result, { subjectHash: transaction.subjects[lens], manifest: transaction.manifest })
     transaction.results[lens] = valid
+    const ranges = candidateRanges(root, transaction)
     for (const found of valid.findings) {
-      transaction.findings.push({ id: `F${transaction.findings.length + 1}`, lens, ...found })
+      transaction.findings.push({ id: `F${transaction.findings.length + 1}`, lens, ...downgrade(found, ranges) })
     }
     if (pending(transaction).length === 0) {
       spend(transaction, 'full_reviews')
@@ -328,7 +349,8 @@ export function captureRefuter({ root, cwd, lineage, input }) {
     for (const finding of transaction.refutation_batch) {
       const verdict = byId.get(finding.id)
       const full = transaction.findings.find((entry) => entry.id === finding.id)
-      if (verdict.outcome === 'corroborated') corroborated.push(full)
+      // inconclusive joins the fix set like corroborated (compact.go:1335-1337); refuted stays advisory.
+      if (verdict.outcome === 'corroborated' || verdict.outcome === 'inconclusive') corroborated.push(full)
       else advisory.push({ ...full, refuter_outcome: verdict.outcome })
     }
     spend(transaction, 'refuter_batches')
@@ -419,9 +441,15 @@ export function captureValidation({ root, cwd, lineage, input }) {
       subjectHash: transaction.correction.subject_hash,
       expectedIds: transaction.to_correct.map((finding) => finding.id),
     })
-    spend(transaction, 'scoped_fix_validations')
     transaction.validation = valid
-    const resolved = valid.results.every((entry) => entry.outcome === 'resolved') && valid.regressions.length === 0
+    transaction.validation_attempts = (transaction.validation_attempts ?? 0) + 1
+    const outcomes = valid.results.map((entry) => entry.outcome)
+    // inconclusive is a non-verdict that may be re-captured, up to 3 attempts
+    // (compact.go:290-292); unresolved, a regression, or the 3rd inconclusive escalates.
+    const retry = outcomes.includes('inconclusive') && !outcomes.includes('unresolved') && valid.regressions.length === 0 && transaction.validation_attempts < MAX_VALIDATION_ATTEMPTS
+    if (retry) return view(transaction, cwd, { validation_attempts: transaction.validation_attempts })
+    spend(transaction, 'scoped_fix_validations')
+    const resolved = outcomes.every((outcome) => outcome === 'resolved') && valid.regressions.length === 0
     transition(transaction, resolved ? 'approved' : 'escalated')
     return view(transaction, cwd)
   })
