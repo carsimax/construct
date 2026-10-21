@@ -43,7 +43,7 @@
         "xhigh",
         "max"
       ],
-      "default": "default"
+      "default": "medium"
     },
     "model_odd_worker": {
       "type": "string",

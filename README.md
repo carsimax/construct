@@ -143,7 +143,7 @@ The plugin ships 13 agents. Each role's model and effort can be changed in `/con
 
 | Role | Agent | Model | Effort |
 |---|---|---|---|
-| ODD Explorer | `construct:odd-explorer` | haiku | default |
+| ODD Explorer | `construct:odd-explorer` | haiku | medium |
 | ODD Worker | `construct:odd-worker` | sonnet | medium |
 | ODD Verify | `construct:odd-verify` | opus | medium |
 | JD Judge A | `construct:jd-judge-a` | opus | medium |

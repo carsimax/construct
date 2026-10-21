@@ -9,7 +9,7 @@ const agentFiles = readdirSync(join(pluginRoot, 'agents')).filter((f) => f.endsW
 
 // S6 role table: agent, model, effort ('default' means no effort override)
 const S6 = {
-  'odd-explorer': ['haiku', 'default'],
+  'odd-explorer': ['haiku', 'medium'],
   'odd-worker': ['sonnet', 'medium'],
   'odd-verify': ['opus', 'medium'],
   'jd-judge-a': ['opus', 'medium'],
