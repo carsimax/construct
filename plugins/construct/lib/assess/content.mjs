@@ -142,12 +142,25 @@ export function processBoundaryRiskReasons(root, baseTree, candidateTree, stats)
     '-c', 'core.quotePath=false', 'diff', '--text', '--no-color', '--no-ext-diff', '--no-textconv',
     '--src-prefix=a/', '--dst-prefix=b/', '--unified=0', baseTree, candidateTree, '--',
   ]
-  for (const batch of batchLiteralPathspecs(paths, prefixLengthOf(root, fixed))) {
+  // Key-only paths are diffed apart from the rest: an oversized or unattributable diff there is
+  // skipped (it can only add private_key_content), never a process_scan_limit.
+  // shortcut: a key header inside a key-only diff over the output limit goes unseen, upgrade with git grep on the candidate tree.
+  const groups = [[eligiblePaths, true], [[...keyOnly], false]]
+  const queue = groups.flatMap(([list, strict]) => batchLiteralPathspecs(list, prefixLengthOf(root, fixed)).map((batch) => [batch, strict]))
+  for (let next = 0; next < queue.length; next++) {
+    const [batch, strict] = queue[next]
     let output
     try {
       output = git(root, [...fixed, ...batch], { maxBuffer: SCAN_BYTE_LIMIT })
     } catch (error) {
-      if (error instanceof GitOutputLimitError) return [scanLimit(stripLiteral(batch[0]))]
+      if (error instanceof GitOutputLimitError) {
+        // Retry one path at a time so a huge file cannot hide a key in its batch neighbors.
+        if (!strict) {
+          if (batch.length > 1) queue.push(...batch.map((one) => [[one], false]))
+          continue
+        }
+        return [scanLimit(stripLiteral(batch[0]))]
+      }
       throw error
     }
     const batchPaths = new Set(batch.map(stripLiteral))
@@ -163,6 +176,7 @@ export function processBoundaryRiskReasons(root, baseTree, candidateTree, stats)
     let tokenSeen = false
     let weakSeen = false
     let sqlLines = []
+    let skipBatch = false
     const flushSql = () => {
       if (currentPath !== '' && isSqlPath(currentPath) && isItemEvidencePath(currentPath) && hasDestructiveSql(sqlLines)) {
         reasons.push(contentRiskItemReason('destructive_sql', currentPath))
@@ -174,10 +188,21 @@ export function processBoundaryRiskReasons(root, baseTree, candidateTree, stats)
         flushSql()
         const quoted = line.lastIndexOf(' "b/')
         const separator = line.lastIndexOf(' b/')
-        if (quoted < 0 && separator < 0) return ambiguous
-        currentPath = quoted >= 0 && line.endsWith('"') ? unquoteCPath(line.slice(quoted + 1)).slice(2) : line.slice(separator + 3)
+        // Without a rename both halves have equal length, so the middle space is exact even when the path holds ' b/'.
+        const half = (line.length - 12) / 2
+        const equalHalves = Number.isInteger(half) && line.startsWith('a/', 11) && line.startsWith(' b/', 11 + half)
+        if (quoted < 0 && separator < 0) {
+          if (strict) return ambiguous
+          skipBatch = true
+          break
+        }
+        currentPath = quoted >= 0 && line.endsWith('"') ? unquoteCPath(line.slice(quoted + 1)).slice(2) : line.slice(equalHalves ? 14 + half : separator + 3)
         inHunk = processSeen = permissionSeen = sinkSeen = keySeen = tokenSeen = weakSeen = false
-        if (!batchPaths.has(currentPath)) return ambiguous
+        if (!batchPaths.has(currentPath)) {
+          if (strict) return ambiguous
+          skipBatch = true
+          break
+        }
       } else if (line.startsWith('@@')) {
         inHunk = true
       } else if (inHunk && line.length > 0 && line[0] === '+') {
@@ -216,7 +241,7 @@ export function processBoundaryRiskReasons(root, baseTree, candidateTree, stats)
         }
       }
     }
-    flushSql()
+    if (!skipBatch) flushSql()
   }
   return canonicalRiskReasons(reasons)
 }
