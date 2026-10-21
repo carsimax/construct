@@ -1,7 +1,7 @@
 # Construct
 
 [![Claude Code](https://img.shields.io/badge/Claude_Code-2.1.304%2B-blue)](#requirements)
-[![Plugin version](https://img.shields.io/badge/version-1.1.0-informational)](plugins/construct/.claude-plugin/plugin.json)
+[![Plugin version](https://img.shields.io/badge/version-1.2.0-informational)](plugins/construct/.claude-plugin/plugin.json)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 Construct is a Claude Code plugin that makes every request follow Organic Driven Development (ODD): authorize, explore, size, track, implement test-first, and close with evidence and a Risk line.
@@ -32,7 +32,7 @@ Memory comes from the separate `engram@engram` plugin, which Construct depends o
 ### One command
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v1.1.0/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v1.2.0/install.sh | bash
 ```
 
 The installer checks the requirements above and stops before changing anything if one is missing, or if `~/.claude` or `~/.claude/settings.json` is not writable, or if `settings.json` is a directory. Then it runs the manual steps below for you:
@@ -52,7 +52,7 @@ Every step is skipped when it is already done, so running the installer again ch
 Pass options after `bash -s --`, for example `curl -fsSL <url> | bash -s -- --no-mcp`. To read the script before running it:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v1.1.0/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v1.2.0/install.sh -o install.sh
 less install.sh
 bash install.sh
 ```
@@ -444,7 +444,13 @@ Setup, checks, and pull request rules are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Status
 
-Current version: 1.1.0 (`plugins/construct/.claude-plugin/plugin.json`); it drops the Construct theme and keeps the output style. Releases are tagged `vX.Y.Z`.
+Current version: 1.2.0 (`plugins/construct/.claude-plugin/plugin.json`); it adds the deterministic gentle parity: destructive-command tiers, delegation admission and write scope, the publication gate and review transaction limits, delivery signals, and the mirror drift gate. Releases are tagged `vX.Y.Z`.
+
+Upgrading from 1.1.0:
+
+- Receipts written before 1.2.0 no longer satisfy the publication gate; re-review before publishing.
+- `rm -r` and `git push` now ask for confirmation on the main thread and are denied inside subagents.
+- The main thread can no longer edit repository files outside `odd/tasks/`.
 
 ## License
 
