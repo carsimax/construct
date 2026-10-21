@@ -35,7 +35,7 @@ function gitRoot(cwd) {
 // against their own directory; the nearest existing ancestor is resolved with realpath
 // and the rest is kept, so a file that does not exist yet still compares against the real
 // repository root. A chain longer than 40 links throws (the caller allows on error).
-function realPath(abs, hops = 0) {
+export function realPath(abs, hops = 0) {
   if (hops > 40) throw new Error('too many symbolic links')
   const rest = []
   let dir = abs

@@ -147,4 +147,13 @@ export const corpus = [
   ["s1-gh-pr-body", "gh pr create --title x --body \"Adds checks.\n\nThe guard now denies @E@ reads.\"", "allow", "a multi-line pull request body that names a protected path on a later line is now checked line by line"],
   ["s1-heredoc-crlf-apostrophe", "cat <<'EOF'\r\nit's here\r\nEOF\r\ncat @E@", "allow", "an apostrophe in a CRLF heredoc body hid the command that follows the terminator"],
   ["s1-commit-multiline-clean", "git commit -m \"it's\nfine\nreally\"", "allow"],
+  // Named differences from main (audit-findings S1, S3): shapes that only add denies.
+  ["audit-s1-super-prefix", "git --super-prefix x reset --hard", "allow", "the value of --super-prefix was read as the git action, hiding reset --hard"],
+  ["audit-s1-config-env", "git --config-env a=B push --force origin main", "allow", "the value of --config-env was read as the git action, hiding a force push"],
+  ["audit-s3-question", "cat .en?", "allow", "a glob with ? can expand to the protected env file and was not matched"],
+  ["audit-s3-class", "cat .[e]nv", "allow", "a glob with a bracket class can expand to the protected env file and was not matched"],
+  ["audit-s3-ssh-glob", "cat ~/.s?h/id_rsa", "allow", "a glob in a directory name can expand to the protected ssh directory and was not matched"],
+  ["audit-s3-var-glob", "f=.en; cat ${f}v", "allow", "a variable next to a literal suffix can build the protected env name; the expansion now counts as a wildcard"],
+  ["audit-s3-subst", "cat .e$(true)nv", "allow", "a command substitution inside a name can build the protected env name; the expansion now counts as a wildcard"],
+  ["audit-s3-ansi-c", "cat $'.en\\x76'", "allow", "an ANSI-C quoted escape spelled the protected env name and was never decoded"],
 ]

@@ -10,14 +10,13 @@ import { homedir } from 'node:os'
 import { basename, isAbsolute, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { commandVerdict } from './command-guard.mjs'
-import { splitCommands } from './shell-words.mjs'
+import { isRootOrHome, SHELLS, splitCommands } from './shell-words.mjs'
 import { testLintVerdict } from './test-lint.mjs'
-import { writeScopeVerdict } from './write-scope.mjs'
+import { realPath, writeScopeVerdict } from './write-scope.mjs'
 
 export { splitCommands }
 
 const TEMPLATES = new Set(['.env.example', '.env.sample', '.env.template'])
-const SHELLS = new Set(['bash', 'sh', 'zsh', 'dash', 'ksh'])
 
 const home = () => process.env.HOME || homedir()
 
@@ -28,10 +27,22 @@ function expand(word) {
     .replace(/\$\{HOME\}|\$HOME(?![A-Za-z0-9_])/g, h)
 }
 
-// ruleFor returns the name of the protected-path rule a path matches, or null.
-// Globs are matched literally on their segments, so `**/*.pem` and `.ssh/**` hit.
+// ruleFor returns the name of the protected-path rule a path matches (itself or its real
+// location), or null. Globs are matched literally on their segments, so `**/*.pem` and `.ssh/**` hit.
 function ruleFor(path, cwd) {
-  const abs = resolve(isAbsolute(expand(path)) ? '/' : cwd, expand(path)).toLowerCase()
+  const abs = resolve(isAbsolute(expand(path)) ? '/' : cwd, expand(path))
+  const rule = absRule(abs.toLowerCase())
+  if (rule) return rule
+  // A symlink, or a path through a symlinked directory, can lead to a protected path.
+  try {
+    const real = realPath(abs)
+    return real === abs ? null : absRule(real.toLowerCase())
+  } catch {
+    return null
+  }
+}
+
+function absRule(abs) {
   const segs = abs.split('/').filter(Boolean)
   const name = basename(abs)
   if (TEMPLATES.has(name)) return null
@@ -101,14 +112,6 @@ function globRule(glob) {
   return null
 }
 
-function isRootOrHome(target, cwd) {
-  const t = expand(target)
-  if (/^\/+$/.test(t)) return true
-  const abs = resolve(cwd, t)
-  if (abs === '/' || abs === resolve(home())) return true
-  return /\/\*$/.test(t) && isRootOrHome(t.slice(0, -2) || '/', cwd)
-}
-
 // catastrophicRm: rm with recursive and force flags, in any order or spelling,
 // aimed at /, ~, $HOME, or their /* globs.
 function catastrophicRm(words, cwd) {
@@ -128,7 +131,7 @@ function catastrophicRm(words, cwd) {
       if (w.includes('f')) force = true
     } else targets.push(w)
   }
-  return recursive && force && targets.some((t) => isRootOrHome(t, cwd))
+  return recursive && force && targets.some((t) => isRootOrHome(t, expand, { cwd, home: home() }))
 }
 
 const PREFIXES = new Set(['sudo', 'command', 'builtin', 'env', 'nohup', 'time', 'exec', 'xargs'])
@@ -187,6 +190,55 @@ function searchRoles(texts, from, spec) {
   return { data, globs }
 }
 
+// An expansion the guard cannot evaluate: it may produce any text, so it counts as a wildcard.
+const EXPANSION = /\$\{[^}]*\}?|\$\([^)]*\)?|`[^`]*`?|\$[A-Za-z_][A-Za-z0-9_]*|\$[0-9@*#?!$-]?/g
+
+// wordRule: the rule a command word matches as a path, a glob, or a path with expansions in it.
+// A word with expansions is matched as a glob only when a literal part remains, so `cat $f` stays allowed.
+function wordRule(word, cwd) {
+  const rule = ruleFor(word, cwd)
+  if (rule) return rule
+  const text = expand(word)
+  const glob = text.replace(EXPANSION, '*')
+  if (glob !== text && !/[^*/]/.test(glob)) return null
+  return /[*?[]/.test(glob) ? globRule(glob) : null
+}
+
+const ANSI_ESCAPES = { a: '\x07', b: '\b', e: '\x1b', E: '\x1b', f: '\f', n: '\n', r: '\r', t: '\t', v: '\v' }
+
+// decodeAnsiC rewrites each unquoted `$'...'` as a plain single-quoted word with its escapes
+// decoded, so the tokenizer sees the text bash will see.
+function decodeAnsiC(text) {
+  let out = ''
+  let quote = null
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i]
+    if (c === '\\' && quote !== "'") {
+      out += c + (text[i + 1] ?? '')
+      i++
+    } else if (quote === null && c === '$' && text[i + 1] === "'") {
+      let j = i + 2
+      let raw = ''
+      for (; j < text.length && text[j] !== "'"; j++) {
+        if (text[j] === '\\') raw += text[j++]
+        raw += text[j] ?? ''
+      }
+      const body = raw.replace(/\\(x[0-9a-f]{1,2}|u[0-9a-f]{1,4}|U[0-9a-f]{1,8}|[0-7]{1,3}|[\s\S])/gi, (_, e) => {
+        if (/^[xuU]./.test(e)) return String.fromCodePoint(parseInt(e.slice(1), 16))
+        if (/^[0-7]/.test(e)) return String.fromCharCode(parseInt(e, 8))
+        return ANSI_ESCAPES[e] ?? e
+      })
+      out += `'${body.replaceAll("'", "'\\''")}'`
+      i = j
+    } else {
+      if (c === "'" && quote !== '"') quote = quote === "'" ? null : "'"
+      else if (c === '"' && quote !== "'") quote = quote === '"' ? null : '"'
+      out += c
+    }
+  }
+  return out
+}
+
 function literalRule(text, cwd) {
   for (const m of text.matchAll(/(["'])((?:(?!\1).)+)\1/g)) {
     const lit = m[2].replace(/^[<>+\s]+/, '')
@@ -217,7 +269,8 @@ function pipedWordsVerdict(upstream, cwd, depth) {
 // body, `echo it's`) opens a quote that swallows the following lines, so each physical
 // line is also checked on its own. This only adds denies: a quoted span that crosses a
 // newline and names a protected path on one of its lines is denied.
-function bashVerdict(command, cwd, depth = 0) {
+function bashVerdict(raw, cwd, depth = 0) {
+  const command = decodeAnsiC(raw)
   const whole = quotedVerdict(command, cwd, depth)
   if (whole || !command.includes('\n')) return whole
   for (const line of command.split(/\r?\n/)) {
@@ -272,7 +325,7 @@ function quotedVerdict(command, cwd, depth) {
         continue
       }
       for (const candidate of new Set([word, ...word.split(/[=:]/)])) {
-        const rule = candidate && ruleFor(candidate, cwd)
+        const rule = candidate && wordRule(candidate, cwd)
         if (rule) return { rule, target: candidate }
       }
     }

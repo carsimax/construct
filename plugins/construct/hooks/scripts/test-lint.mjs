@@ -25,13 +25,13 @@ const RELATIVE_PATH = /^\s*["'`]?(?:\.{1,2}[/\\\w-]|[\w.-]+[/\\])/
 
 const WRITE_TOOLS = new Set(['Write', 'Edit', 'MultiEdit'])
 
-export const isTestFilePath = (path) => TEST_PATH_PATTERNS.some((pattern) => pattern.test(path))
+const isTestFilePath = (path) => TEST_PATH_PATTERNS.some((pattern) => pattern.test(path))
 
 // A literal commit id mixes digits and letters; all-letter or all-digit words are not treated as one.
 const isCommitId = (token) => /[0-9]/.test(token) && /[a-f]/.test(token)
 
 // deliveredTestViolation: why this test content cannot be delivered, or null when it can.
-export function deliveredTestViolation(content) {
+function deliveredTestViolation(content) {
   for (const match of content.matchAll(HISTORY_COMMAND)) {
     const commit = [...match[2].matchAll(COMMIT_ID)].map((m) => m[0]).find(isCommitId)
     if (commit) return `reads git history at a fixed commit (\`git ${match[1]} ${commit}\`), which fails in another clone`

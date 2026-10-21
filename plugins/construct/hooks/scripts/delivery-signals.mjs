@@ -15,7 +15,7 @@ import { join, resolve } from 'node:path'
 import { isGeneratedGoldenPath } from '../../lib/assess/stats.mjs'
 import { dataDir, readInput, safeName } from './hook-io.mjs'
 
-export const SLICE_LINES = 400
+const SLICE_LINES = 400
 // Lock files and minified bundles are not authored lines.
 const GENERATED = [/(^|\/)(pnpm-lock\.yaml|package-lock\.json|yarn\.lock|bun\.lockb?|Cargo\.lock|go\.sum|poetry\.lock|composer\.lock|Gemfile\.lock)$/, /\.min\.(js|css)$/]
 // `git [-C dir | -c key=value]... commit` at the start of a segment, after any variable assignments.
@@ -23,16 +23,16 @@ const COMMIT = /^\s*(\w+=\S*\s+)*git(\s+-[Cc]\s+\S+)*\s+commit(\s|$)/
 const SEGMENT_SEPARATOR = /;|&&|\|\||\n/
 const GIT_TIMEOUT_MS = 2000
 
-export const BACKSTOP_TOKENS = 150_000
+const BACKSTOP_TOKENS = 150_000
 // Only the tail of the transcript is read; a usage row larger than this is not found.
 const TAIL_BYTES = 256 * 1024
 
-export const isGitCommitCommand = (command) => command.split(/[;&|(\n]/).some((segment) => COMMIT.test(segment))
+const isGitCommitCommand = (command) => command.split(/[;&|(\n]/).some((segment) => COMMIT.test(segment))
 
 const unquote = (value) => value.replace(/^["']|["']$/g, '')
 
 // commitTargetDirectory: `git -C <dir>` under every `cd <dir>` segment before the commit, else the cwd.
-export function commitTargetDirectory(command, cwd) {
+function commitTargetDirectory(command, cwd) {
   const gitDir = /\bgit\s+-C\s+("[^"]+"|'[^']+'|\S+)\s+(?:-[Cc]\s+\S+\s+)*commit\b/.exec(command)?.[1]
   let base = cwd
   for (const segment of command.split(SEGMENT_SEPARATOR)) {
@@ -72,7 +72,7 @@ function authoredLines(numstat) {
 }
 
 // commitSliceReport: one line after a commit on a feature branch, or null when there is no slice to report.
-export function commitSliceReport(cwd) {
+function commitSliceReport(cwd) {
   const branch = git(cwd, ['symbolic-ref', '-q', '--short', 'HEAD'])
   const target = branch === undefined ? undefined : defaultBranch(cwd)
   if (!branch || !target || branch === target || `origin/${branch}` === target) return null
@@ -106,7 +106,7 @@ function commitSignal(input) {
 
 // latestUsage reads the last assistant usage row from the tail of the transcript (never the whole
 // file): context tokens = input + cache reads + cache writes + output of that reply.
-export function latestUsage(path) {
+function latestUsage(path) {
   const fd = openSync(path, 'r')
   try {
     const size = statSync(path).size
