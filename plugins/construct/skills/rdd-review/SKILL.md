@@ -32,7 +32,8 @@ Load this skill after each work-unit commit while the RDD switch is on, when `od
 | Tier is `passive` or `medium`, no user request | Record the tier and continue |
 | Tier is `high`, or the user asked | Ask consent, then run the lifecycle |
 | User chose "Skip this time" | Create no record; continue; future candidates ask again |
-| `odd-assess` fails | Treat as `high` (it fails closed); ask consent |
+| `odd-assess` fails with an `unassessable` reason whose detail is `the candidate has no pending changes; ...` (or an empty range) | Nothing to review; stop and ask nothing |
+| `odd-assess` fails for any other reason | Treat as `high` (it fails closed); ask consent |
 | Stop gate blocked, naming a committed range | Review the committed range |
 | Stop gate blocked, naming "uncommitted changes" | Review the working-tree candidate |
 | Both candidates are high | Review the committed range first, then the uncommitted changes, or ask the user to commit first. Never leave high uncommitted work unreviewed: the gate reminds once per target per session, and uncommitted work changes the target |

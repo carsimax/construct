@@ -49,6 +49,15 @@ describe('S3: causality and evidence vocabulary', () => {
     assert.equal(reduced.reason, 'insufficient_evidence')
     assert.deepEqual(reduced.finding_ids, ['F1'])
   })
+  test('mixed unknown and insufficient severe findings keep reason and ids consistent', () => {
+    const repo = highRepo()
+    const txn = start(repo, { lenses: 'risk' })
+    const reduced = captureAll(repo, txn, { 'review-risk': [finding({ causal_disposition: 'unknown' }), finding({ claim: 'a second claim', evidence_class: 'insufficient' })] })
+    assert.equal(reduced.state, 'escalated')
+    assert.equal(reduced.reason, 'unknown_causality')
+    assert.deepEqual(reduced.finding_ids, ['F1'])
+    assert.deepEqual(reduced.insufficient_finding_ids, ['F2'])
+  })
   test('insufficient wins over pre-existing for a severe finding', () => {
     const repo = highRepo()
     const txn = start(repo, { lenses: 'risk' })

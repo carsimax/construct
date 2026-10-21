@@ -40,7 +40,7 @@ State lives under the git common directory (`odd-review/`), never in the worktre
 | `correction_required` | Severe deterministic or corroborated findings | One correction, commit, `correct` |
 | `validation_required` | Correction registered; an `inconclusive` validation may be captured again, up to 3 attempts, the 3rd escalates | Launch `construct:review-validator` with the lineage id |
 | `approved` | No blocking findings | `acknowledge` |
-| `escalated` | Blockers remain after the one correction, a second batch was asked for (`budget_exhausted`), or a lens could not run (`lens_unachievable`) | **Needs your decision** with the findings |
+| `escalated` | Blockers remain after the one correction, a second batch was asked for (`budget_exhausted`), or a lens could not run (`lens_unachievable`) | **Needs your decision** with the findings. For severe `unknown` or `insufficient` findings, `reason` is `unknown_causality` with only those ids in `finding_ids`, or `insufficient_evidence` when none is `unknown`; in a mix, the `insufficient` ids are listed separately in `insufficient_finding_ids` |
 | `abandoned`, `invalidated` | Closed by the user's decision; no receipt | Nothing; `start` again if a review is still wanted |
 
 A refusal `context_budget_exceeded` means the evidence is over the byte budget: split the range into smaller commit slices. A refusal `correction_budget_exceeded` means the correction is larger than min(200, ceil(n/2)) of the reviewed lines, never below 2; it does not consume the single correction. Make a smaller fix or escalate.

@@ -16,6 +16,14 @@ export const CANDIDATE_CAUSED = ['introduced', 'behavior-activated', 'worsened']
 
 export const neutral = (finding) => ({ id: finding.id, location: finding.location, severity: finding.severity, claim: finding.claim, proof_refs: finding.proof_refs })
 
+// reason names the primary class; finding_ids lists only that class, and the other class, when present, goes in insufficient_finding_ids.
+function escalationOf(unknown) {
+  const causal = unknown.filter((finding) => finding.causal_disposition === 'unknown').map((finding) => finding.id)
+  const insufficient = unknown.filter((finding) => finding.causal_disposition !== 'unknown').map((finding) => finding.id)
+  if (causal.length === 0) return { reason: 'insufficient_evidence', finding_ids: insufficient }
+  return insufficient.length === 0 ? { reason: 'unknown_causality', finding_ids: causal } : { reason: 'unknown_causality', finding_ids: causal, insufficient_finding_ids: insufficient }
+}
+
 export function reduceLenses(findings) {
   const unknown = findings.filter((finding) => SEVERE.includes(finding.severity) && (finding.causal_disposition === 'unknown' || finding.evidence_class === 'insufficient'))
   if (unknown.length > 0) {
@@ -25,7 +33,7 @@ export function reduceLenses(findings) {
       to_correct: [],
       refutation_batch: [],
       advisory: findings.filter((finding) => !unknown.includes(finding)),
-      escalation: { reason: unknown.some((finding) => finding.causal_disposition === 'unknown') ? 'unknown_causality' : 'insufficient_evidence', finding_ids: unknown.map((finding) => finding.id) },
+      escalation: escalationOf(unknown),
     }
   }
   const severe = findings.filter((finding) => SEVERE.includes(finding.severity) && CANDIDATE_CAUSED.includes(finding.causal_disposition))

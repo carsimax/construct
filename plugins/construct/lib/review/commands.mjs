@@ -110,6 +110,7 @@ function view(transaction, cwd, extra = {}) {
     } else if (transaction.escalation) {
       out.reason = transaction.escalation.reason
       out.finding_ids = transaction.escalation.finding_ids
+      if (transaction.escalation.insufficient_finding_ids) out.insufficient_finding_ids = transaction.escalation.insufficient_finding_ids
       out.message = 'a BLOCKER or CRITICAL finding has unknown causality or insufficient evidence: a human decision is required'
     } else {
       out.message = 'the correction did not resolve every finding: a human decision is required'

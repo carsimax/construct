@@ -27,7 +27,7 @@ Load this skill before launching any subagent for ODD work, or when deciding whe
 | Evidence budget | Decide or verify within one parallel batch (at most 3 calls, about 10k tokens) | none: the parent reads |
 | Mapping | Needs more evidence than one batch, or more than about 5 sequential lookups | `construct:odd-explorer` (one), then re-evaluate task size |
 | Writer | Any authorized write to repository code, tests, or docs | `construct:odd-worker`, one per unit; disjoint units launched together, dependent units one after another |
-| Verification | A feature's end (one verifier over the whole feature document); per unit only when that unit's Risk line names a high-risk item, after its own checks | `construct:odd-verify` (one) |
+| Verification | A Risk line that names a high-risk item, after the unit's own checks; for a tracked feature with several such units, one verifier at the feature's end over the whole branch instead of one per unit, and a unit alone only when it must ship or be relied on before then | `construct:odd-verify` (one) |
 | Per action | Long suites, builds, installs, broad research | `construct:odd-general` |
 
 A unit is one independent piece of behavior with its code, tests, and docs together. Never split one behavior into separate test, docs, and code writers. A delivery that depends on another is not independent.
