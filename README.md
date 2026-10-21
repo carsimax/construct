@@ -1,7 +1,7 @@
 # Construct
 
 [![Claude Code](https://img.shields.io/badge/Claude_Code-2.1.304%2B-blue)](#requirements)
-[![Plugin version](https://img.shields.io/badge/version-2.1.0-informational)](plugins/construct/.claude-plugin/plugin.json)
+[![Plugin version](https://img.shields.io/badge/version-3.0.0-informational)](plugins/construct/.claude-plugin/plugin.json)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 Construct is a Claude Code plugin that makes every request follow Organic Driven Development (ODD): authorize, explore, size, track, implement test-first, and close with evidence and a Risk line.
@@ -31,7 +31,7 @@ Memory comes from the separate `engram@engram` plugin, which Construct depends o
 ### One command
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v2.1.0/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v3.0.0/install.sh | bash
 ```
 
 The installer checks the requirements above and stops before changing anything if one is missing, or if `~/.claude` or `~/.claude/settings.json` is not writable, or if `settings.json` is a directory. Then it runs the manual steps below for you:
@@ -51,7 +51,7 @@ Every step is skipped when it is already done, so running the installer again ch
 Pass options after `bash -s --`, for example `curl -fsSL <url> | bash -s -- --no-mcp`. To read the script before running it:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v2.1.0/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v3.0.0/install.sh -o install.sh
 less install.sh
 bash install.sh
 ```
@@ -80,7 +80,7 @@ The manual steps the installer runs, for when you want to run them yourself:
    claude plugin install construct@construct
    ```
 
-   The installer (`install.sh`) pins this marketplace to the release tag (`carsimax/construct#v2.1.0`); the command above follows the default branch. A failed `claude mcp add` in the installer warns and the install continues.
+   The installer (`install.sh`) pins this marketplace to the release tag (`carsimax/construct#v3.0.0`); the command above follows the default branch. A failed `claude mcp add` in the installer warns and the install continues.
 
    The install output ends with `(+ 1 dependency: engram)` when engram was not installed yet.
 
@@ -311,7 +311,15 @@ Setup, checks, and pull request rules are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Status
 
-Current version: 2.1.0 (`plugins/construct/.claude-plugin/plugin.json`); `odd-explorer` now runs at `medium` effort (an explicit Haiku 5.5 default), and mapping can launch up to 3 explorers in parallel, one per independent front. Not breaking. Releases are tagged `vX.Y.Z`.
+Current version: 3.0.0 (`plugins/construct/.claude-plugin/plugin.json`); review is now a mandatory phase for high-risk work, enforced by hooks, and the deterministic review and assessment CLIs are gone. Breaking. Releases are tagged `vX.Y.Z`.
+
+Upgrading from 2.1.0:
+
+- `odd-review` and `odd-assess` are removed from the PATH; nothing in the plugin invokes them, so drop any script or habit that calls them.
+- Review is mandatory for high-risk work (a task whose Risk column names an item). The `odd-review mode` switch and its global and clone mode files are no longer read, so there is nothing to turn on or off.
+- `git push`, `gh pr create`, and `gh release create` are denied until the required lenses approve the published ref; run the `construct:rdd-review` skill, then publish.
+- The `review-refuter` and `review-validator` agents are removed, along with their `model_*` and `effort_*` keys; delete those keys from your plugin configuration.
+- The panel's REVIEW card and the doctor's RDD rows are gone.
 
 Upgrading from 2.0.0: nothing to change.
 

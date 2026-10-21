@@ -90,7 +90,7 @@ test('a clean machine gets every tool, in order, and the Construct settings', ()
     'brew install gentleman-programming/tap/engram',
     'engram setup claude-code',
     'claude plugin marketplace add Gentleman-Programming/engram',
-    'claude plugin marketplace add carsimax/construct#v2.1.0',
+    'claude plugin marketplace add carsimax/construct#v3.0.0',
     'claude plugin install construct@construct',
     'npm install -g @colbymchenry/codegraph',
     'claude mcp add --scope user codegraph -- codegraph serve --mcp',

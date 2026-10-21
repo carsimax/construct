@@ -28,7 +28,7 @@ export function checkClaude(version) {
 export function checkNode(text) {
   const have = triple(text)
   const label = `Node ${have ? have.join('.') : 'version unknown'} (needs >= ${MIN_NODE})`
-  return { ok: have !== null && have[0] >= MIN_NODE, label, hint: `install Node ${MIN_NODE} or later; the plugin CLIs need it` }
+  return { ok: have !== null && have[0] >= MIN_NODE, label, hint: `install Node ${MIN_NODE} or later; the hooks need it` }
 }
 
 // `enabledPlugins` from the merged settings ($.settings.read({ key })): an in-process read of the settings the
