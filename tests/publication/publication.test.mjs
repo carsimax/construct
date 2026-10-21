@@ -3,7 +3,7 @@
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { applyFiles, commitAll, git, makeRepo, scratchDir } from '../helpers/repo.mjs'
 import { readVerdicts, subjectHash, writeVerdict } from '../../plugins/construct/hooks/scripts/review-store.mjs'
@@ -36,6 +36,16 @@ function featureRepo(risk = '2') {
   git(repo, 'checkout', '-q', '-b', 'feat')
   applyFiles(repo, { 'odd/tasks/f.md': TABLE(risk), 'src/app.js': 'export const a = 2\n' })
   commitAll(repo, 'unit')
+  return repo
+}
+
+// withRemote gives the repository an origin (a bare clone) and fetches it, so origin/main exists.
+function withRemote(repo) {
+  const bare = join(scratchDir('odd-pub-remote-'), 'origin.git')
+  git(repo, 'clone', '-q', '--bare', repo, bare)
+  git(repo, 'remote', 'add', 'origin', bare)
+  git(repo, 'fetch', '-q', 'origin')
+  git(repo, 'remote', 'set-head', 'origin', 'main')
   return repo
 }
 
@@ -85,8 +95,8 @@ describe('publication commands are gated', () => {
     'gh pr create --base main --fill',
     'gh pr create -B main -t t',
     'gh -R owner/repo pr create',
-    'gh release create v1.0.0 --notes hi',
-    'gh release create v1.0.0 -t "Release one" -n notes dist.zip',
+    'gh release create v1.0.0 --notes hi --target HEAD',
+    'gh release create v1.0.0 -t "Release one" -n notes dist.zip --target HEAD',
     'echo done && git push',
     'git status; git push origin feat',
     'sh -c "git push origin feat"',
@@ -113,7 +123,7 @@ describe('publication commands are gated', () => {
   test('the reason names the gate, the subject line, and the skill', () => {
     assert.match(hook('git push', repo).reason, /pre-push/)
     assert.match(hook('gh pr create', repo).reason, /pre-pr/)
-    assert.match(hook('gh release create v1', repo).reason, /release/)
+    assert.match(hook('gh release create v1 --target HEAD', repo).reason, /release/)
     const mergeBase = git(repo, 'merge-base', 'main', 'HEAD').trim()
     assert.match(hook('git push', repo).reason, new RegExp(`Review subject: ${mergeBase}`))
   })
@@ -190,7 +200,7 @@ describe('the decision follows the Risk items and the verdicts', () => {
     approve(repo, 'review-resilience')
     silent(hook('git push', repo))
     silent(hook('gh pr create', repo))
-    silent(hook('gh release create v1', repo))
+    silent(hook('gh release create v1 --target HEAD', repo))
   })
 
   test('a verdict for an older subject is not enough after a new commit', () => {
@@ -236,7 +246,7 @@ describe('the decision follows the Risk items and the verdicts', () => {
     git(repo, 'branch', '-m', 'main', 'trunk')
     denied(hook('gh pr create --base trunk', repo))
     git(repo, 'checkout', '-q', 'trunk')
-    silent(hook('gh pr create --base trunk', repo))
+    assert.match(hook('gh pr create --base trunk', repo).reason, /default branch and no remote-tracking/)
   })
 
   test('an unreadable document or git failure denies with a reason', () => {
@@ -285,7 +295,7 @@ describe('the hook passes what it cannot judge', () => {
     silent(hook('', '', env(), { input: 'not json' }))
     silent(hook('', '', env(), { input: '' }))
   })
-  test('a missing destination repository is not a denial when nothing is due', () => silent(hook('git push nowhere', makeRepo({ 'src/app.js': 'export const a = 1\n' }))))
+  test('a missing destination repository is not a denial when nothing is due', () => silent(hook('git push nowhere', featureRepo('none'))))
   test('a missing cwd', () => silent(hook('git push', undefined, env(), { input: JSON.stringify({ tool_name: 'Bash', tool_input: { command: 'git push' } }) })))
 })
 
@@ -341,6 +351,7 @@ describe('target directories', () => {
 
   test('nothing due still allows a home-relative directory', () => {
     const clean = makeRepo()
+    git(clean, 'checkout', '-q', '-b', 'feat')
     const cleanHome = scratchDir('odd-pub-home-')
     spawnSync('cp', ['-R', clean, join(cleanHome, 'work')])
     silent(hook('git -C ~/work push', elsewhere(), { ...env(), HOME: cleanHome }))
@@ -383,7 +394,7 @@ describe('both command views are analyzed', () => {
   })
 
   test('a push with nothing due allows once, without output', () => {
-    silent(hook('git push origin main; echo $(echo ok)', makeRepo()))
+    silent(hook('git push origin main; echo $(echo ok)', withRemote(makeRepo())))
   })
 
   test('the same push seen in both views is denied once', () => {
@@ -416,7 +427,7 @@ describe('audit-findings T1', () => {
 describe('the published refs are judged, not HEAD', () => {
   // fromMain: feat is unreviewed with Risk 2 while main is checked out.
   const fromMain = () => {
-    const repo = featureRepo('2')
+    const repo = withRemote(featureRepo('2'))
     git(repo, 'checkout', '-q', 'main')
     return repo
   }
@@ -512,49 +523,7 @@ describe('the Risk cell is read whole', () => {
   })
 })
 
-describe('a chain of approved subjects', () => {
-  // twoLinks: main, then feat with two commits (the first adds the Risk 2 document).
-  function twoLinks() {
-    const repo = featureRepo('2')
-    applyFiles(repo, { 'src/more.js': 'export const m = 1\n' })
-    commitAll(repo, 'second')
-    const tree = (ref) => git(repo, 'rev-parse', `${ref}^{tree}`).trim()
-    return { repo, a: tree('main'), b: tree('HEAD~1'), c: tree('HEAD') }
-  }
-  const link = (repo, from, to, approved = true) => writeVerdict(repo, { lens: 'review-risk', subject_hash: subjectHash(from, to), base_tree: from, head_tree: to, approved, at: Date.now(), result: {} })
-
-  test('two approved ranges allow', () => {
-    const { repo, a, b, c } = twoLinks()
-    denied(hook('git push', repo))
-    link(repo, a, b)
-    denied(hook('git push', repo))
-    link(repo, b, c)
-    silent(hook('git push', repo))
-  })
-
-  test('a chain with a rejected link denies', () => {
-    const { repo, a, b, c } = twoLinks()
-    link(repo, a, b)
-    link(repo, b, c, false)
-    denied(hook('git push', repo))
-  })
-
-  test('a gap in the chain denies', () => {
-    const { repo, b, c } = twoLinks()
-    link(repo, b, c)
-    denied(hook('git push', repo))
-  })
-
-  test('a rejection of the whole subject stands even when a chain exists', () => {
-    const { repo, a, b, c } = twoLinks()
-    link(repo, a, b)
-    link(repo, b, c)
-    link(repo, a, c, false)
-    const r = hook('git push', repo)
-    assert.equal(r.decision, 'deny')
-    assert.match(r.reason, /not approved by review-risk/)
-  })
-
+describe('a rejection stands', () => {
   test('a rejection is not undone by an approval of the same subject', () => {
     const repo = featureRepo('2')
     approve(repo, 'review-risk', subjectOf(repo), false)
@@ -562,9 +531,72 @@ describe('a chain of approved subjects', () => {
     assert.equal(readVerdicts(repo, subjectOf(repo))['review-risk'].approved, false)
     denied(hook('git push', repo))
   })
+
+  test('only the exact subject counts: approvals of other subjects, even from the merge-base, do not (F17)', () => {
+    const repo = featureRepo('2')
+    const tree = (ref) => git(repo, 'rev-parse', `${ref}^{tree}`).trim()
+    applyFiles(repo, { 'src/more.js': 'export const m = 1\n' })
+    commitAll(repo, 'second')
+    writeVerdict(repo, { lens: 'review-risk', subject_hash: subjectHash(tree('main'), tree('HEAD~1')), base_tree: tree('main'), head_tree: tree('HEAD~1'), approved: true, at: Date.now(), result: {} })
+    writeVerdict(repo, { lens: 'review-risk', subject_hash: subjectHash(tree('HEAD~1'), tree('HEAD')), base_tree: tree('HEAD~1'), head_tree: tree('HEAD'), approved: true, at: Date.now(), result: {} })
+    const r = hook('git push', repo)
+    denied(r)
+    assert.match(r.reason, /no verdict from review-risk/)
+    assert.doesNotMatch(r.reason, /\.\./)
+  })
 })
 
-describe('Risk ranges, rejection poison, and a suffixed Tasks heading (L17)', () => {
+describe('F7, F8: the default branch', () => {
+  const plain = () => makeRepo({ 'src/app.js': 'export const a = 1\n' })
+
+  test('gh release create without --target judges the default branch, not HEAD (F7)', () => {
+    // gh --help: "--target branch  Target branch or full commit SHA (default [main branch])".
+    const repo = withRemote(featureRepo('2'))
+    // On feat (Risk 2, unreviewed) the release still targets origin/main, which is clean.
+    silent(hook('gh release create v1', repo))
+    silent(hook('gh release create v1 --notes hi', repo))
+    // An explicit target is judged.
+    denied(hook('gh release create v1 --target HEAD', repo))
+  })
+
+  test('publishing the default branch with no remote-tracking default denies with the reason (F8)', () => {
+    const repo = plain()
+    for (const command of ['git push origin main', 'git push', 'gh release create v1', 'gh release create v1 --target main']) {
+      const r = hook(command, repo)
+      assert.equal(r.decision, 'deny', command)
+      assert.match(r.reason, /default branch and no remote-tracking default branch exists/, command)
+    }
+  })
+
+  test('with a remote-tracking default, the default branch is compared against it (F8)', () => {
+    const repo = withRemote(plain())
+    silent(hook('git push origin main', repo))
+    // Local main ahead of origin/main with an unreviewed Risk 2 document is judged.
+    applyFiles(repo, { 'odd/tasks/f.md': TABLE('2'), 'src/app.js': 'export const a = 2\n' })
+    commitAll(repo, 'unit')
+    denied(hook('git push origin main', repo))
+    denied(hook('git push', repo))
+  })
+})
+
+describe('F1: the Risk items are read at the ref and at the merge-base', () => {
+  test('lowering Risk 2 to none in the branch still requires the review', () => {
+    const repo = makeRepo({ 'odd/tasks/f.md': TABLE('2'), 'src/app.js': 'export const a = 1\n' })
+    git(repo, 'checkout', '-q', '-b', 'feat')
+    applyFiles(repo, { 'odd/tasks/f.md': TABLE('none'), 'src/app.js': 'export const a = 2\n' })
+    commitAll(repo, 'downgrade')
+    const r = hook('git push', repo)
+    denied(r)
+    assert.match(r.reason, /Risk items 2/)
+  })
+
+  test('a document new on the branch has no merge-base version and is read at the ref', () => {
+    denied(hook('git push', featureRepo('2')))
+    silent(hook('git push', featureRepo('none')))
+  })
+})
+
+describe('Risk ranges and a suffixed Tasks heading (L17)', () => {
   const lensesNamed = (risk) => {
     const r = hook('git push', featureRepo(risk))
     assert.equal(r.decision, 'deny', risk)
@@ -609,29 +641,6 @@ describe('Risk ranges, rejection poison, and a suffixed Tasks heading (L17)', ()
     commitAll(repo, 'unit')
     denied(hook('git push', repo))
   })
-  test('re-splitting a rejected range with no code change denies; a changed tree can be approved', () => {
-    const repo = featureRepo('2')
-    applyFiles(repo, { 'src/more.js': 'export const m = 1\n' })
-    commitAll(repo, 'second')
-    const tree = (ref) => git(repo, 'rev-parse', `${ref}^{tree}`).trim()
-    const [a, b, c] = [tree('main'), tree('HEAD~1'), tree('HEAD')]
-    const link = (from, to, approved = true) => writeVerdict(repo, { lens: 'review-risk', subject_hash: subjectHash(from, to), base_tree: from, head_tree: to, approved, at: Date.now(), result: {} })
-    link(a, c, false)
-    link(a, b)
-    link(b, c)
-    const r = hook('git push', repo)
-    assert.equal(r.decision, 'deny')
-    assert.match(r.reason, /not approved by review-risk/)
-    applyFiles(repo, { 'src/fix.js': 'export const f = 1\n' })
-    commitAll(repo, 'fix')
-    const d = tree('HEAD')
-    link(c, d)
-    link(a, b)
-    // chain a..b is approved but b..c head c is poisoned, so a..d needs a fresh route.
-    denied(hook('git push', repo))
-    link(a, d)
-    silent(hook('git push', repo))
-  })
 })
 
 describe('errors deny, aliases and shell bodies are seen', () => {
@@ -648,7 +657,7 @@ describe('errors deny, aliases and shell bodies are seen', () => {
 
   const cases = [
     'gh pr new --title t',
-    'gh release new v1 --notes hi',
+    'gh release new v1 --notes hi --target HEAD',
     'bash <<EOF\ngit push\nEOF',
     "sh <<'EOF'\ngit push origin feat\nEOF",
     'bash <<< "git push"',

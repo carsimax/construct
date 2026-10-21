@@ -2,18 +2,19 @@
 // `gh release create` it judges every ref being published, from the feature documents the ref changed:
 //   - the refs are the push sources (`feat`, `feat:main` -> feat, `HEAD:x` -> HEAD; no refspec -> HEAD;
 //     `--all`, `--mirror`, `--tags` -> every local branch), `gh pr create --head` and
-//     `gh release create --target`, HEAD when none is named; a ref that does not resolve denies;
+//     `gh release create --target` (the default branch when none: that is what gh tags), HEAD when
+//     none is named for the others; a ref that does not resolve denies; the default branch itself
+//     with no remote-tracking default to compare with denies;
 //   - the default branch and its merge-base with the ref come from git (origin/HEAD, origin or local
 //     main/master; a `gh pr create --base` branch is tried first); when none resolves, deny;
-//   - the `odd/tasks/*.md` files changed in merge-base..ref are read at the ref and every integer 1-6
+//   - the `odd/tasks/*.md` files changed in merge-base..ref are read at the ref and at the merge-base
+//     (lowering a Risk in the branch does not hide it), and every integer 1-6
 //     in each Risk cell of their Tasks table (the `## Tasks` heading may carry a suffix) names a Risk
 //     item, a range `a-b`, `a–b`, `a—b`, `a to b` naming every item between (`none` names none; a cell
 //     that is neither, a reversed or out-of-range range, or a missing Risk column, denies);
 //   - requiredLenses(items) (review-lenses.mjs) says which lenses must have approved the subject, the
-//     hash of the merge-base tree and the ref tree, or a chain of approved subjects from one to the
-//     other (review-store.mjs). A rejected subject stays rejected, and a lens that rejected a tree
-//     never counts it as the head of an approved link (re-splitting a rejected range denies); A required lens without approval:
-//     deny, naming the lenses, the `Review subject:` line, and the construct:rdd-review skill;
+//     hash of the merge-base tree and the ref tree (review-store.mjs). A rejected subject stays
+//     rejected. A required lens without approval: deny, naming the lenses, the `Review subject:` line, and the construct:rdd-review skill;
 //   - an error while deciding denies with its reason, including one thrown after the command was
 //     found to be a publication. Only unreadable hook input, a command that is no publication, and a
 //     directory that is no git repository pass. The hook entry sets onFailure: "block" as well.
@@ -30,7 +31,7 @@ import { resolve } from 'node:path'
 import { git, repositoryRoot } from './git-tree.mjs'
 import { readInput } from './hook-io.mjs'
 import { requiredLenses } from './review-lenses.mjs'
-import { approvedLinks, chainExists, readVerdicts, rejectedTrees, subjectHash } from './review-store.mjs'
+import { pruneStore, readVerdicts, subjectHash } from './review-store.mjs'
 import { extractHeredocs, GIT_VALUE_FLAGS, nestedLines, SHELLS, splitCommands, substitutionBodies } from './shell-words.mjs'
 
 const MAX_DEPTH = 4
@@ -216,7 +217,7 @@ function ghPublication(args, cwd) {
     const head = optionValue(rest, '--head', '-H')?.replace(/^.*:/, '')
     return { gate: 'pre-pr', dir: cwd, base: optionValue(rest, '--base', '-B'), refs: [head || 'HEAD'] }
   }
-  if (args[i] === 'release' && create) return { gate: 'release', dir: cwd, refs: [optionValue(rest, '--target') || 'HEAD'] }
+  if (args[i] === 'release' && create) return { gate: 'release', dir: cwd, refs: [optionValue(rest, '--target') || null] }
   return null
 }
 
@@ -318,26 +319,29 @@ function refVerdict(root, pub, base, ref) {
   if (ref === '' || ref.startsWith('-') || !ok(root, ref)) {
     return `publication-gate: ${pub.gate} is denied because the ref ${JSON.stringify(ref)} does not resolve to a commit in this repository, so its review state cannot be checked.`
   }
+  if (base.startsWith('refs/heads/') && out(root, ['rev-parse', '--symbolic-full-name', ref]) === base) {
+    return `publication-gate: ${pub.gate} is denied because ${ref} is the default branch and no remote-tracking default branch exists to compare it with (fetch origin, or publish a branch), so its review state cannot be checked.`
+  }
   const sha = out(root, ['rev-parse', '--verify', `${ref}^{commit}`])
   const mergeBase = out(root, ['merge-base', base, sha])
   const names = out(root, ['diff', '--name-only', '-z', '--diff-filter=d', mergeBase, sha, '--']).split('\0')
   const items = new Set()
   for (const path of names.filter((p) => /^odd\/tasks\/[^/]+\.md$/.test(p))) {
-    for (const item of riskItems(out(root, ['show', `${sha}:${path}`]), path)) items.add(item)
+    const versions = [`${sha}:${path}`]
+    if (out(root, ['ls-tree', '--name-only', mergeBase, '--', path]) !== '') versions.push(`${mergeBase}:${path}`)
+    for (const version of versions) for (const item of riskItems(out(root, ['show', version]), path)) items.add(item)
   }
   const required = requiredLenses(items)
   if (required.length === 0) return null
   const baseTree = out(root, ['rev-parse', `${mergeBase}^{tree}`])
   const headTree = out(root, ['rev-parse', `${sha}^{tree}`])
   const direct = readVerdicts(root, subjectHash(baseTree, headTree))
-  // A rejection of the whole subject stands; otherwise one approved subject or a chain of them counts.
-  const state = (lens) => (rejectedTrees(root, lens).has(headTree) ? 'rejected' : direct[lens] ? (direct[lens].approved === true ? 'ok' : 'rejected') : chainExists(approvedLinks(root, lens), baseTree, headTree) ? 'ok' : 'missing')
+  const state = (lens) => (direct[lens] ? (direct[lens].approved === true ? 'ok' : 'rejected') : 'missing')
   const missing = required.filter((lens) => state(lens) === 'missing')
   const rejected = required.filter((lens) => state(lens) === 'rejected')
   if (missing.length === 0 && rejected.length === 0) return null
   const parts = [missing.length > 0 && `no verdict from ${missing.join(', ')}`, rejected.length > 0 && `not approved by ${rejected.join(', ')}`].filter(Boolean)
-  const subject = ref === 'HEAD' ? mergeBase : `${mergeBase}..${ref}`
-  return `publication-gate: ${pub.gate} is denied because the feature documents of ${ref} name Risk items ${[...items].sort().join(', ')} and it is not reviewed: ${parts.join('; ')}. Run the construct:rdd-review skill with the subject line \`Review subject: ${subject}\` (a branch too large for one context is reviewed as consecutive ranges \`<a>..<b>\` from ${mergeBase} to ${ref}), fix what a lens rejects, and publish again; new commits change the subject, so review after the last commit.`
+  return `publication-gate: ${pub.gate} is denied because the feature documents of ${ref} name Risk items ${[...items].sort().join(', ')} and it is not reviewed: ${parts.join('; ')}. Run the construct:rdd-review skill with the subject line \`Review subject: ${mergeBase}\` ${ref === 'HEAD' ? '' : ` (the head is HEAD: check out ${ref} first)`}, fix what a lens rejects, and publish again; new commits change the subject, so review after the last commit.`
 }
 
 function verdict(pub) {
@@ -348,9 +352,10 @@ function verdict(pub) {
     return null
   }
   try {
+    pruneStore(root)
     const base = defaultBranch(root, pub.base)
     if (!base) return 'publication-gate: the default branch cannot be resolved (no origin/HEAD, origin or local main or master), so the review state cannot be checked. Create or fetch it, then publish again.'
-    const refs = pub.refs === 'all' ? out(root, ['for-each-ref', '--format=%(refname)', 'refs/heads/']).split('\n').filter(Boolean) : pub.refs
+    const refs = pub.refs === 'all' ? out(root, ['for-each-ref', '--format=%(refname)', 'refs/heads/']).split('\n').filter(Boolean) : pub.refs.map((ref) => ref ?? base)
     for (const ref of refs) {
       const reason = refVerdict(root, pub, base, ref)
       if (reason) return reason

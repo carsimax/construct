@@ -38,19 +38,18 @@ The required lenses are the union over the Risk numbers in the feature document'
 |---|---|
 | Risk is `none` and the user did not ask | No review |
 | A work unit with a Risk item is committed | Review it before publication |
-| The publication gate denied a command | It names the missing lenses; review the range it names, then retry the command |
-| The branch is large | Review consecutive ranges `<a>..<b>`, each from the previous head; approvals chain from the merge-base |
+| The publication gate denied a command | It names the missing lenses; review the subject it names, then retry the command |
+| The branch is too large for one context | The hook denies it; split the delivery into smaller pull requests (see `construct:chained-pr`) |
 | A lens rejected | Fix with a new commit, then review again; the rejection stands for that lens and tree |
-| A lens reply was malformed | The hook sends it back at most twice; if it still fails, launch the lens again |
+| A lens reply was invalid or ignored | An invalid report is sent back at most twice; a reply naming no pending subject is ignored, so launch the lens again |
 | The user asks for readability | Add `review-readability`; it never gates publication |
 
 ## Execution Steps
 
 1. Read the Risk numbers of the feature document's tasks and list the required lenses from the table.
-2. Choose the subject. The base is normally the merge-base with the default branch: `git merge-base HEAD <default-branch>`. The head defaults to `HEAD`.
+2. Choose the subject. The base is normally the merge-base with the default branch: `git merge-base HEAD <default-branch>`. The head is always `HEAD`, so check out the ref you will publish first.
 3. Launch each lens in one message, in parallel, as `construct:review-<lens>` with this line in its prompt:
-   - `Review subject: <base>` for the range from the base to `HEAD`;
-   - `Review subject: <base>..<head>` for a range ending elsewhere.
+   - `Review subject: <base>`, the only form.
    Add nothing else the lens must rely on. The review-context hook replaces the prompt with the binding, the name-status, the diff, and (for `review-risk`) the [security-checklist](references/security-checklist.md). A prompt with no readable subject is denied with the expected form.
 4. When the lens agents stop, the review-capture hook validates each reply and records the verdict. Approved means a completed inspection and no BLOCKER or CRITICAL finding.
 5. All required lenses approved: report it and continue. A rejection: fix with a new commit and go to step 2. A lens still missing: launch it again.
@@ -58,7 +57,7 @@ The required lenses are the union over the Risk numbers in the feature document'
 
 ## Output Contract
 
-Report the subject (base and head), each lens and its verdict, the findings that blocked, and follow-ups. Delivery remains the user's decision.
+Report the subject (base), each lens and its verdict, the findings that blocked, and follow-ups. Delivery remains the user's decision.
 
 ## References
 

@@ -1,7 +1,6 @@
 // PreToolUse hook on Agent: a construct:review-* lens gets its whole context
 // from here, so the orchestrator never pastes evidence. The prompt names the
-// subject with one line, `Review subject: <base>` or `<base>..<head>` (head
-// defaults to HEAD). The hook builds the binding, name-status, numstat, per-path
+// subject with one line, `Review subject: <base>` (the head is HEAD). The hook builds the binding, name-status, numstat, per-path
 // patches (a deleted path is listed with a marker, not its removed content; plus the
 // security checklist for review-risk) from the two trees, replaces the
 // prompt with it, and records the pending lens for review-capture.mjs. A review
@@ -18,7 +17,7 @@ const SUBJECT_LINE = /^Review subject: (\S+)[ \t]*$/m
 const CHECKLIST = new URL('../../skills/rdd-review/references/security-checklist.md', import.meta.url)
 const MAX_CONTEXT_BYTES = 400 * 1024
 const DIFF_FLAGS = ['--no-color', '--no-ext-diff', '--no-textconv', '--no-renames', '--ignore-submodules=none']
-const FORM = 'Review subject: <base>[..<head>]'
+const FORM = 'Review subject: <base>'
 
 const decide = (permissionDecision, extra) =>
   process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision, ...extra } })}\n`)
@@ -59,7 +58,7 @@ function buildContext(root, lens, base, head) {
   text += 'ODD_REVIEW_CONTEXT_END\n'
   const bytes = Buffer.byteLength(text)
   if (bytes > MAX_CONTEXT_BYTES) {
-    throw new Error(`the review context is ${bytes} bytes, above the ${MAX_CONTEXT_BYTES} byte budget; review the branch as consecutive ranges \`<a>..<b>\` (one \`Review subject: <a>..<b>\` line per range, each under the budget)`)
+    throw new Error(`the review context is ${bytes} bytes, above the ${MAX_CONTEXT_BYTES} byte budget; split the delivery into smaller pull requests, each under the budget`)
   }
   return { text, subject, manifest, baseTree, headTree }
 }
@@ -71,9 +70,10 @@ function main() {
   const match = REVIEW_AGENT.exec(toolInput.subagent_type ?? '')
   if (!match) return
   const [agent, lens] = match
-  const [base, head = 'HEAD'] = SUBJECT_LINE.exec(toolInput.prompt)?.[1].split('..') ?? []
-  if (!base || base.startsWith('-') || head === '' || head.startsWith('-')) {
-    deny(`${agent} needs its subject: put one line \`${FORM}\` in the prompt (the head defaults to HEAD), and this hook injects the evidence.`)
+  const base = SUBJECT_LINE.exec(toolInput.prompt)?.[1]
+  const head = 'HEAD'
+  if (!base || base.startsWith('-')) {
+    deny(`${agent} needs its subject: put one line \`${FORM}\` in the prompt (the head is HEAD), and this hook injects the evidence.`)
     return
   }
   try {

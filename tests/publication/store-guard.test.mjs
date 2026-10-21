@@ -59,6 +59,18 @@ describe('review-store-guard', () => {
     silent(hook('Bash', { command: 'git status' }, repo))
   })
 
+  test('review-capture and review-context named in a Bash command are denied (F2)', () => {
+    denied(hook('Bash', { command: 'echo \'{}\' | node "$CLAUDE_PLUGIN_ROOT/hooks/scripts/review-capture.mjs"' }, repo))
+    denied(hook('Bash', { command: 'node plugins/construct/hooks/scripts/review-context.mjs < in.json' }, repo))
+    denied(hook('Bash', { command: 'NODE review-CAPTURE' }, repo))
+  })
+
+  test('quotes, backslashes, and brackets do not hide the names (F3)', () => {
+    for (const command of ['cat .git/construct"-"review/x', 'cat .git/construct-revie[w]/x', 'cat .git/construct\\-review/x', "node review'-'capture.mjs", 'node review-conte[x]t.mjs']) {
+      denied(hook('Bash', { command }, repo))
+    }
+  })
+
   test('the store is found whatever the case of its path', () => {
     denied(hook('Write', { file_path: join(repo, '.git', 'CONSTRUCT-REVIEW', 'verdicts', 'x.json') }, repo))
     denied(hook('Write', { file_path: '.git/Construct-Review/x' }, repo))

@@ -2,7 +2,7 @@
 // records (written by review-context.mjs), one verdict record per subject and
 // lens (written only by review-capture.mjs), and the lens result validation.
 import { createHash } from 'node:crypto'
-import { existsSync, readdirSync, readFileSync, rmSync } from 'node:fs'
+import { mkdirSync, readdirSync, readFileSync, rmdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { isAbsolute, join } from 'node:path'
 import { atomicWrite, git } from './git-tree.mjs'
 
@@ -13,10 +13,10 @@ const LOCATION = /^(.+):(\d+)(?:-(\d+))?$/
 
 export const subjectHash = (baseTree, headTree) => createHash('sha256').update(`${baseTree}\n${headTree}`).digest('hex')
 
-export function storeDir(root) {
-  const common = git(root, ['rev-parse', '--git-common-dir']).toString('utf8').trim()
-  return join(isAbsolute(common) ? common : join(root, common), 'construct-review')
-}
+// storeAt is the store of the git common dir `common`, a path relative to `base` or absolute.
+export const storeAt = (common, base) => join(isAbsolute(common) ? common : join(base, common), 'construct-review')
+
+export const storeDir = (root) => storeAt(git(root, ['rev-parse', '--git-common-dir']).toString('utf8').trim(), root)
 
 const pendingFile = (root, lens, subject) => join(storeDir(root), 'pending', `${lens}.${subject}.json`)
 const verdictFile = (root, subject, lens) => join(storeDir(root), 'verdicts', subject, `${lens}.json`)
@@ -46,54 +46,39 @@ export function pendingRecords(root, lens) {
   return records.sort((a, b) => (a.at ?? 0) - (b.at ?? 0))
 }
 
-// A rejection stands: a later verdict for the same subject and lens never replaces it, so only a new
-// subject (a new commit) can be approved.
+// A rejection stands: it always replaces the record, an approval is written with an exclusive
+// create and so never replaces anything (a concurrent approval cannot overwrite a rejection), and
+// only a new subject (a new commit) can be approved.
 export function writeVerdict(root, record) {
   const file = verdictFile(root, record.subject_hash, record.lens)
-  if (existsSync(file) && readJson(file).approved !== true) return
-  atomicWrite(file, `${JSON.stringify(record)}\n`)
-}
-
-// verdictRecords lists the verdict records of a lens across subjects.
-function verdictRecords(root, lens) {
-  const records = []
-  let subjects = []
+  if (record.approved !== true) return atomicWrite(file, `${JSON.stringify(record)}\n`)
+  mkdirSync(join(file, '..'), { recursive: true })
   try {
-    subjects = readdirSync(join(storeDir(root), 'verdicts'))
-  } catch {
-    // No verdicts yet.
+    writeFileSync(file, `${JSON.stringify(record)}\n`, { flag: 'wx' })
+  } catch (error) {
+    if (error.code !== 'EEXIST') throw error
   }
-  for (const subject of subjects) {
-    try {
-      records.push(readJson(verdictFile(root, subject, lens)))
-    } catch {
-      // No record for this lens.
+}
+
+const MAX_AGE_MS = 30 * 24 * 3600 * 1000
+
+// pruneStore removes pending and verdict records not touched for 30 days. One cheap pass; failures are ignored.
+export function pruneStore(root) {
+  try {
+    const store = storeDir(root)
+    const cutoff = Date.now() - MAX_AGE_MS
+    const dirs = [join(store, 'pending'), ...readdirSync(join(store, 'verdicts')).map((subject) => join(store, 'verdicts', subject))]
+    for (const dir of dirs) {
+      try {
+        for (const name of readdirSync(dir)) if (statSync(join(dir, name)).mtimeMs < cutoff) rmSync(join(dir, name), { force: true })
+        if (dir !== dirs[0]) rmdirSync(dir)
+      } catch {
+        // A directory that is gone or not empty stays.
+      }
     }
+  } catch {
+    // No store yet.
   }
-  return records
-}
-
-// rejectedTrees: the head trees a lens rejected. A rejection poisons its head tree for that lens, so
-// re-splitting a rejected range cannot approve it; only a changed tree (a real fix) can.
-export const rejectedTrees = (root, lens) => new Set(verdictRecords(root, lens).filter((r) => r.approved !== true && r.head_tree).map((r) => r.head_tree))
-
-// approvedLinks lists the approved verdicts of a lens that know their trees and whose head tree the
-// lens never rejected: [{ base_tree, head_tree }].
-export function approvedLinks(root, lens) {
-  const poisoned = rejectedTrees(root, lens)
-  return verdictRecords(root, lens)
-    .filter((r) => r.approved === true && r.base_tree && r.head_tree && !poisoned.has(r.head_tree))
-    .map((r) => ({ base_tree: r.base_tree, head_tree: r.head_tree }))
-}
-
-// chainExists: do the approved links form a chain of subjects from tree `from` to tree `to`?
-// One link is the one-subject chain; equal trees need no review.
-export function chainExists(links, from, to) {
-  const reached = new Set([from])
-  for (const tree of reached) {
-    for (const link of links) if (link.base_tree === tree) reached.add(link.head_tree)
-  }
-  return reached.has(to)
 }
 
 // readVerdicts returns the verdict records of a subject, keyed by lens.

@@ -2,13 +2,15 @@
 // prepared: it takes the agent's report (its final reply, or the SubagentHandback
 // message a background agent sends, read from its transcript), validates it
 // against the pending record, and writes the verdict record. Only a surrounding
-// code fence is removed; the JSON itself is never edited. A malformed or invalid
-// reply blocks the stop with the reason, at most MAX_RETRIES times. Errors fail open.
+// code fence is removed; the JSON itself is never edited. The record is the one whose
+// subject_hash the reply names; a reply naming none (malformed JSON, an unknown hash) touches no
+// record and is ignored, so it cannot clear another session's record. An invalid reply for a
+// pending subject blocks the stop with the reason, at most MAX_RETRIES times. Errors fail open.
 // Usage: node review-capture.mjs   (hook JSON on stdin)
 import { readFileSync } from 'node:fs'
-import { atomicWrite, repositoryRoot } from './git-tree.mjs'
+import { repositoryRoot } from './git-tree.mjs'
 import { readInput } from './hook-io.mjs'
-import { checkLensResult, clearPending, pendingRecords, writePending, writeVerdict } from './review-store.mjs'
+import { checkLensResult, clearPending, pendingRecords, pruneStore, writePending, writeVerdict } from './review-store.mjs'
 
 const MAX_RETRIES = 2
 const AGENT = /^construct:(review-[a-z]+)$/
@@ -49,24 +51,22 @@ function main() {
   const reply = replyOf(input)
   if (reply === null) return
   const root = repositoryRoot(input.cwd)
-  const records = pendingRecords(root, lens)
-  if (records.length === 0) return
+  pruneStore(root)
   let parsed
-  let malformed = null
   try {
     parsed = JSON.parse(unfence(reply))
   } catch {
-    malformed = 'the reply is not a JSON object'
+    return
   }
-  // Among several pending subjects take the one the reply names, else the newest spawn.
-  const pending = records.find((record) => record.subject_hash === parsed?.subject_hash) ?? records[records.length - 1]
-  const refusal = malformed ? { code: 'malformed_result', message: malformed } : checkLensResult(parsed, { subjectHash: pending.subject_hash, manifest: pending.manifest })
+  const pending = pendingRecords(root, lens).find((record) => record.subject_hash === parsed?.subject_hash)
+  if (!pending) return
+  const refusal = checkLensResult(parsed, { subjectHash: pending.subject_hash, manifest: pending.manifest })
   if (refusal.code === undefined) {
     writeVerdict(root, { lens, subject_hash: pending.subject_hash, base_tree: pending.base_tree, head_tree: pending.head_tree, approved: refusal.approved, at: Date.now(), result: parsed })
     clearPending(root, pending)
     return
   }
-  if (['malformed_result', 'invalid_result'].includes(refusal.code) && pending.attempts < MAX_RETRIES) {
+  if (refusal.code === 'invalid_result' && pending.attempts < MAX_RETRIES) {
     writePending(root, { ...pending, attempts: pending.attempts + 1 })
     block(
       `review-capture rejected your result (${refusal.code}): ${refusal.message}. ` +

@@ -99,9 +99,9 @@ test('rdd-review quotes the lens mapping of review-lenses.mjs', () => {
   }
 })
 
-test('rdd-review names the Review subject forms and no longer names the removed CLIs or the switch', () => {
+test('rdd-review names the Review subject form and no longer names the removed CLIs or the switch', () => {
   const text = filesUnder(join(skillsRoot, 'rdd-review')).map((f) => readFileSync(f, 'utf8')).join('\n')
-  assert.match(text, /Review subject: <base>\.\.<head>/)
+  assert.doesNotMatch(text, /<base>\.\.<head>|consecutive ranges/)
   assert.match(text, /Review subject: <base>`/)
   assert.doesNotMatch(text, /odd-review|odd-assess|review_due|refuter|validator/)
 })

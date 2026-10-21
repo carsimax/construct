@@ -49,7 +49,7 @@ Parent bash output stays bounded: counts, `--stat`, tails, or summaries.
 ## Review
 
 - Review is mandatory for high-risk work (`construct:rdd-review`); no switch, no consent. Lenses follow the task's Risk numbers.
-- Launch each required lens (for example `construct:review-risk`) with the line `Review subject: <base>` (or `<base>..<head>`). Hooks build the evidence and record the verdict; never write either.
+- Launch each required lens (for example `construct:review-risk`) with the line `Review subject: <base>`. Hooks build the evidence and record the verdict; never write either.
 - `git push`, `gh pr create`, and `gh release create` are denied until the required lenses approve. A rejection stands: fix with a new commit, review again.
 - An approval never authorizes delivery; commit, push, PR, and merge stay human decisions.
 
