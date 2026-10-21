@@ -16,7 +16,7 @@ Source: the user's "Podemos aplicarlo asi, ademas podemos hacer una mejora respe
 |---|---|---|---|---|---|---|
 | T1 | S1 | Explorer effort `medium` in config, frontmatter, S6 test, README | odd-worker | 3 | done | |
 | T2 | S2 | Parallel-explorer rule in session contract and `odd-delegation` (skill and handoffs) | odd-worker | 6 | done | |
-| T3 | S3 | Release 2.1.0 | odd-worker | 5 | pending | |
+| T3 | S3 | Release 2.1.0 | odd-worker | 5 | done | |
 
 ## Log
 
@@ -24,4 +24,5 @@ Source: the user's "Podemos aplicarlo asi, ademas podemos hacer una mejora respe
 - **L2 (2026-10-21, parent):** Against the claude-api skill (cached 2026-10-06): Opus 5.5 default effort `medium`, Sonnet 5.5 `high` (recommended start `medium` for agentic coding), Haiku 5.5 `medium`, positioned for sub-agent work. The four Sonnet reviewers at `medium` stay until an eval compares `medium` and `high`. `delegation-admission.mjs` admits explorers untouched, so S2 needs no hook change.
 - **L3 (2026-10-21, user):** Chose "Todos menos este": every other `odd/tasks/*.md` deleted from the working tree (recoverable from git; the uncommitted L12 of `remove-secret-guard.md` is lost; `harness-extras` T3/T5 lose tracking). `delegation-admission.mjs:19` still cites `odd/tasks/gentle-parity.md`.
 - **L4 (2026-10-21, progress):** T1: S6 row RED then GREEN (`tests/agents-config.test.mjs` 4/4). T2: `session.md` 7,411 characters; the contract test adds the notice text, so the real ceiling is about 7,410, not 8,000 (the Mapping bullet was compressed to fit). `node --test tests/`: 1136, 1133 pass, 3 fail, the locking cases in `tests/review/invariants.test.mjs` that already failed on baseline `8743462`. `claude plugin test`: 161 pass. Both validates pass. Commit: user.
-- **L5 (2026-10-21, user):** "podemos mandar pr y release?". RDD mode is off (global), so no review is due. Branch `feat/explorer-routing`; S3 and T3 added.
+- **L5 (2026-10-21, user):** "podemos mandar pr y release?". RDD mode is off (global), so no review is due. Branch `feat/explorer-routing`; S3 and T3 added. Commits `d215d7a` (T1), `ab972db` (T2), `80b192b` (deletions). The slice is ~1,970 changed lines, almost all whole-file deletions, so it stays one pull request.
+- **L6 (2026-10-21, progress):** T3: 2.1.0 in `plugin.json`, `install.sh`, README (badge, install URLs, marketplace pin, Status paragraph, "Upgrading from 2.0.0"), install test; `tests/install/` RED then GREEN (30/30). Pre-PR checks: `node --test tests/` 1133/1136, the 3 failures also fail on `4320200` (`tests/review/invariants.test.mjs` 47/3 in a detached worktree); `claude plugin test` 161 pass; both validates pass. Merge and tag `v2.1.0`: user, then the GitHub Release.
