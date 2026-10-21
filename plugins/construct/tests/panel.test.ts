@@ -27,11 +27,14 @@ function world($, on, o: any = {}) {
   on('session.cwd', () => value('/home/me/proj'))
   on('settings.read', () => value(o.settings ?? {}))
   on('env.get', () => value('/home/me'))
+  on('fs.exists', () => value(o.exists ?? false))
+  on('session.version', () => value({ version: o.version ?? '2.1.304', base: o.version ?? '2.1.304' }))
   on('clock.now', () => value(o.clock ? o.clock() : NOW))
   on('fs.list', () => value([entry('feat.md')]))
   on('fs.read', () => value(o.tasks ? o.tasks() : TASKS))
   on('process.run', (_$, e) => {
     const a = e.argv
+    if (o.run) return value(o.run(a))
     if (a[0] === 'git' && a.includes('status')) return value(ok(o.git ?? '# branch.oid abc1234\n# branch.head main\n'))
     if (a[0] === 'git' && a.includes('--no-index')) return value(o.untrackedCount ? { ...ok(o.untrackedCount), exitCode: 1 } : { ...ok(''), exitCode: 128 })
     if (a[0] === 'git' && a.includes('--numstat')) return value(ok(o.numstat ?? ''))
@@ -107,6 +110,34 @@ test('/construct opens the pane and /construct close closes it', { options: { pa
   await $.command.run({ command: 'construct', args: 'close' })
   await settle()
   expect(await isUp($)).toBe(false)
+})
+
+test('/construct doctor returns a report even when every process fails', { options: { panel_open_on_start: false } }, async ($, on) => {
+  await start($, on, { run: () => ({ ...ok(''), exitCode: 1 }), settings: undefined })
+  const out = await $.command.run({ command: 'construct', args: 'doctor' })
+  const text = String(out?.text ?? '')
+  expect(text).toContain('Construct doctor')
+  expect(text).toContain('✓ Claude Code 2.1.304')
+  expect(text).toContain('✗ Node')
+  expect(text).toContain('✗ engram@engram plugin enabled')
+  expect(text).toContain('✗ CodeGraph index')
+  expect(text).toContain('✗ odd-review runnable')
+  expect(text).toContain('✗ odd-assess runnable')
+  expect(text).toContain('✗ RDD mode: unknown')
+  expect(await isUp($)).toBe(false)
+})
+
+test('/construct doctor reports a healthy setup', { options: { panel_open_on_start: false } }, async ($, on) => {
+  const run = (a: string[]) => {
+    if (a[0] === 'git') return ok('/home/me/proj\n.git\n.git\n')
+    if (a[1] === '--version') return ok('v22.1.0\n')
+    if (a.includes('mode')) return ok(JSON.stringify({ mode: 'off', source: 'default' }))
+    return ok('usage')
+  }
+  await start($, on, { run, settings: { enabledPlugins: { 'engram@engram': true } }, exists: true, version: '2.1.400' })
+  const text = String((await $.command.run({ command: 'construct', args: 'doctor' }))?.text ?? '')
+  expect(text).not.toContain('✗')
+  expect(text).toContain('✓ RDD mode: off')
 })
 
 test('the Pane draws the panel for the construct pane id', async ($, on) => {

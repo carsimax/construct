@@ -21,6 +21,7 @@ import {
   onUnblocked,
 } from './panel/state.js'
 import { agentDoneNotice, resumeNotice, turnDoneNotice } from './panel/notices.js'
+import { checkAssessCli, checkClaude, checkCodegraph, checkEngram, checkMode, checkNode, checkReviewCli, formatReport } from './status/doctor.js'
 import { activeWork } from './status/tasks.js'
 import { parseAssess, parseBoundary, parseGitStatus, parseMode, parseNumstat, parseRevParse, reviewState } from './status/data.js'
 
@@ -277,9 +278,38 @@ async function openPane($) {
   return $.ui.open({ id: PANEL_ID, title: 'Construct', columns: PANEL_COLUMNS })
 }
 
-// /construct opens the pane, /construct close closes it.
+// Runs one doctor probe; a failure or a timeout is null, never a throw.
+async function probe(read) {
+  try {
+    return (await read()) ?? null
+  } catch {
+    return null
+  }
+}
+
+// /construct doctor (S8): every probe runs in parallel with a 3 s timeout (GIT_MS), so the report comes back
+// well inside the hook budget. The checks themselves are pure, in status/doctor.js.
+async function runDoctor($) {
+  const cwd = await probe(() => $.session.cwd())
+  const rev = parseRevParse(await probe(() => runText($, ['git', 'rev-parse', '--show-toplevel', '--git-dir', '--git-common-dir'], cwd ?? undefined, GIT_MS)))
+  const root = rev?.root ?? cwd
+  const cli = (name) => `${$.plugin.root}/bin/${name}`
+  const cliArgs = root ? ['--cwd', root] : []
+  const [version, node, plugins, codegraph, review, assess] = await Promise.all([
+    probe(async () => (await $.session.version()).version),
+    probe(() => runText($, ['node', '--version'], cwd ?? undefined, GIT_MS)),
+    probe(() => $.settings.read({ key: 'enabledPlugins' })),
+    probe(() => (root ? $.fs.exists(`${root}/.codegraph`) : null)),
+    probe(() => runText($, ['node', cli('odd-review'), ...cliArgs, 'mode', 'status'], root ?? undefined, GIT_MS)),
+    probe(() => runText($, ['node', cli('odd-assess'), '--help'], root ?? undefined, GIT_MS)),
+  ])
+  return formatReport([checkClaude(version), checkNode(node), checkEngram(plugins), checkCodegraph(codegraph), checkReviewCli(review), checkAssessCli(assess), checkMode(review)])
+}
+
+// /construct opens the pane, /construct close closes it, /construct doctor reports the setup.
 async function runCommand($, e) {
   const arg = String(e.args ?? '').trim().toLowerCase()
+  if (arg === 'doctor') return { text: await runDoctor($) }
   if (arg === 'close') {
     await $.ui.close({ id: PANEL_ID })
     return { text: 'Construct panel closed.' }
@@ -442,7 +472,7 @@ async function noteSpawn($, e, result, role, options) {
 // Registers /construct and, when the user asked for it, opens the pane. Detached from session.start.
 async function setUpPanel($, options) {
   try {
-    await $.command.register({ name: 'construct', description: 'Open the Construct panel (close: /construct close)', argumentHint: '[close]' })
+    await $.command.register({ name: 'construct', description: 'Open the Construct panel (close: /construct close, setup check: /construct doctor)', argumentHint: '[close|doctor]' })
   } catch {
     // the command stays unavailable
   }
