@@ -3,7 +3,7 @@
 // the surfaces of its own prompt (S3).
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { mkdirSync, realpathSync, writeFileSync } from 'node:fs'
+import { mkdirSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, test } from 'node:test'
 import { makeRepo, scratchDir } from '../assess/helpers.mjs'
@@ -169,5 +169,49 @@ describe('S3: writer subagent', () => {
   test('the secret rule still wins for a writer', () => {
     const s = session(surfaces('.env'))
     denied(sub(s, 'construct:odd-worker', 'Write', { file_path: join(repo, '.env') }), /secret-guard blocked/)
+  })
+})
+
+describe('A6: symlinks under odd/tasks are judged by where they write', () => {
+  mkdirSync(join(repo, 'odd/tasks'), { recursive: true })
+  mkdirSync(join(repo, 'odd/linkdir'), { recursive: true })
+  symlinkSync(join(repo, 'src/new.js'), join(repo, 'odd/tasks/dangling.md'))
+  symlinkSync('../../src/rel-new.js', join(repo, 'odd/tasks/rel-dangling.md'))
+  symlinkSync(join(repo, 'src/a.js'), join(repo, 'odd/tasks/live.md'))
+  symlinkSync(join(repo, 'odd/tasks/dangling.md'), join(repo, 'odd/tasks/chain.md'))
+  symlinkSync(join(outside, 'gone.md'), join(repo, 'odd/tasks/out.md'))
+  symlinkSync(join(repo, 'odd/tasks/plain-target.md'), join(repo, 'odd/tasks/inner.md'))
+  symlinkSync(join(repo, 'src'), join(repo, 'odd/tasks/srcdir'))
+  symlinkSync(join(repo, 'src/brand'), join(repo, 'odd/tasks/danglingdir'))
+  for (const [name, file] of [
+    ['a dangling absolute link into src', 'odd/tasks/dangling.md'],
+    ['a dangling relative link into src', 'odd/tasks/rel-dangling.md'],
+    ['a live link to a source file', 'odd/tasks/live.md'],
+    ['a chain of links ending in src', 'odd/tasks/chain.md'],
+    ['a file under a link to src', 'odd/tasks/srcdir/new.js'],
+    ['a file under a dangling directory link into src', 'odd/tasks/danglingdir/x.js'],
+  ]) {
+    test(`${name} is denied`, () => {
+      for (const tool of ['Write', 'Edit']) denied(main(tool, { file_path: join(repo, file) }), /construct:odd-worker/)
+    })
+  }
+  test('a link whose real target is outside the repository, or inside odd/tasks, is allowed', () => {
+    allowed(main('Write', { file_path: join(repo, 'odd/tasks/out.md') }))
+    allowed(main('Write', { file_path: join(repo, 'odd/tasks/inner.md') }))
+  })
+  test('a relative path to the link resolves the same way', () => {
+    denied(main('Write', { file_path: 'odd/tasks/dangling.md' }), /construct:odd-worker/)
+  })
+  test('odd/tasks itself a link to src is denied; an ordinary file there stays allowed', () => {
+    const r2 = realpathSync(makeRepo({ 'src/a.js': 'a\n' }))
+    mkdirSync(join(r2, 'odd'), { recursive: true })
+    symlinkSync(join(r2, 'src'), join(r2, 'odd/tasks'))
+    denied(main('Write', { file_path: join(r2, 'odd/tasks/x.md') }, r2), /construct:odd-worker/)
+    allowed(main('Write', { file_path: join(repo, 'odd/tasks/ordinary.md') }))
+  })
+  test('a link loop does not allow-by-crash into the repository', () => {
+    symlinkSync(join(repo, 'odd/tasks/loop-b'), join(repo, 'odd/tasks/loop-a'))
+    symlinkSync(join(repo, 'odd/tasks/loop-a'), join(repo, 'odd/tasks/loop-b'))
+    assert.equal(main('Write', { file_path: join(repo, 'odd/tasks/loop-a') }).status, 0)
   })
 })

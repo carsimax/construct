@@ -323,3 +323,33 @@ describe('concurrent admission (L7 gap)', () => {
     assert.deepEqual(readdirSync(join(e.CLAUDE_PLUGIN_DATA, 'delegation-admission')), ['s1'])
   })
 })
+
+describe('A5: the construct: prefix is optional', () => {
+  for (const [type, prefixed] of [['odd-worker', WORKER], ['jd-fix-agent', FIX]]) {
+    test(`${type} without the prefix is admitted like ${prefixed}`, () => {
+      allowed(launch(plain(), env(), type, surfaces('src/a.js')))
+    })
+    test(`${type} without the prefix is denied with no section`, () => {
+      denied(launch(plain(), env(), type, 'Do the thing'), /## Allowed edit surfaces/)
+    })
+    test(`${type} without the prefix is denied on a bad entry`, () => {
+      denied(launch(plain(), env(), type, surfaces('src/a.js', '/etc/passwd')), /not a narrow repository-relative path/)
+    })
+    test(`${type} without the prefix needs the Spec line when a feature is open`, () => {
+      denied(launch(withFeature('pending'), env(), type, surfaces('src/a.js')), /Spec:/)
+    })
+    test(`${type} without the prefix is tracked for overlap`, () => {
+      const repo = plain()
+      const e = env()
+      allowed(launch(repo, e, type, surfaces('src/a.js'), 'ov'))
+      denied(launch(repo, e, prefixed, surfaces('src/a.js'), 'ov'), /overlap/i)
+    })
+  }
+  test('odd-verify without the prefix needs a Risk line', () => {
+    denied(launch(plain(), env(), 'odd-verify', 'Verify it'), /Risk: item/)
+    allowed(launch(plain(), env(), 'odd-verify', 'Verify it\nRisk: item 2\n'))
+  })
+  test('other agents are untouched', () => {
+    allowed(launch(plain(), env(), 'odd-explore', 'look'))
+  })
+})

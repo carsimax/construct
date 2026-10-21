@@ -38,9 +38,12 @@ export function splitCommands(input) {
       has = true
       for (i++; i < input.length && input[i] !== '"'; i++) {
         // Inside double quotes bash drops a backslash only before $ ` " \ or newline.
-        if (input[i] === '\\' && i + 1 < input.length && '$`"\\\n'.includes(input[i + 1])) i++
+        if (input[i] === '\\' && input[i + 1] === '\n') { i++; continue }
+        if (input[i] === '\\' && i + 1 < input.length && '$`"\\'.includes(input[i + 1])) i++
         cur += input[i]
       }
+    } else if (c === '\\' && input[i + 1] === '\n') {
+      i++ // a continuation line joins before tokenizing
     } else if (c === '\\' && i + 1 < input.length) {
       cur += input[++i]
       has = true

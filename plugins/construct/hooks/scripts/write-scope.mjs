@@ -11,7 +11,7 @@
 // admission hook already checked the prompt, and the transcript layout is undocumented).
 // Pure module: secret-guard.mjs imports `writeScopeVerdict` and owns the output.
 import { execFileSync } from 'node:child_process'
-import { existsSync, realpathSync } from 'node:fs'
+import { lstatSync, readlinkSync, realpathSync } from 'node:fs'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { firstUserPrompt, parseSurfaces, WRITERS } from './delegation-admission.mjs'
 
@@ -30,18 +30,29 @@ function gitRoot(cwd) {
   }
 }
 
-// realPath resolves symlinks of the nearest existing ancestor and keeps the rest, so a
-// file that does not exist yet still compares against the real repository root.
-function realPath(abs) {
+// realPath resolves where a write to `abs` would really land. A symlink (including a
+// dangling one, which existsSync cannot see) is followed with readlink, relative links
+// against their own directory; the nearest existing ancestor is resolved with realpath
+// and the rest is kept, so a file that does not exist yet still compares against the real
+// repository root. A chain longer than 40 links throws (the caller allows on error).
+function realPath(abs, hops = 0) {
+  if (hops > 40) throw new Error('too many symbolic links')
   const rest = []
   let dir = abs
-  while (!existsSync(dir)) {
+  for (;;) {
+    let stat = null
+    try {
+      stat = lstatSync(dir)
+    } catch {
+      // missing: climb
+    }
+    if (stat?.isSymbolicLink()) return realPath(join(resolve(dirname(dir), readlinkSync(dir)), ...rest), hops + 1)
+    if (stat) return join(realpathSync(dir), ...rest)
     const parent = dirname(dir)
     if (parent === dir) return abs
     rest.unshift(basename(dir))
     dir = parent
   }
-  return join(realpathSync(dir), ...rest)
 }
 
 const inside = (rel) => rel !== '' && rel !== '..' && !rel.startsWith('../') && !isAbsolute(rel)

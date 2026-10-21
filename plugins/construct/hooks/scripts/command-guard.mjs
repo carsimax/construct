@@ -12,16 +12,16 @@ const MAX_DEPTH = 4
 // shortcut: wrapper flags are skipped by shape (a leading `-`, plus the listed value flags);
 // upgrade to per-wrapper grammars if a wrapper hides a command behind an unlisted value flag.
 const WRAPPERS = {
-  sudo: new Set(['-u', '-g', '-C', '-h', '-p', '-r', '-t', '-U', '-D']),
+  sudo: new Set(['-u', '-g', '-C', '-h', '-p', '-r', '-t', '-U', '-D', '--user', '--group', '--host', '--prompt', '--chdir', '--role', '--type', '--other-user', '--close-from']),
   command: new Set(),
   builtin: new Set(),
-  env: new Set(['-u', '-C', '-S']),
+  env: new Set(['-u', '-C', '-S', '--unset', '--chdir', '--split-string']),
   nohup: new Set(),
   time: new Set(),
   exec: new Set(['-a']),
-  xargs: new Set(['-n', '-I', '-L', '-P', '-s', '-d', '-E', '-a', '-l', '-i']),
-  nice: new Set(['-n']),
-  ionice: new Set(['-c', '-n', '-p']),
+  xargs: new Set(['-n', '-I', '-L', '-P', '-s', '-d', '-E', '-a', '-l', '-i', '--max-args', '--replace', '--max-procs', '--max-lines', '--delimiter', '--arg-file']),
+  nice: new Set(['-n', '--adjustment']),
+  ionice: new Set(['-c', '-n', '-p', '--class', '--classdata', '--pid']),
   timeout: new Set(['-s', '-k', '--signal', '--kill-after']),
   '!': new Set(),
   '{': new Set(),
@@ -33,30 +33,56 @@ const WRAPPERS = {
   while: new Set(),
   until: new Set(),
 }
+const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/
 const GIT_VALUE_FLAGS = new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace', '--exec-path'])
 
-// headIndex is the index of the word that names the command: past assignments, wrappers,
-// and their flags (and the duration `timeout` takes).
-export function headIndex(texts) {
+// unwrap walks past assignments, wrappers, their flags and values, and the positional
+// argument `timeout` takes (its DURATION). `at` is the index of the word that names the
+// command; `strings` are `env -S`/`--split-string` values, each a command line of its own
+// (env splits it into the command and its arguments, so the rest of the words follow it).
+function unwrap(texts) {
+  const strings = []
   let i = 0
   while (i < texts.length) {
     const w = basename(texts[i])
-    if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(texts[i])) i++
+    if (ASSIGNMENT.test(texts[i])) i++
     else if (Object.hasOwn(WRAPPERS, w)) {
       const values = WRAPPERS[w]
       i++
-      let first = true
       while (i < texts.length) {
-        if (texts[i] === '--') { i++; break }
-        if (texts[i].startsWith('-') && texts[i].length > 1) i += values.has(texts[i]) ? 2 : 1
-        else if (w === 'timeout' && first) i++
-        else if (w === 'env' && /^[A-Za-z_][A-Za-z0-9_]*=/.test(texts[i])) i++
-        else break
-        first = false
+        const t = texts[i]
+        if (t === '--') { i++; break }
+        if (!t.startsWith('-') || t.length === 1) {
+          if (w === 'env' && ASSIGNMENT.test(t)) { i++; continue }
+          break
+        }
+        if (w === 'env' && /^-S./.test(t)) strings.push(t.slice(2))
+        else if (w === 'env' && t.startsWith('--split-string=')) strings.push(t.slice('--split-string='.length))
+        else if (w === 'env' && (t === '-S' || t === '--split-string') && texts[i + 1] !== undefined) strings.push(texts[i + 1])
+        i += values.has(t) ? 2 : 1
       }
+      if (w === 'timeout' && i < texts.length) i++
     } else break
   }
-  return i
+  return { at: i, strings, rest: texts.slice(i) }
+}
+
+// headIndex is the index of the word that names the command: past assignments, wrappers,
+// their flags and values, and the duration `timeout` takes.
+export function headIndex(texts) {
+  return unwrap(texts).at
+}
+
+// npm flags that take a separate value, so the subcommand is the first word after them.
+// shortcut: a value flag missing here makes its value look like the subcommand; add it to the set.
+const NPM_VALUE_FLAGS = new Set(['--access', '--registry', '--otp', '--tag', '--prefix', '--workspace', '-w', '--userconfig', '--globalconfig', '--cache', '--loglevel', '--scope', '--tmp', '--before', '--omit', '--include', '--fund', '--audit-level', '--cwd', '--logs-dir', '--script-shell', '--node-options', '--provenance-file'])
+function npmSubcommand(args) {
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--') return args[i + 1]
+    if (!args[i].startsWith('-') || args[i] === '-') return args[i]
+    if (NPM_VALUE_FLAGS.has(args[i])) i++
+  }
+  return undefined
 }
 
 const hasFlag = (args, short, long) => args.some((a) => (long && (a === long || a.startsWith(`${long}=`))) || (/^-[^-]/.test(a) && a.slice(1).includes(short)))
@@ -156,13 +182,16 @@ function findMatches(command, deps, depth = 0) {
   let previous = []
   for (const words of split(text)) {
     const live = words.filter((w) => !w.r).map((w) => w.t)
-    const at = headIndex(live)
+    const { at, strings } = unwrap(live)
+    // `env -S "cmd args"` runs the string as a command, followed by the words after it.
+    for (const text of strings) nested([text, ...live.slice(at)].join(' '))
     const name = basename(live[at] ?? '')
     const args = live.slice(at + 1)
     if (!words.piped) previous = []
     if (SHELLS.has(name)) {
       const flag = args.findIndex((a) => /^-[a-z]*c[a-z]*$/.test(a))
-      if (flag >= 0 && args[flag + 1] !== undefined) nested(args[flag + 1])
+      const body = flag + 1 < args.length && args[flag + 1] === '--' ? flag + 2 : flag + 1
+      if (flag >= 0 && args[body] !== undefined) nested(args[body])
     } else if (name === 'eval') nested((args[0] === '--' ? args.slice(1) : args).join(' '))
     else if (SQL_CLIENTS.has(name)) {
       const payloads = args.map((a) => a.replace(/^(?:--command|--execute)=/, ''))
@@ -184,7 +213,7 @@ function findMatches(command, deps, depth = 0) {
     } else if (name === 'git') gitMatches(args, add)
     else if (name === 'chmod' && hasFlag(args, 'R', '--recursive') && args.some((a) => /^0?777$/.test(a))) add('deny', 'chmod -R 777')
     else if (name === 'chown' && hasFlag(args, 'R', '--recursive')) add('deny', 'chown -R')
-    else if (name === 'npm' && args.find((a) => !a.startsWith('-')) === 'publish') add('deny', 'npm publish')
+    else if (name === 'npm' && npmSubcommand(args) === 'publish') add('deny', 'npm publish')
     if (DATA_COMMANDS.has(name)) previous = args
   }
 

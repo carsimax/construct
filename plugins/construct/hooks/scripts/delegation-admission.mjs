@@ -288,7 +288,9 @@ function withLock(session, fn) {
 function admit(input) {
   const tool = input.tool_input
   if (input.tool_name !== 'Agent' || !tool || typeof tool !== 'object' || Array.isArray(tool)) return
-  const type = tool.subagent_type
+  const raw = tool.subagent_type
+  // The prefix is optional: write-scope and the agent registry accept both spellings.
+  const type = typeof raw === 'string' && !raw.includes(':') ? `construct:${raw}` : raw
   const prompt = typeof tool.prompt === 'string' ? tool.prompt : ''
   if (type === VERIFIER) {
     if (!RISK_LINE.test(prompt)) deny(`${VERIFIER} needs a high-risk item declared in its prompt. ${RISK_FORM}`)
