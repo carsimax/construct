@@ -66,7 +66,9 @@ function expandBraces(glob, depth = 0) {
 }
 
 // segmentRegex compiles one glob segment. A bracket class that does not compile
-// (`[z-a]`) becomes `[^/]*`, so the segment can only match more, never less.
+// (`[z-a]`) becomes `[^/]`: one character, as in the shell, so the segment can only match
+// more, never less. A bracket expression never matches zero or several characters; when it
+// cannot match, the shell keeps the literal word, which ruleFor checks separately.
 function segmentRegex(seg) {
   for (const strict of [true, false]) {
     let re = ''
@@ -76,7 +78,7 @@ function segmentRegex(seg) {
       else if (c === '?') re += '[^/]'
       else if (c === '[' && seg.indexOf(']', i + 2) !== -1) {
         const end = seg.indexOf(']', i + 2)
-        re += strict ? `[${seg.slice(i + 1, end).replace(/^!/, '^').replace(/\\/g, '\\\\')}]` : '[^/]*'
+        re += strict ? `[${seg.slice(i + 1, end).replace(/^!/, '^').replace(/\\/g, '\\\\')}]` : '[^/]'
         i = end
       } else re += c.replace(/[.+^${}()|\\\]\[]/g, '\\$&')
     }
