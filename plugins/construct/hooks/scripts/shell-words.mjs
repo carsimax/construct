@@ -1,28 +1,10 @@
-// Shell-word tokenizer shared by the command hooks (secret-guard and publication-gate).
+// Shell-word tokenizer and command unwrapping for the publication gate.
 // Pure: no I/O.
-import { resolve } from 'node:path'
+import { basename } from 'node:path'
 
 export const SHELLS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh'])
 // Flags of `git` that take a value, so the next word is not the subcommand.
 export const GIT_VALUE_FLAGS = new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace', '--exec-path', '--super-prefix', '--config-env'])
-
-// shortcut: `~/sub` and `$HOME/sub` are not a root target (command-guard asks for rm -r, as
-// upstream denies only the roots themselves); upgrade if a deny for home subtrees is wanted.
-const ROOTISH = /^(?:\/(?:\*+)?|~\/?|\$\{?HOME\}?\/?)$/
-const DOTS = /^\.{1,2}\/?$/
-
-// isRootOrHome: the one rm-root rule of both guards. True for /, ~, $HOME, and a `/*` glob of
-// one of them. Without `at`, `.` and `..` count too; with `at` ({ cwd, home }) a path counts
-// when it resolves to / or home, so a `.` in prose is not a root unless the cwd is one.
-export function isRootOrHome(target, expand, at, glob = false) {
-  const t = expand(target)
-  if (ROOTISH.test(target) || ROOTISH.test(t)) return true
-  if (at) {
-    const abs = resolve(at.cwd, t)
-    if (abs === '/' || abs === resolve(at.home)) return true
-  } else if (!glob && DOTS.test(target)) return true // `./*` and `../*` stay an ask, as at baseline
-  return /\/\*$/.test(target) && isRootOrHome(target.slice(0, -2) || '/', expand, at, true)
-}
 
 // splitCommands is a small shell-word splitter: quotes and backslashes group a word,
 // unquoted ; | & ( ) ` newline end a command, and < > are dropped as separators so
@@ -97,4 +79,130 @@ export function splitCommands(input) {
   }
   endCommand()
   return commands
+}
+
+// Words that keep command position for the next word, and the flags of each that take a value.
+// shortcut: wrapper flags are skipped by shape (a leading `-`, plus the listed value flags);
+// upgrade to per-wrapper grammars if a wrapper hides a command behind an unlisted value flag.
+const WRAPPERS = {
+  sudo: new Set(['-u', '-g', '-C', '-h', '-p', '-r', '-t', '-U', '-D', '--user', '--group', '--host', '--prompt', '--chdir', '--role', '--type', '--other-user', '--close-from']),
+  command: new Set(),
+  builtin: new Set(),
+  env: new Set(['-u', '-C', '-S', '--unset', '--chdir', '--split-string']),
+  nohup: new Set(),
+  time: new Set(),
+  exec: new Set(['-a']),
+  xargs: new Set(['-n', '-I', '-L', '-P', '-s', '-d', '-E', '-a', '-l', '-i', '--max-args', '--replace', '--max-procs', '--max-lines', '--delimiter', '--arg-file']),
+  nice: new Set(['-n', '--adjustment']),
+  ionice: new Set(['-c', '-n', '-p', '--class', '--classdata', '--pid']),
+  timeout: new Set(['-s', '-k', '--signal', '--kill-after']),
+  '!': new Set(),
+  '{': new Set(),
+  if: new Set(),
+  then: new Set(),
+  else: new Set(),
+  elif: new Set(),
+  do: new Set(),
+  while: new Set(),
+  until: new Set(),
+}
+const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/
+
+// unwrap walks past assignments, wrappers, their flags and values, and the positional
+// argument `timeout` takes (its DURATION). `at` is the index of the word that names the
+// command; `strings` are `env -S`/`--split-string` values, each a command line of its own
+// (env splits it into the command and its arguments, so the rest of the words follow it).
+function unwrap(texts) {
+  const strings = []
+  let i = 0
+  while (i < texts.length) {
+    const w = basename(texts[i])
+    if (ASSIGNMENT.test(texts[i])) i++
+    else if (Object.hasOwn(WRAPPERS, w)) {
+      const values = WRAPPERS[w]
+      i++
+      while (i < texts.length) {
+        const t = texts[i]
+        if (t === '--') { i++; break }
+        if (!t.startsWith('-') || t.length === 1) {
+          if (w === 'env' && ASSIGNMENT.test(t)) { i++; continue }
+          break
+        }
+        if (w === 'env' && /^-S./.test(t)) strings.push(t.slice(2))
+        else if (w === 'env' && t.startsWith('--split-string=')) strings.push(t.slice('--split-string='.length))
+        else if (w === 'env' && (t === '-S' || t === '--split-string') && texts[i + 1] !== undefined) strings.push(texts[i + 1])
+        i += values.has(t) ? 2 : 1
+      }
+      if (w === 'timeout' && i < texts.length) i++
+    } else break
+  }
+  return { at: i, strings, rest: texts.slice(i) }
+}
+
+// headIndex is the index of the word that names the command: past assignments, wrappers,
+// their flags and values, and the duration `timeout` takes.
+export function headIndex(texts) {
+  return unwrap(texts).at
+}
+
+const HEREDOC_RE = /<<-?\s*(['"]?)([A-Za-z_]\w*)\1[^\n]*\n[\s\S]*?\n[ \t]*\2(?=\n|$)/g
+
+// extractHeredocs removes heredoc bodies from the command (they are data) and returns them
+// with the header line they belong to, so a body fed to a shell or SQL client is checked.
+export function extractHeredocs(command) {
+  const bodies = []
+  const text = command.replace(HEREDOC_RE, (raw, _q, _tag, offset) => {
+    const nl = raw.indexOf('\n')
+    const lineStart = command.lastIndexOf('\n', offset - 1) + 1
+    const header = command.slice(lineStart, offset) + raw.slice(0, nl)
+    bodies.push({ header, body: raw.slice(nl + 1, raw.lastIndexOf('\n')) })
+    return raw.slice(0, nl)
+  })
+  return { text, bodies }
+}
+
+// substitutionBodies lists the bodies of $(...), <(...), >(...), and backticks outside
+// single quotes. A body is a command line of its own.
+export function substitutionBodies(command) {
+  const out = []
+  let quote = null
+  for (let i = 0; i < command.length; i++) {
+    const c = command[i]
+    if (quote === "'") {
+      if (c === "'") quote = null
+    } else if (c === '\\') i++
+    else if (c === "'" && quote === null) quote = "'"
+    else if (c === '"') quote = quote === '"' ? null : '"'
+    else if ((c === '$' || c === '<' || c === '>') && command[i + 1] === '(' && (c === '$' || quote === null)) {
+      let depth = 1
+      let j = i + 2
+      for (; j < command.length && depth > 0; j++) {
+        if (command[j] === '(') depth++
+        else if (command[j] === ')') depth--
+      }
+      out.push(command.slice(i + 2, depth === 0 ? j - 1 : j))
+    } else if (c === '`') {
+      let j = i + 1
+      while (j < command.length && command[j] !== '`') j += command[j] === '\\' ? 2 : 1
+      out.push(command.slice(i + 1, j).replace(/\\([\\$`])/g, '$1'))
+      i = j
+    }
+  }
+  return out
+}
+
+// nestedLines lists the command lines one simple command (its live words) runs as a string:
+// `env -S "..."` values (followed by the words after them), the body of `sh|bash|zsh -c [--] 'cmd'`,
+// and `eval` arguments. `at` and `name` are the head word's index and basename, `args` the words after it.
+export function nestedLines(live) {
+  const { at, strings } = unwrap(live)
+  const lines = strings.map((text) => [text, ...live.slice(at)].join(' '))
+  const name = basename(live[at] ?? '')
+  const args = live.slice(at + 1)
+  if (SHELLS.has(name)) {
+    const flag = args.findIndex((a) => /^-[a-z]*c[a-z]*$/.test(a))
+    const body = flag + 1 < args.length && args[flag + 1] === '--' ? flag + 2 : flag + 1
+    if (flag >= 0 && args[body] !== undefined) lines.push(args[body])
+  } else if (name === 'eval') lines.push((args[0] === '--' ? args.slice(1) : args).join(' '))
+  return { at, name, args, lines }
 }

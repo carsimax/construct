@@ -14,8 +14,7 @@
 // and expire after SUBAGENT_MAX_IDLE_MS (one hour), like subagent-count.mjs entries.
 // The check-then-record of open writers runs under an mkdir lock (withLock), so parallel
 // launches in one batch cannot both pass. Fails open on unreadable input, any internal
-// error, or a lock that cannot be taken. write-scope.mjs imports parseSurfaces and
-// firstUserPrompt (S3 reads the same section from the writer's own transcript).
+// error, or a lock that cannot be taken.
 // Ported from gentle-shell lib/bounded-writer-admission.ts, lib/verifier-admission.ts
 // and lib/writer-surfaces.ts; the Spec rule is adapted (see S2 of odd/tasks/gentle-parity.md).
 // Usage: node delegation-admission.mjs [stop]   (hook JSON on stdin)
@@ -289,7 +288,7 @@ function admit(input) {
   const tool = input.tool_input
   if (input.tool_name !== 'Agent' || !tool || typeof tool !== 'object' || Array.isArray(tool)) return
   const raw = tool.subagent_type
-  // The prefix is optional: write-scope and the agent registry accept both spellings.
+  // The prefix is optional: the agent registry accepts both spellings.
   const type = typeof raw === 'string' && !raw.includes(':') ? `construct:${raw}` : raw
   const prompt = typeof tool.prompt === 'string' ? tool.prompt : ''
   if (type === VERIFIER) {
@@ -356,7 +355,7 @@ function main() {
   else admit(input)
 }
 
-// Run only as a script; write-scope.mjs imports the helpers above.
+// Run only as a script; the helpers above are importable.
 if (process.argv[1] && fileURLToPath(import.meta.url) === realpathSync(process.argv[1])) {
   try {
     main()

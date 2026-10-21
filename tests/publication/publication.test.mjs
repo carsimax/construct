@@ -53,6 +53,11 @@ describe('registration', () => {
     assert.equal(entry.matcher, 'Bash')
     assert.deepEqual(entry.hooks[0], { type: 'command', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/hooks/scripts/publication-gate.mjs'], timeout: 30 })
   })
+
+  test('hooks.json registers no secret-guard hook', () => {
+    const text = readFileSync(join(PLUGIN, 'hooks/hooks.json'), 'utf8')
+    assert.ok(!text.includes('secret-guard.mjs'))
+  })
 })
 
 describe('publication commands are gated', () => {
@@ -215,8 +220,8 @@ describe('the hook fails open', () => {
   test('a missing cwd', () => silent(hook('git push', undefined, env(), { input: JSON.stringify({ tool_name: 'Bash', tool_input: { command: 'git push' } }) })))
 })
 
-// T13 (F1, F2): the same unwrapping as command-guard, and unresolvable target directories.
-describe('shell wrappers are unwrapped like command-guard', () => {
+// T13 (F1, F2): the shell-words unwrapping, and unresolvable target directories.
+describe('shell wrappers are unwrapped by shell-words', () => {
   const repo = featureRepo()
   const cases = [
     "bash -c -- 'git push origin feat'",
@@ -339,7 +344,7 @@ describe('audit-findings T1', () => {
     const root = scratchDir('odd-pub-deadline-')
     mkdirSync(join(root, 'hooks/scripts'), { recursive: true })
     mkdirSync(join(root, 'bin'))
-    for (const f of ['publication-gate.mjs', 'command-guard.mjs', 'shell-words.mjs', 'hook-io.mjs']) {
+    for (const f of ['publication-gate.mjs', 'shell-words.mjs', 'hook-io.mjs']) {
       let text = readFileSync(join(PLUGIN, 'hooks/scripts', f), 'utf8')
       if (f === 'publication-gate.mjs') text = text.replace('const TIMEOUT_MS = 25000', 'const TIMEOUT_MS = 1500')
       writeFileSync(join(root, 'hooks/scripts', f), text)
