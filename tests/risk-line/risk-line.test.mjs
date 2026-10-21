@@ -5,7 +5,7 @@ import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
 import { mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { applyFiles, makeRepo, scratchDir } from '../review/helpers.mjs'
+import { applyFiles, makeRepo, scratchDir } from '../helpers/repo.mjs'
 
 const PLUGIN = new URL('../../plugins/construct/', import.meta.url).pathname
 const SCRIPT = join(PLUGIN, 'hooks/scripts/risk-line.mjs')

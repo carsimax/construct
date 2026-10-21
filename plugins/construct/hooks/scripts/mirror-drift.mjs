@@ -72,11 +72,7 @@ async function main() {
   if (!input || typeof input.cwd !== 'string' || typeof input.transcript_path !== 'string' || input.stop_hook_active === true) return
   if (hasOpenSubagents(input.session_id)) return
 
-  const [{ repositoryRoot, freezeWorkingTree, git }, { headCommit }, { atomicWrite }] = await Promise.all([
-    import('../../lib/assess/git.mjs'),
-    import('../../lib/review/boundary.mjs'),
-    import('../../lib/review/store.mjs'),
-  ])
+  const { repositoryRoot, freezeWorkingTree, git, headCommit, atomicWrite } = await import('./git-tree.mjs')
   let root
   try {
     root = repositoryRoot(input.cwd)

@@ -42,11 +42,7 @@ async function main() {
   // Subagents may still be writing; the first Stop after they finish runs the check.
   if (mode === 'check' && hasOpenSubagents(input.session_id)) return
 
-  const [{ repositoryRoot, freezeWorkingTree, git }, { headCommit }, { atomicWrite }] = await Promise.all([
-    import('../../lib/assess/git.mjs'),
-    import('../../lib/review/boundary.mjs'),
-    import('../../lib/review/store.mjs'),
-  ])
+  const { repositoryRoot, freezeWorkingTree, git, headCommit, atomicWrite } = await import('./git-tree.mjs')
 
   let root
   try {
