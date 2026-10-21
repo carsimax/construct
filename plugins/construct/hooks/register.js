@@ -27,6 +27,7 @@ import { parseAssess, parseBoundary, parseGitStatus, parseMode, parseNumstat, pa
 // Role of each subagent this session spawned, keyed by agent id, so
 // turn.step can apply the role's effort to that subagent's requests
 const roleByAgent = new Map()
+const MAX_ROLES = 256
 
 // ---- panel data -------------------------------------------------------------
 // What the panel shows from outside the session (git, the plugin CLIs, the feature
@@ -158,7 +159,7 @@ async function collect($) {
   }
   const [gitText, revText, numstatText] = await Promise.all([
     runText($, ['git', '--no-optional-locks', 'status', '--porcelain=v2', '--branch'], cwd, GIT_MS),
-    runText($, ['git', 'rev-parse', '--show-toplevel', '--git-dir', '--git-common-dir'], cwd, GIT_MS),
+    runText($, ['git', 'rev-parse', '--show-toplevel'], cwd, GIT_MS),
     runText($, ['git', '--no-optional-locks', 'diff', '--numstat', '--no-renames', 'HEAD'], cwd, GIT_MS),
   ])
   data.git = parseGitStatus(gitText)
@@ -201,7 +202,7 @@ async function refresh($) {
 
 // The figures read live on each redraw: they are free, and they move during a turn.
 async function readLive($) {
-  const live = { usage: null, model: null, dir: null, nowMs: Date.now() }
+  const live = { usage: null, model: null, nowMs: Date.now() }
   try {
     live.usage = await $.session.usage()
   } catch {
@@ -211,11 +212,6 @@ async function readLive($) {
     live.model = (await $.session.model()) || null
   } catch {
     // no model known
-  }
-  try {
-    live.dir = await $.session.cwd()
-  } catch {
-    // no directory known
   }
   try {
     live.nowMs = await $.clock.now()
@@ -274,7 +270,7 @@ async function probe(read) {
 // well inside the hook budget. The checks themselves are pure, in status/doctor.js.
 async function runDoctor($) {
   const cwd = await probe(() => $.session.cwd())
-  const rev = parseRevParse(await probe(() => runText($, ['git', 'rev-parse', '--show-toplevel', '--git-dir', '--git-common-dir'], cwd ?? undefined, GIT_MS)))
+  const rev = parseRevParse(await probe(() => runText($, ['git', 'rev-parse', '--show-toplevel'], cwd ?? undefined, GIT_MS)))
   const root = rev?.root ?? cwd
   const cli = (name) => `${$.plugin.root}/bin/${name}`
   const cliArgs = root ? ['--cwd', root] : []
@@ -317,7 +313,11 @@ export function register(on, options) {
     const role = roleFor(e.subagentType)
     const model = modelFor(role, options)
     const result = await next(model ? { ...e, model } : e)
-    if (role && result?.agentId) roleByAgent.set(result.agentId, role)
+    if (role && result?.agentId) {
+      roleByAgent.set(result.agentId, role)
+      // Never deleted on turn.complete (a resumed subagent needs its role); the oldest go past the cap.
+      if (roleByAgent.size > MAX_ROLES) roleByAgent.delete(roleByAgent.keys().next().value)
+    }
     await noteSpawn($, e, result, role, options)
     if (!e.parentAgentId && e.permissionMode) await feed($, (s) => onPermissionMode(s, { mode: e.permissionMode }))
     return result

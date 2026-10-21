@@ -48,7 +48,7 @@
 
 import { agentsView, mainBusy, maskSecrets, phaseOf, shortName } from './state.js'
 import { PALETTE, card, changeRows, effortMeter, fmtResetIn, gauge, stackBar } from './draw.js'
-import { STATE_COLOR, text } from '../status/format.js'
+import { STATE_COLOR, isNum, text } from '../status/format.js'
 
 export const PANEL_COLUMNS = 66
 
@@ -59,7 +59,6 @@ const PANEL_BACKGROUND = '#000000'
 
 // ---- small helpers ---------------------------------------------------------
 
-const isNum = (x) => typeof x === 'number' && Number.isFinite(x)
 const two = (n) => String(n).padStart(2, '0')
 
 // `s` clipped to `w` cells, with an ellipsis when it was cut.
@@ -113,9 +112,6 @@ function height(node) {
   const own = (node.props.borderStyle ? 2 : 0) + (node.props.marginTop ?? 0)
   return own + (node.children ?? []).reduce((n, k) => n + height(k), 0)
 }
-
-let seq = 0
-const key = (name) => `${name}-${seq++}`
 
 // ---- main card (S3) ------------------------------------------------------------
 

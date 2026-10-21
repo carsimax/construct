@@ -65,14 +65,11 @@ export function parseNumstat(text) {
   return files
 }
 
-const base = (path) => path.replace(/\/+$/, '').split('/').pop()
-
-// `git rev-parse --show-toplevel --git-dir --git-common-dir`: the root, and a worktree name when linked.
+// `git rev-parse --show-toplevel`: the root.
 export function parseRevParse(text) {
   if (typeof text !== 'string') return null
-  const [root, gitDir, common] = text.split('\n').map((l) => l.trim())
-  if (!root) return null
-  return { root, worktree: gitDir && common && gitDir !== common ? base(root) : null }
+  const root = text.split('\n')[0].trim()
+  return root ? { root } : null
 }
 
 export function parseMode(text) {

@@ -5,53 +5,25 @@ import { execFileSync } from 'node:child_process'
 import { readFileSync, readdirSync, realpathSync, statSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { scanTasks } from '../status/tasks.js'
 
 const MAX_DOCS = 3
 const MAX_TOTAL = 2500
 const MAX_CELL = 160
 const MAX_LINE = 200
-const FINISHED = new Set(['done', 'dropped'])
 
 const clip = (text, max) => (text.length > max ? `${text.slice(0, max - 1)}…` : text)
 
-function splitRow(line) {
-  return line
-    .trim()
-    .replace(/^\|/, '')
-    .replace(/\|$/, '')
-    .split(/(?<!\\)\|/)
-    .map((cell) => cell.replace(/\\\|/g, '|').trim())
-}
-
-// Returns the unfinished rows of the `## Tasks` table, or null when the table is missing or malformed.
-function unfinishedRows(lines) {
-  const start = lines.findIndex((l) => /^##\s+Tasks\s*$/.test(l))
-  if (start < 0) return null
-  let i = start + 1
-  while (i < lines.length && !lines[i].trim().startsWith('|')) {
-    if (/^##\s/.test(lines[i])) return null
-    i++
-  }
-  if (i >= lines.length) return null
-  const header = splitRow(lines[i]).map((c) => c.toLowerCase())
-  const status = header.indexOf('status')
-  const id = header.indexOf('id')
-  const task = header.indexOf('task')
-  if (status < 0 || id < 0 || task < 0) return null
-  if (!/^\|?\s*:?-{3,}/.test(lines[i + 1] ?? '')) return null
-  const rows = []
-  for (i += 2; i < lines.length && lines[i].trim().startsWith('|'); i++) {
-    const cells = splitRow(lines[i])
-    if (cells.length < header.length) return null
-    if (!FINISHED.has(cells[status].toLowerCase())) rows.push(`${clip(cells[id], MAX_CELL)} — ${clip(cells[task], MAX_CELL)}`)
-  }
-  return rows
+// The unfinished rows of the `## Tasks` table, or null when the table is missing or malformed.
+function unfinishedRows(text) {
+  const scan = scanTasks(text)
+  return scan && scan.tasks.filter((t) => !t.done).map((t) => `${clip(t.id, MAX_CELL)} — ${clip(t.title, MAX_CELL)}`)
 }
 
 function parseDoc(root, path) {
   const text = readFileSync(join(root, path), 'utf8')
   const lines = text.split(/\r?\n/)
-  const rows = unfinishedRows(lines)
+  const rows = unfinishedRows(text)
   if (!rows || rows.length === 0) return null
   const logAt = lines.findIndex((l) => /^##\s+Log\s*$/.test(l))
   const next = logAt < 0 ? undefined : lines.slice(logAt + 1).reverse().find((l) => l.includes('Next step:'))

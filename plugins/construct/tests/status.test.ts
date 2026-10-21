@@ -1,5 +1,4 @@
 import { expect, test } from 'claude-code/testing'
-import { unfinishedCount } from '../hooks/status/tasks.js'
 import { parseAssess, parseBoundary, parseGitStatus, parseMode, parseNumstat, parseRevParse, reviewState } from '../hooks/status/data.js'
 
 // ---- fixtures ----------------------------------------------------------
@@ -103,20 +102,13 @@ const under = async (ui, key: string) => (await leaves(ui)).filter((l) => l.key 
 
 // ---- pure helpers --------------------------------------------------------
 
-test('unfinishedCount counts rows whose status is not done or dropped', async () => {
-  expect(unfinishedCount(TASKS)).toBe(2)
-  expect(unfinishedCount(TASKS.replace('in progress', 'done').replace('pending', 'dropped'))).toBe(0)
-  expect(unfinishedCount('# no table here')).toBe(null)
-  expect(unfinishedCount('## Tasks\n\n| ID | Task |\n|---|---|\n| T1 | x |\n')).toBe(null)
-})
-
 test('parsers read git, rev-parse, mode, boundary and assess output', async () => {
   const git = parseGitStatus('# branch.oid abc1234deadbeef\n# branch.head main\n# branch.upstream o/main\n# branch.ab +2 -1\n1 .M x\n? y\n')
   expect(git).toEqual({ branch: 'main', dirty: 2, ahead: 2, behind: 1, untracked: ['y'] })
   expect(parseGitStatus('# branch.oid abc1234deadbeef\n# branch.head (detached)\n').branch).toBe('abc1234')
   expect(parseGitStatus('')).toBe(null)
-  expect(parseRevParse('/r\n/r/.git/worktrees/w\n/r/.git\n')).toEqual({ root: '/r', worktree: 'r' })
-  expect(parseRevParse('/r\n.git\n.git\n')).toEqual({ root: '/r', worktree: null })
+  expect(parseRevParse('/r\n/r/.git/worktrees/w\n/r/.git\n')).toEqual({ root: '/r' })
+  expect(parseRevParse('/r\n.git\n.git\n')).toEqual({ root: '/r' })
   expect(parseMode('{"mode":"off","source":"clone"}')).toBe('off')
   expect(parseMode('garbage')).toBe(null)
   expect(parseBoundary('{"commit":"c","source":"receipt"}')).toEqual({ commit: 'c', source: 'receipt' })

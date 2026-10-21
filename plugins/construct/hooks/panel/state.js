@@ -57,6 +57,7 @@
 //   gate.buckets { file, shell, other }  each { rule, ask, cleared, deny }
 
 import { roleFor } from '../routing.js'
+import { isNum } from '../status/format.js'
 
 export const SCHEMA_VERSION = 3
 
@@ -94,7 +95,6 @@ export function initialState() {
 }
 
 const isObj = (x) => typeof x === 'object' && x !== null && !Array.isArray(x)
-const isNum = (x) => typeof x === 'number' && Number.isFinite(x)
 const str = (x) => (typeof x === 'string' && x !== '' ? x : null)
 
 // A stored value merged over the defaults; the defaults when the version is unknown or the shape is off.
@@ -225,7 +225,6 @@ export function mainBusy(state) {
 const BLOCKING_TOOLS = ['AskUserQuestion', 'ExitPlanMode']
 
 export const isBlockingTool = (tool) => BLOCKING_TOOLS.includes(tool)
-export const isBlocked = (state) => isObj(state) && state.blocked === true
 
 export function onBlocked(state) {
   const s = merge(state)

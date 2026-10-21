@@ -87,3 +87,15 @@ test('turn.step keeps the model effort when the role effort is default', async (
   await runStep($, { turnId: 't1', index: 0, model: 'claude-haiku', effort: 'medium', messageCount: 1, agentId: 'agent-construct:odd-explorer' })
   expect(steps[0].effort).toBe('medium')
 })
+
+test('the role map keeps the newest 256 subagents and drops the oldest', async ($, on) => {
+  let n = 0
+  on('agent.spawn', ($, e) => ({ model: e.model, agentId: `a${n++}` }))
+  const steps = []
+  on('turn.step', stepStub(steps))
+  for (let i = 0; i < 257; i++) await $.agent.spawn({ subagentType: 'construct:odd-worker', model: 'sonnet', prompt: 'build' })
+  await runStep($, { turnId: 't0', index: 0, model: 'm', effort: 'low', messageCount: 1, agentId: 'a0' })
+  await runStep($, { turnId: 't1', index: 0, model: 'm', effort: 'low', messageCount: 1, agentId: 'a1' })
+  await runStep($, { turnId: 't2', index: 0, model: 'm', effort: 'low', messageCount: 1, agentId: 'a256' })
+  expect(steps.map((s) => s.effort)).toEqual(['low', 'medium', 'medium'])
+})

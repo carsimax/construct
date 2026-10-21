@@ -22,7 +22,7 @@ case "$1 $2" in
   "plugin list") cat "$STUB_STATE/plugins" 2>/dev/null; exit 0 ;;
   "plugin install") echo "  ❯ $3" >> "$STUB_STATE/plugins"; exit 0 ;;
   "mcp get") grep -qx "$3" "$STUB_STATE/mcps" 2>/dev/null; exit $? ;;
-  "mcp add") echo "$5" >> "$STUB_STATE/mcps"; exit 0 ;;
+  "mcp add") [ -n "$STUB_MCP_FAIL" ] && { echo "mcp add failed" >&2; exit 1; }; echo "$5" >> "$STUB_STATE/mcps"; exit 0 ;;
 esac
 exit 0`,
   engram: `
@@ -90,7 +90,7 @@ test('a clean machine gets every tool, in order, and the Construct settings', ()
     'brew install gentleman-programming/tap/engram',
     'engram setup claude-code',
     'claude plugin marketplace add Gentleman-Programming/engram',
-    'claude plugin marketplace add carsimax/construct',
+    'claude plugin marketplace add carsimax/construct#v1.3.0',
     'claude plugin install construct@construct',
     'npm install -g @colbymchenry/codegraph',
     'claude mcp add --scope user codegraph -- codegraph serve --mcp',
@@ -154,6 +154,24 @@ test('a failed codegraph install warns and still merges the settings', () => {
   assert.match(run.stderr, /codegraph.*--no-mcp/)
   assert.deepEqual(run.calls.filter((c) => /^claude mcp add --scope user codegraph/.test(c)), [])
   assert.equal(readSettings(box).theme, undefined)
+})
+
+test('a failed MCP registration warns and still merges the settings and prints the summary', () => {
+  const box = sandbox()
+  const run = install(box, [], { STUB_MCP_FAIL: '1' })
+  assert.equal(run.status, 0, run.stderr)
+  assert.match(run.stderr, /for the codegraph MCP server failed/)
+  assert.deepEqual(readSettings(box).permissions.allow, ['mcp__engram', 'mcp__plugin_engram_engram'])
+  assert.match(run.stdout, /codegraph CLI/)
+})
+
+test('MIN_CLAUDE and MIN_NODE match the doctor minimums', () => {
+  const sh = readFileSync(INSTALLER, 'utf8')
+  const doctor = readFileSync(new URL('../../plugins/construct/hooks/status/doctor.js', import.meta.url), 'utf8')
+  for (const k of ['MIN_CLAUDE', 'MIN_NODE']) {
+    assert.equal(/^MIN_CLAUDE=|^MIN_NODE=/m.test(sh), true)
+    assert.equal(sh.match(new RegExp(`^${k}=(\\S+)`, 'm'))[1], doctor.match(new RegExp(`${k} = '?([\\d.]+)`))[1], k)
+  }
 })
 
 const OLD_THEME = 'custom:construct:construct'

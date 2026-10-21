@@ -1,0 +1,43 @@
+# Audit findings
+
+Objective: fix the 20 findings of the 2026-10-20 ponytail audit (engram `audit/2026-10-20`). Branch: `fix/audit-findings`, baseline `bfdd691` (main, 1.3.0). Test runner: `node --test tests/`; `claude plugin test plugins/construct`; `claude plugin validate --strict ./plugins/construct`.
+
+## Specs
+
+Source for every spec: the user's "trabaja en los 20 puntos" (L1) over the audit report. Spec `S<n>` is audit finding `<n>`. Paths are under `plugins/construct/` unless they start with `install.sh` or `tests/`.
+
+- **S1 — One git value-flag list.** `command-guard.mjs` and `publication-gate.mjs` share one `GIT_VALUE_FLAGS` (the publication-gate set, which has `--super-prefix` and `--config-env`). `git --super-prefix x reset --hard` and `git --config-env a=B push --force origin main` are denied.
+- **S2 — Installer survives an MCP failure.** A failing `claude mcp add` warns and the installer still runs `merge_settings` and `summary`.
+- **S3 — Secret guard sees through globs and expansions.** Denied: `cat .en?`, `cat .[e]nv`, `cat ~/.s?h/id_rsa`, `f=.en; cat ${f}v`, `cat .e$(true)nv`, `cat $'.en\x76'`. Still allowed: `cat $f`, `cat "$HOME/notes.txt"`, `ls *.js`, `cat src/*.ts`. Assumption: only adds denies (fail closed); the guard corpus pins each new deny as a named difference from main.
+- **S4 — Symlinks to protected paths are denied.** `ruleFor` resolves symlinks (reuse `realPath` from `write-scope.mjs`); a repo file linking to a protected path is denied for Read and `cat`.
+- **S5 — Lock waits for a live holder.** `withLock` (`lib/review/store.mjs`) retries for a short bounded time (about 2 s) while a live holder has the lock, then refuses. Four lens captures in parallel all land.
+- **S6 — One sound-receipt rule.** `boundary.mjs` and the "already acknowledged" check in `start` use the gate's `ok` receipt predicate, so a damaged receipt no longer dead-ends the gate's suggested `start`.
+- **S7 — No silent `no_base`.** The base lookup also tries `init.defaultBranch` (local and `origin/`); `DEFAULT_BRANCH_REFS` lives in one place. A repo whose default is `develop` gates a high-risk push.
+- **S8 — Id-less subagent stop closes a named start.** `subagent-count.mjs` falls back to the oldest entry of any name.
+- **S9 — PEM header found in any text file.** `.md` and `.html` with a private-key header classify high with `private_key_content`.
+- **S10 — Operational docs never passive, whatever the extension.** `isOperationalMarkdownPath` applies to every passive document extension (`.rst`, `.mdx`, `.adoc`, ...).
+- **S11 — Linear `alter ... drop` check.** Same result as `/\balter\s[\s\S]*\bdrop\b/i`, linear time; a 100k-`alter` statement finishes under a time bound.
+- **S12 — Quoted diff header paths.** C-quoted `diff --git "a/..." "b/..."` headers are unquoted; a quoted name no longer forces `process_scan_limit` high.
+- **S13 — Publication gate shares one deadline.** All `odd-review` spawns in one hook call share a deadline under the 30 s hook timeout; on expiry the push is denied.
+- **S14 — Bare `cd`, `cd -`, `pushd` are an unknown directory** for the publication gate (deny path that already exists).
+- **S15 — One minimum-version source.** A test asserts `install.sh` `MIN_CLAUDE`/`MIN_NODE` equal `status/doctor.js`.
+- **S16 — Installer installs the release it names.** Pin the marketplace to the tag only if the documented `claude plugin marketplace add` source syntax supports a ref; otherwise no code change and the limit is logged here.
+- **S17 — Dead code removed.** Unused exports lose `export` or are deleted; `touchesHotPath`, `layout.js` `key`/`seq`, `PALETTE.text`, `live.dir` and its `$.session.cwd()` call, test-only `isBlocked`/`unfinishedCount` (with their tests), unreachable branches in `commands.mjs`, and the never-incremented `final_verifications` (only if no persisted receipt format depends on it; otherwise keep and log).
+- **S18 — Near-copies merged.** One rm-root rule and one `SHELLS` (guards); one `isNum` (panel); one Tasks-table parser (`status/tasks.js` / `feature-state.mjs`) if both can import it; one `isAncestor`, receipt reader, terminal-state set, `neutral`, lineage regex (review).
+- **S19 — Bounded long-session state.** `risk-line.mjs` returns early for a seen `prompt_id` before `git add -A`; `review-gate baseline` prunes this plugin's per-session state older than 7 days; `roleByAgent` is capped (oldest dropped).
+- **S20 — Review-store edge cases.** A non-empty lock older than a bound is stale even if its PID is alive; pending lens records are keyed by `agent_id`; an unreadable reminder file is treated as empty.
+
+## Tasks
+
+| ID | Specs | Task | Route | Risk | Status | Commit |
+|---|---|---|---|---|---|---|
+| T1 | S1, S3, S4, S13, S14, S17/S18 guard parts | `hooks/scripts/{secret-guard,command-guard,publication-gate,write-scope,delivery-signals,test-lint,mirror-drift}.mjs`, `tests/{guard,publication,signals,mirror-drift}/**` | odd-worker, wave A | 2 | todo | |
+| T2 | S5, S6, S7, S20 store/lock, S17/S18 review parts | `lib/review/**`, `tests/review/**` | odd-worker, wave A | 4 | todo | |
+| T3 | S8, S19 hook parts, S20 pending/reminder | `hooks/scripts/{subagent-count,risk-line,review-gate,review-context,review-capture,hook-io}.mjs`, `tests/{gate,risk-line,review-hooks}/**` | odd-worker, wave A | 4 | todo | |
+| T4 | S9, S10, S11, S12, S17 assess parts | `lib/assess/**`, `tests/assess/**` | odd-worker, wave A | 3 | todo | |
+| T5 | S2, S15, S16, S17/S18 mod parts, S19 `roleByAgent` | `install.sh`, `tests/install/**`, `hooks/{register.js,panel/**,status/**}`, `hooks/scripts/feature-state.mjs`, `tests/feature-state/**`, `tests/*.test.ts` under `plugins/construct/tests/` | odd-worker, wave A | 5 | todo | |
+| T6 | docs for changed messages | `README.md`, skills text | odd-worker, wave B | none | todo | |
+
+## Log
+
+- **L1 (2026-10-20, user):** "trabaja en los 20 puntos"

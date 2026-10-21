@@ -1,7 +1,7 @@
 // Active ODD feature, by the rule of hooks/scripts/feature-state.mjs: a document
 // counts when its `## Tasks` table is well formed and holds a row whose status
-// is not `done` or `dropped`. A mod cannot import that script (it needs Node),
-// so the rule is restated here.
+// is not `done` or `dropped`. The script imports `scanTasks` from here: this file
+// needs no Node module, so the mod and the hook script share one parser.
 const FINISHED = new Set(['done', 'dropped'])
 
 function splitRow(line) {
@@ -16,7 +16,7 @@ function splitRow(line) {
 // { open, first } of the Tasks table: the unfinished row count and the first
 // unfinished row's { id, title } (null when none), or null when the table is
 // missing or malformed.
-function scanTasks(markdown) {
+export function scanTasks(markdown) {
   const lines = String(markdown).split(/\r?\n/)
   const start = lines.findIndex((l) => /^##\s+Tasks\s*$/.test(l))
   if (start < 0) return null
@@ -38,18 +38,13 @@ function scanTasks(markdown) {
   for (i += 2; i < lines.length && lines[i].trim().startsWith('|'); i++) {
     const cells = splitRow(lines[i])
     if (cells.length < header.length) return null
-    tasks.push({ id: cells[idCol], done: FINISHED.has(cells[status].toLowerCase()) })
+    tasks.push({ id: cells[idCol], title: cells[titleCol], done: FINISHED.has(cells[status].toLowerCase()) })
     if (!FINISHED.has(cells[status].toLowerCase())) {
       open++
       first ??= { id: cells[idCol], title: cells[titleCol] }
     }
   }
   return { open, first, tasks }
-}
-
-// Number of unfinished rows, or null when the table is missing or malformed.
-export function unfinishedCount(markdown) {
-  return scanTasks(markdown)?.open ?? null
 }
 
 function newest(docs) {
@@ -63,7 +58,7 @@ function newest(docs) {
       continue
     }
     if (!scan?.open) continue
-    if (best === null || doc.mtimeMs > best.mtimeMs) best = { mtimeMs: doc.mtimeMs, feature: doc.name.slice(0, -3), open: scan.open, task: scan.first, tasks: scan.tasks }
+    if (best === null || doc.mtimeMs > best.mtimeMs) best = { mtimeMs: doc.mtimeMs, feature: doc.name.slice(0, -3), open: scan.open, task: scan.first, tasks: scan.tasks.map(({ id, done }) => ({ id, done })) }
   }
   return best
 }

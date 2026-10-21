@@ -14,6 +14,7 @@ MIN_NODE=20
 ENGRAM_FORMULA=gentleman-programming/tap/engram
 ENGRAM_REPO=Gentleman-Programming/engram
 CONSTRUCT_REPO=carsimax/construct
+CONSTRUCT_REF=v1.3.0 # the release this script belongs to; keep in step with the URL above
 CONSTRUCT_PLUGIN=construct@construct
 CODEGRAPH_PACKAGE=@colbymchenry/codegraph
 
@@ -123,11 +124,11 @@ setup_engram() {
 add_marketplace() {
   local marketplaces
   marketplaces=$(run claude plugin marketplace list)
-  if [[ "$marketplaces" == *"($1)"* ]]; then
+  if [[ "$marketplaces" == *"($1"* ]]; then
     skipped "marketplace $1 (already added)"
   else
     say "Adding the $1 marketplace"
-    run claude plugin marketplace add "$1"
+    run claude plugin marketplace add "$1${2:+#$2}"
     installed "marketplace $1"
   fi
 }
@@ -152,7 +153,11 @@ add_mcp() {
     skipped "MCP server $name (already registered)"
   else
     say "Registering the $name MCP server"
-    run claude mcp add --scope user "$name" -- "$@"
+    # Optional, like the npm step: a failure must not stop the settings merge.
+    if ! run claude mcp add --scope user "$name" -- "$@"; then
+      warn "claude mcp add for the $name MCP server failed; register it later with: claude mcp add --scope user $name -- $*"
+      return
+    fi
     installed "MCP server $name"
   fi
 }
@@ -316,7 +321,7 @@ main() {
   preflight
   setup_engram
   add_marketplace "$ENGRAM_REPO"
-  add_marketplace "$CONSTRUCT_REPO"
+  add_marketplace "$CONSTRUCT_REPO" "$CONSTRUCT_REF"
   install_plugin
   setup_mcp
   merge_settings

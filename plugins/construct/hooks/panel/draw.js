@@ -30,8 +30,10 @@
 // Colors are theme keys only. Flightdeck's "theme" palette maps onto ours as:
 //   main -> claude, agent -> suggestion, gate -> success, cleared -> permission,
 //   arch -> merged (our ODD card), amber -> warning, warn -> error,
-//   dim -> inactive, faint -> subtle, text -> text.
+//   dim -> inactive, faint -> subtle.
 // Flightdeck's "pastel" palette (fixed hex) is not adopted.
+
+import { isNum, text } from '../status/format.js'
 
 export const PALETTE = {
   main: 'claude',
@@ -44,10 +46,8 @@ export const PALETTE = {
   warn: 'error',
   dim: 'inactive',
   faint: 'subtle',
-  text: 'text',
 }
 
-const isNum = (x) => typeof x === 'number' && Number.isFinite(x)
 
 // Time left until a window resets, its two largest units: 25m, 3h10m, 4d2h. Empty when unknown or past.
 // Adapted from claude-flightdeck's fmtResetIn (core.ts).
@@ -107,10 +107,6 @@ export function stackBar(counts, width) {
   return cells
 }
 
-function textNode(content, props) {
-  return { type: 'Text', props, children: [content] }
-}
-
 // A round bordered column: `dim` dims the border, `marginTop` and `width` are optional.
 export function panelBox({ color, dim, width, marginTop, children = [] }) {
   const props = { flexDirection: 'column', borderStyle: 'round', borderColor: color, paddingX: 1 }
@@ -124,13 +120,10 @@ export function panelBox({ color, dim, width, marginTop, children = [] }) {
 // row, then `children` (element objects). `status` is a string (in the card color) or
 // { text, color, dim }; `width` is omitted to let the pane size the card; `dim` dims the border.
 export function card({ title, status, color, children = [], width, dim, marginTop }) {
-  const head = [textNode(title, { color, bold: true })]
+  const head = [text(title, { color, bold: true })]
   if (status !== undefined && status !== null) {
     const s = typeof status === 'string' ? { text: status, color } : status
-    const props = {}
-    if (s.dim) props.dimColor = true
-    else if (s.color) props.color = s.color
-    head.push(textNode(s.text, props))
+    head.push(text(s.text, s.dim ? { dim: true } : { color: s.color }))
   }
   return panelBox({ color, dim, width, marginTop, children: [{ type: 'Box', props: { justifyContent: 'space-between' }, children: head }, ...children] })
 }
