@@ -13,7 +13,7 @@
 // whose commit lies inside the range moves the base up to that commit, so reviewed
 // work units are not judged again. The rest of the range is covered when an approved
 // receipt has the published tree as its candidate tree and its integrity hashes still
-// match its transaction (receipt_check ok or legacy); a due range without one fails.
+// match its transaction (receipt_check ok); a due range without one fails.
 import { spawnSync } from 'node:child_process'
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -66,7 +66,7 @@ function derivedBase(root, gate, head, headIsHead, tag) {
 }
 
 // receiptState reads one receipt and says whether it is sound: approved, with a
-// readable transaction whose recomputed hashes match (or a legacy receipt).
+// readable transaction whose recomputed hashes match (a legacy receipt is reported, not sound).
 function receiptState(root, receipt) {
   if (receipt.outcome !== 'approved') return { status: 'not_approved', mismatched: [] }
   try {
@@ -77,7 +77,8 @@ function receiptState(root, receipt) {
   }
 }
 
-const SOUND = new Set(['ok', 'legacy'])
+// A legacy receipt (no hash fields) cannot prove its transaction is unchanged, so it is not sound.
+const SOUND = new Set(['ok'])
 
 function readReceipts(root) {
   const dir = join(storeDir(root), 'receipts')
@@ -120,12 +121,22 @@ export function validateGate({ root, gate, baseRef, headRef, tag }) {
   if (!base) return done('no_base', { head })
 
   const receipts = readReceipts(root).map((receipt) => ({ receipt, ...receiptState(root, receipt) }))
-  // A sound receipt inside the range moves its start up: that work was reviewed.
+  // A sound receipt inside the range moves its start up: that work was reviewed. It moves the
+  // start only when the receipt's base_commit is the start or an ancestor of it, so the receipt
+  // covers everything from the start to its candidate; a receipt without base_commit, or one
+  // that began later, is ignored. Repeat until nothing moves: receipts are read in any order.
   let start = base
-  for (const { receipt, status } of receipts) {
-    if (!SOUND.has(status) || typeof receipt.candidate_commit !== 'string') continue
-    const commit = commitOf(root, receipt.candidate_commit)
-    if (commit && commit !== start && isAncestor(root, start, commit) && isAncestor(root, commit, head)) start = commit
+  for (let moved = true; moved; ) {
+    moved = false
+    for (const { receipt, status } of receipts) {
+      if (!SOUND.has(status) || typeof receipt.candidate_commit !== 'string' || typeof receipt.base_commit !== 'string') continue
+      const commit = commitOf(root, receipt.candidate_commit)
+      const from = commitOf(root, receipt.base_commit)
+      if (commit && from && commit !== start && isAncestor(root, from, start) && isAncestor(root, start, commit) && isAncestor(root, commit, head)) {
+        start = commit
+        moved = true
+      }
+    }
   }
   const headTree = treeOf(root, head)
   const baseTree = treeOf(root, start)
@@ -141,7 +152,15 @@ export function validateGate({ root, gate, baseRef, headRef, tag }) {
   }
   if (assessment.changedPaths === 0 || publicRisk(assessment.level) !== 'high') return done('not_due', range)
 
-  const sameTree = receipts.filter(({ receipt }) => receipt.candidate_tree === headTree)
+  // A receipt that records its base_commit covers the range only when that base is the start
+  // or an ancestor of it; one reviewing a later part (A..B) of an unreviewed range does not.
+  // A receipt without base_commit (a working-tree review) is judged by its tree alone.
+  const reachesStart = (receipt) => {
+    if (typeof receipt.base_commit !== 'string') return true
+    const from = commitOf(root, receipt.base_commit)
+    return from !== null && isAncestor(root, from, start)
+  }
+  const sameTree = receipts.filter(({ receipt }) => receipt.candidate_tree === headTree && reachesStart(receipt))
   const sound = sameTree.find(({ status }) => SOUND.has(status))
   if (sound) return done('covered', { ...range, receipt: sound.status, lineage: sound.receipt.lineage })
 

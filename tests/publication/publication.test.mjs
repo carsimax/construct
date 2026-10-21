@@ -79,6 +79,7 @@ describe('publication commands are gated', () => {
     'sudo git push',
     'env GIT_SSH_COMMAND=ssh git push',
     'timeout 30 git push',
+    'timeout --foreground 60 git push origin feat',
     'eval "git push"',
     'echo $(git push)',
     'FOO=1 git push',
@@ -174,12 +175,42 @@ describe('allows when nothing is due, RDD is off, or a receipt covers the range'
   })
 })
 
+// B1: a source ref the hook cannot read is judged as HEAD, never passed through to fail with bad_ref.
+describe('an unreadable push source is judged as HEAD', () => {
+  const repo = featureRepo()
+  const cases = [
+    'git push -u origin "$(git branch --show-current)"',
+    'git push origin "$BRANCH"',
+    'git push origin `git branch --show-current`',
+    'git push origin "$(git branch --show-current):feat"',
+    'git push origin no-such-branch',
+    'git push origin no-such-branch:feat',
+  ]
+  for (const command of cases) test(`denies: ${command}`, () => denied(hook(command, repo)))
+
+  test('the same refs allow when HEAD is not due', () => {
+    const quiet = makeRepo({ 'src/app.js': 'export const a = 1\n' })
+    git(quiet, 'checkout', '-q', '-b', 'feat')
+    applyFiles(quiet, { 'docs/note.md': 'a note\n' })
+    commitAll(quiet, 'docs')
+    silent(hook('git push -u origin "$(git branch --show-current)"', quiet))
+    silent(hook('git push origin no-such-branch', quiet))
+  })
+
+  test('a bad_ref from the CLI is retried against HEAD, so it cannot allow what HEAD would deny', () => {
+    // A tag named like a branch does not resolve as a commit-less ref; the source below is a
+    // blob ref, which `rev-parse ^{commit}` rejects, so only the HEAD retry can decide.
+    const blob = git(repo, 'rev-parse', 'HEAD:src/app.js').trim()
+    denied(hook(`git push origin ${blob}`, repo))
+  })
+})
+
 describe('the hook fails open', () => {
   test('not a repository', () => silent(hook('git push', scratchDir('odd-pub-norepo-'))))
   test('unreadable input', () => {
     silent(hook('', '', env(), { input: 'not json' }))
     silent(hook('', '', env(), { input: '' }))
   })
-  test('a ref the gate cannot resolve is not a denial', () => silent(hook('git push origin no-such-branch', featureRepo())))
+  test('a missing destination repository is not a denial when nothing is due', () => silent(hook('git push origin quiet', makeRepo({ 'src/app.js': 'export const a = 1\n' }))))
   test('a missing cwd', () => silent(hook('git push', undefined, env(), { input: JSON.stringify({ tool_name: 'Bash', tool_input: { command: 'git push' } }) })))
 })

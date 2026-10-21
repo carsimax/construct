@@ -1,7 +1,14 @@
 // Publication gate (PreToolUse on Bash). Before `git push`, `gh pr create`, or
 // `gh release create` it runs `odd-review validate --gate pre-push|pre-pr|release` and denies
-// the call when the gate reports review_required. It fails open: any other result (no
-// repository, an odd-review error, a timeout, unreadable input) means no output and exit 0.
+// the call when the gate reports review_required. Outcomes of the CLI:
+//   exit 1 review_required   deny;
+//   exit 1 bad_ref           the hook passed a ref the CLI cannot read: the gate runs again
+//                            for HEAD (the checked-out branch) and that verdict decides, so
+//                            an unreadable ref never allows what HEAD would deny;
+//   anything else            allow (no repository, usage or internal errors, a timeout,
+//                            unreadable input): the hook fails open, as the other gates do.
+// A push source containing `$` or a backtick (an unexpanded substitution or variable), or
+// one that does not resolve to a commit, is judged as HEAD.
 // Commands are found through `sh -c`, `eval`, `$(...)`, backticks, wrappers such as sudo or
 // env, `git -C DIR`, and a preceding `cd DIR`. A dry run and a branch deletion publish no
 // work, so they are not gated.
@@ -130,7 +137,7 @@ function gateArgs(pub) {
   if (pub.gate === 'pre-push') {
     const spec = (pub.refspecs[0] ?? '').replace(/^\+/, '')
     const [src, dst] = spec.split(':')
-    if (src && src !== 'HEAD') args.push('--head-ref', src)
+    if (src && src !== 'HEAD' && !/[$`]/.test(src) && resolves(pub.dir, src)) args.push('--head-ref', src)
     const branch = branchOf(dst || src || '')
     if (pub.remote && branch && branch !== 'HEAD' && resolves(pub.dir, `refs/remotes/${pub.remote}/${branch}`)) args.push('--base-ref', `refs/remotes/${pub.remote}/${branch}`)
   } else if (pub.gate === 'pre-pr') {
@@ -146,19 +153,26 @@ function gateArgs(pub) {
   return args
 }
 
+// gateError runs the gate CLI and returns its refusal ({code, message}); null for exit 0, a
+// timeout, or output that is not a refusal.
+function gateError(dir, args) {
+  const run = spawnSync(BIN, ['--cwd', dir, 'validate', ...args], { encoding: 'utf8', timeout: TIMEOUT_MS })
+  if (run.status !== 1) return null
+  try {
+    const error = JSON.parse(run.stderr).error
+    return typeof error?.code === 'string' && typeof error.message === 'string' ? error : null
+  } catch {
+    return null
+  }
+}
+
 function verdict(pub) {
   const refspecs = pub.gate === 'pre-push' && pub.refspecs.length > 1 ? pub.refspecs : [pub.refspecs?.[0]]
   for (const spec of refspecs) {
     const single = pub.gate === 'pre-push' ? { ...pub, refspecs: spec === undefined ? [] : [spec] } : pub
-    const run = spawnSync(BIN, ['--cwd', pub.dir, 'validate', ...gateArgs(single)], { encoding: 'utf8', timeout: TIMEOUT_MS })
-    if (run.status !== 1) continue
-    let error
-    try {
-      error = JSON.parse(run.stderr).error
-    } catch {
-      continue
-    }
-    if (error?.code === 'review_required' && typeof error.message === 'string') return `publication-gate: ${error.message}`
+    let error = gateError(pub.dir, gateArgs(single))
+    if (error?.code === 'bad_ref') error = gateError(pub.dir, ['--gate', pub.gate])
+    if (error?.code === 'review_required') return `publication-gate: ${error.message}`
   }
   return null
 }

