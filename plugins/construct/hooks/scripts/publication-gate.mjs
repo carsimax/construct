@@ -6,11 +6,13 @@
 //   - the default branch and its merge-base with the ref come from git (origin/HEAD, origin or local
 //     main/master; a `gh pr create --base` branch is tried first); when none resolves, deny;
 //   - the `odd/tasks/*.md` files changed in merge-base..ref are read at the ref and every integer 1-6
-//     in each Risk cell of their Tasks table names a Risk item (`none` names none; a cell that is
-//     neither, or a missing Risk column, denies);
+//     in each Risk cell of their Tasks table (the `## Tasks` heading may carry a suffix) names a Risk
+//     item, a range `a-b`, `a–b`, `a—b`, `a to b` naming every item between (`none` names none; a cell
+//     that is neither, a reversed or out-of-range range, or a missing Risk column, denies);
 //   - requiredLenses(items) (review-lenses.mjs) says which lenses must have approved the subject, the
 //     hash of the merge-base tree and the ref tree, or a chain of approved subjects from one to the
-//     other (review-store.mjs). A rejected subject stays rejected. A required lens without approval:
+//     other (review-store.mjs). A rejected subject stays rejected, and a lens that rejected a tree
+//     never counts it as the head of an approved link (re-splitting a rejected range denies); A required lens without approval:
 //     deny, naming the lenses, the `Review subject:` line, and the construct:rdd-review skill;
 //   - an error while deciding denies with its reason, including one thrown after the command was
 //     found to be a publication. Only unreadable hook input, a command that is no publication, and a
@@ -28,7 +30,7 @@ import { resolve } from 'node:path'
 import { git, repositoryRoot } from './git-tree.mjs'
 import { readInput } from './hook-io.mjs'
 import { requiredLenses } from './review-lenses.mjs'
-import { approvedLinks, chainExists, readVerdicts, subjectHash } from './review-store.mjs'
+import { approvedLinks, chainExists, readVerdicts, rejectedTrees, subjectHash } from './review-store.mjs'
 import { extractHeredocs, GIT_VALUE_FLAGS, nestedLines, SHELLS, splitCommands, substitutionBodies } from './shell-words.mjs'
 
 const MAX_DEPTH = 4
@@ -280,7 +282,7 @@ function riskItems(markdown, path) {
   let seenHeader = false
   for (const line of markdown.split('\n')) {
     if (/^##\s/.test(line)) {
-      inTasks = /^##\s+Tasks\s*$/.test(line)
+      inTasks = /^##\s+Tasks\b/i.test(line)
       column = -1
       seenHeader = false
     } else if (inTasks && line.trim().startsWith('|') && !/^[\s|:-]+$/.test(line)) {
@@ -292,7 +294,13 @@ function riskItems(markdown, path) {
       } else {
         const cell = cells[column] ?? ''
         if (cell.replace(/[*`]/g, '').trim().toLowerCase().startsWith('none')) continue
-        const numbers = cell.match(/(?<!\d)[1-6](?!\d)/g)
+        // A range a-b (also an en or em dash, or "to") names every item between its ends; a reversed
+        // or out-of-range one is as unreadable as a bad cell.
+        const spaced = cell.replace(/(?<!\d)(\d+)\s*(?:[-–—]|\bto\b)\s*(\d+)(?!\d)/gi, (_, a, b) => {
+          if (!(a >= 1 && a <= b && b <= 6)) throw new Error(`${path} has a Risk cell with an invalid range: ${JSON.stringify(cell)} (a Risk cell names items 1-6)`)
+          return Array.from({ length: b - a + 1 }, (__, i) => Number(a) + i).join(' ')
+        })
+        const numbers = spaced.match(/(?<!\d)[1-6](?!\d)/g)
         if (!numbers) throw new Error(`${path} has a Risk cell that is neither "none" nor names an item 1-6: ${JSON.stringify(cell)}`)
         for (const n of numbers) items.add(Number(n))
       }
@@ -319,7 +327,7 @@ function refVerdict(root, pub, base, ref) {
   const headTree = out(root, ['rev-parse', `${sha}^{tree}`])
   const direct = readVerdicts(root, subjectHash(baseTree, headTree))
   // A rejection of the whole subject stands; otherwise one approved subject or a chain of them counts.
-  const state = (lens) => (direct[lens] ? (direct[lens].approved === true ? 'ok' : 'rejected') : chainExists(approvedLinks(root, lens), baseTree, headTree) ? 'ok' : 'missing')
+  const state = (lens) => (rejectedTrees(root, lens).has(headTree) ? 'rejected' : direct[lens] ? (direct[lens].approved === true ? 'ok' : 'rejected') : chainExists(approvedLinks(root, lens), baseTree, headTree) ? 'ok' : 'missing')
   const missing = required.filter((lens) => state(lens) === 'missing')
   const rejected = required.filter((lens) => state(lens) === 'rejected')
   if (missing.length === 0 && rejected.length === 0) return null

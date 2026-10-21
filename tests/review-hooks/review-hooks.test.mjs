@@ -329,8 +329,12 @@ describe('ranges, deleted paths, and verdict records (T8)', () => {
     writeVerdict(repo, record(true))
     assert.equal(readVerdicts(repo, 's1')['review-risk'].approved, false)
     assert.deepEqual(approvedLinks(repo, 'review-risk'), [])
+    // L17: a rejection poisons its head tree for the lens, so another subject ending at tree b stays unapproved.
     writeVerdict(repo, { ...record(true), subject_hash: 's2' })
-    assert.deepEqual(approvedLinks(repo, 'review-risk'), [{ base_tree: 'a', head_tree: 'b' }])
+    assert.deepEqual(approvedLinks(repo, 'review-risk'), [])
+    // A changed tree (a real fix) can be approved.
+    writeVerdict(repo, { ...record(true), subject_hash: 's3', head_tree: 'c' })
+    assert.deepEqual(approvedLinks(repo, 'review-risk'), [{ base_tree: 'a', head_tree: 'c' }])
   })
 
   test('an approval can still be replaced by a newer approval', () => {

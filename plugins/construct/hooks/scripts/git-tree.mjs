@@ -80,7 +80,7 @@ function emptyTree(root) {
 // real index is never read for writing or changed. The base is the HEAD tree, or
 // the empty tree on an unborn branch.
 export function freezeWorkingTree(root) {
-  const dir = mkdtempSync(join(tmpdir(), 'odd-assess-index-'))
+  const dir = mkdtempSync(join(tmpdir(), 'construct-index-'))
   try {
     const env = { GIT_INDEX_FILE: join(dir, 'index') }
     const head = headTree(root)

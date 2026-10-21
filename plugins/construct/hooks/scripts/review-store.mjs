@@ -54,9 +54,9 @@ export function writeVerdict(root, record) {
   atomicWrite(file, `${JSON.stringify(record)}\n`)
 }
 
-// approvedLinks lists the approved verdicts of a lens that know their trees: [{ base_tree, head_tree }].
-export function approvedLinks(root, lens) {
-  const links = []
+// verdictRecords lists the verdict records of a lens across subjects.
+function verdictRecords(root, lens) {
+  const records = []
   let subjects = []
   try {
     subjects = readdirSync(join(storeDir(root), 'verdicts'))
@@ -65,13 +65,25 @@ export function approvedLinks(root, lens) {
   }
   for (const subject of subjects) {
     try {
-      const record = readJson(verdictFile(root, subject, lens))
-      if (record.approved === true && record.base_tree && record.head_tree) links.push({ base_tree: record.base_tree, head_tree: record.head_tree })
+      records.push(readJson(verdictFile(root, subject, lens)))
     } catch {
       // No record for this lens.
     }
   }
-  return links
+  return records
+}
+
+// rejectedTrees: the head trees a lens rejected. A rejection poisons its head tree for that lens, so
+// re-splitting a rejected range cannot approve it; only a changed tree (a real fix) can.
+export const rejectedTrees = (root, lens) => new Set(verdictRecords(root, lens).filter((r) => r.approved !== true && r.head_tree).map((r) => r.head_tree))
+
+// approvedLinks lists the approved verdicts of a lens that know their trees and whose head tree the
+// lens never rejected: [{ base_tree, head_tree }].
+export function approvedLinks(root, lens) {
+  const poisoned = rejectedTrees(root, lens)
+  return verdictRecords(root, lens)
+    .filter((r) => r.approved === true && r.base_tree && r.head_tree && !poisoned.has(r.head_tree))
+    .map((r) => ({ base_tree: r.base_tree, head_tree: r.head_tree }))
 }
 
 // chainExists: do the approved links form a chain of subjects from tree `from` to tree `to`?

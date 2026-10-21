@@ -564,6 +564,62 @@ describe('a chain of approved subjects', () => {
   })
 })
 
+describe('Risk ranges, rejection poison, and a suffixed Tasks heading (L17)', () => {
+  const lensesNamed = (risk) => {
+    const r = hook('git push', featureRepo(risk))
+    assert.equal(r.decision, 'deny', risk)
+    return ['review-reliability', 'review-resilience', 'review-risk'].filter((lens) => r.reason.includes(lens))
+  }
+  test('a range names every item between its ends', () => {
+    for (const cell of ['2–6', '2—6', '2-6', 'items 2 to 6']) {
+      assert.deepEqual(lensesNamed(cell), ['review-reliability', 'review-resilience', 'review-risk'], cell)
+    }
+    // 2-5 covers 3 (reliability) and 4 (reliability, resilience) and 5.
+    assert.deepEqual(lensesNamed('2-5'), ['review-reliability', 'review-resilience', 'review-risk'])
+    const r = hook('git push', featureRepo('2-5'))
+    assert.match(r.reason, /Risk items 2, 3, 4, 5\b/)
+  })
+  test('a reversed or out-of-range range denies as an unreadable cell', () => {
+    for (const cell of ['6-2', '2-7', '0-3']) {
+      const r = hook('git push', featureRepo(cell))
+      assert.equal(r.decision, 'deny', cell)
+      assert.match(r.reason, /Risk cell/, cell)
+    }
+  })
+  test('a Tasks heading with a suffix is read, case-insensitively', () => {
+    for (const heading of ['## Tasks (wave 2)', '## tasks - wave 2']) {
+      const repo = makeRepo({ 'src/app.js': 'export const a = 1\n' })
+      git(repo, 'checkout', '-q', '-b', 'feat')
+      applyFiles(repo, { 'odd/tasks/f.md': TABLE('2').replace('## Tasks', heading), 'src/app.js': 'export const a = 2\n' })
+      commitAll(repo, 'unit')
+      denied(hook('git push', repo))
+    }
+  })
+  test('re-splitting a rejected range with no code change denies; a changed tree can be approved', () => {
+    const repo = featureRepo('2')
+    applyFiles(repo, { 'src/more.js': 'export const m = 1\n' })
+    commitAll(repo, 'second')
+    const tree = (ref) => git(repo, 'rev-parse', `${ref}^{tree}`).trim()
+    const [a, b, c] = [tree('main'), tree('HEAD~1'), tree('HEAD')]
+    const link = (from, to, approved = true) => writeVerdict(repo, { lens: 'review-risk', subject_hash: subjectHash(from, to), base_tree: from, head_tree: to, approved, at: Date.now(), result: {} })
+    link(a, c, false)
+    link(a, b)
+    link(b, c)
+    const r = hook('git push', repo)
+    assert.equal(r.decision, 'deny')
+    assert.match(r.reason, /not approved by review-risk/)
+    applyFiles(repo, { 'src/fix.js': 'export const f = 1\n' })
+    commitAll(repo, 'fix')
+    const d = tree('HEAD')
+    link(c, d)
+    link(a, b)
+    // chain a..b is approved but b..c head c is poisoned, so a..d needs a fresh route.
+    denied(hook('git push', repo))
+    link(a, d)
+    silent(hook('git push', repo))
+  })
+})
+
 describe('errors deny, aliases and shell bodies are seen', () => {
   test('a crash in the parser denies a command that mentions a push', () => {
     const deep = `git push $(`.repeat(1) + '$('.repeat(30000) + ')'.repeat(30000)
