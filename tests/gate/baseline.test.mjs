@@ -3,7 +3,7 @@
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, readFileSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { applyFiles, commitAll, highRepo, review, scratchDir } from '../review/helpers.mjs'
 
@@ -119,5 +119,45 @@ describe('baseline', () => {
     commitAll(repo, 'commit it')
     run('baseline', repo, e)
     assert.deepEqual(JSON.parse(readFileSync(file(e), 'utf8')).baseline, [])
+  })
+})
+
+describe('state pruning', () => {
+  const DAY = 86400
+  const age = (path, days) => {
+    const t = Date.now() / 1000 - days * DAY
+    utimesSync(path, t, t)
+  }
+  const seed = (e, rel, days) => {
+    const path = join(e.CLAUDE_PLUGIN_DATA, rel)
+    mkdirSync(join(path, '..'), { recursive: true })
+    writeFileSync(path, 'x')
+    age(path, days)
+    age(join(e.CLAUDE_PLUGIN_DATA, rel.split('/').slice(0, 2).join('/')), days) // the session directory itself
+    return path
+  }
+
+  test('baseline removes this plugin\'s per-session state older than 7 days and nothing else', () => {
+    const e = env()
+    const repo = highRepo()
+    const old = ['review-gate/old.json', 'risk-line/old.json', 'review-hooks/oldsess/construct_review-risk.review-0123456789abcdef.json', 'subagent-count/oldsess/a1'].map((rel) => seed(e, rel, 8))
+    const fresh = ['review-gate/fresh.json', 'risk-line/fresh.json', 'review-hooks/fresh/a.json'].map((rel) => seed(e, rel, 1))
+    const foreign = [seed(e, 'other-plugin/old.json', 30), seed(e, 'root-old.txt', 30)]
+    assert.equal(run('baseline', repo, e).status, 0)
+    for (const path of old.slice(0, 2)) assert.equal(existsSync(path), false, path)
+    assert.equal(existsSync(join(e.CLAUDE_PLUGIN_DATA, 'review-hooks/oldsess')), false)
+    assert.equal(existsSync(join(e.CLAUDE_PLUGIN_DATA, 'subagent-count/oldsess')), false)
+    for (const path of [...fresh, ...foreign]) assert.equal(existsSync(path), true, path)
+  })
+})
+
+describe('unreadable reminder file', () => {
+  test('is treated as empty, so the gate still blocks', () => {
+    const e = env()
+    const repo = highRepo()
+    mkdirSync(join(file(e), '..'), { recursive: true })
+    writeFileSync(file(e), '{}')
+    chmodSync(file(e), 0) // readFileSync throws EACCES
+    assert.equal(run(null, repo, e).json?.decision, 'block')
   })
 })

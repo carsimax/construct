@@ -1,6 +1,6 @@
 // Shared helpers for the command hooks: hook input from stdin and the plugin
 // data directory they keep small per-session state in.
-import { lstatSync, mkdirSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -35,9 +35,40 @@ export function dataDir() {
 // safeName keeps a session id or agent type usable as one file name.
 export const safeName = (value) => String(value || 'unknown').replace(/[^A-Za-z0-9_-]/g, '_')
 
-// pendingFile is where review-context.mjs records the lineage of a spawned
-// review lens and review-capture.mjs finds it at SubagentStop.
-export const pendingFile = (session, agent) => join(dataDir(), 'review-hooks', safeName(session), `${safeName(agent)}.json`)
+// pendingDir holds the records review-context.mjs writes for the review lenses
+// it prepared in a session; review-capture.mjs finds them at SubagentStop. A
+// record is keyed by lens and lineage: PreToolUse runs before the child exists,
+// so it cannot know the child's agent_id, and two concurrent reviews of one
+// lens always have different lineages.
+export const pendingDir = (session) => join(dataDir(), 'review-hooks', safeName(session))
+export const pendingFile = (session, agent, lineage) => join(pendingDir(session), `${safeName(agent)}.${safeName(lineage)}.json`)
+
+// STATE_MAX_AGE_MS: per-session state older than this belongs to a finished session.
+const STATE_MAX_AGE_MS = 7 * 24 * 3600 * 1000
+const STATE_DIRS = ['review-gate', 'risk-line', 'review-hooks', 'subagent-count']
+
+// pruneState removes this plugin's per-session state entries (a file or a
+// session directory directly under one of STATE_DIRS) idle for over 7 days.
+// Nothing else in the data directory is touched. Best effort: errors are ignored.
+export function pruneState(now = Date.now()) {
+  for (const name of STATE_DIRS) {
+    const base = join(dataDir(), name)
+    let entries
+    try {
+      entries = readdirSync(base)
+    } catch {
+      continue
+    }
+    for (const entry of entries) {
+      try {
+        const path = join(base, entry)
+        if (now - lstatSync(path).mtimeMs > STATE_MAX_AGE_MS) rmSync(path, { recursive: true, force: true })
+      } catch {
+        // Best effort.
+      }
+    }
+  }
+}
 
 // SUBAGENT_MAX_IDLE_MS is one hour, shorter than OPEN_LINEAGE_MAX_IDLE_MS (lib/review/store.mjs) because workers run minutes: an
 // open-agent entry older than this belongs to a crashed agent and is ignored.

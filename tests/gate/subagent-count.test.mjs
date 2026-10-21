@@ -4,7 +4,7 @@
 import { after, describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawn, spawnSync } from 'node:child_process'
-import { chmodSync, existsSync, readdirSync, readFileSync, rmSync, utimesSync } from 'node:fs'
+import { chmodSync, existsSync, readdirSync, readFileSync, rmSync, symlinkSync, utimesSync } from 'node:fs'
 import { join } from 'node:path'
 import { applyFiles, highRepo, makeRepo, scratchDir } from '../review/helpers.mjs'
 
@@ -75,6 +75,21 @@ describe('subagent-count hook', () => {
     assert.equal(openIds(e).length, 1)
     silent(stopAgent(e, 'a1'))
     assert.equal(openIds(e).length, 0)
+  })
+
+  test('a stop without an id closes the oldest named entry', () => {
+    const e = envOf()
+    startAgent(e, 'a1')
+    silent(count('stop', e, { session_id: 's1' }))
+    assert.deepEqual(openIds(e), [])
+  })
+
+  test('an entry that vanishes mid-stop does not abort the close', () => {
+    const e = envOf()
+    startAgent(e, 'a1')
+    symlinkSync(join(agentDir(e), 'gone'), join(agentDir(e), 'a0')) // dangling: statSync throws ENOENT
+    silent(count('stop', e, { session_id: 's1' }))
+    assert.equal(existsSync(join(agentDir(e), 'a1')), false)
   })
 
   test('a stop for an id with a file removes only that file', () => {

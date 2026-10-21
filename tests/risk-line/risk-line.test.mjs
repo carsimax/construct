@@ -226,6 +226,17 @@ describe('mark across repeated UserPromptSubmit', () => {
     silent(check(repo, e, 'Done.'))
   })
 
+  test('a repeated prompt_id returns before freezing the working tree', () => {
+    const repo = makeRepo({ 'src/a.js': 'export const a = 1\n' })
+    const e = env()
+    silent(mark(repo, e, 'p1'))
+    applyFiles(repo, { 'src/new.js': 'export const unique = 123456\n' })
+    const objects = () => execFileSync('git', ['count-objects', '-v'], { cwd: repo, encoding: 'utf8' })
+    const before = objects()
+    silent(mark(repo, e, 'p1'))
+    assert.equal(objects(), before)
+  })
+
   test('without a prompt_id every mark re-marks, as before', () => {
     const repo = makeRepo({ 'src/a.js': 'export const a = 1\n' })
     const e = env()

@@ -8,9 +8,10 @@
 // orchestrator reads `odd-review status`. Errors fail open.
 // Usage: node review-capture.mjs   (hook JSON on stdin)
 import { spawnSync } from 'node:child_process'
-import { readFileSync, rmSync } from 'node:fs'
+import { readdirSync, readFileSync, rmSync, statSync } from 'node:fs'
+import { join } from 'node:path'
 import { atomicWrite } from '../../lib/review/store.mjs'
-import { pendingFile, readInput } from './hook-io.mjs'
+import { pendingDir, readInput, safeName } from './hook-io.mjs'
 
 const ODD_REVIEW = new URL('../../bin/odd-review', import.meta.url).pathname
 const MAX_RETRIES = 2
@@ -58,19 +59,50 @@ function refusalOf(stderr) {
   }
 }
 
+// pendingFor picks the pending record of the stopping agent: records are keyed by
+// lens and lineage, so among several of one lens it takes the one whose
+// subject_hash the reply carries, else the oldest.
+function pendingFor(input, reply) {
+  const dir = pendingDir(input.session_id)
+  const prefix = `${safeName(input.agent_type)}.`
+  const records = []
+  for (const name of readdirSync(dir)) {
+    if (!name.startsWith(prefix) || !name.endsWith('.json')) continue
+    try {
+      const file = join(dir, name)
+      records.push({ file, pending: JSON.parse(readFileSync(file, 'utf8')), at: statSync(file).mtimeMs })
+    } catch {
+      // Unreadable record: not a candidate.
+    }
+  }
+  records.sort((a, b) => a.at - b.at || a.file.localeCompare(b.file))
+  let subject
+  try {
+    subject = JSON.parse(unfence(reply))?.subject_hash
+  } catch {
+    // Not JSON: the oldest record takes the retry.
+  }
+  return records.find((record) => subject !== undefined && record.pending.subject_hash === subject) ?? records[0]
+}
+
 function main() {
   const input = readInput()
   if (typeof input?.agent_type !== 'string') return
-  const file = pendingFile(input.session_id, input.agent_type)
-  let pending
+  let reply
   try {
-    pending = JSON.parse(readFileSync(file, 'utf8'))
+    reply = replyOf(input)
   } catch {
     return
   }
-
-  const reply = replyOf(input)
   if (reply === null) return
+  let found
+  try {
+    found = pendingFor(input, reply)
+  } catch {
+    return
+  }
+  if (!found) return
+  const { file, pending } = found
   const args = captureArgs(pending)
   const result = spawnSync('node', [ODD_REVIEW, '--cwd', pending.cwd, ...args, '--input', '-'], {
     input: unfence(reply),

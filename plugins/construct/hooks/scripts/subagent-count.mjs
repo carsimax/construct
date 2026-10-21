@@ -37,15 +37,21 @@ function main() {
   }
 
   // A stop whose id has a file closes it. Any other stop (no id, or an id the
-  // start never recorded because SubagentStart lacked agent_id) closes the oldest
-  // anonymous entry, so a start/stop id mismatch cannot hold the gates open.
+  // start never recorded) closes the oldest entry of any name, so a start/stop
+  // id mismatch cannot hold the gates open.
   if (id && existsSync(join(dir, id))) {
     rmSync(join(dir, id), { force: true })
     return
   }
   const oldest = readdirSync(dir)
-    .filter((name) => name.startsWith(ANON))
-    .map((name) => ({ name, at: statSync(join(dir, name)).mtimeMs }))
+    .filter((name) => !name.startsWith('.'))
+    .flatMap((name) => {
+      try {
+        return [{ name, at: statSync(join(dir, name)).mtimeMs }]
+      } catch {
+        return [] // removed by a concurrent stop
+      }
+    })
     .sort((a, b) => a.at - b.at || a.name.localeCompare(b.name))[0]
   if (oldest) rmSync(join(dir, oldest.name), { force: true })
 }
