@@ -379,6 +379,16 @@ The denial says which rule matched and that the user can run the command manuall
 
 Known lexical limits: the guard reads the command text and cannot see through whole-directory searches such as `grep -rn KEY .`, symlinks, shell globs (`cat .e*`), variables, or obfuscation (`cat $(echo .e)nv`, encoded payloads).
 
+### Delivery signals
+
+Three deterministic checks that used to be prompt-only (ports of gentle-shell's `commit-slice-signal`, `context-backstop`, and `delivered-test-lint`).
+
+- **Commit slice** (`hooks/scripts/delivery-signals.mjs`, `PostToolUse`, main thread and subagents). After a successful `git commit` on a branch other than the default branch (`origin/HEAD`, else `main` or `master`), the hook adds context with the authored changed lines from the merge base to `HEAD` (added plus deleted, renames counted by what changed; lock files such as `package-lock.json`, `yarn.lock`, `Cargo.lock`, `go.sum`, minified `.min.js`/`.min.css`, and generated golden files excluded) and the number of lines left before the ~400-line slice. Past 400 it asks you to apply the feature's delivery strategy before the next commit. Failed, interrupted, and background commands, text that only mentions `git commit`, and commits on the default branch add nothing. `git -C DIR` and a preceding `cd DIR` pick the repository.
+- **Context backstop** (same hook, main thread only). When the latest assistant usage in the transcript (input, cache read, cache write, and output tokens) reaches 150,000 tokens, one notice asks you to delegate the next multi-step unit to `construct:odd-worker`. It fires once per crossing: a later reading below the threshold (after compaction) re-arms it. The hook reads only the last 256 KB of `transcript_path`. The hook payload and transcript give no context window and the model id does not reveal it, so the window is treated as unknown and the absolute cap applies (as in gentle-shell, where an unknown window leaves the cap alone). The notice is advice, not a gate.
+- **Delivered-test lint** (`hooks/scripts/test-lint.mjs`, called from `secret-guard.mjs` after the write scope). A `Write`, `Edit`, or `MultiEdit` to a test path (`test/`, `tests/`, `__tests__/`, `spec/`, `*.test.*`, `*.spec.*`, `*_test.go`, `test_*.py`) is denied when the new text reads git history at a literal commit id (`git show|checkout|diff|cat-file|archive` followed by a 7-40 character hex id that mixes digits and letters) or assigns `TMPDIR` a path inside the working directory (`$PWD`, `process.cwd()`, `__dirname`, a relative path). A test must pass in any clone: build the previous behavior from a fixture and create scratch with `mktemp` outside the repository. Text written through `Bash` is not seen.
+
+Both `PostToolUse` signals fail open (no output, exit 0).
+
 ### Construct panel (mod)
 
 The mod draws one thing: a docked **panel** (a `Pane` with id `construct`) laid out as [claude-flightdeck](https://github.com/scasella/claude-flightdeck) cards and adapted to the ODD flow: one column at any width, no header or legend, `round` bordered cards, the bold title on the left and the status on the right. The band above the prompt is not drawn. It needs Claude Code 2.1.304 or later and does not appear in `claude -p` runs, which draw no interface.
@@ -413,7 +423,7 @@ The mod draws one thing: a docked **panel** (a `Pane` with id `construct`) laid 
 | `plugins/construct/` | The plugin (manifest name `construct`) |
 | `plugins/construct/agents/` | The 13 role agents |
 | `plugins/construct/skills/` | Delivery and review skills (`branch-pr`, `chained-pr`, `work-unit-commits`, `judgment-day`, `debugging`, `constraint-driven`, ...) |
-| `plugins/construct/hooks/` | `hooks.json`, the mod (`register.js`), its routing helpers, the status modules (`status/`), the panel modules (`panel/`), and the command hooks (`scripts/`: contract, feature state, secret guard, review gate and session baseline, publication gate, Risk line gate, subagent count, delegation admission, review context and capture) |
+| `plugins/construct/hooks/` | `hooks.json`, the mod (`register.js`), its routing helpers, the status modules (`status/`), the panel modules (`panel/`), and the command hooks (`scripts/`: contract, feature state, secret guard (with `command-guard`, `write-scope`, `test-lint`, and the shared `shell-words` tokenizer), delivery signals, review gate and session baseline, publication gate, Risk line gate, subagent count, delegation admission, review context and capture) |
 | `plugins/construct/bin/` | Executable scripts put on the `PATH` (`odd-assess`, `odd-review`) |
 | `plugins/construct/lib/assess/` | `odd-assess` modules: git, stats, passive, signals, sinks, content, classify, escalation, output |
 | `plugins/construct/lib/review/` | `odd-review` modules: the review lifecycle, its mode switch, and its store |

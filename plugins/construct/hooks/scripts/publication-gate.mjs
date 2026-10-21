@@ -9,99 +9,21 @@
 import { spawnSync } from 'node:child_process'
 import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { extractHeredocs, headIndex } from './command-guard.mjs'
 import { readInput } from './hook-io.mjs'
+import { splitCommands } from './shell-words.mjs'
 
 const BIN = join(dirname(fileURLToPath(import.meta.url)), '../../bin/odd-review')
 const TIMEOUT_MS = 25000
 const MAX_DEPTH = 4
 const SHELLS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh'])
-// Wrappers keep command position for the next word; the set holds the flags that take a value.
-// shortcut: flags are skipped by shape (a leading `-`) plus these value flags; upgrade to
-// per-wrapper grammars if a wrapper hides a publication behind an unlisted value flag.
-const WRAPPERS = {
-  sudo: new Set(['-u', '-g', '-C', '-h', '-p', '-r', '-t', '-U', '-D']),
-  command: new Set(),
-  builtin: new Set(),
-  env: new Set(['-u', '-C', '-S']),
-  nohup: new Set(),
-  time: new Set(),
-  exec: new Set(['-a']),
-  xargs: new Set(['-n', '-I', '-L', '-P', '-s', '-d', '-E', '-a', '-l', '-i']),
-  nice: new Set(['-n']),
-  ionice: new Set(['-c', '-n', '-p']),
-  timeout: new Set(['-s', '-k', '--signal', '--kill-after']),
-  '!': new Set(),
-  '{': new Set(),
-  if: new Set(),
-  then: new Set(),
-  else: new Set(),
-  do: new Set(),
-  while: new Set(),
-}
 const GIT_VALUE_FLAGS = new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace', '--exec-path', '--super-prefix', '--config-env'])
 const PUSH_VALUE_FLAGS = new Set(['--repo', '-o', '--push-option', '--receive-pack', '--exec', '--force-with-lease-value'])
 const GH_VALUE_FLAGS = new Set(['-R', '--repo', '--hostname'])
 const RELEASE_VALUE_FLAGS = new Set(['-t', '--title', '-n', '--notes', '-F', '--notes-file', '--target', '--notes-start-tag', '--discussion-category', '-R', '--repo'])
 
-// splitCommands is a small shell-word splitter: quotes and a backslash group a word, and an
-// unquoted ; | & ( ) ` or newline ends a command. A redirection target is not a word.
-// shortcut: this is a reduced copy of secret-guard's splitter, which is not importable (it
-// runs on import); upgrade to an import when it is exported.
-function splitCommands(input) {
-  const commands = []
-  let words = []
-  let cur = ''
-  let has = false
-  let redir = false
-  const endWord = () => {
-    if (has && !redir) words.push(cur)
-    if (has) redir = false
-    cur = ''
-    has = false
-  }
-  const endCommand = () => {
-    endWord()
-    redir = false
-    if (words.length) commands.push(words)
-    words = []
-  }
-  for (let i = 0; i < input.length; i++) {
-    const c = input[i]
-    if (c === "'") {
-      const end = input.indexOf("'", i + 1)
-      const stop = end === -1 ? input.length : end
-      cur += input.slice(i + 1, stop)
-      has = true
-      i = stop
-    } else if (c === '"') {
-      has = true
-      for (i++; i < input.length && input[i] !== '"'; i++) {
-        if (input[i] === '\\' && i + 1 < input.length && '$`"\\\n'.includes(input[i + 1])) i++
-        cur += input[i]
-      }
-    } else if (c === '\\' && i + 1 < input.length) {
-      cur += input[++i]
-      has = true
-    } else if (/\s/.test(c) && c !== '\n') {
-      endWord()
-    } else if (';|&()`\n'.includes(c)) {
-      endCommand()
-    } else if (c === '<' || c === '>') {
-      endWord()
-      const op = /^(<<<|<<-?|>>|>\||>&[0-9-]*|<&[0-9-]*|[<>])/.exec(input.slice(i))[0]
-      i += op.length - 1
-      redir = !/&[0-9-]*$/.test(op) && op !== '<<<'
-    } else {
-      cur += c
-      has = true
-    }
-  }
-  endCommand()
-  return commands
-}
-
-const HEREDOC_RE = /<<-?\s*(['"]?)([A-Za-z_]\w*)\1[^\n]*\n[\s\S]*?\n[ \t]*\2(?=\n|$)/g
-const stripHeredocs = (command) => command.replace(HEREDOC_RE, (raw) => raw.slice(0, raw.indexOf('\n')))
+// Heredoc bodies are data, not commands.
+const stripHeredocs = (command) => extractHeredocs(command).text
 
 // substitutions lists the bodies of $(...) and backticks, which a quoted word can still hold.
 function substitutions(word) {
@@ -109,28 +31,6 @@ function substitutions(word) {
   for (const m of word.matchAll(/\$\(([^()]*)\)/g)) out.push(m[1])
   for (const m of word.matchAll(/`([^`]*)`/g)) out.push(m[1])
   return out
-}
-
-function headIndex(words) {
-  let i = 0
-  while (i < words.length) {
-    const name = basename(words[i])
-    if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(words[i])) i++
-    else if (Object.hasOwn(WRAPPERS, name)) {
-      const values = WRAPPERS[name]
-      i++
-      let first = true
-      while (i < words.length) {
-        if (words[i] === '--') { i++; break }
-        if (words[i].startsWith('-') && words[i].length > 1) i += values.has(words[i]) ? 2 : 1
-        else if (name === 'timeout' && first) i++
-        else if (name === 'env' && /^[A-Za-z_][A-Za-z0-9_]*=/.test(words[i])) i++
-        else break
-        first = false
-      }
-    } else break
-  }
-  return i
 }
 
 // option reads `--name value`, `--name=value`, or a short `-N value`; null when absent.
@@ -192,7 +92,9 @@ function findPublications(command, cwd, depth = 0) {
   const found = []
   const nested = (line, at) => found.push(...findPublications(line, at, depth + 1))
   let where = cwd
-  for (const words of splitCommands(stripHeredocs(command))) {
+  for (const tokens of splitCommands(stripHeredocs(command))) {
+    // A redirection target is not a word.
+    const words = tokens.filter((w) => !w.r).map((w) => w.t)
     for (const word of words) for (const body of substitutions(word)) nested(body, where)
     const at = headIndex(words)
     const name = basename(words[at] ?? '')

@@ -37,7 +37,7 @@ const GIT_VALUE_FLAGS = new Set(['-C', '-c', '--git-dir', '--work-tree', '--name
 
 // headIndex is the index of the word that names the command: past assignments, wrappers,
 // and their flags (and the duration `timeout` takes).
-function headIndex(texts) {
+export function headIndex(texts) {
   let i = 0
   while (i < texts.length) {
     const w = basename(texts[i])
@@ -76,7 +76,7 @@ const HEREDOC_RE = /<<-?\s*(['"]?)([A-Za-z_]\w*)\1[^\n]*\n[\s\S]*?\n[ \t]*\2(?=\
 
 // extractHeredocs removes heredoc bodies from the command (they are data) and returns them
 // with the header line they belong to, so a body fed to a shell or SQL client is checked.
-function extractHeredocs(command) {
+export function extractHeredocs(command) {
   const bodies = []
   const text = command.replace(HEREDOC_RE, (raw, _q, _tag, offset) => {
     const nl = raw.indexOf('\n')

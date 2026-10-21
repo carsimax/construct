@@ -1,15 +1,20 @@
 // PreToolUse hook: deny tool calls that touch secrets or run a catastrophic rm -rf, and
 // apply the destructive-command tiers of command-guard.mjs to Bash (deny, or ask).
 // Edit/Write/MultiEdit/NotebookEdit also go through write-scope.mjs (main thread does not
-// write in the repository; a writer stays in its surfaces). Stands in for a
+// write in the repository; a writer stays in its surfaces; a test write passes test-lint.mjs). Stands in for a
 // permissions.deny list, which a plugin cannot set. Read-only: the secret and command
 // rules decide from the hook JSON alone; write-scope only reads git and the transcript.
 // Usage: node secret-guard.mjs   (hook JSON on stdin: tool_name, tool_input, cwd)
-import { readFileSync } from 'node:fs'
+import { readFileSync, realpathSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, isAbsolute, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { commandVerdict } from './command-guard.mjs'
+import { splitCommands } from './shell-words.mjs'
+import { testLintVerdict } from './test-lint.mjs'
 import { writeScopeVerdict } from './write-scope.mjs'
+
+export { splitCommands }
 
 const TEMPLATES = new Set(['.env.example', '.env.sample', '.env.template'])
 const SHELLS = new Set(['bash', 'sh', 'zsh', 'dash', 'ksh'])
@@ -94,78 +99,6 @@ function globRule(glob) {
     }
   }
   return null
-}
-
-// splitCommands is a small shell-word splitter: quotes and backslashes group a word,
-// unquoted ; | & ( ) ` newline end a command, and < > are dropped as separators so
-// `cat <.env` yields the word `.env`. Each returned word keeps whether it was quoted.
-function splitCommands(input) {
-  const commands = []
-  let words = []
-  let cur = ''
-  let has = false
-  let redir = false
-  let piped = false
-  const endWord = () => {
-    if (has) words.push({ t: cur, r: redir })
-    if (has) redir = false
-    cur = ''
-    has = false
-  }
-  const endCommand = () => {
-    endWord()
-    redir = false
-    if (words.length) {
-      words.piped = piped
-      commands.push(words)
-    }
-    words = []
-    piped = false
-  }
-  for (let i = 0; i < input.length; i++) {
-    const c = input[i]
-    if (c === "'") {
-      const end = input.indexOf("'", i + 1)
-      const stop = end === -1 ? input.length : end
-      cur += input.slice(i + 1, stop)
-      has = true
-      i = stop
-    } else if (c === '"') {
-      has = true
-      for (i++; i < input.length && input[i] !== '"'; i++) {
-        // Inside double quotes bash drops a backslash only before $ ` " \ or newline.
-        if (input[i] === '\\' && i + 1 < input.length && '$`"\\\n'.includes(input[i + 1])) i++
-        cur += input[i]
-      }
-    } else if (c === '\\' && i + 1 < input.length) {
-      cur += input[++i]
-      has = true
-    } else if (/\s/.test(c) && c !== '\n') {
-      endWord()
-    } else if (';|&()`\n'.includes(c)) {
-      endCommand()
-      // `|` and `|&` feed the next command; `||` does not.
-      if (c === '|') {
-        if (input[i + 1] === '|') i++
-        else {
-          // `|&` pipes stderr too: consume the `&` so it does not end a command.
-          if (input[i + 1] === '&') i++
-          piped = true
-        }
-      }
-    } else if (c === '<' || c === '>') {
-      endWord()
-      // Operators: >> >| >&N <<EOF; a here-string (<<<) takes data, not a file.
-      const op = /^(<<<|<<-?|>>|>\||>&[0-9-]*|<&[0-9-]*|[<>])/.exec(input.slice(i))[0]
-      i += op.length - 1
-      redir = op !== '<<<' && !/&[0-9-]*$/.test(op) || /^[<>]&$/.test(op)
-    } else {
-      cur += c
-      has = true
-    }
-  }
-  endCommand()
-  return commands
 }
 
 function isRootOrHome(target, cwd) {
@@ -375,9 +308,16 @@ function evaluate(event) {
   }
   // After the secret rules: who may write where (S3 writer surfaces, S4 main thread).
   try {
-    return writeScopeVerdict(event)
+    const scope = writeScopeVerdict(event)
+    if (scope) return scope
   } catch (error) {
     process.stderr.write(`secret-guard: write-scope error, allowing (${error.message})\n`)
+  }
+  // Last: a delivered test must pass in any clone (S7c).
+  try {
+    return testLintVerdict(event)
+  } catch (error) {
+    process.stderr.write(`secret-guard: test-lint error, allowing (${error.message})\n`)
     return null
   }
 }
@@ -396,26 +336,38 @@ function deny(verdict) {
   )
 }
 
-let raw = ''
-let event
-try {
-  raw = readFileSync(0, 'utf8')
-  event = JSON.parse(raw)
-  if (!event || typeof event !== 'object') throw new Error('not an object')
-} catch (error) {
-  process.stderr.write(`secret-guard: unreadable hook input, allowing (${error.message})\n`)
-  process.exit(0)
-}
+function main() {
+  let raw = ''
+  let event
+  try {
+    raw = readFileSync(0, 'utf8')
+    event = JSON.parse(raw)
+    if (!event || typeof event !== 'object') throw new Error('not an object')
+  } catch (error) {
+    process.stderr.write(`secret-guard: unreadable hook input, allowing (${error.message})\n`)
+    process.exit(0)
+  }
 
-try {
-  const verdict = evaluate(event)
-  if (verdict) deny(verdict)
-} catch (error) {
-  // An evaluation error never blocks on its own; it blocks only when the raw input
-  // already looks like a protected path or the rm -rf set.
-  if (/\.env\b|\.ssh|\.credentials|Keychains|\.aws\/credentials|hosts\.yml|\.pem|\.key|secrets\/|rm\s+-/.test(raw)) {
-    deny({ rule: 'internal error on a suspect call', target: error.message })
-  } else {
-    process.stderr.write(`secret-guard: internal error, allowing (${error.message})\n`)
+  try {
+    const verdict = evaluate(event)
+    if (verdict) deny(verdict)
+  } catch (error) {
+    // An evaluation error never blocks on its own; it blocks only when the raw input
+    // already looks like a protected path or the rm -rf set.
+    if (/\.env\b|\.ssh|\.credentials|Keychains|\.aws\/credentials|hosts\.yml|\.pem|\.key|secrets\/|rm\s+-/.test(raw)) {
+      deny({ rule: 'internal error on a suspect call', target: error.message })
+    } else {
+      process.stderr.write(`secret-guard: internal error, allowing (${error.message})\n`)
+    }
   }
 }
+
+// Importing this file (for splitCommands) must not read stdin; only a direct run guards.
+const direct = (() => {
+  try {
+    return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))
+  } catch {
+    return false
+  }
+})()
+if (direct) main()
