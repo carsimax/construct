@@ -5,7 +5,6 @@ import {
   SCHEMA_VERSION,
   filePathOf,
   initialState,
-  isBlockingNotification,
   isBlockingTool,
   merge,
   onAgentSpawn,
@@ -311,11 +310,6 @@ function noteEffort(e) {
   }
 }
 
-async function clearBlocked($, e, next) {
-  await feed($, onUnblocked)
-  return next(e)
-}
-
 export function register(on, options) {
   // Send each construct agent on the model its role is configured for.
   // If this hook fails, the agent keeps its frontmatter model.
@@ -354,7 +348,7 @@ export function register(on, options) {
     try {
       const at = await nowMs($)
       const cost = e.agentId === undefined ? await costUsd($) : undefined
-      await feed($, (s) => onTurnComplete(s, { agentId: e.agentId, turnId: e.turnId, nowMs: at, cost }))
+      await feed($, (s) => onTurnComplete(onUnblocked(s), { agentId: e.agentId, turnId: e.turnId, nowMs: at, cost }))
     } catch {
       // observe only
     }
@@ -367,22 +361,25 @@ export function register(on, options) {
     try {
       const at = await nowMs($)
       const cost = e.agentId === undefined ? await costUsd($) : undefined
-      await feed($, (s) => onTurnStart(s, { agentId: e.agentId, turnId: e.turnId, nowMs: at, cost }))
+      await feed($, (s) => onTurnStart(onUnblocked(s), { agentId: e.agentId, turnId: e.turnId, nowMs: at, cost }))
     } catch {
       // observe only
     }
     return result
   }).catch(($, e, next) => next(e))
 
-  // A finished tool call: counts edits and errors, and main-thread writes outside odd/tasks.
+  // A tool call: counts edits and errors, and main-thread writes outside odd/tasks. The call stays open
+  // while a question or a plan waits on the human (S8b), so AskUserQuestion and ExitPlanMode block the
+  // panel until it returns; any settled call clears a block.
   on('tool.call', async ($, e, next) => {
+    if (isBlockingTool(e.tool)) await feed($, onBlocked)
     const result = await next(e)
     try {
       const cwd = await projectRoot($)
       const at = await nowMs($)
       const didRun = result?.deny === undefined
       await feed($, (s) =>
-        onToolCall(onToolSettle(s, { tool: e.tool, didRun, callId: e.tool_use_id }), { tool: e.tool, path: filePathOf(e), cwd, agentId: e.agentId, isError: result?.isError === true, nowMs: at }),
+        onToolCall(onToolSettle(onUnblocked(s), { tool: e.tool, didRun, callId: e.tool_use_id }), { tool: e.tool, path: filePathOf(e), cwd, agentId: e.agentId, isError: result?.isError === true, nowMs: at }),
       )
     } catch {
       // observe only
@@ -390,31 +387,18 @@ export function register(on, options) {
     return result
   }).catch(($, e, next) => next(e))
 
-  // The permission verdict, whoever decided it.
+  // The permission verdict, whoever decided it. An ask on a real call is the permission prompt (S8b).
   on('tool.check', async ($, e, next) => {
     const result = await next(e)
     const at = await nowMs($)
-    await feed($, (s) => onToolCheck(s, { tool: e.tool, callId: e.tool_use_id, input: e.input, agentId: e.agentId, decision: result?.decision, nowMs: at, isQuery: typeof e.tool_use_id !== 'string' || e.tool_use_id === '' }))
+    const isQuery = typeof e.tool_use_id !== 'string' || e.tool_use_id === ''
+    await feed($, (s) => {
+      const checked = onToolCheck(s, { tool: e.tool, callId: e.tool_use_id, input: e.input, agentId: e.agentId, decision: result?.decision, nowMs: at, isQuery })
+      // An ask on a real call goes to the person (or the mode's decider): blocked until the call settles.
+      return !isQuery && result?.decision === 'ask' ? onBlocked(checked) : checked
+    })
     return result
   }).catch(($, e, next) => next(e))
-
-  // Claude is waiting on the human: a permission Notification, or a PreToolUse on AskUserQuestion or
-  // ExitPlanMode. The idle "waiting for your input" Notification is not a block. Observe only.
-  on('classic.Notification', async ($, e, next) => {
-    if (isBlockingNotification(e.message)) await feed($, onBlocked)
-    return next(e)
-  }).catch(($, e, next) => next(e))
-
-  on('classic.PreToolUse', async ($, e, next) => {
-    if (isBlockingTool(e.tool)) await feed($, onBlocked)
-    return next(e)
-  }).catch(($, e, next) => next(e))
-
-  // The human answered or the turn moved on: UserPromptSubmit, PostToolUse and Stop clear it.
-  // The `on` event names are string literals, so each is spelled out.
-  on('classic.UserPromptSubmit', clearBlocked).catch(($, e, next) => next(e))
-  on('classic.PostToolUse', clearBlocked).catch(($, e, next) => next(e))
-  on('classic.Stop', clearBlocked).catch(($, e, next) => next(e))
 
   on('session.compact', async ($, e, next) => {
     const result = await next(e)

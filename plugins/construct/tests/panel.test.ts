@@ -48,10 +48,9 @@ function world($, on, o: any = {}) {
   const seen = o.seen ?? {}
   on('turn.start', (_$, e) => ((seen.start = e), { turnId: e.turnId }))
   on('turn.complete', ($, e) => ({ text: e.answer }))
-  on('tool.call', (_$, e) => ((seen.call = e), { ref: 'r', result: {}, text: 'ok', ...(o.isError ? { isError: true } : {}) }))
+  on('tool.call', async (_$, e) => ((seen.call = e), await o.hold?.(), { ref: 'r', result: {}, text: 'ok', ...(o.isError ? { isError: true } : {}) }))
   on('tool.check', (_$, e) => ((seen.check = e), { decision: o.decision ?? 'allow' }))
   on('agent.spawn', (_$, e) => ({ model: e.model, agentId: 'ag-1' }))
-  for (const name of ['Notification', 'UserPromptSubmit', 'PostToolUse', 'Stop']) on(`classic.${name}`, () => ({}))
   on('turn.step', async function* (_$, e) {
     return { turnId: e.turnId, index: e.index, answer: 'ok', toolUses: [], stopReason: 'end_turn', usage: null }
   })
@@ -332,9 +331,7 @@ test('a surface with Client support draws the rail as a Client of ./rail.tsx', a
   expect(tree).toContain('panel/rail.tsx')
 })
 
-// ---- S8b blocked state: the mod hears the classic events itself ----------------
-
-const NOTE = (message: string) => ({ message, notification_type: 'permission_prompt' })
+// ---- S8b blocked state: tool.check asks and the blocking tools, no classic hooks ----
 
 // One pane per test: mount it once, redraw it for each reading.
 const reader = async ($) => {
@@ -342,49 +339,84 @@ const reader = async ($) => {
   return async () => (await p.redraw(), joined(p))
 }
 
-test('a permission Notification shows blocked; Stop, PostToolUse and UserPromptSubmit clear it', async ($, on) => {
-  await start($, on)
+const CALL = { tool: 'Bash', input: { command: 'ls' }, tool_use_id: 'tu-1' }
+
+test('a real tool.check ask shows blocked until the call settles', async ($, on) => {
+  await start($, on, { decision: 'ask' })
   const status = await reader($)
   expect(await status()).toContain('○ idle')
+  await $.tool.check(CALL)
+  await settle()
+  expect(await status()).toContain('◆ blocked')
+  await $.tool.call({ tool: 'Bash', command: 'ls', tool_use_id: 'tu-1' })
+  await settle()
+  expect(await status()).not.toContain('blocked')
+})
+
+test('an allow verdict and a query ask do not block', async ($, on) => {
+  await start($, on, { decision: 'allow' })
+  const status = await reader($)
+  await $.tool.check(CALL)
+  await settle()
+  expect(await status()).not.toContain('blocked')
+})
+
+test('a tool.check ask without a tool_use_id (a query) does not block', async ($, on) => {
+  await start($, on, { decision: 'ask' })
+  const status = await reader($)
+  await $.tool.check({ tool: 'Bash', input: { command: 'ls' } })
+  await settle()
+  expect(await status()).not.toContain('blocked')
+})
+
+// A tool.call whose core step stays open until `release()`, as a question waits on the person.
+async function openCall($, on, tool: string) {
+  let release: () => void = () => {}
+  const gate = new Promise<void>((r) => (release = r))
+  await start($, on, { hold: () => gate })
+  const status = await reader($)
+  const call = $.tool.call({ tool })
+  await settle()
+  return { status, release, call }
+}
+
+for (const tool of ['AskUserQuestion', 'ExitPlanMode']) {
+  test(`${tool} blocks while its tool.call is open and clears when it returns`, async ($, on) => {
+    const { status, release, call } = await openCall($, on, tool)
+    expect(await status()).toContain('◆ blocked')
+    release()
+    await call
+    await settle()
+    expect(await status()).not.toContain('blocked')
+  })
+}
+
+test('another tool does not block while its tool.call is open', async ($, on) => {
+  const { status, release, call } = await openCall($, on, 'Bash')
+  expect(await status()).not.toContain('blocked')
+  release()
+  await call
+})
+
+test('turn.start and turn.complete clear a block', async ($, on) => {
+  await start($, on, { decision: 'ask' })
+  const status = await reader($)
   for (const clear of [
-    () => $.classic.Stop({ stop_hook_active: false }),
-    () => $.classic.PostToolUse({ tool_name: 'AskUserQuestion', tool_input: {}, tool_response: {}, tool_use_id: 'tu' }),
-    () => $.classic.UserPromptSubmit({ prompt: 'go' }),
+    () => $.turn.start({ text: 'go', turnId: 't1' }),
+    () => $.turn.complete({ turnId: 't1', answer: 'done' }),
   ]) {
-    await $.classic.Notification(NOTE('Claude needs your permission to use Bash'))
+    await $.tool.check(CALL)
     await settle()
     expect(await status()).toContain('◆ blocked')
     await clear()
     await settle()
-    const text = await status()
-    expect(text).not.toContain('blocked')
+    expect(await status()).not.toContain('blocked')
   }
 })
 
-test('the idle waiting-for-input Notification does not block', async ($, on) => {
-  await start($, on)
-  const status = await reader($)
-  await $.classic.Notification({ message: 'Claude is waiting for your input', notification_type: 'idle_prompt' })
-  await settle()
-  expect(await status()).not.toContain('blocked')
-})
-
-test('a PreToolUse on AskUserQuestion or ExitPlanMode blocks; another tool does not', async ($, on) => {
-  await start($, on)
-  const status = await reader($)
-  await $.tool.call({ tool: 'Bash', command: 'ls' })
-  await settle()
-  expect(await status()).not.toContain('blocked')
-  for (const tool of ['AskUserQuestion', 'ExitPlanMode']) {
-    await $.classic.UserPromptSubmit({ prompt: 'go' })
-    await $.tool.call({ tool })
-    await settle()
-    expect(await status()).toContain('◆ blocked')
-  }
-})
-
-test('blocked-state hooks pass the classic events through unchanged', async ($, on) => {
-  await start($, on)
-  const r = await $.classic.Notification(NOTE('needs your permission'))
-  expect(r).toBeDefined()
+test('the blocked-state wiring passes tool.check and tool.call results through unchanged', async ($, on) => {
+  await start($, on, { decision: 'ask' })
+  expect((await $.tool.check(CALL)).decision).toBe('ask')
+  const r = await $.tool.call({ tool: 'AskUserQuestion' })
+  expect(r.text).toBe('ok')
 })

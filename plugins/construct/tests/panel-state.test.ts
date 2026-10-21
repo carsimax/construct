@@ -4,7 +4,6 @@ import {
   agentsView,
   initialState,
   isBlocked,
-  isBlockingNotification,
   isBlockingTool,
   isOutsideTasks,
   maskSecrets,
@@ -449,15 +448,6 @@ test('initialState is not blocked and merge defaults a stored value without the 
   const { blocked, ...old } = initialState()
   expect(merge(old).blocked).toBe(false)
   expect(merge({ ...initialState(), blocked: 'yes' }).blocked).toBe(false)
-})
-
-test('a notification blocks only on permission, needs-your or approve wording', () => {
-  for (const m of ['Claude needs your permission to use Bash', 'Claude needs your attention', 'Please approve this plan', 'permission required']) {
-    expect(isBlockingNotification(m)).toBe(true)
-  }
-  for (const m of ['Claude is waiting for your input', '', undefined, null, 5, 'Task complete']) {
-    expect(isBlockingNotification(m as any)).toBe(false)
-  }
 })
 
 test('AskUserQuestion and ExitPlanMode are the blocking tools', () => {

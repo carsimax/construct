@@ -48,8 +48,8 @@
 //                (turn.step without agentId, index.d.ts:14328-14354), model and effort are the latest
 //                request's, mode is the permission mode (agent.spawn permissionMode, index.d.ts:326,
 //                set only when the parent is main; classic hook permission_mode, index.d.ts:861)
-//   blocked      true while Claude waits on the human (S8b): set by a permission Notification or a
-//                PreToolUse on AskUserQuestion / ExitPlanMode, cleared by UserPromptSubmit, PostToolUse, Stop
+//   blocked      true while Claude waits on the human (S8b): set by a tool.check ask on a real call or a
+//                tool.call open on AskUserQuestion / ExitPlanMode, cleared by a settled tool.call, turn.start, turn.complete
 //   gate.verdicts { rule, ask, cleared, deny }  who decided (S6), subagents included. tool.check
 //                decision 'allow' | 'ask' | 'deny' (index.d.ts:13642): allow is a rule/allowed pass,
 //                ask went to the mode's decider and stays 'ask' until onToolSettle moves it to
@@ -219,13 +219,12 @@ export function mainBusy(state) {
 }
 
 // ---- blocked (S8b) --------------------------------------------------------
-// Port of gentle-agent-state scripts/hook-adapter.sh: Claude fires Notification for a permission
-// request and, about 60 s after Stop, for "waiting for your input". Only the first is a block.
+// Port of gentle-agent-state scripts/hook-adapter.sh, from mod events only (the classic hooks never
+// reach the mod, L12): a real tool.check ask is the permission prompt, and a tool.call on a tool that
+// asks the person stays open while it waits. A settled tool.call, turn.start or turn.complete clears it.
 
-const BLOCKING_NOTIFICATION = /permission|needs your|approve/i
 const BLOCKING_TOOLS = ['AskUserQuestion', 'ExitPlanMode']
 
-export const isBlockingNotification = (message) => typeof message === 'string' && BLOCKING_NOTIFICATION.test(message)
 export const isBlockingTool = (tool) => BLOCKING_TOOLS.includes(tool)
 export const isBlocked = (state) => isObj(state) && state.blocked === true
 
