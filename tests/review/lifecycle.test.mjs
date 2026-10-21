@@ -378,8 +378,10 @@ describe('correction path', () => {
     assert.equal(review(repo, ['correct', '--lineage', txn.lineage]).status, 0)
     applyFiles(repo, { 'scripts/build.sh': 'echo safer\n' })
     const second = review(repo, ['correct', '--lineage', txn.lineage])
-    assert.equal(second.status, 1)
-    assert.equal(second.error.code, 'wrong_state')
+    assert.equal(second.status, 0)
+    assert.equal(second.json.state, 'escalated')
+    assert.equal(second.json.reason, 'budget_exhausted')
+    assert.equal(review(repo, ['correct', '--lineage', txn.lineage]).error.code, 'wrong_state')
   })
 
   test('correct is refused outside correction_required', () => {

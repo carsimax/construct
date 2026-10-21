@@ -22,12 +22,12 @@ export const receiptPath = (root, target) => join(storeDir(root), 'receipts', `$
 
 export const receiptExists = (root, target) => existsSync(receiptPath(root, target))
 
-const TERMINAL_STATES = new Set(['escalated', 'acknowledged'])
+const TERMINAL_STATES = new Set(['escalated', 'acknowledged', 'abandoned', 'invalidated'])
 // A review runs for minutes; one idle longer than this was abandoned.
 export const OPEN_LINEAGE_MAX_IDLE_MS = 6 * 3600 * 1000
 
 // openLineageTargets lists the targets of every transaction still in flight
-// (any state but escalated and acknowledged, with a transition in the last
+// (any state but escalated, acknowledged, abandoned, and invalidated, with a transition in the last
 // OPEN_LINEAGE_MAX_IDLE_MS), including a correction's target. It reads without
 // the lock: writes are atomic renames. An unreadable transaction is skipped.
 export function openLineageTargets(root, now = Date.now()) {

@@ -16,13 +16,13 @@ import { headCommit } from './boundary.mjs'
 import { buildContext, DEFAULT_CONTEXT_BYTES } from './evidence.mjs'
 import { Refusal } from './errors.mjs'
 import { REFUTER, VALIDATOR, newLineage, refuterSubjectHashOf, subjectHashOf, targetOf, manifestDigest, canonicalLens } from './identity.mjs'
+import { checkReceipt, correctionBudget, emptyCounters, MAX_CORRECTION_LINES, receiptHashes } from './receipt.mjs'
 import { reduceLenses } from './reduce.mjs'
 import { atomicCreate, readTransaction, receiptExists, receiptPath, withLock, writeTransaction } from './store.mjs'
 import { validateLensResult, validateRefuterResult, validateValidatorResult } from './validate.mjs'
 
 export const SCHEMA = 'construct.review-transaction/v1'
 export const RECEIPT_SCHEMA = 'construct.review-receipt/v1'
-const MAX_CORRECTION_LINES = 200
 
 const quote = (value) => `'${value.replaceAll("'", "'\\''")}'`
 
@@ -50,7 +50,28 @@ export function nextCommands(transaction, cwd) {
 
 const pending = (transaction) => transaction.lenses.filter((lens) => !Object.hasOwn(transaction.results, lens))
 
-const correctionBudget = (transaction) => Math.min(MAX_CORRECTION_LINES, Math.ceil(transaction.changed_lines / 2))
+const budgetOf = (transaction) => correctionBudget(transaction.changed_lines)
+
+// A transaction written before the counters existed reads as all zeros.
+const countersOf = (transaction) => ({ ...emptyCounters(), ...transaction.counters })
+
+const TERMINAL = ['escalated', 'acknowledged', 'abandoned', 'invalidated']
+const LIVE = ['collecting', 'refutation_required', 'correction_required', 'validation_required']
+
+// spent reports whether a one-shot counter is already used in a transaction
+// that is still being reviewed (an approved one only refuses); the caller then escalates instead of running a second batch.
+const spent = (transaction, counter) => LIVE.includes(transaction.state) && countersOf(transaction)[counter] >= 1
+
+function spend(transaction, counter) {
+  transaction.counters = { ...countersOf(transaction), [counter]: countersOf(transaction)[counter] + 1 }
+}
+
+// exhaust makes the transaction terminal escalated because a second batch of
+// one kind was asked for.
+function exhaust(transaction, counter) {
+  transaction.escalation = { reason: 'budget_exhausted', counter, finding_ids: [] }
+  transition(transaction, 'escalated')
+}
 
 const neutral = (finding) => ({ id: finding.id, location: finding.location, severity: finding.severity, claim: finding.claim, proof_refs: finding.proof_refs })
 
@@ -62,6 +83,7 @@ function view(transaction, cwd, extra = {}) {
     state: transaction.state,
     target: transaction.target,
     lenses: transaction.lenses,
+    counters: countersOf(transaction),
     captured: transaction.lenses.filter((lens) => Object.hasOwn(transaction.results, lens)),
     pending: pending(transaction),
     ...extra,
@@ -69,10 +91,22 @@ function view(transaction, cwd, extra = {}) {
   if (transaction.state === 'refutation_required') out.refutation_batch = transaction.refutation_batch
   if (transaction.state === 'correction_required') {
     out.to_correct = transaction.to_correct
-    out.correction_budget = { max_changed_lines: correctionBudget(transaction) }
+    out.correction_budget = { max_changed_lines: budgetOf(transaction) }
+  }
+  if (transaction.state === 'abandoned' || transaction.state === 'invalidated') {
+    out.reason = transaction.closed?.reason ?? null
+    out.message = `the review was ${transaction.state}; no receipt is written`
   }
   if (transaction.state === 'escalated') {
-    if (transaction.escalation) {
+    if (transaction.escalation?.reason === 'budget_exhausted') {
+      out.reason = 'budget_exhausted'
+      out.counter = transaction.escalation.counter
+      out.message = `a second ${transaction.escalation.counter.replace(/_/g, ' ')} is not allowed: a human decision is required`
+    } else if (transaction.escalation?.reason === 'lens_unachievable') {
+      out.reason = 'lens_unachievable'
+      out.unachievable_lenses = Object.keys(transaction.unachievable ?? {})
+      out.message = 'a selected lens could not run, so the review cannot approve: a human decision is required'
+    } else if (transaction.escalation) {
       out.reason = transaction.escalation.reason
       out.finding_ids = transaction.escalation.finding_ids
       out.message = 'a BLOCKER or CRITICAL finding has unknown causality: a human decision is required'
@@ -111,11 +145,16 @@ function commitFields(root, candidate) {
 
 // assessedLenses is start's default when no --lenses is given: the lenses the
 // assessment assigns to the frozen candidate, and a reason built from it.
-function assessedLenses(assessment, escalation) {
+function assessedLenses(assessment, escalation, focus) {
   const { risk, reasons: publicList } = escalateRisk(publicRisk(assessment.level), publicReasons(assessment.reasons), escalation)
+  if (risk === 'medium' && focus) {
+    // One focus lens for a medium candidate, as the upstream policy does.
+    return { risk, lenses: [focus], lensesReason: `odd-assess: medium risk, focus ${focus.replace(/^review-/, '')}` }
+  }
   const lenses = lensesFor(risk)
   if (lenses.length === 0) {
-    throw new Refusal('lenses_required', `the candidate is ${risk} risk, which assigns no lenses; pass --lenses and --lenses-reason`, { risk })
+    const hint = risk === 'medium' ? 'pass --focus LENS for one focus lens, or --lenses and --lenses-reason' : 'pass --lenses and --lenses-reason'
+    throw new Refusal('lenses_required', `the candidate is ${risk} risk, which assigns no lenses; ${hint}`, { risk })
   }
   const reasons = publicList.map((reason) => (reason.path ? `${reason.code} ${reason.path}` : reason.code === 'agent_escalation' ? `${reason.code} ${reason.detail}` : reason.code))
   return { risk, lenses, lensesReason: `odd-assess: ${risk} risk (${reasons.join(', ')})` }
@@ -123,7 +162,7 @@ function assessedLenses(assessment, escalation) {
 
 // start freezes the candidate and opens a transaction in state collecting.
 // Without lenses, it takes them from the assessment (assessedLenses).
-export function start({ root, cwd, baseRef, committedOnly, lenses: requested, lensesReason: requestedReason, escalation = null }) {
+export function start({ root, cwd, baseRef, committedOnly, lenses: requested, lensesReason: requestedReason, escalation = null, focus = null }) {
   let isolation = null
   try {
     let candidate
@@ -139,7 +178,7 @@ export function start({ root, cwd, baseRef, committedOnly, lenses: requested, le
     if (receiptExists(root, target)) {
       throw new Refusal('target_already_acknowledged', 'this exact candidate already has a receipt; change the candidate to review it again', { target })
     }
-    const { risk, lenses, lensesReason } = requested ? { risk: publicRisk(assessment.level), lenses: requested, lensesReason: requestedReason } : assessedLenses(assessment, escalation)
+    const { risk, lenses, lensesReason } = requested ? { risk: publicRisk(assessment.level), lenses: requested, lensesReason: requestedReason } : assessedLenses(assessment, escalation, focus)
     const lineage = newLineage()
     const now = new Date().toISOString()
     const transaction = {
@@ -158,6 +197,7 @@ export function start({ root, cwd, baseRef, committedOnly, lenses: requested, le
       risk,
       lenses,
       lenses_reason: lensesReason,
+      counters: emptyCounters(),
       subjects: Object.fromEntries(lenses.map((lens) => [lens, subjectHashOf({ lineage, target, lens, manifest: assessment.manifest })])),
       results: {},
       findings: [],
@@ -268,7 +308,10 @@ export function capture({ root, cwd, lineage, lens: lensName, input }) {
     for (const found of valid.findings) {
       transaction.findings.push({ id: `F${transaction.findings.length + 1}`, lens, ...found })
     }
-    if (pending(transaction).length === 0) settle(transaction, reduceLenses(transaction.findings))
+    if (pending(transaction).length === 0) {
+      spend(transaction, 'full_reviews')
+      settle(transaction, reduceLenses(transaction.findings))
+    }
     return view(transaction, cwd, { lens })
   })
 }
@@ -277,6 +320,10 @@ export function captureRefuter({ root, cwd, lineage, input }) {
   const result = readInput(input)
   return modify(root, lineage, (transaction) => {
     requireState(transaction, 'refutation_required')
+    if (spent(transaction, 'refuter_batches')) {
+      exhaust(transaction, 'refuter_batches')
+      return view(transaction, cwd)
+    }
     const valid = validateRefuterResult(result, {
       subjectHash: transaction.refutation_subject,
       expectedIds: transaction.refutation_batch.map((finding) => finding.id),
@@ -290,6 +337,7 @@ export function captureRefuter({ root, cwd, lineage, input }) {
       if (verdict.outcome === 'corroborated') corroborated.push(full)
       else advisory.push({ ...full, refuter_outcome: verdict.outcome })
     }
+    spend(transaction, 'refuter_batches')
     transaction.refutation = valid.results
     transaction.advisory = advisory
     transaction.refutation_batch = []
@@ -317,6 +365,10 @@ function correctedTree(root, transaction, baseRef) {
 
 export function correct({ root, cwd, lineage, baseRef }) {
   return modify(root, lineage, (transaction) => {
+    if (spent(transaction, 'fix_batches')) {
+      exhaust(transaction, 'fix_batches')
+      return view(transaction, cwd)
+    }
     if (transaction.correction) throw new Refusal('wrong_state', 'this lineage already used its one correction', { state: transaction.state })
     requireState(transaction, 'correction_required')
     const candidateTree = correctedTree(root, transaction, baseRef)
@@ -327,7 +379,7 @@ export function correct({ root, cwd, lineage, baseRef }) {
     try {
       const fixStats = collectDiffStats(root, transaction.candidate_tree, candidateTree, isolation)
       const changedLines = countChangedLines(fixStats)
-      const budget = correctionBudget(transaction)
+      const budget = budgetOf(transaction)
       if (changedLines > budget) {
         throw new Refusal(
           'correction_budget_exceeded',
@@ -349,6 +401,7 @@ export function correct({ root, cwd, lineage, baseRef }) {
         budget,
         at: new Date().toISOString(),
       }
+      spend(transaction, 'fix_batches')
       transition(transaction, 'validation_required')
       return view(transaction, cwd, {
         corrected_target: target,
@@ -368,10 +421,15 @@ export function captureValidation({ root, cwd, lineage, input }) {
   const result = readInput(input)
   return modify(root, lineage, (transaction) => {
     requireState(transaction, 'validation_required')
+    if (spent(transaction, 'scoped_fix_validations')) {
+      exhaust(transaction, 'scoped_fix_validations')
+      return view(transaction, cwd)
+    }
     const valid = validateValidatorResult(result, {
       subjectHash: transaction.correction.subject_hash,
       expectedIds: transaction.to_correct.map((finding) => finding.id),
     })
+    spend(transaction, 'scoped_fix_validations')
     transaction.validation = valid
     const resolved = valid.results.every((entry) => entry.outcome === 'resolved') && valid.regressions.length === 0
     transition(transaction, resolved ? 'approved' : 'escalated')
@@ -380,7 +438,51 @@ export function captureValidation({ root, cwd, lineage, input }) {
 }
 
 export function status({ root, cwd, lineage }) {
-  return view(readTransaction(root, lineage), cwd)
+  const transaction = readTransaction(root, lineage)
+  return view(transaction, cwd, transaction.state === 'acknowledged' ? { receipt_check: checkReceipt(root, transaction) } : {})
+}
+
+// abandon closes any open transaction for good; invalidate does the same for
+// one that no lens has touched yet. Neither writes a receipt.
+function close(transaction, state, reason) {
+  transaction.closed = { reason: reason ?? null }
+  transition(transaction, state)
+}
+
+export function abandon({ root, cwd, lineage, reason }) {
+  return modify(root, lineage, (transaction) => {
+    if (TERMINAL.includes(transaction.state)) throw new Refusal('wrong_state', `the transaction is already ${transaction.state}`, { state: transaction.state })
+    close(transaction, 'abandoned', reason)
+    return view(transaction, cwd)
+  })
+}
+
+export function invalidate({ root, cwd, lineage, reason }) {
+  return modify(root, lineage, (transaction) => {
+    if (TERMINAL.includes(transaction.state)) throw new Refusal('wrong_state', `the transaction is already ${transaction.state}`, { state: transaction.state })
+    if (transaction.state !== 'collecting' || Object.keys(transaction.results).length > 0 || countersOf(transaction).full_reviews > 0) {
+      throw new Refusal('not_pristine', 'invalidate only closes a review that no lens has touched; use abandon', { state: transaction.state })
+    }
+    close(transaction, 'invalidated', reason)
+    return view(transaction, cwd)
+  })
+}
+
+// capture-unachievable records that a selected lens cannot run. The review can
+// never approve without that lens, so it escalates to a human decision.
+export function captureUnachievable({ root, cwd, lineage, lens: lensName, reason }) {
+  return modify(root, lineage, (transaction) => {
+    requireState(transaction, 'collecting')
+    const lens = canonicalLens(lensName)
+    if (!lens || !transaction.lenses.includes(lens)) {
+      throw new Refusal('lens_not_selected', `${lensName} was not selected when the review started (${transaction.lenses.join(', ')})`)
+    }
+    if (Object.hasOwn(transaction.results, lens)) throw new Refusal('lens_already_captured', `${lens} was already captured; it cannot be unachievable`)
+    transaction.unachievable = { ...transaction.unachievable, [lens]: { reason, at: new Date().toISOString() } }
+    transaction.escalation = { reason: 'lens_unachievable', finding_ids: [] }
+    transition(transaction, 'escalated')
+    return view(transaction, cwd, { lens })
+  })
 }
 
 // acknowledge consumes an approved review: it writes the receipt for the final
@@ -422,6 +524,8 @@ export function acknowledge({ root, cwd, lineage }) {
       ...commitsOfReceipt(transaction, fix),
       lenses: transaction.lenses,
       lenses_reason: transaction.lenses_reason,
+      ...receiptHashes(transaction),
+      counters: countersOf(transaction),
       outcome: 'approved',
       advisory_findings: transaction.advisory,
       started_at: transaction.created_at,
