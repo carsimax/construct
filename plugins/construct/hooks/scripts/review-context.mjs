@@ -1,8 +1,9 @@
 // PreToolUse hook on Agent: a construct:review-* lens gets its whole context
 // from here, so the orchestrator never pastes evidence. The prompt names the
-// subject with one line, `Review subject: <base-ref>` (the head is always HEAD).
-// The hook builds the binding, name-status, numstat, per-path patches (and the
-// security checklist for review-risk) from the base and HEAD trees, replaces the
+// subject with one line, `Review subject: <base>` or `<base>..<head>` (head
+// defaults to HEAD). The hook builds the binding, name-status, numstat, per-path
+// patches (a deleted path is listed with a marker, not its removed content; plus the
+// security checklist for review-risk) from the two trees, replaces the
 // prompt with it, and records the pending lens for review-capture.mjs. A review
 // agent it cannot prepare is denied; other agents pass untouched, errors for
 // them fail open.
@@ -17,7 +18,7 @@ const SUBJECT_LINE = /^Review subject: (\S+)[ \t]*$/m
 const CHECKLIST = new URL('../../skills/rdd-review/references/security-checklist.md', import.meta.url)
 const MAX_CONTEXT_BYTES = 400 * 1024
 const DIFF_FLAGS = ['--no-color', '--no-ext-diff', '--no-textconv', '--no-renames', '--ignore-submodules=none']
-const FORM = 'Review subject: <base-ref>'
+const FORM = 'Review subject: <base>[..<head>]'
 
 const decide = (permissionDecision, extra) =>
   process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision, ...extra } })}\n`)
@@ -25,15 +26,15 @@ const deny = (reason) => decide('deny', { permissionDecisionReason: reason })
 const out = (root, args) => git(root, args).toString('utf8')
 const withNewline = (text) => (text.endsWith('\n') ? text : `${text}\n`)
 
-function buildContext(root, lens, base) {
+function buildContext(root, lens, base, head) {
   const baseTree = out(root, ['rev-parse', '--verify', `${base}^{tree}`]).trim()
-  const headTree = out(root, ['rev-parse', '--verify', 'HEAD^{tree}']).trim()
+  const headTree = out(root, ['rev-parse', '--verify', `${head}^{tree}`]).trim()
   const subject = subjectHash(baseTree, headTree)
   const records = out(root, ['diff', '--name-status', '-z', ...DIFF_FLAGS, baseTree, headTree, '--']).split('\0')
   const nameStatus = []
   for (let i = 0; i + 1 < records.length; i += 2) nameStatus.push({ status: records[i], path: records[i + 1] })
   const manifest = nameStatus.map((entry) => entry.path)
-  if (manifest.length === 0) throw new Error(`${base} and HEAD have the same tree: nothing to review`)
+  if (manifest.length === 0) throw new Error(`${base} and ${head} have the same tree: nothing to review`)
   const numstat = out(root, ['diff', '--numstat', '-z', ...DIFF_FLAGS, baseTree, headTree, '--'])
     .split('\0')
     .filter(Boolean)
@@ -50,16 +51,17 @@ function buildContext(root, lens, base) {
     ...numstat,
   ].join('\n') + '\n'
   manifest.forEach((path, index) => {
-    const patch = withNewline(out(root, ['diff', ...DIFF_FLAGS, baseTree, headTree, '--', `:(literal)${path}`]))
+    // A deleted file's body is noise to a reviewer and can alone exceed the budget.
+    const patch = nameStatus[index].status.startsWith('D') ? 'deleted; content omitted\n' : withNewline(out(root, ['diff', ...DIFF_FLAGS, baseTree, headTree, '--', `:(literal)${path}`]))
     text += `ODD_REVIEW_PATH ${JSON.stringify({ index, path })}\n${patch}ODD_REVIEW_PATH_END ${index}\n`
   })
   if (lens === 'review-risk') text += `ODD_REVIEW_CHECKLIST_BEGIN\n${withNewline(readFileSync(CHECKLIST, 'utf8'))}ODD_REVIEW_CHECKLIST_END\n`
   text += 'ODD_REVIEW_CONTEXT_END\n'
   const bytes = Buffer.byteLength(text)
   if (bytes > MAX_CONTEXT_BYTES) {
-    throw new Error(`the review context is ${bytes} bytes, above the ${MAX_CONTEXT_BYTES} byte budget; split the change into smaller slices (commits) and review each`)
+    throw new Error(`the review context is ${bytes} bytes, above the ${MAX_CONTEXT_BYTES} byte budget; review the branch as consecutive ranges \`<a>..<b>\` (one \`Review subject: <a>..<b>\` line per range, each under the budget)`)
   }
-  return { text, subject, manifest }
+  return { text, subject, manifest, baseTree, headTree }
 }
 
 function main() {
@@ -69,17 +71,17 @@ function main() {
   const match = REVIEW_AGENT.exec(toolInput.subagent_type ?? '')
   if (!match) return
   const [agent, lens] = match
-  const base = SUBJECT_LINE.exec(toolInput.prompt)?.[1]
-  if (!base || base.startsWith('-')) {
-    deny(`${agent} needs its subject: put one line \`${FORM}\` in the prompt (the head is always HEAD), and this hook injects the evidence.`)
+  const [base, head = 'HEAD'] = SUBJECT_LINE.exec(toolInput.prompt)?.[1].split('..') ?? []
+  if (!base || base.startsWith('-') || head === '' || head.startsWith('-')) {
+    deny(`${agent} needs its subject: put one line \`${FORM}\` in the prompt (the head defaults to HEAD), and this hook injects the evidence.`)
     return
   }
   try {
     const root = repositoryRoot(input.cwd)
     git(root, ['rev-parse', '--verify', '-q', `${base}^{commit}`])
-    git(root, ['rev-parse', '--verify', '-q', 'HEAD^{commit}'])
-    const { text, subject, manifest } = buildContext(root, lens, base)
-    writePending(root, { lens, subject_hash: subject, manifest, attempts: 0, at: Date.now() })
+    git(root, ['rev-parse', '--verify', '-q', `${head}^{commit}`])
+    const { text, subject, manifest, baseTree, headTree } = buildContext(root, lens, base, head)
+    writePending(root, { lens, subject_hash: subject, base_tree: baseTree, head_tree: headTree, manifest, attempts: 0, at: Date.now() })
     decide('allow', { permissionDecisionReason: `construct: injected the review context for ${lens}`, updatedInput: { ...toolInput, prompt: text } })
   } catch (error) {
     deny(`${agent} could not be prepared: ${error.message}. Use \`${FORM}\` naming a ref that resolves in this repository, with at least one commit on HEAD.`)

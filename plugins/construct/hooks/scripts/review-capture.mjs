@@ -62,7 +62,7 @@ function main() {
   const pending = records.find((record) => record.subject_hash === parsed?.subject_hash) ?? records[records.length - 1]
   const refusal = malformed ? { code: 'malformed_result', message: malformed } : checkLensResult(parsed, { subjectHash: pending.subject_hash, manifest: pending.manifest })
   if (refusal.code === undefined) {
-    writeVerdict(root, { lens, subject_hash: pending.subject_hash, approved: refusal.approved, at: Date.now(), result: parsed })
+    writeVerdict(root, { lens, subject_hash: pending.subject_hash, base_tree: pending.base_tree, head_tree: pending.head_tree, approved: refusal.approved, at: Date.now(), result: parsed })
     clearPending(root, pending)
     return
   }

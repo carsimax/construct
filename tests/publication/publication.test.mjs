@@ -249,8 +249,8 @@ describe('the decision follows the Risk items and the verdicts', () => {
   })
 })
 
-// B1: a source ref the hook cannot read is judged as HEAD, never passed through to fail with bad_ref.
-describe('an unreadable push source is judged as HEAD', () => {
+// A published ref that does not resolve to a commit cannot be judged, so it is denied (it was judged as HEAD).
+describe('an unresolvable push source is denied', () => {
   const repo = featureRepo()
   const cases = [
     'git push -u origin "$(git branch --show-current)"',
@@ -260,17 +260,22 @@ describe('an unreadable push source is judged as HEAD', () => {
     'git push origin no-such-branch',
     'git push origin no-such-branch:feat',
   ]
-  for (const command of cases) test(`denies: ${command}`, () => denied(hook(command, repo)))
+  for (const command of cases) {
+    test(`denies: ${command}`, () => {
+      const r = hook(command, repo)
+      assert.equal(r.decision, 'deny')
+      // The unquoted view of a backtick span leaves a plain `git push origin`, judged as HEAD.
+      assert.match(r.reason, /does not resolve|review-risk/)
+    })
+  }
 
-  test('the same refs allow when HEAD is not due', () => {
-    const quiet = featureRepo('none')
-    silent(hook('git push -u origin "$(git branch --show-current)"', quiet))
-    silent(hook('git push origin no-such-branch', quiet))
+  test('a not-due branch still denies an unresolvable ref', () => {
+    assert.match(hook('git push origin no-such-branch', featureRepo('none')).reason, /does not resolve/)
   })
 
-  test('a pushed blob ref is judged as HEAD', () => {
+  test('a pushed blob ref is not a commit', () => {
     const blob = git(repo, 'rev-parse', 'HEAD:src/app.js').trim()
-    denied(hook(`git push origin ${blob}`, repo))
+    assert.match(hook(`git push origin ${blob}`, repo).reason, /does not resolve/)
   })
 })
 
@@ -280,7 +285,7 @@ describe('the hook passes what it cannot judge', () => {
     silent(hook('', '', env(), { input: 'not json' }))
     silent(hook('', '', env(), { input: '' }))
   })
-  test('a missing destination repository is not a denial when nothing is due', () => silent(hook('git push origin quiet', makeRepo({ 'src/app.js': 'export const a = 1\n' }))))
+  test('a missing destination repository is not a denial when nothing is due', () => silent(hook('git push nowhere', makeRepo({ 'src/app.js': 'export const a = 1\n' }))))
   test('a missing cwd', () => silent(hook('git push', undefined, env(), { input: JSON.stringify({ tool_name: 'Bash', tool_input: { command: 'git push' } }) })))
 })
 
@@ -403,5 +408,186 @@ describe('audit-findings T1', () => {
   test('--super-prefix and --config-env values are skipped before push', () => {
     denied(hook('git --super-prefix x push origin feat', repo))
     denied(hook('git --config-env a=B push origin feat', repo))
+  })
+})
+
+// T8 (L15): the gate judges what is published, reads every Risk number, accepts chains of approved
+// subjects, keeps rejections, denies on errors, and sees the aliases and shell heredocs.
+describe('the published refs are judged, not HEAD', () => {
+  // fromMain: feat is unreviewed with Risk 2 while main is checked out.
+  const fromMain = () => {
+    const repo = featureRepo('2')
+    git(repo, 'checkout', '-q', 'main')
+    return repo
+  }
+  const featSubject = (repo) => subjectHash(git(repo, 'rev-parse', 'main^{tree}').trim(), git(repo, 'rev-parse', 'feat^{tree}').trim())
+  const cases = [
+    'git push origin feat',
+    'git push origin feat:main',
+    'git push origin +feat:other',
+    'git push origin main feat',
+    'gh release create v1 --target feat',
+    'gh release create v1 --target=feat',
+    'gh pr create --head feat',
+    'gh pr create --head=feat',
+    'gh pr create -H someone:feat',
+    'git push --all origin',
+    'git push --mirror origin',
+    'git push --tags origin',
+  ]
+  for (const command of cases) test(`denies from main: ${command}`, () => denied(hook(command, fromMain())))
+
+  test('what is not published is not judged', () => {
+    const repo = fromMain()
+    silent(hook('git push origin main', repo))
+    silent(hook('git push', repo))
+    silent(hook('gh pr create', repo))
+    silent(hook('gh release create v1', repo))
+    silent(hook('git push origin HEAD:other', repo))
+  })
+
+  test('the pushed branch decides: approved allows, a HEAD that is due does not matter', () => {
+    const repo = fromMain()
+    approve(repo, 'review-risk', featSubject(repo))
+    silent(hook('git push origin feat', repo))
+    silent(hook('git push origin feat:main', repo))
+    silent(hook('gh pr create --head feat', repo))
+    silent(hook('gh release create v1 --target feat', repo))
+    silent(hook('git push --all origin', repo))
+  })
+
+  test('a ref that is unreviewed is denied even when another pushed ref is fine', () => {
+    denied(hook('git push origin main feat', fromMain()))
+  })
+
+  test('a release target that does not resolve is denied with the reason', () => {
+    const r = hook('gh release create v1 --target nope', fromMain())
+    assert.equal(r.decision, 'deny')
+    assert.match(r.reason, /does not resolve/)
+  })
+})
+
+describe('the Risk cell is read whole', () => {
+  const lensesOf = (risk) => hook('git push', featureRepo(risk)).reason ?? ''
+  const cells = {
+    '**2**': ['review-risk'],
+    '`2`': ['review-risk'],
+    'item 2': ['review-risk'],
+    R2: ['review-risk'],
+    '2 and 3': ['review-risk', 'review-reliability'],
+    '2;3': ['review-risk', 'review-reliability'],
+    '1–3': ['review-resilience', 'review-reliability'],
+    '3 (contract text)': ['review-reliability'],
+    '**1**, `3`': ['review-resilience', 'review-reliability'],
+  }
+  for (const [cell, lenses] of Object.entries(cells)) {
+    test(`${cell} names ${lenses.join(', ')}`, () => {
+      const reason = lensesOf(cell)
+      for (const lens of lenses) assert.match(reason, new RegExp(lens), cell)
+    })
+  }
+
+  test('none in any dress names no item', () => {
+    for (const cell of ['none', '**none**', '`None`', 'none (docs only)']) silent(hook('git push', featureRepo(cell)))
+  })
+
+  test('an unreadable cell denies, naming the document and the cell', () => {
+    for (const cell of ['tbd', 'soon', '', '7', '10']) {
+      const r = hook('git push', featureRepo(cell))
+      assert.equal(r.decision, 'deny', JSON.stringify(cell))
+      assert.match(r.reason, /odd\/tasks\/f\.md/)
+      assert.match(r.reason, /Risk cell/)
+    }
+  })
+
+  test('a Tasks table without a Risk column denies naming the document', () => {
+    const repo = makeRepo({ 'src/app.js': 'export const a = 1\n' })
+    git(repo, 'checkout', '-q', '-b', 'feat')
+    applyFiles(repo, { 'odd/tasks/f.md': '# F\n\n## Tasks\n\n| ID | Task |\n|---|---|\n| T1 | work |\n' })
+    commitAll(repo, 'doc')
+    const r = hook('git push', repo)
+    assert.equal(r.decision, 'deny')
+    assert.match(r.reason, /odd\/tasks\/f\.md/)
+    assert.match(r.reason, /Risk column/)
+  })
+})
+
+describe('a chain of approved subjects', () => {
+  // twoLinks: main, then feat with two commits (the first adds the Risk 2 document).
+  function twoLinks() {
+    const repo = featureRepo('2')
+    applyFiles(repo, { 'src/more.js': 'export const m = 1\n' })
+    commitAll(repo, 'second')
+    const tree = (ref) => git(repo, 'rev-parse', `${ref}^{tree}`).trim()
+    return { repo, a: tree('main'), b: tree('HEAD~1'), c: tree('HEAD') }
+  }
+  const link = (repo, from, to, approved = true) => writeVerdict(repo, { lens: 'review-risk', subject_hash: subjectHash(from, to), base_tree: from, head_tree: to, approved, at: Date.now(), result: {} })
+
+  test('two approved ranges allow', () => {
+    const { repo, a, b, c } = twoLinks()
+    denied(hook('git push', repo))
+    link(repo, a, b)
+    denied(hook('git push', repo))
+    link(repo, b, c)
+    silent(hook('git push', repo))
+  })
+
+  test('a chain with a rejected link denies', () => {
+    const { repo, a, b, c } = twoLinks()
+    link(repo, a, b)
+    link(repo, b, c, false)
+    denied(hook('git push', repo))
+  })
+
+  test('a gap in the chain denies', () => {
+    const { repo, b, c } = twoLinks()
+    link(repo, b, c)
+    denied(hook('git push', repo))
+  })
+
+  test('a rejection of the whole subject stands even when a chain exists', () => {
+    const { repo, a, b, c } = twoLinks()
+    link(repo, a, b)
+    link(repo, b, c)
+    link(repo, a, c, false)
+    const r = hook('git push', repo)
+    assert.equal(r.decision, 'deny')
+    assert.match(r.reason, /not approved by review-risk/)
+  })
+
+  test('a rejection is not undone by an approval of the same subject', () => {
+    const repo = featureRepo('2')
+    approve(repo, 'review-risk', subjectOf(repo), false)
+    approve(repo, 'review-risk')
+    assert.equal(readVerdicts(repo, subjectOf(repo))['review-risk'].approved, false)
+    denied(hook('git push', repo))
+  })
+})
+
+describe('errors deny, aliases and shell bodies are seen', () => {
+  test('a crash in the parser denies a command that mentions a push', () => {
+    const deep = `git push $(`.repeat(1) + '$('.repeat(30000) + ')'.repeat(30000)
+    const r = hook(deep, featureRepo('none'))
+    assert.equal(r.decision, 'deny')
+    assert.match(r.reason, /publication-gate/)
+  })
+
+  test('a crash on a command that is no publication stays silent', () => {
+    silent(hook('echo ' + '$('.repeat(30000) + ')'.repeat(30000), featureRepo('2')))
+  })
+
+  const cases = [
+    'gh pr new --title t',
+    'gh release new v1 --notes hi',
+    'bash <<EOF\ngit push\nEOF',
+    "sh <<'EOF'\ngit push origin feat\nEOF",
+    'bash <<< "git push"',
+    "cat <<EOF | bash\ngit push\nEOF",
+  ]
+  for (const command of cases) test(`denies without verdicts: ${JSON.stringify(command)}`, () => denied(hook(command, featureRepo('2'))))
+
+  test('a heredoc fed to something else is data', () => {
+    silent(hook('cat <<EOF\ngit push\nEOF', featureRepo('2')))
+    silent(hook('git commit -F - <<EOF\ngit push\nEOF', featureRepo('2')))
   })
 })

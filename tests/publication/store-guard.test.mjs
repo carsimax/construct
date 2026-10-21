@@ -59,6 +59,12 @@ describe('review-store-guard', () => {
     silent(hook('Bash', { command: 'git status' }, repo))
   })
 
+  test('the store is found whatever the case of its path', () => {
+    denied(hook('Write', { file_path: join(repo, '.git', 'CONSTRUCT-REVIEW', 'verdicts', 'x.json') }, repo))
+    denied(hook('Write', { file_path: '.git/Construct-Review/x' }, repo))
+    denied(hook('Bash', { command: 'cat .git/CONSTRUCT-REVIEW/pending/x' }, repo))
+  })
+
   test('it fails open outside a git repository, on unreadable input, and for other tools', () => {
     silent(hook('Write', { file_path: '/x/.git/construct-review/a' }, scratchDir('odd-guard-norepo-')))
     silent(hook('Write', {}, repo, 'not json'))

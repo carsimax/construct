@@ -2,7 +2,7 @@
 // records (written by review-context.mjs), one verdict record per subject and
 // lens (written only by review-capture.mjs), and the lens result validation.
 import { createHash } from 'node:crypto'
-import { readdirSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { isAbsolute, join } from 'node:path'
 import { atomicWrite, git } from './git-tree.mjs'
 
@@ -46,7 +46,43 @@ export function pendingRecords(root, lens) {
   return records.sort((a, b) => (a.at ?? 0) - (b.at ?? 0))
 }
 
-export const writeVerdict = (root, record) => atomicWrite(verdictFile(root, record.subject_hash, record.lens), `${JSON.stringify(record)}\n`)
+// A rejection stands: a later verdict for the same subject and lens never replaces it, so only a new
+// subject (a new commit) can be approved.
+export function writeVerdict(root, record) {
+  const file = verdictFile(root, record.subject_hash, record.lens)
+  if (existsSync(file) && readJson(file).approved !== true) return
+  atomicWrite(file, `${JSON.stringify(record)}\n`)
+}
+
+// approvedLinks lists the approved verdicts of a lens that know their trees: [{ base_tree, head_tree }].
+export function approvedLinks(root, lens) {
+  const links = []
+  let subjects = []
+  try {
+    subjects = readdirSync(join(storeDir(root), 'verdicts'))
+  } catch {
+    // No verdicts yet.
+  }
+  for (const subject of subjects) {
+    try {
+      const record = readJson(verdictFile(root, subject, lens))
+      if (record.approved === true && record.base_tree && record.head_tree) links.push({ base_tree: record.base_tree, head_tree: record.head_tree })
+    } catch {
+      // No record for this lens.
+    }
+  }
+  return links
+}
+
+// chainExists: do the approved links form a chain of subjects from tree `from` to tree `to`?
+// One link is the one-subject chain; equal trees need no review.
+export function chainExists(links, from, to) {
+  const reached = new Set([from])
+  for (const tree of reached) {
+    for (const link of links) if (link.base_tree === tree) reached.add(link.head_tree)
+  }
+  return reached.has(to)
+}
 
 // readVerdicts returns the verdict records of a subject, keyed by lens.
 export function readVerdicts(root, subject) {

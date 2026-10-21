@@ -23,7 +23,8 @@ function real(path) {
 function insideStore(input, store) {
   const path = input.tool_input?.file_path ?? input.tool_input?.notebook_path
   if (typeof path !== 'string' || path === '') return false
-  const rel = relative(real(store), real(resolve(input.cwd, path)))
+  // macOS volumes are case-insensitive, so `.git/CONSTRUCT-REVIEW` is the store.
+  const rel = relative(real(store).toLowerCase(), real(resolve(input.cwd, path)).toLowerCase())
   return rel === '' || (!rel.startsWith('..') && !rel.startsWith('/'))
 }
 
@@ -32,7 +33,7 @@ function main() {
   if (!input || typeof input.cwd !== 'string' || input.cwd === '' || typeof input.tool_name !== 'string') return
   const command = input.tool_input?.command
   let denied
-  if (input.tool_name === 'Bash') denied = typeof command === 'string' && command.includes('construct-review')
+  if (input.tool_name === 'Bash') denied = typeof command === 'string' && /construct-review/i.test(command)
   else if (/^(Write|Edit|MultiEdit|NotebookEdit)$/.test(input.tool_name)) {
     denied = insideStore(input, storeDir(repositoryRoot(input.cwd)))
   } else return

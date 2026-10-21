@@ -1,28 +1,35 @@
 // Publication gate (PreToolUse on Bash). Before `git push`, `gh pr create`, or
-// `gh release create` it decides from the feature documents the branch changed:
-//   - the default branch and its merge-base with HEAD come from git (origin/HEAD, origin or local
+// `gh release create` it judges every ref being published, from the feature documents the ref changed:
+//   - the refs are the push sources (`feat`, `feat:main` -> feat, `HEAD:x` -> HEAD; no refspec -> HEAD;
+//     `--all`, `--mirror`, `--tags` -> every local branch), `gh pr create --head` and
+//     `gh release create --target`, HEAD when none is named; a ref that does not resolve denies;
+//   - the default branch and its merge-base with the ref come from git (origin/HEAD, origin or local
 //     main/master; a `gh pr create --base` branch is tried first); when none resolves, deny;
-//   - the `odd/tasks/*.md` files changed in merge-base..HEAD are read at HEAD, and the integers
-//     1-6 at the start of each Risk cell of their Tasks table name the Risk items;
-//   - requiredLenses(items) (review-lenses.mjs) says which lenses must have approved the subject,
-//     the hash of the merge-base tree and the HEAD tree (review-store.mjs). None required: allow;
-//     a required lens without a verdict, or with an unapproved one: deny, naming the lenses, the
-//     `Review subject: <merge-base sha>` line, and the construct:rdd-review skill;
-//   - any error while deciding (git failure, unreadable document) denies with its reason. Outside a
-//     git repository there is nothing to publish, so the call passes.
-// The decision is about HEAD whatever the pushed refspec is: new commits change the subject, so
-// the review must run again. The hook entry sets onFailure: "block", so a crash denies as well.
+//   - the `odd/tasks/*.md` files changed in merge-base..ref are read at the ref and every integer 1-6
+//     in each Risk cell of their Tasks table names a Risk item (`none` names none; a cell that is
+//     neither, or a missing Risk column, denies);
+//   - requiredLenses(items) (review-lenses.mjs) says which lenses must have approved the subject, the
+//     hash of the merge-base tree and the ref tree, or a chain of approved subjects from one to the
+//     other (review-store.mjs). A rejected subject stays rejected. A required lens without approval:
+//     deny, naming the lenses, the `Review subject:` line, and the construct:rdd-review skill;
+//   - an error while deciding denies with its reason, including one thrown after the command was
+//     found to be a publication. Only unreadable hook input, a command that is no publication, and a
+//     directory that is no git repository pass. The hook entry sets onFailure: "block" as well.
 // Commands are found through the unwrapping shell-words.mjs does (`sh -c [--]`, `env -S`, `eval`,
-// `$(...)`, backticks, wrappers such as sudo or env), `git -C DIR`, and a preceding `cd DIR`. A
-// directory with a variable or substitution other than ~ or $HOME cannot be checked: it is denied. A dry run and a branch deletion publish no
-// work, so they are not gated.
+// `$(...)`, backticks, wrappers such as sudo or env, heredoc and here-string bodies fed to a shell),
+// `git -C DIR`, and a preceding `cd DIR`. A directory with a variable or substitution other than ~
+// or $HOME cannot be checked: it is denied. A dry run and a branch deletion publish no work, so they
+// are not gated. `gh pr new` and `gh release new` are aliases of `create`.
+// shortcut: a heuristic parser; git aliases, interpreter one-liners, xargs, variable-built commands,
+// --git-dir/GIT_DIR, a spoofed origin/HEAD, deleted or moved feature documents, and store paths
+// built indirectly are not caught. Upgrade if one of them shows up in real use.
 // Usage: node publication-gate.mjs   (hook JSON on stdin)
 import { resolve } from 'node:path'
 import { git, repositoryRoot } from './git-tree.mjs'
 import { readInput } from './hook-io.mjs'
 import { requiredLenses } from './review-lenses.mjs'
-import { readVerdicts, subjectHash } from './review-store.mjs'
-import { extractHeredocs, GIT_VALUE_FLAGS, nestedLines, splitCommands, substitutionBodies } from './shell-words.mjs'
+import { approvedLinks, chainExists, readVerdicts, subjectHash } from './review-store.mjs'
+import { extractHeredocs, GIT_VALUE_FLAGS, nestedLines, SHELLS, splitCommands, substitutionBodies } from './shell-words.mjs'
 
 const MAX_DEPTH = 4
 const PUSH_VALUE_FLAGS = new Set(['--repo', '-o', '--push-option', '--receive-pack', '--exec', '--force-with-lease-value'])
@@ -191,17 +198,23 @@ function gitPublication(args, cwd) {
   // `:dst` deletes a remote ref and publishes no work.
   const refspecs = all.filter((spec) => !spec.replace(/^\+/, '').startsWith(':'))
   if (all.length > 0 && refspecs.length === 0) return null
-  return { gate: 'pre-push', dir, remote, refspecs }
+  // The source side of each refspec is what leaves the machine.
+  const sources = refspecs.map((spec) => spec.replace(/^\+/, '').split(':')[0])
+  const refs = rest.some((a) => ['--all', '--mirror', '--tags'].includes(a)) ? 'all' : sources.length > 0 ? sources : ['HEAD']
+  return { gate: 'pre-push', dir, remote, refs }
 }
 
 function ghPublication(args, cwd) {
   let i = 0
   while (args[i]?.startsWith('-')) i += GH_VALUE_FLAGS.has(args[i]) ? 2 : 1
   const rest = args.slice(i + 2)
-  if (args[i] === 'pr' && args[i + 1] === 'create') return { gate: 'pre-pr', dir: cwd, base: optionValue(rest, '--base', '-B') }
-  if (args[i] === 'release' && args[i + 1] === 'create') {
-    return { gate: 'release', dir: cwd, tag: positionals(rest, RELEASE_VALUE_FLAGS)[0], target: optionValue(rest, '--target') }
+  const create = args[i + 1] === 'create' || args[i + 1] === 'new'
+  if (args[i] === 'pr' && create) {
+    // `--head owner:branch` names a fork's branch.
+    const head = optionValue(rest, '--head', '-H')?.replace(/^.*:/, '')
+    return { gate: 'pre-pr', dir: cwd, base: optionValue(rest, '--base', '-B'), refs: [head || 'HEAD'] }
   }
+  if (args[i] === 'release' && create) return { gate: 'release', dir: cwd, refs: [optionValue(rest, '--target') || 'HEAD'] }
   return null
 }
 
@@ -210,6 +223,13 @@ function findPublications(command, cwd, depth = 0) {
   const seen = new Map()
   for (const text of views(command)) {
     for (const pub of publicationsIn(text, cwd, depth)) seen.set(JSON.stringify(pub), pub)
+  }
+  // A heredoc body is data unless its command line runs a shell.
+  if (depth <= MAX_DEPTH) {
+    for (const { header, body } of extractHeredocs(command).bodies) {
+      if (!splitCommands(header).some((words) => SHELLS.has(nestedLines(words.filter((w) => !w.r).map((w) => w.t)).name))) continue
+      for (const pub of findPublications(body, cwd, depth + 1)) seen.set(JSON.stringify(pub), pub)
+    }
   }
   return [...seen.values()]
 }
@@ -225,6 +245,8 @@ function publicationsIn(text, cwd, depth) {
     for (const word of words) for (const body of substitutionBodies(word)) nested(body, where)
     const { name, args, lines } = nestedLines(words)
     for (const line of lines) nested(line, where)
+    // `bash <<< 'git push'`: the here-string reaches the tokenizer as a plain word.
+    if (SHELLS.has(name)) for (const arg of args) if (!arg.startsWith('-')) nested(arg, where)
     if (name === 'cd' || name === 'pushd' || name === 'popd') where = changeDir(where, name, args)
     else if (name === 'git') {
       const push = gitPublication(args, where)
@@ -249,24 +271,61 @@ function defaultBranch(root, base) {
   return candidates.find((ref) => ref && ok(root, ref)) ?? null
 }
 
-// riskItems reads the Risk column of the Tasks table: the integers 1-6 at the start of each cell, or in a comma list.
-function riskItems(markdown) {
+// riskItems reads the Risk column of the Tasks table: `none` names no item, any other cell must hold
+// an integer 1-6. An unreadable cell or a missing column throws, so the gate denies.
+function riskItems(markdown, path) {
   const items = new Set()
   let inTasks = false
   let column = -1
+  let seenHeader = false
   for (const line of markdown.split('\n')) {
     if (/^##\s/.test(line)) {
       inTasks = /^##\s+Tasks\s*$/.test(line)
       column = -1
-    } else if (inTasks && line.trim().startsWith('|')) {
+      seenHeader = false
+    } else if (inTasks && line.trim().startsWith('|') && !/^[\s|:-]+$/.test(line)) {
       const cells = line.trim().replace(/^\||\|$/g, '').split('|').map((c) => c.trim())
-      if (column < 0) column = cells.findIndex((c) => c.toLowerCase() === 'risk')
-      else if (cells[column] !== undefined) {
-        for (const n of /^\d+(?:\s*,\s*\d+)*/.exec(cells[column])?.[0].split(',') ?? []) if (Number(n) >= 1 && Number(n) <= 6) items.add(Number(n))
+      if (!seenHeader) {
+        seenHeader = true
+        column = cells.findIndex((c) => c.toLowerCase() === 'risk')
+        if (column < 0) throw new Error(`${path} has a Tasks table without a Risk column`)
+      } else {
+        const cell = cells[column] ?? ''
+        if (cell.replace(/[*`]/g, '').trim().toLowerCase().startsWith('none')) continue
+        const numbers = cell.match(/(?<!\d)[1-6](?!\d)/g)
+        if (!numbers) throw new Error(`${path} has a Risk cell that is neither "none" nor names an item 1-6: ${JSON.stringify(cell)}`)
+        for (const n of numbers) items.add(Number(n))
       }
     }
   }
   return items
+}
+
+// refVerdict judges one published ref: null when it may go, else the denial reason.
+function refVerdict(root, pub, base, ref) {
+  if (ref === '' || ref.startsWith('-') || !ok(root, ref)) {
+    return `publication-gate: ${pub.gate} is denied because the ref ${JSON.stringify(ref)} does not resolve to a commit in this repository, so its review state cannot be checked.`
+  }
+  const sha = out(root, ['rev-parse', '--verify', `${ref}^{commit}`])
+  const mergeBase = out(root, ['merge-base', base, sha])
+  const names = out(root, ['diff', '--name-only', '-z', '--diff-filter=d', mergeBase, sha, '--']).split('\0')
+  const items = new Set()
+  for (const path of names.filter((p) => /^odd\/tasks\/[^/]+\.md$/.test(p))) {
+    for (const item of riskItems(out(root, ['show', `${sha}:${path}`]), path)) items.add(item)
+  }
+  const required = requiredLenses(items)
+  if (required.length === 0) return null
+  const baseTree = out(root, ['rev-parse', `${mergeBase}^{tree}`])
+  const headTree = out(root, ['rev-parse', `${sha}^{tree}`])
+  const direct = readVerdicts(root, subjectHash(baseTree, headTree))
+  // A rejection of the whole subject stands; otherwise one approved subject or a chain of them counts.
+  const state = (lens) => (direct[lens] ? (direct[lens].approved === true ? 'ok' : 'rejected') : chainExists(approvedLinks(root, lens), baseTree, headTree) ? 'ok' : 'missing')
+  const missing = required.filter((lens) => state(lens) === 'missing')
+  const rejected = required.filter((lens) => state(lens) === 'rejected')
+  if (missing.length === 0 && rejected.length === 0) return null
+  const parts = [missing.length > 0 && `no verdict from ${missing.join(', ')}`, rejected.length > 0 && `not approved by ${rejected.join(', ')}`].filter(Boolean)
+  const subject = ref === 'HEAD' ? mergeBase : `${mergeBase}..${ref}`
+  return `publication-gate: ${pub.gate} is denied because the feature documents of ${ref} name Risk items ${[...items].sort().join(', ')} and it is not reviewed: ${parts.join('; ')}. Run the construct:rdd-review skill with the subject line \`Review subject: ${subject}\` (a branch too large for one context is reviewed as consecutive ranges \`<a>..<b>\` from ${mergeBase} to ${ref}), fix what a lens rejects, and publish again; new commits change the subject, so review after the last commit.`
 }
 
 function verdict(pub) {
@@ -279,21 +338,12 @@ function verdict(pub) {
   try {
     const base = defaultBranch(root, pub.base)
     if (!base) return 'publication-gate: the default branch cannot be resolved (no origin/HEAD, origin or local main or master), so the review state cannot be checked. Create or fetch it, then publish again.'
-    const mergeBase = out(root, ['merge-base', base, 'HEAD'])
-    const names = out(root, ['diff', '--name-only', '-z', '--diff-filter=d', mergeBase, 'HEAD', '--']).split('\0')
-    const items = new Set()
-    for (const path of names.filter((p) => /^odd\/tasks\/[^/]+\.md$/.test(p))) {
-      for (const item of riskItems(out(root, ['show', `HEAD:${path}`]))) items.add(item)
+    const refs = pub.refs === 'all' ? out(root, ['for-each-ref', '--format=%(refname)', 'refs/heads/']).split('\n').filter(Boolean) : pub.refs
+    for (const ref of refs) {
+      const reason = refVerdict(root, pub, base, ref)
+      if (reason) return reason
     }
-    const required = requiredLenses(items)
-    if (required.length === 0) return null
-    const subject = subjectHash(out(root, ['rev-parse', `${mergeBase}^{tree}`]), out(root, ['rev-parse', 'HEAD^{tree}']))
-    const verdicts = readVerdicts(root, subject)
-    const missing = required.filter((lens) => verdicts[lens] === undefined)
-    const rejected = required.filter((lens) => verdicts[lens] !== undefined && verdicts[lens].approved !== true)
-    if (missing.length === 0 && rejected.length === 0) return null
-    const parts = [missing.length > 0 && `no verdict from ${missing.join(', ')}`, rejected.length > 0 && `not approved by ${rejected.join(', ')}`].filter(Boolean)
-    return `publication-gate: ${pub.gate} is denied because the branch's feature documents name Risk items ${[...items].sort().join(', ')} and HEAD is not reviewed: ${parts.join('; ')}. Run the construct:rdd-review skill with the subject line \`Review subject: ${mergeBase}\`, fix what a lens rejects, and publish again; new commits change the subject, so review after the last commit.`
+    return null
   } catch (error) {
     return `publication-gate: the review state could not be checked (${error.message}), so this publication is denied.`
   }
@@ -301,17 +351,23 @@ function verdict(pub) {
 
 const unresolvable = (command) => `publication-gate: this publishes work from a directory the gate cannot resolve (${command}). Write the repository path literally (no variable or substitution besides ~ and $HOME), so the gate can check its review state.`
 
+const deny = (reason) => process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: reason } })}\n`)
+let publishing = false
+
 function main() {
   const input = readInput()
   if (!input || input.tool_name !== 'Bash' || typeof input.cwd !== 'string' || input.cwd === '') return
   const command = input.tool_input?.command
   if (typeof command !== 'string' || command === '') return
+  // A parser crash on text that mentions a publication cannot be told from a hidden one.
+  publishing = /\bpush\b|\b(?:pr|release)\s+(?:create|new)\b/.test(command)
   // An unresolvable directory is reported first: its reason says what to fix.
   const pubs = findPublications(command, input.cwd).sort((a, b) => (b.dir === null) - (a.dir === null))
+  publishing = publishing || pubs.length > 0
   for (const pub of pubs) {
     const reason = pub.dir === null ? unresolvable(pub.gate === 'pre-push' ? 'git push' : pub.gate === 'pre-pr' ? 'gh pr create' : 'gh release create') : verdict(pub)
     if (reason) {
-      process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: reason } })}\n`)
+      deny(reason)
       return
     }
   }
@@ -319,7 +375,7 @@ function main() {
 
 try {
   main()
-} catch {
-  // Fail open: no output, exit 0.
+} catch (error) {
+  if (publishing) deny(`publication-gate: the publication could not be checked (${error.message}), so it is denied.`)
 }
 process.exitCode = 0
