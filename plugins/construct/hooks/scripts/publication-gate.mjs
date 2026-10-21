@@ -11,7 +11,7 @@
 //                            input): the hook fails open, as the other gates do.
 // A push source containing `$` or a backtick (an unexpanded substitution or variable), or
 // one that does not resolve to a commit, is judged as HEAD.
-// Commands are found through the unwrapping command-guard uses (`sh -c [--]`, `env -S`, `eval`,
+// Commands are found through the unwrapping shell-words.mjs does (`sh -c [--]`, `env -S`, `eval`,
 // `$(...)`, backticks, wrappers such as sudo or env), `git -C DIR`, and a preceding `cd DIR`. A
 // directory with a variable or substitution other than ~ or $HOME cannot be checked: it is denied. A dry run and a branch deletion publish no
 // work, so they are not gated.
@@ -19,9 +19,8 @@
 import { spawnSync } from 'node:child_process'
 import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { extractHeredocs, nestedLines, substitutionBodies } from './command-guard.mjs'
 import { readInput } from './hook-io.mjs'
-import { GIT_VALUE_FLAGS, splitCommands } from './shell-words.mjs'
+import { extractHeredocs, GIT_VALUE_FLAGS, nestedLines, splitCommands, substitutionBodies } from './shell-words.mjs'
 
 const BIN = join(dirname(fileURLToPath(import.meta.url)), '../../bin/odd-review')
 // One deadline for every `odd-review` spawn of a hook call; the hook's own timeout is 30 s.
