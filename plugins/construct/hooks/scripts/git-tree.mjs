@@ -8,7 +8,7 @@ import { join } from 'node:path'
 
 const DEFAULT_OUTPUT_LIMIT = 64 << 20
 
-export class GitError extends Error {
+class GitError extends Error {
   constructor(message, { status = null, stderr = '' } = {}) {
     super(message)
     this.name = 'GitError'

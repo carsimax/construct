@@ -3,7 +3,7 @@
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
-import { mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, realpathSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { applyFiles, makeRepo, scratchDir } from '../helpers/repo.mjs'
 
@@ -243,5 +243,36 @@ describe('mark across repeated UserPromptSubmit', () => {
     applyFiles(repo, { 'src/a.js': 'export const a = 2\n' })
     silent(run('mark', repo, e))
     silent(check(repo, e, 'Done.'))
+  })
+})
+
+describe('audit fixes', () => {
+  test('mark prunes state older than the prune age and keeps fresh state', () => {
+    const repo = makeRepo({ 'src/a.js': 'export const a = 1\n' })
+    const e = env()
+    const dir = join(e.CLAUDE_PLUGIN_DATA, 'delivery-signals')
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(join(dir, 'old.backstop'), 'x')
+    writeFileSync(join(dir, 'fresh.backstop'), 'x')
+    const old = new Date(Date.now() - 8 * 24 * 3600 * 1000)
+    utimesSync(join(dir, 'old.backstop'), old, old)
+    silent(run('mark', repo, e))
+    assert.equal(existsSync(join(dir, 'old.backstop')), false)
+    assert.equal(existsSync(join(dir, 'fresh.backstop')), true)
+  })
+
+  test('check with a Risk line never calls git', () => {
+    const { repo, e } = changed()
+    const shim = scratchDir('odd-git-shim-')
+    const log = join(shim, 'calls')
+    writeFileSync(join(shim, 'git'), `#!/bin/sh\necho call >> "${log}"\nexit 1\n`, { mode: 0o755 })
+    const r = spawnSync('node', [SCRIPT, 'check'], {
+      input: JSON.stringify({ session_id: 's1', cwd: repo, stop_hook_active: false, last_assistant_message: 'Done.\nRisk: none' }),
+      encoding: 'utf8',
+      env: { ...process.env, ...e, PATH: `${shim}:${process.env.PATH}` },
+    })
+    assert.equal(r.status, 0)
+    assert.equal(r.stdout, '')
+    assert.equal(existsSync(log), false)
   })
 })

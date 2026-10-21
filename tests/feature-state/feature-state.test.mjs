@@ -207,3 +207,11 @@ test('the script writes nothing: the tree and mtimes stay the same', () => {
   assert.deepEqual(snapshot(), before)
   assert.equal(readFileSync(SCRIPT, 'utf8').includes('writeFile'), false)
 })
+
+test('an unescaped pipe in the task cell does not shift the status column', () => {
+  const repo = makeRepo()
+  write(repo, 'odd/tasks/pipe.md', doc({ rows: [['T1', 'use a|b', 'done'], ['T2', 'plain', 'pending']] }))
+  const text = context(run(repo))
+  assert.match(text, /T2 — plain/)
+  assert.doesNotMatch(text, /T1/)
+})
