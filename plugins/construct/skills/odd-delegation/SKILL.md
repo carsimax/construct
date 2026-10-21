@@ -18,7 +18,8 @@ Load this skill before launching any subagent for ODD work, or when deciding whe
 - A trigger holds only when its condition truly holds. When one holds, delegating is mandatory; writing code inline or continuing inline past a trigger is a routing defect.
 - Never pass these rules to child agents as permission to orchestrate. Children do not delegate.
 - Each role's model and effort come from the plugin configuration. The routing mod applies them, so prompts never choose a model.
-- Never delegate a writer without `## Allowed edit surfaces`. Never ask the human to author paths in free text.
+- Never delegate a writer without `## Allowed edit surfaces`: one bare repository-relative path or glob per line, notes under a later heading. Never ask the human to author paths in free text.
+- A writer prompt also carries `Spec: odd/tasks/<feature>.md, T<n>` while a feature document is unfinished; a `construct:odd-verify` prompt carries `Risk: item N (reason)`. The admission hook denies a launch without them.
 
 ## Decision Gates
 

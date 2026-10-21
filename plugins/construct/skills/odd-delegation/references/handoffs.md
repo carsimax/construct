@@ -4,8 +4,11 @@
 
 A bounded writer refuses to write outside its allowed edit surfaces. Deriving them is part of planning the delegation:
 
-- Use exact repository-relative paths or narrow globs, one per line. Never use `.`, a bare repository root, or an absolute path. Wrap paths that contain whitespace in backticks.
-- The section ends at the next Markdown heading, and every non-empty line inside it must be a surface entry. Put prose under a later heading.
+- The heading is exactly `## Allowed edit surfaces`. Under it, one bare repository-relative path or narrow glob per line, and nothing else: no `- path (new)` notes, no trailing comments, no prose. Never use `.`, a bare repository root, an absolute path, `..`, or a glob in the first segment (`*`, `**`). Wrap paths that contain whitespace in backticks.
+- The section ends at the next Markdown heading, and every non-empty line inside it must be a surface entry. Put notes (which paths are new, why) under a later heading such as `## Reuse`.
+- Two writers open at once need disjoint surfaces; the hook denies an overlap, and an entry it cannot interpret counts as overlapping. Wait for the first writer or split the paths.
+- A writer (`construct:odd-worker`, `construct:jd-fix-agent`) is also denied without a line `Spec: odd/tasks/<feature>.md, T<n>` naming an existing regular file (not a symlink) while an unfinished feature document exists.
+- `construct:odd-verify` is denied without a line `Risk: item N` (N 1-6); `Risk: none` does not admit it.
 - List pre-existing untracked targets the writer may write explicitly.
 - Name the directories where new files are authorized, when the task needs new files.
 - Include nothing beyond the delegated task. A surface wider than the task is the same defect as no surface.
@@ -22,10 +25,14 @@ Scope: <directories or symbols to start from>
 Return at most about 2k tokens with path:line evidence: answer, map, open questions.
 ```
 
+## General
+
+`construct:odd-general` has no hook-enforced fields: state the command or research, its bounds, and what to return.
+
 ## Worker
 
 ```markdown
-Spec: odd/tasks/<feature>.md, <task ID>, <S#...> — read the document until ## Log.
+Spec: odd/tasks/<feature>.md, T<n>, <S#...> — read the document until ## Log.
 (Without a document: the user's request, verbatim.)
 
 ## Allowed edit surfaces
@@ -49,6 +56,7 @@ Verifier strength: <strong (tests, build, typecheck): loop until it passes | wea
 ## Verifier
 
 ```markdown
+Risk: item N (reason), N from 1 to 6 as in the Risk line.
 Feature document: odd/tasks/<feature>.md (all S#).
 Baseline commit: <sha>. Candidate: <branch or sha>.
 Probe command forms: <authorized commands>.
