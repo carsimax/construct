@@ -1,6 +1,6 @@
 # Audit findings
 
-Objective: fix the 20 findings of the 2026-10-20 ponytail audit (engram `audit/2026-10-20`). Branch: `fix/audit-findings`, baseline `bfdd691` (main, 1.3.0). Test runner: `node --test tests/`; `claude plugin test plugins/construct`; `claude plugin validate --strict ./plugins/construct`.
+Objective: fix the 20 findings of the 2026-10-20 ponytail audit (engram `audit/2026-10-20`). Branch: `fix/audit-findings`, baseline `bfdd691` (main, 1.3.0). Delivery strategy: one PR; slice boundaries are the task commits (L2). Test runner: `node --test tests/`; `claude plugin test plugins/construct`; `claude plugin validate --strict ./plugins/construct`.
 
 ## Specs
 
@@ -31,13 +31,16 @@ Source for every spec: the user's "trabaja en los 20 puntos" (L1) over the audit
 
 | ID | Specs | Task | Route | Risk | Status | Commit |
 |---|---|---|---|---|---|---|
-| T1 | S1, S3, S4, S13, S14, S17/S18 guard parts | `hooks/scripts/{secret-guard,command-guard,publication-gate,write-scope,delivery-signals,test-lint,mirror-drift}.mjs`, `tests/{guard,publication,signals,mirror-drift}/**` | odd-worker, wave A | 2 | todo | |
-| T2 | S5, S6, S7, S20 store/lock, S17/S18 review parts | `lib/review/**`, `tests/review/**` | odd-worker, wave A | 4 | todo | |
-| T3 | S8, S19 hook parts, S20 pending/reminder | `hooks/scripts/{subagent-count,risk-line,review-gate,review-context,review-capture,hook-io}.mjs`, `tests/{gate,risk-line,review-hooks}/**` | odd-worker, wave A | 4 | todo | |
-| T4 | S9, S10, S11, S12, S17 assess parts | `lib/assess/**`, `tests/assess/**` | odd-worker, wave A | 3 | todo | |
-| T5 | S2, S15, S16, S17/S18 mod parts, S19 `roleByAgent` | `install.sh`, `tests/install/**`, `hooks/{register.js,panel/**,status/**}`, `hooks/scripts/feature-state.mjs`, `tests/feature-state/**`, `tests/*.test.ts` under `plugins/construct/tests/` | odd-worker, wave A | 5 | todo | |
-| T6 | docs for changed messages | `README.md`, skills text | odd-worker, wave B | none | todo | |
+| T1 | S1, S3, S4, S13, S14, S17/S18 guard parts | `hooks/scripts/{secret-guard,command-guard,publication-gate,write-scope,delivery-signals,test-lint,mirror-drift}.mjs`, `tests/{guard,publication,signals,mirror-drift}/**` | odd-worker, wave A | 2 | done | `10836a8` |
+| T2 | S5, S6, S7, S20 store/lock, S17/S18 review parts | `lib/review/**`, `tests/review/**` | odd-worker, wave A | 4 | done | `dc6a2c9` |
+| T3 | S8, S19 hook parts, S20 pending/reminder | `hooks/scripts/{subagent-count,risk-line,review-gate,review-context,review-capture,hook-io}.mjs`, `tests/{gate,risk-line,review-hooks}/**` | odd-worker, wave A | 4 | done | `c43ec6f` |
+| T4 | S9, S10, S11, S12, S17 assess parts | `lib/assess/**`, `tests/assess/**` | odd-worker, wave A | 3 | done | `94aa4e6` |
+| T5 | S2, S15, S16, S17/S18 mod parts, S19 `roleByAgent` | `install.sh`, `tests/install/**`, `hooks/{register.js,panel/**,status/**}`, `hooks/scripts/feature-state.mjs`, `tests/feature-state/**`, `tests/*.test.ts` under `plugins/construct/tests/` | odd-worker, wave A | 5 | done | `71fc25a` |
+| T6 | docs for changed messages | `README.md`, skills text | odd-worker, wave B | none | done | this commit |
 
 ## Log
 
 - **L1 (2026-10-20, user):** "trabaja en los 20 puntos"
+- **L2 (2026-10-20, progress):** Wave A in five commits: T5 `71fc25a`, T4 `94aa4e6` (RED 6 → GREEN), T3 `c43ec6f` (RED 9 → GREEN), T2 `dc6a2c9` (RED 6 → GREEN), T1 `10836a8` (RED on new guard and corpus tests → GREEN). The branch passed the ~400-line slice at T3; the user chose one PR for the previous feature, so the task commits are the review slices.
+- **L3 (2026-10-20, deviations):** S20 pending records are keyed by lens plus lineage and matched by `subject_hash`, not `agent_id`: the PreToolUse Agent input has no child id. `final_verifications` kept: `ONE_SHOT` feeds `policy_hash` of persisted receipts. S16: `owner/repo#ref` is documented (code.claude.com/docs/en/plugins/cli-reference); an already-added unpinned marketplace is left as is on rerun. S1/S3 side effects: `rm -r ~/*` is now a deny in command-guard; `ls .*` is denied; a publication-gate spawn timeout now denies.
+- **L4 (2026-10-20, docs):** T6: README, CONTRIBUTING (bump `CONSTRUCT_REF` with the tag), lifecycle.md; `STATE_DIRS` also prunes `delegation-admission`, `delivery-signals`, `mirror-drift` (RED → GREEN). `node --test tests/`: 1244 pass, 0 fail; `claude plugin test plugins/construct`: 160 pass; both validations pass.

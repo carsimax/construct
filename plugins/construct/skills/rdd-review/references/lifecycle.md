@@ -47,7 +47,7 @@ The counters `full_reviews`, `refuter_batches`, `fix_batches`, `scoped_fix_valid
 
 A `root` boundary source means no receipt and no default branch to diff against; do not review the whole history.
 
-A refusal `target_already_acknowledged` means this exact target already has a receipt; no review is needed.
+A refusal `target_already_acknowledged` means this exact target already has a sound receipt; no review is needed. A damaged or legacy receipt does not trigger it, and `acknowledge` replaces it.
 
 ## Rules
 

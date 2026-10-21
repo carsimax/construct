@@ -72,7 +72,8 @@ Many tests cross-check text against code, so a change in one place usually needs
 
 1. Bump `version` in `plugins/construct/.claude-plugin/plugin.json` in a `chore: release X.Y.Z` commit.
 2. Put the version in the pull request title, for example `feat(delegation): ... (0.3.0)`.
-3. Tag the merged release `vX.Y.Z`.
+3. Bump `CONSTRUCT_REF` in `install.sh` and the tag in its header URL together with the version.
+4. Tag the merged release `vX.Y.Z`.
 
 ## Third-party material
 
