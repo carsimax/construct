@@ -18,5 +18,7 @@ export function readRequestContext(file) {
   }
   const text = raw.toString('utf8')
   if (text.trim() === '') throw new Refusal('request_context_empty', `the request context ${file} is blank`)
+  // Patches cannot forge framing (every git diff line starts with a diff marker); raw spec text can, so a line-initial sentinel is refused.
+  if (/^ODD_REVIEW_/m.test(text)) throw new Refusal('request_context_framing', `the request context ${file} has a line starting with ODD_REVIEW_, which could forge the review framing; reword or indent that line`)
   return { text, sha256: createHash('sha256').update(raw).digest('hex') }
 }

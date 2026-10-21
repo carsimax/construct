@@ -30,8 +30,8 @@ in the worktree. Each command prints JSON that names the exact next command.
         odd-assess; it cannot be combined with --lenses. --focus LENS gives a
         medium candidate that one lens (a high one keeps all four); it cannot
         be combined with --lenses. --request-context FILE freezes the request
-        or spec text (at most 32 KiB) with its sha256 into the review; context
-        shows it to every lens before the patches
+        or spec text (at most 32 KiB, no line starting with ODD_REVIEW_) with its
+        sha256 into the review; context shows it to every lens before the patches
   context --lineage L --lens LENS [--max-bytes N]
         print the binding and evidence for one lens (also review-refuter and
         review-validator in their states); default budget ${DEFAULT_CONTEXT_BYTES} bytes
