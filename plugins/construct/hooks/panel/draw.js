@@ -74,8 +74,8 @@ export function effortMeter(effort) {
   return { on: '▮'.repeat(n), off: '▯'.repeat(4 - n) }
 }
 
-// How many file rows the changes card may show: what the other cards leave less its frame (
-// border 2, title 1 = 3 rows), at most 10. -1 when not even the frame fits (the caller drops the card),
+// How many file rows the changes card may show: what the other cards leave less its frame
+// (border 2 + title 1 = 3 rows), at most 10. -1 when not even the frame fits (the caller drops the card),
 // 0 when only the title fits.
 export const CHANGES_FRAME_ROWS = 3
 export const MAX_CHANGE_ROWS = 10
