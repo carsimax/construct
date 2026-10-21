@@ -1,0 +1,136 @@
+#!/usr/bin/env node
+// construct-memory: the command line over the per-repository memory store (S5 of odd/tasks/construct-memory.md).
+import { readFileSync } from 'node:fs'
+import { parseArgs } from 'node:util'
+import { openMemory } from '../hooks/scripts/memory-store.mjs'
+
+const USAGE = `usage: construct-memory <command> [options]
+
+  save                              JSON on stdin: title, content, type, topic_key, session_id
+  search <query> [--type T] [--limit N] [--any]
+  get <id> [--history]
+  context
+  update <id>                       JSON on stdin: title, content, type, topic_key, or find + replace
+  delete <id>
+  summary --session <id>            summary on stdin; stores it and ends the session
+  review list | review done <id>
+  help`
+
+class UsageError extends Error {}
+const fail = (message) => {
+  throw new UsageError(message)
+}
+
+function stdinJson() {
+  let value
+  try {
+    value = JSON.parse(readFileSync(0, 'utf8'))
+  } catch {
+    fail('invalid JSON on stdin')
+  }
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) fail('stdin must be a JSON object')
+  return value
+}
+
+function idArg(text) {
+  if (!/^\d+$/.test(text ?? '')) fail('an observation id (a number) is required')
+  return Number(text)
+}
+
+const oneLine = (text) => String(text).replace(/\s+/g, ' ').trim()
+
+function hit(row) {
+  const parts = [`#${row.id}`, `[${row.type}]`, oneLine(row.title)]
+  if (row.topic_key) parts.push(`(${row.topic_key})`)
+  if (row.needs_review) parts.push('needs_review')
+  return `${parts.join(' ')} - ${oneLine(row.preview)}${row.truncated ? '...' : ''}`
+}
+
+function show(row) {
+  let out = `#${row.id} [${row.type}] ${oneLine(row.title)}\n`
+  if (row.topic_key) out += `topic_key: ${row.topic_key}\n`
+  out += `created: ${row.created_at}  updated: ${row.updated_at}  revisions: ${row.revision_count}  duplicates: ${row.duplicate_count}\n`
+  if (row.session_id) out += `session: ${row.session_id}\n`
+  if (row.needs_review) out += 'needs_review: yes\n'
+  out += `\n${row.content}\n`
+  if (row.versions) {
+    out += `\n## history (${row.versions.length} earlier versions)\n`
+    for (const v of row.versions) out += `\n--- version ${v.id} (${v.created_at}) [${v.type}] ${oneLine(v.title)}\n${v.content}\n`
+  }
+  return out
+}
+
+function main(argv) {
+  const [command, ...rest] = argv
+  if (command === undefined || command === 'help' || command === '--help' || command === '-h') return `${USAGE}\n`
+  const { values, positionals } = parseArgs({
+    args: rest,
+    allowPositionals: true,
+    options: { type: { type: 'string' }, limit: { type: 'string' }, any: { type: 'boolean' }, history: { type: 'boolean' }, session: { type: 'string' } },
+  })
+  const known = ['save', 'search', 'get', 'context', 'update', 'delete', 'summary', 'review']
+  if (!known.includes(command)) fail(`unknown command: ${command} (run construct-memory help)`)
+  if (command === 'review' && !['list', 'done'].includes(positionals[0])) fail('review needs list or done <id>')
+
+  const store = openMemory(process.cwd())
+  if (!store) fail('memory is off: not inside a git repository')
+  try {
+    switch (command) {
+      case 'save': {
+        const { id, action } = store.save(stdinJson())
+        return `saved #${id} (${action})\n`
+      }
+      case 'search': {
+        const query = positionals.join(' ')
+        if (!query.trim()) fail('search needs a query')
+        const rows = store.search(query, { type: values.type, limit: values.limit, any: values.any })
+        return rows.length ? `${rows.map(hit).join('\n')}\n` : 'no memories found\n'
+      }
+      case 'get': {
+        const id = idArg(positionals[0])
+        const row = store.get(id, { history: values.history })
+        if (!row) fail(`observation #${id} not found`)
+        return show(row)
+      }
+      case 'context':
+        return store.context()
+      case 'update': {
+        const id = idArg(positionals[0])
+        const result = store.update(id, stdinJson())
+        if (!result) fail(`observation #${id} not found`)
+        return `${result.action} #${id}\n`
+      }
+      case 'delete': {
+        const id = idArg(positionals[0])
+        if (!store.remove(id)) fail(`observation #${id} not found`)
+        return `deleted #${id}\n`
+      }
+      case 'summary': {
+        if (!values.session) fail('summary needs --session <id>')
+        const summary = readFileSync(0, 'utf8')
+        if (!summary.trim()) fail('summary content is required on stdin')
+        store.endSession(values.session, summary)
+        return `summary saved, session ${values.session} ended\n`
+      }
+      case 'review': {
+        if (positionals[0] === 'list') {
+          const rows = store.needingReview()
+          return rows.length ? `${rows.map(hit).join('\n')}\n` : 'nothing to review\n'
+        }
+        const id = idArg(positionals[1])
+        if (!store.markReviewed(id)) fail(`observation #${id} not found`)
+        return `reviewed #${id}\n`
+      }
+    }
+  } finally {
+    store.close()
+  }
+}
+
+try {
+  process.stdout.write(main(process.argv.slice(2)))
+} catch (error) {
+  // parseArgs errors (unknown option) and store errors (missing title, newer schema) all end here.
+  process.stderr.write(`construct-memory: ${oneLine(error.message)}\n`)
+  process.exitCode = 1
+}
