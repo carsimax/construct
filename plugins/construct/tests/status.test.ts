@@ -1,5 +1,5 @@
 import { expect, test } from 'claude-code/testing'
-import { parseAssess, parseBoundary, parseGitStatus, parseMode, parseNumstat, parseRevParse, reviewState } from '../hooks/status/data.js'
+import { parseGitStatus, parseNumstat, parseRevParse } from '../hooks/status/data.js'
 
 // ---- fixtures ----------------------------------------------------------
 
@@ -24,9 +24,6 @@ const TASKS = [
 
 const entry = (name: string, mtimeMs = 1) => ({ name, kind: 'file', size: 1, mtimeMs, isLink: false })
 const ok = (stdout: string) => ({ exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false })
-
-const assessJson = (risk: string, reason: string, due: boolean, consumed = false) =>
-  JSON.stringify({ schema: 'x', risk, reasons: [{ code: 'sink' }], candidate: { kind: 'k', consumed }, review_due: due, review_due_reason: reason })
 
 // Registers stubs for everything the panel reads. `o` overrides pieces; a function
 // for `process` answers each argv, and `fail` makes every call reject.
@@ -57,12 +54,6 @@ function world($, on, o: any = {}) {
       return value(ok('# branch.oid abc1234\n# branch.head main\n# branch.upstream origin/main\n# branch.ab +2 -1\n1 .M N... 1 1 1 a b f\n? new\n'))
     }
     if (a[0] === 'git' && a.includes('rev-parse')) return value(ok('/home/me/proj\n.git\n.git\n'))
-    if (a.includes('mode')) return value(ok(JSON.stringify({ mode: o.mode ?? 'on', source: 'default' })))
-    if (a.includes('boundary')) return value(ok(JSON.stringify({ commit: 'deadbeef', source: o.boundarySource ?? 'merge-base' })))
-    if (a.some((x: string) => x.endsWith('odd-assess'))) {
-      const committed = a.includes('--base-ref')
-      return value(ok(committed ? (o.committed ?? assessJson('passive', 'passive', false)) : (o.dirty ?? assessJson('passive', 'passive', false))))
-    }
     return value({ ...ok(''), exitCode: 1 })
   })
   return seen
@@ -75,7 +66,7 @@ async function drawBand($, on, o: any = {}) {
   const seen = world($, on, o)
   await $.session.start({ cwd: '/home/me/proj', source: 'startup' })
   const ui = await $.ui.mount({ plugin: 'construct', surface: 'terminal', component: 'Pane', requestId: 'construct', props: PANE })
-  for (let i = 0; i < 40 && !(await leaves(ui)).some((l) => l.text.includes('ODD') || l.text.includes('clear')); i++) {
+  for (let i = 0; i < 40 && !(await leaves(ui)).some((l) => l.text.includes('ODD')); i++) {
     await ui.redraw()
     await new Promise((r) => setTimeout(r, 5))
   }
@@ -102,28 +93,13 @@ const under = async (ui, key: string) => (await leaves(ui)).filter((l) => l.key 
 
 // ---- pure helpers --------------------------------------------------------
 
-test('parsers read git, rev-parse, mode, boundary and assess output', async () => {
+test('parsers read git and rev-parse output', async () => {
   const git = parseGitStatus('# branch.oid abc1234deadbeef\n# branch.head main\n# branch.upstream o/main\n# branch.ab +2 -1\n1 .M x\n? y\n')
   expect(git).toEqual({ branch: 'main', dirty: 2, ahead: 2, behind: 1, untracked: ['y'] })
   expect(parseGitStatus('# branch.oid abc1234deadbeef\n# branch.head (detached)\n').branch).toBe('abc1234')
   expect(parseGitStatus('')).toBe(null)
   expect(parseRevParse('/r\n/r/.git/worktrees/w\n/r/.git\n')).toEqual({ root: '/r' })
   expect(parseRevParse('/r\n.git\n.git\n')).toEqual({ root: '/r' })
-  expect(parseMode('{"mode":"off","source":"clone"}')).toBe('off')
-  expect(parseMode('garbage')).toBe(null)
-  expect(parseBoundary('{"commit":"c","source":"receipt"}')).toEqual({ commit: 'c', source: 'receipt' })
-  expect(parseBoundary('{"commit":1}')).toBe(null)
-  expect(parseAssess(assessJson('high', 'high_risk', true))).toEqual({ due: true, consumed: false, unassessable: false })
-  expect(parseAssess(assessJson('high', 'already_reviewed', false, true))).toEqual({ due: false, consumed: true, unassessable: false })
-  expect(parseAssess('{"review_due":true,"reasons":[{"code":"unassessable"}]}')).toEqual({ due: false, consumed: false, unassessable: true })
-  expect(parseAssess('nope')).toBe(null)
-})
-
-test('reviewState: due beats reviewed, reviewed beats clear', async () => {
-  expect(reviewState([{ due: true, consumed: false }, { due: false, consumed: true }])).toBe('review due')
-  expect(reviewState([{ due: false, consumed: true }, { due: false, consumed: false }])).toBe('reviewed')
-  expect(reviewState([{ due: false, consumed: false }])).toBe('clear')
-  expect(reviewState([])).toBe(null)
 })
 
 // ---- mounted panel --------------------------------------------------------
@@ -137,7 +113,7 @@ test('the panel shows the same cards with or without a statusLine', async ($, on
   expect(text).toContain('Opus 4')
   expect(text).toContain('ODD · feat')
   expect(text).toContain('T2')
-  expect(text).toContain('clear')
+  expect(text).not.toContain('REVIEW')
   expect(text).toContain('ctx')
   expect(text).toContain('40%')
   expect(text).not.toContain('~/proj')
@@ -176,7 +152,7 @@ for (const [pct, color] of [[49, 'claude'], [79, 'claude'], [80, 'error']] as co
 const THEME_KEYS = new Set(['claude', 'text', 'inverseText', 'inactive', 'subtle', 'suggestion', 'permission', 'remember', 'success', 'error', 'warning', 'merged', 'promptBorder', 'planMode', 'autoAccept', 'bashBorder', 'ide', 'fastMode'])
 
 test('every color the panel draws is a theme key, so it follows the active theme', async ($, on) => {
-  const { ui } = await drawBand($, on, { committed: assessJson('high', 'high_risk', true) })
+  const { ui } = await drawBand($, on)
   const colors = (await leaves(ui)).map((l) => l.props.color).filter(Boolean)
   expect(colors.length).toBeDefined()
   for (const color of colors) expect(THEME_KEYS.has(color)).toBe(true)
@@ -200,44 +176,7 @@ test('a segment whose data is missing is omitted', async ($, on) => {
   expect(text).not.toContain('↻')
 })
 
-test('review due is drawn when the committed range classifies high and is not consumed', async ($, on) => {
-  const { ui, seen } = await drawBand($, on, { committed: assessJson('high', 'high_risk', true) })
-  expect(await joined(ui)).toContain('review due')
-  const committed = seen.find((a) => a.includes('--base-ref'))
-  expect(committed).toContain('deadbeef')
-  expect(committed).toContain('--committed-only')
-})
-
-test('review due is drawn for uncommitted high-risk changes', async ($, on) => {
-  const { ui } = await drawBand($, on, { dirty: assessJson('high', 'high_risk', true) })
-  expect(await joined(ui)).toContain('review due')
-})
-
-test('a clear range reads clear', async ($, on) => {
-  const { ui } = await drawBand($, on, {})
-  expect(await joined(ui)).toContain('clear')
-  expect(await joined(ui)).not.toContain('review due')
-})
-
-test('a consumed range reads reviewed', async ($, on) => {
-  const { ui } = await drawBand($, on, { committed: assessJson('high', 'already_reviewed', false, true) })
-  expect(await joined(ui)).toContain('reviewed')
-})
-
-test('a root-source boundary is not assessed', async ($, on) => {
-  const { ui, seen } = await drawBand($, on, { boundarySource: 'root', committed: assessJson('high', 'high_risk', true) })
-  expect(seen.some((a) => a.includes('--base-ref'))).toBe(false)
-  expect(await joined(ui)).not.toContain('review due')
-})
-
-test('with the RDD switch off the line says so and nothing is assessed', async ($, on) => {
-  const { ui, seen } = await drawBand($, on, { mode: 'off', dirty: assessJson('high', 'high_risk', true) })
-  expect(await joined(ui)).not.toContain('REVIEW')
-  expect(await joined(ui)).not.toContain('review due')
-  expect(seen.some((a) => a.some((x) => x.endsWith('odd-assess')))).toBe(false)
-})
-
-test('a failing process draws no git or RDD segments and does not throw', async ($, on) => {
+test('a failing process draws no git segments and does not throw', async ($, on) => {
   const { ui } = await drawBand($, on, { fail: true, usage: { startedAt: 0, context: { window: 1, percent: 12 }, rateLimits: [] } })
   expect(await joined(ui)).toContain('ctx')
   const text = await joined(ui)
@@ -258,7 +197,7 @@ test('with a native statusLine and a failing process nothing extra is drawn', as
   for (const w of ['ODD ·', 'REVIEW', 'GATE', 'agents ·']) expect(text).not.toContain(w)
 })
 
-test('the CLIs are not run on render, only on session.start and turn.complete', async ($, on) => {
+test('the probes are not run on render, only on session.start and turn.complete', async ($, on) => {
   const { ui, seen } = await drawBand($, on, {})
   const after = seen.length
   expect(after).toBeGreaterThan(0)

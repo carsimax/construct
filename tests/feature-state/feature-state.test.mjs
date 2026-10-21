@@ -4,7 +4,7 @@ import { spawnSync } from 'node:child_process'
 import { mkdirSync, readFileSync, readdirSync, utimesSync } from 'node:fs'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { makeRepo, scratchDir, write } from '../assess/helpers.mjs'
+import { makeRepo, scratchDir, write } from '../helpers/repo.mjs'
 
 const SCRIPT = new URL('../../plugins/construct/hooks/scripts/feature-state.mjs', import.meta.url).pathname
 const HOOKS = new URL('../../plugins/construct/hooks/hooks.json', import.meta.url).pathname

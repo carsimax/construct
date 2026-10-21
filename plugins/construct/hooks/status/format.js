@@ -11,5 +11,3 @@ export function text(content, { color, dim, bold } = {}) {
   if (bold) props.bold = true
   return { type: 'Text', props, children: [content] }
 }
-
-export const STATE_COLOR = { 'review due': 'error', reviewed: 'success', clear: undefined }

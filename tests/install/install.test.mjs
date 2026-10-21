@@ -7,7 +7,7 @@ import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { scratchDir } from '../assess/helpers.mjs'
+import { scratchDir } from '../helpers/repo.mjs'
 
 const INSTALLER = new URL('../../install.sh', import.meta.url).pathname
 

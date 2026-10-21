@@ -279,58 +279,6 @@
       ],
       "default": "medium"
     },
-    "model_review_refuter": {
-      "type": "string",
-      "title": "RDD Refuter model",
-      "description": "Model the review-refuter agent runs on",
-      "options": [
-        "haiku",
-        "sonnet",
-        "opus",
-        "fable"
-      ],
-      "default": "opus"
-    },
-    "effort_review_refuter": {
-      "type": "string",
-      "title": "RDD Refuter effort",
-      "description": "Effort level for the review-refuter agent; default keeps the model's own level",
-      "options": [
-        "default",
-        "low",
-        "medium",
-        "high",
-        "xhigh",
-        "max"
-      ],
-      "default": "medium"
-    },
-    "model_review_validator": {
-      "type": "string",
-      "title": "RDD Validator model",
-      "description": "Model the review-validator agent runs on",
-      "options": [
-        "haiku",
-        "sonnet",
-        "opus",
-        "fable"
-      ],
-      "default": "opus"
-    },
-    "effort_review_validator": {
-      "type": "string",
-      "title": "RDD Validator effort",
-      "description": "Effort level for the review-validator agent; default keeps the model's own level",
-      "options": [
-        "default",
-        "low",
-        "medium",
-        "high",
-        "xhigh",
-        "max"
-      ],
-      "default": "medium"
-    },
     "model_odd_general": {
       "type": "string",
       "title": "General delegation model",

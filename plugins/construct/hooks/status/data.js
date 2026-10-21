@@ -1,13 +1,4 @@
-// Pure parsers for the command output the band reads, and the review-state reduction.
-
-function json(text) {
-  try {
-    const value = JSON.parse(text)
-    return value && typeof value === 'object' && !Array.isArray(value) ? value : null
-  } catch {
-    return null
-  }
-}
+// Pure parsers for the command output the band reads.
 
 // A git path as plain text: C-style quotes undone (quotes and backslashes; octal escapes stay as
 // written) and control characters dropped, so a path cannot move the cursor or inject escapes.
@@ -70,36 +61,4 @@ export function parseRevParse(text) {
   if (typeof text !== 'string') return null
   const root = text.split('\n')[0].trim()
   return root ? { root } : null
-}
-
-export function parseMode(text) {
-  const mode = json(text)?.mode
-  return mode === 'on' || mode === 'off' ? mode : null
-}
-
-export function parseBoundary(text) {
-  const value = json(text)
-  return typeof value?.commit === 'string' && typeof value?.source === 'string' ? { commit: value.commit, source: value.source } : null
-}
-
-// One odd-assess result. An empty candidate is clear, not a failure; any other
-// `unassessable` result is unknown and the caller leaves it out.
-export function parseAssess(text) {
-  const value = json(text)
-  if (!value) return null
-  const failure = Array.isArray(value.reasons) ? value.reasons.find((r) => r?.code === 'unassessable') : undefined
-  if (failure) {
-    const empty = typeof failure.detail === 'string' && /no pending changes/.test(failure.detail)
-    return { due: false, consumed: false, unassessable: !empty }
-  }
-  const consumed = value.candidate?.consumed === true || value.review_due_reason === 'already_reviewed'
-  return { due: value.review_due === true && !consumed, consumed, unassessable: false }
-}
-
-// Reduces the assessed candidates: due beats reviewed, reviewed beats clear; null when none is known.
-export function reviewState(results) {
-  const known = results.filter((r) => r && !r.unassessable)
-  if (known.length === 0) return null
-  if (known.some((r) => r.due)) return 'review due'
-  return known.some((r) => r.consumed) ? 'reviewed' : 'clear'
 }

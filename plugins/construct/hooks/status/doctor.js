@@ -1,7 +1,6 @@
 // Pure checks behind `/construct doctor` (S8). Each takes the raw output of one probe (a string, or null when
 // the probe failed or timed out) and returns a row `{ ok, label, hint }`. No `$` calls here: register.js runs
 // the probes.
-import { parseMode } from './data.js'
 
 export const MIN_CLAUDE = '2.1.304'
 export const MIN_NODE = 20
@@ -42,22 +41,6 @@ export function checkEngram(enabledPlugins) {
 // `present` is whether `<root>/.codegraph` exists; null when the root or the probe is unknown.
 export function checkCodegraph(present) {
   return { ok: present === true, label: 'CodeGraph index (.codegraph/) at the project root', hint: 'run `codegraph init -i` in the project root' }
-}
-
-// `odd-review mode status` must succeed and parse.
-export function checkReviewCli(text) {
-  return { ok: parseMode(text) !== null, label: 'odd-review runnable', hint: 'check that node is on the PATH and the plugin install is intact' }
-}
-
-// `odd-assess --help` must exit 0 (any output, even empty).
-export function checkAssessCli(text) {
-  return { ok: typeof text === 'string', label: 'odd-assess runnable', hint: 'check that node is on the PATH and the plugin install is intact' }
-}
-
-// Info: the RDD mode. An unreadable mode is the only failure.
-export function checkMode(text) {
-  const mode = parseMode(text)
-  return { ok: mode !== null, label: `RDD mode: ${mode ?? 'unknown'}`, hint: 'could not read it; check odd-review' }
 }
 
 export function formatReport(rows) {

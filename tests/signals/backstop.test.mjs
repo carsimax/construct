@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { appendFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, test } from 'node:test'
-import { scratchDir } from '../review/helpers.mjs'
+import { scratchDir } from '../helpers/repo.mjs'
 import { featureRepo, hook, lines } from './helpers.mjs'
 
 const row = (tokens, model = 'claude-opus-4-7') =>

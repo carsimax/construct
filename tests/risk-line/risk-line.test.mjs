@@ -50,7 +50,6 @@ describe('registration', () => {
       hooks[event].flatMap((group) => group.hooks).find((hook) => hook.args?.[0] === script && hook.args[1] === mode)
     assert.equal(entry('UserPromptSubmit', 'mark').command, 'node')
     assert.equal(entry('Stop', 'check').command, 'node')
-    assert.ok(hooks.Stop.flatMap((group) => group.hooks).some((hook) => hook.args?.[0].endsWith('review-gate.mjs')))
   })
 })
 

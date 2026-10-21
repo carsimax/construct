@@ -6,7 +6,7 @@ import { spawnSync } from 'node:child_process'
 import { mkdirSync, readdirSync, readFileSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, test } from 'node:test'
-import { makeRepo, scratchDir, write } from '../assess/helpers.mjs'
+import { makeRepo, scratchDir, write } from '../helpers/repo.mjs'
 
 const PLUGIN = new URL('../../plugins/construct/', import.meta.url).pathname
 const SCRIPT = join(PLUGIN, 'hooks/scripts/delegation-admission.mjs')

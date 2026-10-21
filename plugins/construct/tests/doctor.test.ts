@@ -1,5 +1,5 @@
 import { expect, test } from 'claude-code/testing'
-import { checkAssessCli, checkClaude, checkCodegraph, checkEngram, checkMode, checkNode, checkReviewCli, formatReport } from '../hooks/status/doctor.js'
+import { checkClaude, checkCodegraph, checkEngram, checkNode, formatReport } from '../hooks/status/doctor.js'
 
 // Pure checks behind /construct doctor (S8).
 
@@ -39,22 +39,6 @@ test('the CodeGraph index must exist', () => {
   expect(checkCodegraph(true).ok).toBe(true)
   expect(checkCodegraph(false).ok).toBe(false)
   expect(checkCodegraph(null).ok).toBe(false)
-})
-
-test('the plugin CLIs must run', () => {
-  expect(checkReviewCli(JSON.stringify({ mode: 'off' })).ok).toBe(true)
-  expect(checkReviewCli('garbage').ok).toBe(false)
-  expect(checkReviewCli(null).ok).toBe(false)
-  expect(checkAssessCli('usage').ok).toBe(true)
-  expect(checkAssessCli('').ok).toBe(true)
-  expect(checkAssessCli(null).ok).toBe(false)
-})
-
-test('the RDD mode is reported as on, off, or unknown', () => {
-  expect(checkMode(JSON.stringify({ mode: 'on' }))).toMatchObject({ ok: true, label: 'RDD mode: on' })
-  expect(checkMode(JSON.stringify({ mode: 'off' }))).toMatchObject({ ok: true, label: 'RDD mode: off' })
-  expect(checkMode('garbage')).toMatchObject({ ok: false, label: 'RDD mode: unknown' })
-  expect(checkMode(null).ok).toBe(false)
 })
 
 test('the report has one line per check', () => {

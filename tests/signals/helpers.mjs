@@ -1,6 +1,6 @@
 // Shared by the S7 signal tests: the real delivery-signals hook driven with PostToolUse JSON.
 import { spawnSync } from 'node:child_process'
-import { applyFiles, commitAll, git, makeRepo, scratchDir } from '../review/helpers.mjs'
+import { applyFiles, commitAll, git, makeRepo, scratchDir } from '../helpers/repo.mjs'
 
 export const PLUGIN = new URL('../../plugins/construct/', import.meta.url).pathname
 export const SCRIPT = `${PLUGIN}hooks/scripts/delivery-signals.mjs`

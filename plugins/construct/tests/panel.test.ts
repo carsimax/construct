@@ -39,11 +39,6 @@ function world($, on, o: any = {}) {
     if (a[0] === 'git' && a.includes('--no-index')) return value(o.untrackedCount ? { ...ok(o.untrackedCount), exitCode: 1 } : { ...ok(''), exitCode: 128 })
     if (a[0] === 'git' && a.includes('--numstat')) return value(ok(o.numstat ?? ''))
     if (a[0] === 'git' && a.includes('rev-parse')) return value(ok('/home/me/proj\n.git\n.git\n'))
-    if (a.includes('mode')) return value(ok(JSON.stringify({ mode: 'on', source: 'default' })))
-    if (a.includes('boundary')) return value(ok(JSON.stringify({ commit: 'deadbeef', source: 'root' })))
-    if (a.some((x: string) => x.endsWith('odd-assess'))) {
-      return value(ok(JSON.stringify({ schema: 'x', risk: 'passive', reasons: [], candidate: { kind: 'k', consumed: false }, review_due: false, review_due_reason: 'passive' })))
-    }
     return value({ ...ok(''), exitCode: 1 })
   })
   on('ui.render', () => ({ type: 'Box', props: {}, children: [] }))
@@ -121,9 +116,6 @@ test('/construct doctor returns a report even when every process fails', { optio
   expect(text).toContain('✗ Node')
   expect(text).toContain('✗ engram@engram plugin enabled')
   expect(text).toContain('✗ CodeGraph index')
-  expect(text).toContain('✗ odd-review runnable')
-  expect(text).toContain('✗ odd-assess runnable')
-  expect(text).toContain('✗ RDD mode: unknown')
   expect(await isUp($)).toBe(false)
 })
 
@@ -140,13 +132,11 @@ test('/construct doctor reports a healthy setup', { options: { panel_open_on_sta
   const run = (a: string[]) => {
     if (a[0] === 'git') return ok('/home/me/proj\n.git\n.git\n')
     if (a[1] === '--version') return ok('v22.1.0\n')
-    if (a.includes('mode')) return ok(JSON.stringify({ mode: 'off', source: 'default' }))
     return ok('usage')
   }
   await start($, on, { run, settings: { enabledPlugins: { 'engram@engram': true } }, exists: true, version: '2.1.400' })
   const text = String((await $.command.run({ command: 'construct', args: 'doctor' }))?.text ?? '')
   expect(text).not.toContain('✗')
-  expect(text).toContain('✓ RDD mode: off')
 })
 
 test('the Pane draws the panel for the construct pane id', async ($, on) => {
