@@ -22,6 +22,7 @@ import {
   onTurnComplete,
   onTurnStart,
   onTurnStep,
+  phaseOf,
 } from '../hooks/panel/state.js'
 
 const USAGE = { input_tokens: 10, output_tokens: 5, cache_read_input_tokens: 200, cache_creation_input_tokens: 30, model: 'm' }
@@ -459,4 +460,32 @@ test('onBlocked sets and onUnblocked clears the flag, both idempotent and leavin
   expect(c).toEqual(s)
   expect(onUnblocked(s)).toEqual(s)
   expect(isBlocked(null as any)).toBe(false)
+})
+
+// ---- phaseOf (S5) ----
+
+const phaseFor = (...types: string[]) => phaseOf(types.reduce((s: any, t, i) => spawn(s, `p${i}`, { subagentType: t }), initialState()))
+
+test('phaseOf maps the running roles to a phase', () => {
+  expect(phaseFor('construct:odd-verify')).toBe('verifying')
+  expect(phaseFor('construct:review-risk')).toBe('reviewing')
+  expect(phaseFor('construct:jd-judge-a')).toBe('reviewing')
+  expect(phaseFor('construct:odd-worker')).toBe('implementing')
+  expect(phaseFor('construct:jd-fix-agent')).toBe('implementing')
+  expect(phaseFor('construct:odd-explorer')).toBe('exploring')
+  expect(phaseFor('general-purpose')).toBe('working')
+})
+
+test('phaseOf picks verifying > reviewing > implementing > exploring > working', () => {
+  expect(phaseFor('general-purpose', 'construct:odd-explorer')).toBe('exploring')
+  expect(phaseFor('construct:odd-explorer', 'construct:odd-worker')).toBe('implementing')
+  expect(phaseFor('construct:odd-worker', 'construct:review-risk')).toBe('reviewing')
+  expect(phaseFor('construct:review-risk', 'construct:odd-verify', 'construct:odd-worker')).toBe('verifying')
+})
+
+test('phaseOf is null with no agents or only done agents, and ignores odd input', () => {
+  expect(phaseOf(initialState())).toBe(null)
+  const done = onTurnComplete(spawn(initialState(), 'a'), { agentId: 'a', nowMs: 2 })
+  expect(phaseOf(done)).toBe(null)
+  expect(phaseOf(null as any)).toBe(null)
 })

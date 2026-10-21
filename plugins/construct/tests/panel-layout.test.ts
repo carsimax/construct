@@ -153,7 +153,9 @@ test('main card shows without usage or replica, and is busy while a turn is open
   expect(rows.some((r) => r.startsWith('ctx'))).toBe(false)
   expect(rows.some((r) => r.startsWith('effort ▯▯▯▯ —'))).toBe(true)
   const busy = { ...full(), turn: { turnId: 't' } }
-  expect(rowsOf({ panel: busy }).some((r) => r === 'Opus 5.5 ● busy')).toBe(true)
+  expect(rowsOf({ panel: busy }).some((r) => r === 'Opus 5.5 ● implementing')).toBe(true)
+  expect(rowsOf({ panel: { ...busy, agents: [] } }).some((r) => r === 'Opus 5.5 ● busy')).toBe(true)
+  expect(rowsOf({ panel: { ...busy, agents: [agent({ status: 'done', endedMs: NOW })] } })[0]).toBe('Opus 5.5 ● busy')
 })
 
 test('a high ctx is flagged in the error color', async () => {
@@ -448,4 +450,11 @@ test('blocked: the main card status reads blocked in place of busy or idle, with
 test('not blocked: the status is unchanged', async () => {
   expect(rowsOf({ panel: { ...full(), blocked: false } })[0]).toBe(rowsOf()[0])
   expect(rowsOf()[0]).not.toContain('blocked')
+})
+
+test('phase: the busy status names the running agents phase, and blocked wins', async () => {
+  const verifying = { ...full(), turn: { turnId: 't' }, agents: [agent(), agent({ id: 'v', role: 'odd_verify' })] }
+  expect(rowsOf({ panel: verifying })[0]).toBe('Opus 5.5 ● verifying')
+  expect(rowsOf({ panel: { ...verifying, blocked: true } })[0]).toBe('Opus 5.5 ◆ blocked')
+  expect(rowsOf({ panel: { ...full(), blocked: false } })[0]).toBe('Opus 5.5 ○ idle')
 })

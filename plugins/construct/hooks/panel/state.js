@@ -315,6 +315,28 @@ export function agentsView(state, nowMs, max = 3) {
   return { cards, rest: ordered.length - cards.length, running: running.length }
 }
 
+// `odd_worker` / `construct:odd-worker` -> `worker`, `review_risk` -> `review-risk`; an agent with no
+// construct role keeps its subagent type.
+export function shortName(a) {
+  const raw = String(a.role ?? a.type ?? 'agent')
+  const name = raw.replace(/^construct:/, '').replace(/^odd[_-]/, '').replaceAll('_', '-')
+  return name === '' ? 'agent' : name
+}
+
+// The ODD phase the running agents imply (S5); null with none running. The most advanced phase wins.
+const PHASES = [
+  ['verifying', (n) => n === 'verify'],
+  ['reviewing', (n) => n.startsWith('review-') || n.startsWith('jd-') && n !== 'jd-fix-agent'],
+  ['implementing', (n) => n === 'worker' || n === 'jd-fix-agent'],
+  ['exploring', (n) => n === 'explorer'],
+]
+export function phaseOf(state) {
+  const agents = isObj(state) && Array.isArray(state.agents) ? state.agents.filter((a) => isObj(a) && a.status === 'running') : []
+  if (agents.length === 0) return null
+  const names = agents.map(shortName)
+  return PHASES.find(([, is]) => names.some(is))?.[0] ?? 'working'
+}
+
 // ---- tools: inline writes (S3) -------------------------------------------
 
 // A finished tool call. `path` is the file it targets (filePathOf), `cwd` the project root.

@@ -46,7 +46,7 @@
 // No `$` calls live here, so these run (and test) in isolation. The wiring passes the panel state
 // (hooks/panel/state.js), the session usage, a clock and the Pane's `bodyColumns` / `scroll.bodyRows`.
 
-import { agentsView, mainBusy, maskSecrets } from './state.js'
+import { agentsView, mainBusy, maskSecrets, phaseOf, shortName } from './state.js'
 import { PALETTE, card, changeRows, effortMeter, fmtResetIn, gauge, stackBar } from './draw.js'
 import { STATE_COLOR, text } from '../status/format.js'
 
@@ -126,7 +126,7 @@ function limitPiece(label, pct, resetsAt, nowMs) {
   return [dim(`${label} `), text(g.on, { color: pct >= 80 ? PALETTE.warn : PALETTE.main }), faint(g.off), dim(` ${Math.round(pct)}%${left ? ` ↻${left}` : ''}`)]
 }
 
-function mainCard({ main, usage, model, busy, blocked, compactions, branch, width, nowMs }) {
+function mainCard({ main, usage, model, busy, phase, blocked, compactions, branch, width, nowMs }) {
   const effort = main?.effort ?? null
   const meter = effortMeter(effort)
   const ctx = usage?.context
@@ -164,7 +164,7 @@ function mainCard({ main, usage, model, busy, blocked, compactions, branch, widt
   return card({
     title: model,
     // Waiting on the human outranks busy and idle: one indicator, no extra row (S8b).
-    status: blocked ? { text: '◆ blocked', color: PALETTE.amber } : busy ? '● busy' : { text: '○ idle', color: PALETTE.dim },
+    status: blocked ? { text: '◆ blocked', color: PALETTE.amber } : busy ? `● ${phase ?? 'busy'}` : { text: '○ idle', color: PALETTE.dim },
     color: PALETTE.main,
     children: rows.filter(Boolean),
     width,
@@ -280,14 +280,6 @@ function gateCard({ gate, inline, mode, width }) {
 
 const AGENT_MARK = { running: ['◐', PALETTE.agent], done: ['✓', PALETTE.gate], failed: ['✗', PALETTE.warn] }
 const MAX_NAME = 18
-
-// `odd_worker` / `construct:odd-worker` -> `worker`, `review_risk` -> `review-risk`; an agent with no
-// construct role keeps its subagent type.
-function shortName(a) {
-  const raw = String(a.role ?? a.type ?? 'agent')
-  const name = raw.replace(/^construct:/, '').replace(/^odd[_-]/, '').replaceAll('_', '-')
-  return name === '' ? 'agent' : name
-}
 
 // A clock: static text, `—` when the start is unknown.
 function clockPiece(since, endAt, color, nowMs) {
@@ -405,6 +397,7 @@ export function buildPanel({ panel, usage, odd, rdd, nowMs, columns, rows, model
   const state = panel ?? {}
   const width = isNum(columns) && columns > 0 ? Math.max(MIN_COLUMNS, Math.floor(columns)) : PANEL_COLUMNS
   const busy = mainBusy(state)
+  const phase = phaseOf(state)
   const main = { ...state.main, effort: state.main?.effort ?? effort ?? null }
   const name = prettyModel(state.main?.model ?? model)
 
@@ -413,7 +406,7 @@ export function buildPanel({ panel, usage, odd, rdd, nowMs, columns, rows, model
     if (el) children.push(el)
     return Boolean(el)
   }
-  push(mainCard({ main, usage, model: name, busy, blocked: state.blocked === true, compactions: state.compactions ?? 0, branch: git?.branch, width, nowMs }))
+  push(mainCard({ main, usage, model: name, busy, phase, blocked: state.blocked === true, compactions: state.compactions ?? 0, branch: git?.branch, width, nowMs }))
   push(oddCard(odd, width))
   push(reviewCard(rdd, width))
   push(gateCard({ gate: state.gate, inline: state.inline, mode: state.main?.mode, width }))
