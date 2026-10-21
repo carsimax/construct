@@ -56,6 +56,9 @@ describe('A3: wrappers hide nothing', () => {
   for (const c of ['timeout -k 2 5 git status', 'env -S "git status"', "bash -c -- 'git status'", 'nice -n 5 ls', 'git status \\\n-s', 'env -u A ls']) {
     test(`stays allowed: ${c}`, () => assert.equal(verdict(c), 'allow'))
   }
+  test('env -S with a non-command payload stays allowed (data, not a command)', () => {
+    assert.equal(verdict('env -S "echo git reset --hard"'), 'allow')
+  })
   test('headIndex skips wrapper flags, their values, and the timeout duration', () => {
     assert.equal(headIndex(['timeout', '-k', '2', '--foreground', '5', 'git']), 5)
     assert.equal(headIndex(['nice', '-n', '5', 'git']), 3)

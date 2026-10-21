@@ -152,11 +152,15 @@ export function validateGate({ root, gate, baseRef, headRef, tag }) {
   }
   if (assessment.changedPaths === 0 || publicRisk(assessment.level) !== 'high') return done('not_due', range)
 
-  // A receipt that records its base_commit covers the range only when that base is the start
-  // or an ancestor of it; one reviewing a later part (A..B) of an unreviewed range does not.
-  // A receipt without base_commit (a working-tree review) is judged by its tree alone.
+  // A receipt covers the range only from what it reviewed. One that records its base_commit
+  // covers it when that base is the start or an ancestor of it; one reviewing a later part
+  // (A..B) of an unreviewed range does not. A working-tree review has no base_commit and records
+  // the HEAD tree it started from as base_tree: it covers only when that is the tree at the start,
+  // so it never hides an unreviewed commit before the reviewed changes. A receipt with neither
+  // (legacy) covers nothing.
+  const startTree = baseTree
   const reachesStart = (receipt) => {
-    if (typeof receipt.base_commit !== 'string') return true
+    if (typeof receipt.base_commit !== 'string') return typeof receipt.base_tree === 'string' && receipt.base_tree === startTree
     const from = commitOf(root, receipt.base_commit)
     return from !== null && isAncestor(root, from, start)
   }

