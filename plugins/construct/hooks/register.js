@@ -20,6 +20,7 @@ import {
   onTurnStep,
   onUnblocked,
 } from './panel/state.js'
+import { checkAssessCli, checkClaude, checkCodegraph, checkEngram, checkMode, checkNode, checkReviewCli, formatReport } from './status/doctor.js'
 import { activeWork } from './status/tasks.js'
 import { parseAssess, parseBoundary, parseGitStatus, parseMode, parseNumstat, parseRevParse, reviewState } from './status/data.js'
 
@@ -60,15 +61,6 @@ async function nowMs($) {
     return await $.clock.now()
   } catch {
     return Date.now()
-  }
-}
-
-async function costUsd($) {
-  try {
-    const usd = (await $.session.usage())?.cost?.usd
-    return typeof usd === 'number' ? usd : undefined
-  } catch {
-    return undefined
   }
 }
 
@@ -233,41 +225,11 @@ async function readLive($) {
   return live
 }
 
-// The engine reads a Client's `module` off this file's source, as a string literal relative to it, so the
-// Client elements are made here (`els.Client`) from the placeholders layout.js leaves ({ type: 'Client',
-// props.module './rail.tsx' | './elapsed.tsx' }). A Client may not sit inside a Text, so a row that holds
-// one becomes a row Box. Only reached when the surface has Client.
-function realize(node, els) {
-  if (!node || typeof node === 'string') return node
-  if (node.type === 'Client') {
-    const { module, ...rest } = node.props ?? {}
-    if (module === './rail.tsx') return els.Client({ ...rest, module: './panel/rail.tsx' })
-    if (module === './elapsed.tsx') return els.Client({ ...rest, module: './panel/elapsed.tsx' })
-    return node
-  }
-  if (!Array.isArray(node.children)) return node
-  const children = node.children.map((k) => realize(k, els))
-  const hasClient = node.type === 'Text' && node.children.some((k) => k?.type === 'Client')
-  return hasClient ? { type: 'Box', props: { flexDirection: 'row' }, children } : { ...node, children }
-}
-
-// The surfaces whose element table declares `Client` (index.d.ts, Elements).
-const CLIENT_SURFACES = ['terminal', 'desktop']
-
 // The docked panel body, drawn only for this plugin's pane (its requestId is the pane id).
 async function drawPane($, e, next) {
   const data = status.data
   if (e.requestId !== PANEL_ID) return next(e)
   const live = await readLive($)
-  let els = null
-  try {
-    // $.ui.resolve completes a table to every element name (index.d.ts, ElementName), so a `Client` key
-    // proves nothing; the surface's own table does (Elements: terminal and desktop declare Client,
-    // vscode and mobile do not). e.surface is what the client declared, a rendering fact.
-    if (CLIENT_SURFACES.includes(e.surface)) els = $.ui.resolve(e)
-  } catch {
-    // no element table: draw static
-  }
   const panel = merge(await read($, PANEL))
   const tree = buildPanel({
     panel,
@@ -279,20 +241,48 @@ async function drawPane($, e, next) {
     odd: data?.odd ?? null,
     rdd: data?.rdd ?? null,
     nowMs: live.nowMs,
-    client: els !== null,
     columns: e.props?.bodyColumns,
     rows: e.props?.scroll?.bodyRows,
   })
-  return tree ? (els ? realize(tree, els) : tree) : next(e)
+  return tree ?? next(e)
 }
 
 async function openPane($) {
   return $.ui.open({ id: PANEL_ID, title: 'Construct', columns: PANEL_COLUMNS })
 }
 
-// /construct opens the pane, /construct close closes it.
+// Runs one doctor probe; a failure or a timeout is null, never a throw.
+async function probe(read) {
+  try {
+    return (await read()) ?? null
+  } catch {
+    return null
+  }
+}
+
+// /construct doctor (S8): every probe runs in parallel with a 3 s timeout (GIT_MS), so the report comes back
+// well inside the hook budget. The checks themselves are pure, in status/doctor.js.
+async function runDoctor($) {
+  const cwd = await probe(() => $.session.cwd())
+  const rev = parseRevParse(await probe(() => runText($, ['git', 'rev-parse', '--show-toplevel', '--git-dir', '--git-common-dir'], cwd ?? undefined, GIT_MS)))
+  const root = rev?.root ?? cwd
+  const cli = (name) => `${$.plugin.root}/bin/${name}`
+  const cliArgs = root ? ['--cwd', root] : []
+  const [version, node, plugins, codegraph, review, assess] = await Promise.all([
+    probe(async () => (await $.session.version()).version),
+    probe(() => runText($, ['node', '--version'], cwd ?? undefined, GIT_MS)),
+    probe(() => $.settings.read({ key: 'enabledPlugins' })),
+    probe(() => (root ? $.fs.exists(`${root}/.codegraph`) : null)),
+    probe(() => runText($, ['node', cli('odd-review'), ...cliArgs, 'mode', 'status'], root ?? undefined, GIT_MS)),
+    probe(() => runText($, ['node', cli('odd-assess'), '--help'], root ?? undefined, GIT_MS)),
+  ])
+  return formatReport([checkClaude(version), checkNode(node), checkEngram(plugins), checkCodegraph(codegraph), checkReviewCli(review), checkAssessCli(assess), checkMode(review)])
+}
+
+// /construct opens the pane, /construct close closes it, /construct doctor reports the setup.
 async function runCommand($, e) {
   const arg = String(e.args ?? '').trim().toLowerCase()
+  if (arg === 'doctor') return { text: await runDoctor($) }
   if (arg === 'close') {
     await $.ui.close({ id: PANEL_ID })
     return { text: 'Construct panel closed.' }
@@ -347,21 +337,19 @@ export function register(on, options) {
     if (e.agentId === undefined) void refresh($)
     try {
       const at = await nowMs($)
-      const cost = e.agentId === undefined ? await costUsd($) : undefined
-      await feed($, (s) => onTurnComplete(onUnblocked(s), { agentId: e.agentId, turnId: e.turnId, nowMs: at, cost }))
+      await feed($, (s) => onTurnComplete(onUnblocked(s), { agentId: e.agentId, turnId: e.turnId, nowMs: at }))
     } catch {
       // observe only
     }
     return result
   }).catch(($, e, next) => next(e))
 
-  // A turn began: a main turn opens the receipt, a subagent's runs again.
+  // A turn began: a main turn marks the panel busy, a subagent's runs again.
   on('turn.start', async ($, e, next) => {
     const result = await next(e)
     try {
       const at = await nowMs($)
-      const cost = e.agentId === undefined ? await costUsd($) : undefined
-      await feed($, (s) => onTurnStart(onUnblocked(s), { agentId: e.agentId, turnId: e.turnId, nowMs: at, cost }))
+      await feed($, (s) => onTurnStart(onUnblocked(s), { agentId: e.agentId, turnId: e.turnId, nowMs: at }))
     } catch {
       // observe only
     }
@@ -429,7 +417,7 @@ async function noteSpawn($, e, result, role, options) {
 // Registers /construct and, when the user asked for it, opens the pane. Detached from session.start.
 async function setUpPanel($, options) {
   try {
-    await $.command.register({ name: 'construct', description: 'Open the Construct panel (close: /construct close)', argumentHint: '[close]' })
+    await $.command.register({ name: 'construct', description: 'Open the Construct panel (close: /construct close, setup check: /construct doctor)', argumentHint: '[close|doctor]' })
   } catch {
     // the command stays unavailable
   }

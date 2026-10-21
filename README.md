@@ -1,7 +1,7 @@
 # Construct
 
 [![Claude Code](https://img.shields.io/badge/Claude_Code-2.1.304%2B-blue)](#requirements)
-[![Plugin version](https://img.shields.io/badge/version-1.2.0-informational)](plugins/construct/.claude-plugin/plugin.json)
+[![Plugin version](https://img.shields.io/badge/version-1.3.0-informational)](plugins/construct/.claude-plugin/plugin.json)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 Construct is a Claude Code plugin that makes every request follow Organic Driven Development (ODD): authorize, explore, size, track, implement test-first, and close with evidence and a Risk line.
@@ -13,7 +13,7 @@ Construct is a Claude Code plugin that makes every request follow Organic Driven
 - **Skills.** Procedures that load on demand: workflow, delegation, task sizing, debugging, quality bar, migrations, branches and pull requests, and more.
 - **Receipt-driven review.** `odd-assess` classifies risk and `odd-review` runs a bounded outside review of high-risk changes, with your consent.
 - **Secret guard.** A hook that denies reads and writes of credentials and destructive commands, including under `bypassPermissions`.
-- **Status panel.** A docked panel with the model, context, cost, plan limits, active feature, review state, permission gate, agents, and changes. Open it with `/construct`.
+- **Status panel.** A docked panel with the model, context, plan limits, active feature, review state, permission gate, agents, and changes. Open it with `/construct`.
 - **Output style.** The `Principal Engineer` output style.
 
 Memory comes from the separate `engram@engram` plugin, which Construct depends on.
@@ -32,7 +32,7 @@ Memory comes from the separate `engram@engram` plugin, which Construct depends o
 ### One command
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v1.2.0/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v1.3.0/install.sh | bash
 ```
 
 The installer checks the requirements above and stops before changing anything if one is missing, or if `~/.claude` or `~/.claude/settings.json` is not writable, or if `settings.json` is a directory. Then it runs the manual steps below for you:
@@ -52,7 +52,7 @@ Every step is skipped when it is already done, so running the installer again ch
 Pass options after `bash -s --`, for example `curl -fsSL <url> | bash -s -- --no-mcp`. To read the script before running it:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v1.2.0/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v1.3.0/install.sh -o install.sh
 less install.sh
 bash install.sh
 ```
@@ -398,26 +398,24 @@ The ODD feature documents (`odd/tasks/<f>.md`) are mirrored into engram so a lat
 
 The mod draws one thing: a docked **panel** (a `Pane` with id `construct`) laid out as [claude-flightdeck](https://github.com/scasella/claude-flightdeck) cards and adapted to the ODD flow: one column at any width, no header or legend, `round` bordered cards, the bold title on the left and the status on the right. The band above the prompt is not drawn. It needs Claude Code 2.1.304 or later and does not appear in `claude -p` runs, which draw no interface.
 
-**Commands and opening.** `/construct` opens the panel and `/construct close` closes it. The panel opens at every session start; to turn that off, set the plugin option `panel_open_on_start` (boolean, default `true`) to `false`.
+**Commands and opening.** `/construct` opens the panel, `/construct close` closes it, and `/construct doctor` prints a setup report instead: one line per check, `✓ label` or `✗ label — hint`, for Claude Code 2.1.304 or later, Node 20 or later, the `engram@engram` plugin enabled (read from the merged `enabledPlugins` setting), a CodeGraph index (`.codegraph/`) at the project root, `odd-review` and `odd-assess` runnable, and the RDD mode (on or off). The checks run in parallel with a 3 s timeout each, and a failed check shows as `✗` and never throws. The panel opens at every session start; to turn that off, set the plugin option `panel_open_on_start` (boolean, default `true`) to `false`.
 
 **Width.** The panel asks for 66 columns when it opens (`columns: 66` on `ui.open`). That is a request, not a guarantee: a width you drag or keep wins, and the layout reads the real width (never below 40). Rows that do not fit are clipped, and the changes card keeps only the file rows that fit the pane height.
 
-**Colors.** All colors are theme keys, so the panel follows the active theme.
+**Colors.** The text colors are theme keys, so they follow the active theme, while the panel background is fixed: it draws on pure black (`#000000`) whatever the terminal theme.
 
-**The panel, top to bottom.** A card with nothing to show takes no room.
+**The panel, top to bottom.** Every section is a card of the same width (round border, bold title on the left, status on the right); the borders separate the sections. A card with nothing to show takes no room.
 
-1. **main card** (always drawn, with or without a `statusLine`): `<Model>` (no suffix) and idle, busy, or `◆ blocked` (warning color) while Claude waits on you: a `tool.check` verdict of `ask` on a real call (the permission prompt), or a `tool.call` on `AskUserQuestion` or `ExitPlanMode` while it is open; the next settled `tool.call`, `turn.start` or `turn.complete` clears it, and the idle "waiting for your input" state never sets it (it is the one indicator, with no extra row; the mod's `classic.*` hooks are bypassed by a higher-tier module, so none is used); the current git branch (`⎇ <branch>`, hidden without one); the effort meter (`▮▯`), the permission mode (from the main thread's spawns), and the main request count; the context gauge with tokens used and window; the session cost; the 5-hour and 7-day gauges (`▰▱`) with the time to each reset (`↻3h10m`, `↻4d2h`), omitted when the figure is missing, for example off a subscription.
-2. **rail**: a connector between cards, animated while the main thread is busy on terminals that can draw `Client` elements, a static line otherwise.
-3. **ODD card** (only with an active feature): the feature (newest `odd/tasks/*.md` with an unfinished task, the rule of `feature-state.mjs`), the current task, one checkpoint per task (done filled, current highlighted) and the open count.
-4. **REVIEW card** (only when RDD is on): the state `review due`, `reviewed` or `clear` (a `root` boundary is not assessed).
-5. **GATE card**: a stacked bar of permission verdicts, allowed / asked (`you`, or `classifier` in `auto` mode) / pending / denied counts, `file`, `shell` and `other` bucket counts, the last denied tool with credential-like values masked, and the inline-write alert (a main-thread `Edit`, `Write`, `MultiEdit` or `NotebookEdit` outside `odd/tasks/`: the count and last path, error color). It only observes and never blocks.
-6. **agents**: `agents · N running · M total`, one row per subagent (up to 6) with a status mark, its construct role (else the subagent type), a timeline bar placed on the session's time span and its duration; running clocks tick live where `Client` is available.
-7. **last turn card**: duration of the running or last main-thread turn, agents, edits, errors and the cost added.
-8. **changes card** (only with something to show): round card titled with the branch, `↑N` (commits to push) and `↓N` (commits to pull) on the right, each shown only when above 0. One row per changed file, biggest change first: the path (long paths keep their basename: `…/dir/name`) and `+added` / `-removed` lines (`bin` for a binary file). Changes are the working tree against `HEAD`, staged and unstaged; an untracked file shows `+lines` (counted for the first 20 untracked files) or `new` when it is a directory, past the first 20, or not countable. Rows fit the pane height; when some are cut the last row is `+N more`. The card is hidden when the repository is clean and in sync.
+1. **main card** (always drawn, with or without a `statusLine`): `<Model>` (no suffix) and idle, busy (named by the ODD phase of the running agents: `● verifying`, `● reviewing`, `● implementing`, `● exploring`, `● working`; plain `● busy` with none running), or `◆ blocked` (warning color) while Claude waits on you: a `tool.check` verdict of `ask` on a real call (the permission prompt), or a `tool.call` on `AskUserQuestion` or `ExitPlanMode` while it is open; the next settled `tool.call`, `turn.start` or `turn.complete` clears it, and the idle "waiting for your input" state never sets it (it is the one indicator, with no extra row; the mod's `classic.*` hooks are bypassed by a higher-tier module, so none is used); the current git branch (`⎇ <branch>`, hidden without one); the effort meter (`▮▯`), the permission mode (from the main thread's spawns), and the main request count; the context gauge with tokens used and window; the 5-hour and 7-day gauges (`▰▱`) with the time to each reset (`↻3h10m`, `↻4d2h`), omitted when the figure is missing, for example off a subscription.
+2. **ODD card** (only with an active feature): the feature (newest `odd/tasks/*.md` with an unfinished task, the rule of `feature-state.mjs`), the current task, one checkpoint per task (done filled, current highlighted) and the open count.
+3. **REVIEW card** (only when RDD is on): the state `review due`, `reviewed` or `clear` (a `root` boundary is not assessed).
+4. **GATE card**: a stacked bar of permission verdicts, allowed / asked (`you`, or `classifier` in `auto` mode) / pending / denied counts, `file`, `shell` and `other` bucket counts, the last denied tool with credential-like values masked, and the inline-write alert (a main-thread `Edit`, `Write`, `MultiEdit` or `NotebookEdit` outside `odd/tasks/`: the count and last path, error color). It only observes and never blocks.
+5. **agents card**: titled `agents`, with `N running · M total` on the right, one row per subagent (up to 6, then `+N earlier`): a status mark, a short name (the construct role without the `odd_` prefix, as in `worker` or `review-risk`; the subagent type when there is no construct role), the routed model with its effort meter (for example `Sonnet 5.5 ▮▮▮▯`), and the elapsed time as static text.
+6. **changes card** (only with something to show): round card titled with the branch, `↑N` (commits to push) and `↓N` (commits to pull) on the right, each shown only when above 0. One row per changed file, biggest change first: the path (long paths keep their basename: `…/dir/name`) and `+added` / `-removed` lines (`bin` for a binary file). Changes are the working tree against `HEAD`, staged and unstaged; an untracked file shows `+lines` (counted for the first 20 untracked files) or `new` when it is a directory, past the first 20, or not countable. Rows fit the pane height; when some are cut the last row is `+N more`. The card is hidden when the repository is clean and in sync.
 
-**Refresh and fail-open.** Git (status, `diff --numstat HEAD` and a line count per untracked file), `odd-review`, `odd-assess`, and the feature documents are read only on `session.start` and after each main-thread `turn.complete`, in the background with a timeout, never on a redraw. Context, cost and the plan limits are read from the session usage on each redraw. The panel's own state is kept in a versioned `atom` fed from engine events (`agent.spawn`, `turn.start`, `turn.step`, `tool.call`, `tool.check`, `turn.complete`, and `session.compact`); the panel redraws on those events, not per token. These hooks only observe: each passes its event on unchanged and swallows its own failures, and the model and effort routing is untouched. Any error leaves out the affected card and never blocks or delays a turn.
+**Refresh and fail-open.** Git (status, `diff --numstat HEAD` and a line count per untracked file), `odd-review`, `odd-assess`, and the feature documents are read only on `session.start` and after each main-thread `turn.complete`, in the background with a timeout, never on a redraw. Context and the plan limits are read from the session usage on each redraw. Nothing is animated: the agents' elapsed times are static text computed at each redraw, which happens on the events below, not on a timer. The panel's own state is kept in a versioned `atom` fed from engine events (`agent.spawn`, `turn.start`, `turn.step`, `tool.call`, `tool.check`, `turn.complete`, and `session.compact`); the panel redraws on those events, not per token. These hooks only observe: each passes its event on unchanged and swallows its own failures, and the model and effort routing is untouched. Any error leaves out the affected card and never blocks or delays a turn.
 
-**Credit.** The drawing code (gauges, effort meter, timeline geometry, the animated rail and the elapsed clock) is adapted from [claude-flightdeck](https://github.com/scasella/claude-flightdeck) by Stephen Casella, MIT License. The copyright and permission notice are in [`plugins/construct/LICENSE-flightdeck`](plugins/construct/LICENSE-flightdeck) and at the top of each adapted file.
+**Credit.** The drawing code (gauges, effort meter, and the card layout) is adapted from [claude-flightdeck](https://github.com/scasella/claude-flightdeck) by Stephen Casella, MIT License. The copyright and permission notice are in [`plugins/construct/LICENSE-flightdeck`](plugins/construct/LICENSE-flightdeck) and at the top of each adapted file.
 
 ### Layout
 
@@ -444,7 +442,7 @@ Setup, checks, and pull request rules are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Status
 
-Current version: 1.2.0 (`plugins/construct/.claude-plugin/plugin.json`); it adds the deterministic gentle parity: destructive-command tiers, delegation admission and write scope, the publication gate and review transaction limits, delivery signals, and the mirror drift gate. Releases are tagged `vX.Y.Z`.
+Current version: 1.3.0 (`plugins/construct/.claude-plugin/plugin.json`); the panel drops the cost, the last turn card and the animations, the agents card shows short names and the routed model, the main card names the ODD phase, `/construct doctor` is new, and the panel draws on pure black. Releases are tagged `vX.Y.Z`.
 
 Upgrading from 1.1.0:
 

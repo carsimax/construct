@@ -166,8 +166,8 @@ test('the main card draws ctx, 5h and 7d from the session usage, and no dir, git
   })
   const text = await joined(ui)
   expect(text).toMatch(/ODD · feat.*T2/)
-  for (const w of ['ctx', '12%', '120k/1.0M', '$3.50', '5h', '30%', '7d', '60%', 'Opus 4']) expect(text).toContain(w)
-  for (const w of ['~/proj', '±2', 'construct:Principal Engineer', 'Explanatory']) expect(text).not.toContain(w)
+  for (const w of ['ctx', '12%', '120k/1.0M', '5h', '30%', '7d', '60%', 'Opus 4']) expect(text).toContain(w)
+  for (const w of ['$3.50', '~/proj', '±2', 'construct:Principal Engineer', 'Explanatory']) expect(text).not.toContain(w)
   expect(text.indexOf('ODD · feat')).toBeGreaterThan(text.indexOf('ctx'))
 })
 

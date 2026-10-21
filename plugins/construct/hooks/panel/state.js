@@ -30,7 +30,7 @@
 // Pure state for the Construct panel: one reducer per engine event the panel
 // observes, plus selectors. No `$` calls live here and nothing throws on odd
 // input, so these run (and test) in isolation. The wiring passes plain data
-// (ids, usage, a clock, a cost number); every reducer returns a new state.
+// (ids, usage, a clock); every reducer returns a new state.
 //
 // Stored shape (SCHEMA_VERSION 3; version 3 dropped the session log, S9 as rewritten by L14):
 //   v            schema version
@@ -41,8 +41,8 @@
 //                cells: last 60 of 'allowed' | 'asked' | 'denied' | 'sub'
 //                counts: { allowed, asked, denied, sub } totals, never capped
 //                lastDenied: { tool, detail } | null, detail masked and short
-//   receipt      { turnId, startedMs, endedMs, agents, edits, errors, costStart, cost } | null (S5)
-//                endedMs null while the turn runs; cost is the cost added, null if unknown
+//   turn         { turnId } while a main turn runs (a stored turn that still has startedMs reads as is), else null (the busy flag; a stored `receipt` from
+//                the last turn card is dropped on read)
 //   compactions  session.compact count
 //   main         { steps, model, effort, mode }  main-thread vitals (S3): steps counts main requests
 //                (turn.step without agentId, index.d.ts:14328-14354), model and effort are the latest
@@ -87,7 +87,7 @@ export function initialState() {
       buckets: zeroBuckets(),
       pending: {},
     },
-    receipt: null,
+    turn: null,
     compactions: 0,
     main: { steps: 0, model: null, effort: null, mode: null },
     blocked: false,
@@ -104,13 +104,13 @@ const str = (x) => (typeof x === 'string' && x !== '' ? x : null)
 export function merge(stored) {
   const base = initialState()
   if (!isObj(stored) || (stored.v !== SCHEMA_VERSION && stored.v !== 2 && stored.v !== 1)) return base
-  const { agents, inline, gate, receipt, compactions, main, blocked } = stored
+  const { agents, inline, gate, turn, compactions, main, blocked } = stored
   if (agents !== undefined && !Array.isArray(agents)) return base
   if (inline !== undefined && !isObj(inline)) return base
   if (gate !== undefined && !isObj(gate)) return base
   if (gate?.cells !== undefined && !Array.isArray(gate.cells)) return base
   if (gate?.counts !== undefined && !isObj(gate.counts)) return base
-  if (receipt !== undefined && receipt !== null && !isObj(receipt)) return base
+  if (turn !== undefined && turn !== null && !isObj(turn)) return base
   if (gate?.verdicts !== undefined && !isObj(gate.verdicts)) return base
   if (gate?.buckets !== undefined && !isObj(gate.buckets)) return base
   if (compactions !== undefined && !isNum(compactions)) return base
@@ -130,7 +130,7 @@ export function merge(stored) {
         Object.keys(base.gate.buckets).map((k) => [k, { ...base.gate.buckets[k], ...(isObj(buckets[k]) ? buckets[k] : {}) }]),
       ),
     },
-    receipt: receipt ?? null,
+    turn: turn ?? null,
     compactions: compactions ?? 0,
     main: { ...base.main, ...main },
     blocked: blocked === true,
@@ -213,9 +213,9 @@ export function onPermissionMode(state, e) {
   return mode && mode !== s.main.mode ? { ...s, main: { ...s.main, mode } } : s
 }
 
-// Busy while a main turn's receipt is open.
+// Busy while a main turn is open.
 export function mainBusy(state) {
-  return isObj(state) && isObj(state.receipt) && state.receipt.endedMs === null
+  return isObj(state) && isObj(state.turn)
 }
 
 // ---- blocked (S8b) --------------------------------------------------------
@@ -245,9 +245,6 @@ const patchAgent = (state, id, fn) => {
   return { ...state, agents: state.agents.map((a) => (a.id === id ? fn(a) : a)) }
 }
 
-const openReceipt = (state, fn) =>
-  state.receipt && state.receipt.endedMs === null ? { ...state, receipt: fn(state.receipt) } : state
-
 // A subagent started: add its card (role from the construct agent name, else the subagent type).
 export function onAgentSpawn(state, e) {
   const s = merge(state)
@@ -268,7 +265,7 @@ export function onAgentSpawn(state, e) {
     status: 'running',
   }
   const agents = [...s.agents.filter((a) => a.id !== id), card].slice(-MAX_AGENTS)
-  return openReceipt({ ...s, agents }, (r) => ({ ...r, agents: r.agents + 1 }))
+  return { ...s, agents }
 }
 
 // One request of a subagent: count the step, ctx is the request's whole input.
@@ -283,25 +280,15 @@ export function onTurnStep(state, e) {
   return patchAgent(s, id, (a) => ({ ...a, steps: a.steps + 1, ctx: ctx ?? a.ctx }))
 }
 
-// A turn began: a subagent runs again, a main turn opens a new receipt.
+// A turn began: a subagent runs again, a main turn marks the panel busy.
 export function onTurnStart(state, e) {
   const s = merge(state)
   const id = str(e?.agentId)
   if (id) return patchAgent(s, id, (a) => ({ ...a, status: 'running', endedMs: null }))
-  const receipt = {
-    turnId: str(e?.turnId),
-    startedMs: isNum(e?.nowMs) ? e.nowMs : 0,
-    endedMs: null,
-    agents: 0,
-    edits: 0,
-    errors: 0,
-    costStart: isNum(e?.cost) ? e.cost : null,
-    cost: null,
-  }
-  return { ...s, receipt }
+  return { ...s, turn: { turnId: str(e?.turnId) } }
 }
 
-// A turn ended: a subagent is done, the main receipt closes with the cost it added.
+// A turn ended: a subagent is done, the main turn stops being busy.
 export function onTurnComplete(state, e) {
   const s = merge(state)
   const nowMs = isNum(e?.nowMs) ? e.nowMs : 0
@@ -310,12 +297,8 @@ export function onTurnComplete(state, e) {
     return patchAgent(s, id, (x) => ({ ...x, status: 'done', endedMs: nowMs }))
   }
   const turnId = str(e?.turnId)
-  if (turnId && s.receipt?.turnId && s.receipt.turnId !== turnId) return s
-  return openReceipt(s, (r) => ({
-    ...r,
-    endedMs: nowMs,
-    cost: isNum(e?.cost) && isNum(r.costStart) ? Math.max(0, e.cost - r.costStart) : null,
-  }))
+  if (turnId && s.turn?.turnId && s.turn.turnId !== turnId) return s
+  return s.turn ? { ...s, turn: null } : s
 }
 
 // Up to `max` cards, running first then the most recent, and how many are left out.
@@ -332,15 +315,35 @@ export function agentsView(state, nowMs, max = 3) {
   return { cards, rest: ordered.length - cards.length, running: running.length }
 }
 
-// ---- tools: inline writes (S3) and receipt edits/errors (S5) -------------
+// `odd_worker` / `construct:odd-worker` -> `worker`, `review_risk` -> `review-risk`; an agent with no
+// construct role keeps its subagent type.
+export function shortName(a) {
+  const raw = String(a.role ?? a.type ?? 'agent')
+  const name = raw.replace(/^construct:/, '').replace(/^odd[_-]/, '').replaceAll('_', '-')
+  return name === '' ? 'agent' : name
+}
+
+// The ODD phase the running agents imply (S5); null with none running. The most advanced phase wins.
+const PHASES = [
+  ['verifying', (n) => n === 'verify'],
+  ['reviewing', (n) => n.startsWith('review-') || n.startsWith('jd-') && n !== 'jd-fix-agent'],
+  ['implementing', (n) => n === 'worker' || n === 'jd-fix-agent'],
+  ['exploring', (n) => n === 'explorer'],
+]
+export function phaseOf(state) {
+  const agents = isObj(state) && Array.isArray(state.agents) ? state.agents.filter((a) => isObj(a) && a.status === 'running') : []
+  if (agents.length === 0) return null
+  const names = agents.map(shortName)
+  return PHASES.find(([, is]) => names.some(is))?.[0] ?? 'working'
+}
+
+// ---- tools: inline writes (S3) -------------------------------------------
 
 // A finished tool call. `path` is the file it targets (filePathOf), `cwd` the project root.
 export function onToolCall(state, e) {
   let s = merge(state)
   const tool = str(e?.tool)
   const isWrite = tool !== null && WRITE_TOOLS.includes(tool)
-  if (isWrite) s = openReceipt(s, (r) => ({ ...r, edits: r.edits + 1 }))
-  if (e?.isError === true) s = openReceipt(s, (r) => ({ ...r, errors: r.errors + 1 }))
   const path = str(e?.path)
   if (isWrite && !str(e?.agentId) && path && isOutsideTasks(path, e?.cwd)) {
     s = { ...s, inline: { count: s.inline.count + 1, last: path } }

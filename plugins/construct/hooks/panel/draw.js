@@ -23,10 +23,9 @@
 // SOFTWARE.
 
 // Pure drawing primitives for the Construct panel: gauges, the effort meter, the
-// agent timeline geometry, the changes row clamp and the bordered card. They return
-// strings, numbers and plain element objects ({ type, props, children }, as
-// layout.js and hooks/status/format.js build them), so they run and test without
-// `$`. The rail and the elapsed clock are Client modules next to this file.
+// changes row clamp and the bordered card. They return strings, numbers and plain
+// element objects ({ type, props, children }, as layout.js and hooks/status/format.js
+// build them), so they run and test without `$`.
 //
 // Colors are theme keys only. Flightdeck's "theme" palette maps onto ours as:
 //   main -> claude, agent -> suggestion, gate -> success, cleared -> permission,
@@ -75,35 +74,10 @@ export function effortMeter(effort) {
   return { on: '▮'.repeat(n), off: '▯'.repeat(4 - n) }
 }
 
-// Swimlane geometry: each agent's bar on one shared axis from the earliest known
-// start to `nowMs`, `width` cells wide. Agents carry startedMs / endedMs (state.js);
-// an unknown start sits at the axis start, a running agent ends at `nowMs`, and every
-// bar is at least one cell (none when width is 0). before + bar + after equals width.
-export function lanes(agents, nowMs, width) {
-  const list = Array.isArray(agents) ? agents : []
-  const w = Math.max(0, Math.floor(isNum(width) ? width : 0))
-  const starts = list.map((a) => a?.startedMs).filter((n) => isNum(n) && n > 0)
-  const start = Math.min(...starts, nowMs)
-  const span = Math.max(1, nowMs - start)
-  return list.map((a) => {
-    const begin = isNum(a?.startedMs) && a.startedMs > 0 ? Math.max(a.startedMs, start) : start
-    const end = isNum(a?.endedMs) ? a.endedMs : nowMs
-    const from = Math.min(w, Math.floor(((begin - start) * w) / span))
-    const to = Math.min(w, Math.max(from + 1, Math.ceil(((end - start) * w) / span)))
-    return { id: a?.id, before: from, bar: to - from, after: w - to }
-  })
-}
-
-// The strings of one lane: · padding either side of a ━ run (one ━ when no geometry).
-export function laneBar(geo) {
-  if (!geo) return { before: '', bar: '━', after: '' }
-  return { before: '·'.repeat(geo.before), bar: '━'.repeat(geo.bar), after: '·'.repeat(geo.after) }
-}
-
-// How many file rows the changes card may show: what the other cards leave less its frame (margin 1,
-// border 2, title 1 = 4 rows), at most 10. -1 when not even the frame fits (the caller drops the card),
+// How many file rows the changes card may show: what the other cards leave less its frame (
+// border 2, title 1 = 3 rows), at most 10. -1 when not even the frame fits (the caller drops the card),
 // 0 when only the title fits.
-export const CHANGES_FRAME_ROWS = 4
+export const CHANGES_FRAME_ROWS = 3
 export const MAX_CHANGE_ROWS = 10
 export const changeRows = (bodyRows, used) => {
   const free = Math.floor(bodyRows - used - CHANGES_FRAME_ROWS)
