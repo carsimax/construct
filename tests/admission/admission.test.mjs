@@ -379,6 +379,19 @@ describe('start mode (F10)', () => {
     age(e, 5)
     denied(launch(repo, e, WORKER, surfaces('src/a.js')), /overlap/)
   })
+  test('start skips a record past the grace and marks the launch that is inside it', () => {
+    const repo = plain()
+    const e = env()
+    const file = join(scratchDir('odd-adm-b2-'), 'agent-b.jsonl')
+    const promptB = `${surfaces('src/a.js')}\nunit B`
+    writeFileSync(file, `${JSON.stringify({ type: 'user', message: { role: 'user', content: promptB } })}\n`)
+    allowed(launch(repo, e, WORKER, `${surfaces('src/a.js')}\nunit A`)) // declined by the host: never starts
+    age(e, 3)
+    allowed(launch(repo, e, WORKER, promptB))
+    allowed(start(e))
+    allowed(run('stop', { session_id: 's1', agent_id: 'b', agent_type: WORKER, hook_event_name: 'SubagentStop', agent_transcript_path: file }, e))
+    allowed(launch(repo, e, WORKER, `${surfaces('src/a.js')}\nunit D`))
+  })
   test('a start for another agent type leaves the record unstarted', () => {
     const repo = plain()
     const e = env()

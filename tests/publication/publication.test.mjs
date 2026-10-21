@@ -590,6 +590,47 @@ describe('F1: the Risk items are read at the ref and at the merge-base', () => {
     assert.match(r.reason, /Risk items 2/)
   })
 
+  test('a renamed document with a lowered Risk is read at the merge-base under its old path', () => {
+    const repo = makeRepo({ 'odd/tasks/f.md': TABLE('2'), 'src/app.js': 'export const a = 1\n' })
+    git(repo, 'checkout', '-q', '-b', 'feat')
+    git(repo, 'mv', 'odd/tasks/f.md', 'odd/tasks/g.md')
+    applyFiles(repo, { 'odd/tasks/g.md': TABLE('none'), 'src/app.js': 'export const a = 2\n' })
+    commitAll(repo, 'rename and downgrade')
+    const r = hook('git push', repo)
+    denied(r)
+    assert.match(r.reason, /Risk items 2/)
+  })
+
+  test('deleting a Risk 2 document with no other risky change is allowed (L15)', () => {
+    const repo = makeRepo({ 'odd/tasks/f.md': TABLE('2'), 'src/app.js': 'export const a = 1\n' })
+    git(repo, 'checkout', '-q', '-b', 'feat')
+    git(repo, 'rm', '-q', 'odd/tasks/f.md')
+    commitAll(repo, 'remove the finished feature document')
+    silent(hook('git push', repo))
+  })
+
+  test('an escaped pipe in a task cell does not shift the Risk column', () => {
+    const doc = TABLE('2').replace('| work |', '| work a \\| b |')
+    const repo = makeRepo({ 'src/app.js': 'export const a = 1\n' })
+    git(repo, 'checkout', '-q', '-b', 'feat')
+    applyFiles(repo, { 'odd/tasks/f.md': doc, 'src/app.js': 'export const a = 2\n' })
+    commitAll(repo, 'unit')
+    denied(hook('git push', repo))
+  })
+
+  test('the denial text has no double space, no stray comma, and short branch names', () => {
+    const repo = featureRepo('2')
+    const onFeat = hook('git push origin feat', repo)
+    denied(onFeat)
+    assert.doesNotMatch(onFeat.reason, /  | ,|check out/)
+    assert.match(onFeat.reason, /` , fix|`, fix/)
+    git(repo, 'checkout', '-q', 'main')
+    const fromMain = hook('git push origin feat', repo)
+    assert.match(fromMain.reason, /check out feat first/)
+    const bare = hook('git push origin main', withRemote(featureRepo('2')))
+    assert.doesNotMatch(bare.reason ?? '', /refs\/heads\//)
+  })
+
   test('a document new on the branch has no merge-base version and is read at the ref', () => {
     denied(hook('git push', featureRepo('2')))
     silent(hook('git push', featureRepo('none')))

@@ -143,7 +143,7 @@ install_plugin() {
   if [[ "$plugins" == *"$CONSTRUCT_PLUGIN"* ]]; then
     local have
     have=$(printf '%s\n' "$plugins" | awk -v id="$CONSTRUCT_PLUGIN" 'index($0, id) { f = 1; next } f && /❯/ { exit } f && /Version:/ { print $2; exit }')
-    if [ -n "$have" ] && [ "$have" != "${CONSTRUCT_REF#v}" ]; then
+    if [ -n "$have" ] && ! version_ge "$have" "${CONSTRUCT_REF#v}"; then
       skipped "$CONSTRUCT_PLUGIN (already installed, version $have)"
       warn "$CONSTRUCT_PLUGIN $have is installed but this installer is for ${CONSTRUCT_REF#v}; run: claude plugin update $CONSTRUCT_PLUGIN"
     else

@@ -62,7 +62,36 @@ describe('review-store-guard', () => {
   test('review-capture and review-context named in a Bash command are denied (F2)', () => {
     denied(hook('Bash', { command: 'echo \'{}\' | node "$CLAUDE_PLUGIN_ROOT/hooks/scripts/review-capture.mjs"' }, repo))
     denied(hook('Bash', { command: 'node plugins/construct/hooks/scripts/review-context.mjs < in.json' }, repo))
-    denied(hook('Bash', { command: 'NODE review-CAPTURE' }, repo))
+    denied(hook('Bash', { command: 'NODE review-CAPTURE.mjs' }, repo))
+  })
+
+  test('commands that only name the hook files as data are allowed (B1)', () => {
+    for (const command of [
+      'grep -rn review-context plugins',
+      'git diff d09ceba -- plugins/construct/hooks/scripts/review-capture.mjs',
+      "git commit -m 'fix(review-capture): x'",
+      'git add src/review-context.tsx',
+      'cat plugins/construct/hooks/scripts/review-context.mjs | wc -l',
+      'node --test tests/review-hooks/review-capture.test.mjs',
+      "sed -n 1,5p plugins/construct/hooks/scripts/review-capture.mjs",
+    ]) {
+      silent(hook('Bash', { command }, repo))
+      silent(hook('Bash', { command }, scratchDir('odd-guard-norepo-')))
+    }
+  })
+
+  test('running a review hook through an interpreter is denied in any directory (B1)', () => {
+    for (const command of [
+      'node plugins/construct/hooks/scripts/review-capture.mjs',
+      'echo {} | node /p/hooks/scripts/review-capture.mjs',
+      'bash -c "node /p/hooks/scripts/review-context.mjs"',
+      '/p/hooks/scripts/review-capture.mjs',
+      'env FOO=1 bun /p/hooks/scripts/review-context.mjs',
+      'cd x && deno run review-capture.mjs',
+    ]) {
+      denied(hook('Bash', { command }, repo))
+      denied(hook('Bash', { command }, scratchDir('odd-guard-norepo-')))
+    }
   })
 
   test('quotes, backslashes, and brackets do not hide the names (F3)', () => {

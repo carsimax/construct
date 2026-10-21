@@ -72,6 +72,10 @@ function main() {
   const [agent, lens] = match
   const base = SUBJECT_LINE.exec(toolInput.prompt)?.[1]
   const head = 'HEAD'
+  if (base?.includes('..')) {
+    deny(`${agent} was given a range (${base}): the \`<base>..<head>\` form was removed. Review the whole branch from the merge-base with the default branch, with one line \`${FORM}\`.`)
+    return
+  }
   if (!base || base.startsWith('-')) {
     deny(`${agent} needs its subject: put one line \`${FORM}\` in the prompt (the head is HEAD), and this hook injects the evidence.`)
     return

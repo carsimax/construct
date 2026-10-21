@@ -352,7 +352,7 @@ function clear(input) {
   if (prompt) rmSync(join(recordDir(input.session_id), promptKey(prompt)), { force: true })
 }
 
-// start marks the oldest unstarted record of the agent type as started. SubagentStart input
+// start marks the oldest unstarted record of the agent type inside the grace as started. SubagentStart input
 // carries no prompt, so the match is session plus agent type (shortcut: two same-type
 // launches in flight may swap records, upgrade if the host adds the prompt to the input).
 function start(input) {
@@ -365,7 +365,8 @@ function start(input) {
       if (name.startsWith('.')) continue
       try {
         const entry = JSON.parse(readFileSync(join(dir, name), 'utf8'))
-        if (entry.started === false && entry.type === type) unstarted.push({ name, entry })
+        // A record past the grace was declined by the host and no longer blocks: it is not the launch that started.
+        if (entry.started === false && entry.type === type && !(Date.now() - Date.parse(entry.at) > START_GRACE_MS)) unstarted.push({ name, entry })
       } catch {
         // unreadable record: ignore it
       }

@@ -291,7 +291,8 @@ function riskItems(markdown, path) {
       column = -1
       seenHeader = false
     } else if (inTasks && line.trim().startsWith('|') && !/^[\s|:-]+$/.test(line)) {
-      const cells = line.trim().replace(/^\||\|$/g, '').split('|').map((c) => c.trim())
+      // A cell holds `\|` for a literal pipe (same rule as feature-state.mjs splitRow).
+      const cells = line.trim().replace(/^\|/, '').replace(/\|$/, '').split(/(?<!\\)\|/).map((c) => c.replace(/\\\|/g, '|').trim())
       if (!seenHeader) {
         seenHeader = true
         column = cells.findIndex((c) => c.toLowerCase() === 'risk')
@@ -316,20 +317,35 @@ function riskItems(markdown, path) {
 
 // refVerdict judges one published ref: null when it may go, else the denial reason.
 function refVerdict(root, pub, base, ref) {
+  const short = ref.replace(/^refs\/heads\//, '')
   if (ref === '' || ref.startsWith('-') || !ok(root, ref)) {
     return `publication-gate: ${pub.gate} is denied because the ref ${JSON.stringify(ref)} does not resolve to a commit in this repository, so its review state cannot be checked.`
   }
   if (base.startsWith('refs/heads/') && out(root, ['rev-parse', '--symbolic-full-name', ref]) === base) {
-    return `publication-gate: ${pub.gate} is denied because ${ref} is the default branch and no remote-tracking default branch exists to compare it with (fetch origin, or publish a branch), so its review state cannot be checked.`
+    return `publication-gate: ${pub.gate} is denied because ${short} is the default branch and no remote-tracking default branch exists to compare it with (fetch origin, or publish a branch), so its review state cannot be checked.`
   }
   const sha = out(root, ['rev-parse', '--verify', `${ref}^{commit}`])
   const mergeBase = out(root, ['merge-base', base, sha])
-  const names = out(root, ['diff', '--name-only', '-z', '--diff-filter=d', mergeBase, sha, '--']).split('\0')
+  // -M pairs a rename: its new path is read at the ref and its old path at the merge-base (a rename plus a lowered Risk
+  // stays visible). A plain delete is ignored (L15: reading deleted documents would demand reviews for old merged work).
+  const tokens = out(root, ['diff', '--name-status', '-M', '-z', mergeBase, sha, '--']).split('\0')
+  const reads = [] // [commit, path]
+  for (let k = 0; k < tokens.length - 1; ) {
+    const status = tokens[k][0]
+    if (status === 'R' || status === 'C') {
+      reads.push([sha, tokens[k + 2]])
+      if (status === 'R') reads.push([mergeBase, tokens[k + 1]])
+      k += 3
+    } else {
+      if (status !== 'D') reads.push([sha, tokens[k + 1]], [mergeBase, tokens[k + 1]])
+      k += 2
+    }
+  }
   const items = new Set()
-  for (const path of names.filter((p) => /^odd\/tasks\/[^/]+\.md$/.test(p))) {
-    const versions = [`${sha}:${path}`]
-    if (out(root, ['ls-tree', '--name-only', mergeBase, '--', path]) !== '') versions.push(`${mergeBase}:${path}`)
-    for (const version of versions) for (const item of riskItems(out(root, ['show', version]), path)) items.add(item)
+  for (const [commit, path] of reads) {
+    if (!/^odd\/tasks\/[^/]+\.md$/.test(path)) continue
+    if (out(root, ['ls-tree', '--name-only', commit, '--', path]) === '') continue
+    for (const item of riskItems(out(root, ['show', `${commit}:${path}`]), path)) items.add(item)
   }
   const required = requiredLenses(items)
   if (required.length === 0) return null
@@ -341,7 +357,8 @@ function refVerdict(root, pub, base, ref) {
   const rejected = required.filter((lens) => state(lens) === 'rejected')
   if (missing.length === 0 && rejected.length === 0) return null
   const parts = [missing.length > 0 && `no verdict from ${missing.join(', ')}`, rejected.length > 0 && `not approved by ${rejected.join(', ')}`].filter(Boolean)
-  return `publication-gate: ${pub.gate} is denied because the feature documents of ${ref} name Risk items ${[...items].sort().join(', ')} and it is not reviewed: ${parts.join('; ')}. Run the construct:rdd-review skill with the subject line \`Review subject: ${mergeBase}\` ${ref === 'HEAD' ? '' : ` (the head is HEAD: check out ${ref} first)`}, fix what a lens rejects, and publish again; new commits change the subject, so review after the last commit.`
+  const checkout = out(root, ['rev-parse', 'HEAD']) === sha ? '' : ` (the head is HEAD: check out ${short} first)`
+  return `publication-gate: ${pub.gate} is denied because the feature documents of ${short} name Risk items ${[...items].sort().join(', ')} and it is not reviewed: ${parts.join('; ')}. Run the construct:rdd-review skill with the subject line \`Review subject: ${mergeBase}\`${checkout}, fix what a lens rejects, and publish again; new commits change the subject, so review after the last commit.`
 }
 
 function verdict(pub) {

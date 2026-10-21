@@ -364,6 +364,11 @@ describe('ranges, deleted paths, and verdict records (T8)', () => {
     }
   })
 
+  test('the range denial says the form was removed and to review from the merge-base', () => {
+    const r = hook(CONTEXT_HOOK, spawnInput(three(), 'Review subject: HEAD~2..HEAD'))
+    assert.match(r.json.hookSpecificOutput.permissionDecisionReason, /form was removed.*merge-base/)
+  })
+
   test('a deleted path stays in the manifest and the name-status, its removed body is omitted', () => {
     const repo = three()
     const r = hook(CONTEXT_HOOK, spawnInput(repo, 'Review subject: HEAD~1'))

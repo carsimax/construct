@@ -62,8 +62,8 @@ export function pruneState(now = Date.now()) {
   }
 }
 
-// SUBAGENT_MAX_IDLE_MS is one hour, shorter than the review store's open-lineage idle limit because workers run minutes: an
-// open-agent entry older than this belongs to a crashed agent and is ignored.
+// SUBAGENT_MAX_IDLE_MS is one hour because workers run minutes: an open-agent entry older than this
+// belongs to a crashed agent and is ignored.
 export const SUBAGENT_MAX_IDLE_MS = 3600 * 1000
 
 // subagentDir holds one file per open subagent of a session (written by

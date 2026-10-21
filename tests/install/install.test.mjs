@@ -461,8 +461,8 @@ test('an installed construct at another version warns and names the update comma
   assert.ok(!run.calls.some((c) => /^claude plugin (install|update)/.test(c)), 'the install is never modified')
 })
 
-test('an installed construct at this version, or with no readable version, gets the plain skip', () => {
-  for (const version of ['3.0.0', '']) {
+test('an installed construct at this version, a newer one, or with no readable version, gets the plain skip', () => {
+  for (const version of ['3.0.0', '3.1.0', '']) {
     const box = sandbox()
     writeFileSync(join(box.state, 'plugins'), PLUGIN_LIST(version))
     const run = install(box)
