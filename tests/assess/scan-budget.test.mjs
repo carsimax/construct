@@ -75,3 +75,20 @@ for (const path of ['notes/keys.md', 'site/page.html']) {
     assert.deepEqual(reasonKeys(json.reasons), [`private_key_content:${path}`])
   })
 }
+
+// Only an added header changes the tier: a document that already holds one stays passive when other lines change.
+test('an unrelated edit to a markdown note that already holds a PEM header stays passive', () => {
+  const repo = makeRepo({ 'notes/keys.md': `${PEM_HEADER}intro\n` })
+  applyFiles(repo, { 'notes/keys.md': `${PEM_HEADER}intro edited\n` })
+  const { json } = assessJson(repo)
+  assert.equal(json.risk, 'passive', JSON.stringify(json.reasons))
+  assert.deepEqual(reasonKeys(json.reasons), ['non_executable_only'])
+})
+
+test('adding a PEM header to an existing markdown note is high', () => {
+  const repo = makeRepo({ 'notes/keys.md': 'intro\n' })
+  applyFiles(repo, { 'notes/keys.md': `intro\n${PEM_HEADER}` })
+  const { json } = assessJson(repo)
+  assert.equal(json.risk, 'high', JSON.stringify(json.reasons))
+  assert.deepEqual(reasonKeys(json.reasons), ['private_key_content:notes/keys.md'])
+})

@@ -4,7 +4,6 @@
 import { batchBlobContents, catFileRecordBytes, treeBlobSizes } from './git.mjs'
 import { asciiLower, fieldsFunc, goBase, goExt, isConfigurationReviewPath } from './signals.mjs'
 import { isGeneratedGoldenPath } from './stats.mjs'
-import { PRIVATE_KEY_HEADER, isItemEvidencePath } from './items.mjs'
 import { goTrimSpace } from './text.mjs'
 
 // Caps every content readback this classifier performs (8 MiB).
@@ -174,7 +173,6 @@ export function isPassiveDocumentContent(logicalPath, content) {
   if (isPassiveImageExtension(logicalPath)) return hasPassiveImageSignature(content)
   if (content.includes(0) || !isValidUtf8(content)) return false
   if (hasInterpreterDirective(content)) return false
-  if (isItemEvidencePath(logicalPath) && PRIVATE_KEY_HEADER.test(content.toString('utf8'))) return false
   if (goExt(logicalPath).toLowerCase() === '.mdx') return isStaticMDXDocument(content)
   return true
 }

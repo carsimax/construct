@@ -61,7 +61,7 @@ function refusalOf(stderr) {
 
 // pendingFor picks the pending record of the stopping agent: records are keyed by
 // lens and lineage, so among several of one lens it takes the one whose
-// subject_hash the reply carries, else the oldest.
+// subject_hash the reply carries, else the newest (the latest spawn wins).
 function pendingFor(input, reply) {
   const dir = pendingDir(input.session_id)
   const prefix = `${safeName(input.agent_type)}.`
@@ -80,9 +80,9 @@ function pendingFor(input, reply) {
   try {
     subject = JSON.parse(unfence(reply))?.subject_hash
   } catch {
-    // Not JSON: the oldest record takes the retry.
+    // Not JSON: the newest record takes the retry.
   }
-  return records.find((record) => subject !== undefined && record.pending.subject_hash === subject) ?? records[0]
+  return records.find((record) => subject !== undefined && record.pending.subject_hash === subject) ?? records[records.length - 1]
 }
 
 function main() {

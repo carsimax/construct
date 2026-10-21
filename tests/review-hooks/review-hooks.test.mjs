@@ -4,7 +4,7 @@
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { finding, highRepo, lensResult, readTransaction, scratchDir, start } from '../review/helpers.mjs'
 
@@ -309,6 +309,19 @@ describe('capture hook', () => {
     assert.ok(readTransaction(one.repo, one.txn.lineage).results['review-risk'])
     assert.ok(readTransaction(two.repo, two.txn.lineage).results['review-risk'])
     assert.deepEqual(readdirSync(join(data, 'review-hooks', 's1')), [])
+  })
+
+  test('a malformed reply retries the newest pending record of the lens, not a stale older one', () => {
+    const old = lineage()
+    const fresh = lineage()
+    const data = old.data
+    spawned(old.repo, old.txn, data)
+    spawned(fresh.repo, fresh.txn, data)
+    utimesSync(pendingOf(data, old.txn), new Date(1_000_000), new Date(1_000_000))
+    const r = hook(CAPTURE_HOOK, stopInput(fresh.repo, 'not json'), data)
+    assert.equal(r.json.decision, 'block')
+    assert.equal(JSON.parse(readFileSync(pendingOf(data, fresh.txn), 'utf8')).attempts, 1)
+    assert.equal(JSON.parse(readFileSync(pendingOf(data, old.txn), 'utf8')).attempts, 0)
   })
 
   test('a lens that is already captured counts as done and the pending record is cleared', () => {
