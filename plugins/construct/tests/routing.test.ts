@@ -43,17 +43,24 @@ test('modelFor and effortFor read the role options, and effort default means no 
   expect(effortFor(null, options)).toBe(null)
 })
 
-test('agent.spawn sends the configured model for an construct agent', async ($, on) => {
+test('agent.spawn sends the configured model for a construct agent that names none', async ($, on) => {
   const seen = []
   on('agent.spawn', spawnStub(seen))
-  await $.agent.spawn({ subagentType: 'construct:odd-explorer', model: 'opus', prompt: 'map it' })
+  await $.agent.spawn({ subagentType: 'construct:odd-explorer', prompt: 'map it' })
   expect(seen[0].model).toBe('haiku')
 })
 
-test('agent.spawn sends the general delegation model for general-purpose', async ($, on) => {
+test('agent.spawn keeps an explicit model over the configured one', async ($, on) => {
   const seen = []
   on('agent.spawn', spawnStub(seen))
-  await $.agent.spawn({ subagentType: 'general-purpose', model: 'opus', prompt: 'research' })
+  await $.agent.spawn({ subagentType: 'construct:odd-explorer', model: 'opus', prompt: 'map it' })
+  expect(seen[0].model).toBe('opus')
+})
+
+test('agent.spawn sends the general delegation model for general-purpose that names none', async ($, on) => {
+  const seen = []
+  on('agent.spawn', spawnStub(seen))
+  await $.agent.spawn({ subagentType: 'general-purpose', prompt: 'research' })
   expect(seen[0].model).toBe('sonnet')
 })
 

@@ -307,11 +307,11 @@ function noteEffort(e) {
 }
 
 export function register(on, options) {
-  // Send each construct agent on the model its role is configured for.
+  // Send each construct agent on the model its role is configured for, unless the call names one.
   // If this hook fails, the agent keeps its frontmatter model.
   on('agent.spawn', async ($, e, next) => {
     const role = roleFor(e.subagentType)
-    const model = modelFor(role, options)
+    const model = e.model ? null : modelFor(role, options)
     const result = await next(model ? { ...e, model } : e)
     if (role && result?.agentId) {
       roleByAgent.set(result.agentId, role)

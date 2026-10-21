@@ -20,6 +20,9 @@ Print the deterministic risk tier of a candidate change.
   --escalate-reason T  one-line reason for --escalate-item (at most 500 bytes)
   --json               print the construct.review-assessment/v1 JSON object
 
+Exit status: 0 on success; 1 when the candidate is unassessable (without --json;
+with --json the result is printed and the exit status stays 0); 2 on a usage error.
+
 Signals that make a change high include verifier_weakening: an added suppression
 (@ts-ignore, @ts-expect-error, @ts-nocheck, eslint-disable, # noqa, # type: ignore,
 //nolint) in a source or test file, or an added skip/focus marker (.skip(, .only(,
@@ -104,7 +107,8 @@ export function run(argv, { stdout = process.stdout, stderr = process.stderr } =
       escalation,
     })
     stdout.write(values.json ? `${JSON.stringify(result, null, 2)}\n` : humanSummary(result))
-    return 0
+    // Without --json an unassessable candidate is an error; --json callers read the result instead.
+    return !values.json && result.reasons.some((reason) => reason.code === 'unassessable') ? 1 : 0
   } catch (error) {
     stderr.write(`odd-assess: ${error.message}\n\n${USAGE}`)
     return 2
