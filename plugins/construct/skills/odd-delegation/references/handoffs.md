@@ -16,6 +16,8 @@ When a worker asks about surfaces, present its candidate paths as an approve/dec
 
 ```markdown
 Question: <the decision this map serves>
+Front: <the one module, layer, or question this explorer maps>
+Out of scope: <the other fronts, owned by parallel explorers>
 Scope: <directories or symbols to start from>
 Return at most about 2k tokens with path:line evidence: answer, map, open questions.
 ```

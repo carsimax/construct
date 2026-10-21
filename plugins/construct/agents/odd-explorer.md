@@ -5,6 +5,7 @@ description: >
   one bounded batch (about 3 calls and 10k tokens) or more than about 5 sequential lookups,
   so the parent can decide or route without filling its own context.
 model: haiku
+effort: medium
 tools: Read, Glob, Grep, Bash, mcp__codegraph__codegraph_explore, mcp__engram__mem_search, mcp__engram__mem_get_observation
 disallowedTools: Edit, Write, NotebookEdit, Agent
 ---

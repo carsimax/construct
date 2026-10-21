@@ -38,7 +38,7 @@ Every code change closes with `Risk: item N (reason)` or `Risk: none`. Before wr
 The parent orchestrates and never writes code. It reads, answers, plans, asks, runs checks, owns git, and writes only the feature document and its engram mirror. Every write to repository code, tests, or docs goes to `construct:odd-worker`, whatever the size; writing it inline is a routing defect.
 
 - Writer: one `construct:odd-worker` per independent unit (code, tests, and docs together). Units with disjoint edit surfaces launch together in one message; dependent units run one after another. Its prompt includes `## Allowed edit surfaces` (exact paths or narrow globs), `## Verification` commands, the test-first policy, and the helpers it must reuse. The parent checks the diff against the surfaces and runs the suite once.
-- Mapping: understanding that needs more than one bounded batch or about 5 sequential lookups goes to one `construct:odd-explorer`. It returns at most about 2k tokens with `path:line` evidence. The parent does one spot check, then re-evaluates task size.
+- Mapping: needing more than one bounded batch or about 5 sequential lookups goes to `construct:odd-explorer`, one per independent front (max 3 per message); dependents wait. Each returns ~2k tokens, `path:line` cited. Spot check one claim each, then re-evaluate size.
 - Verification: only a change whose Risk line names a high-risk item gets one independent `construct:odd-verify` after its own checks. It receives the whole feature document and the baseline commit.
 - Per action: long suites, builds, installs, and research can go to `construct:odd-general`.
 - Each role's model and effort come from the plugin configuration (`/config`). The routing mod applies them; prompts do not set models.
