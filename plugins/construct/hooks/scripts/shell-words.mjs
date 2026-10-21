@@ -14,14 +14,14 @@ const DOTS = /^\.{1,2}\/?$/
 // isRootOrHome: the one rm-root rule of both guards. True for /, ~, $HOME, and a `/*` glob of
 // one of them. Without `at`, `.` and `..` count too; with `at` ({ cwd, home }) a path counts
 // when it resolves to / or home, so a `.` in prose is not a root unless the cwd is one.
-export function isRootOrHome(target, expand, at) {
+export function isRootOrHome(target, expand, at, glob = false) {
   const t = expand(target)
   if (ROOTISH.test(target) || ROOTISH.test(t)) return true
   if (at) {
     const abs = resolve(at.cwd, t)
     if (abs === '/' || abs === resolve(at.home)) return true
-  } else if (DOTS.test(target)) return true
-  return /\/\*$/.test(target) && isRootOrHome(target.slice(0, -2) || '/', expand, at)
+  } else if (!glob && DOTS.test(target)) return true // `./*` and `../*` stay an ask, as at baseline
+  return /\/\*$/.test(target) && isRootOrHome(target.slice(0, -2) || '/', expand, at, true)
 }
 
 // splitCommands is a small shell-word splitter: quotes and backslashes group a word,

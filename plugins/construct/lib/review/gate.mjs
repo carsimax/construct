@@ -21,7 +21,7 @@ import { defaultBranchRefs, isAncestor } from './boundary.mjs'
 import { Refusal } from './errors.mjs'
 import { targetOf } from './identity.mjs'
 import { readMode } from './mode.mjs'
-import { readReceipts, receiptState } from './receipt.mjs'
+import { isSound, readReceipts, receiptState } from './receipt.mjs'
 
 export const GATES = ['pre-push', 'pre-pr', 'release']
 const text = (buffer) => buffer.toString('utf8').trim()
@@ -58,8 +58,6 @@ function derivedBase(root, gate, head, headIsHead, tag) {
   return null
 }
 
-const SOUND = new Set(['ok'])
-
 export function validateGate({ root, gate, baseRef, headRef, tag }) {
   const mode = readMode(root)
   const done = (reason, extra = {}) => ({ ok: true, result: 'ok', gate, reason, ...extra })
@@ -88,8 +86,9 @@ export function validateGate({ root, gate, baseRef, headRef, tag }) {
   let start = base
   for (let moved = true; moved; ) {
     moved = false
-    for (const { receipt, status } of receipts) {
-      if (!SOUND.has(status) || typeof receipt.candidate_commit !== 'string' || typeof receipt.base_commit !== 'string') continue
+    for (const state of receipts) {
+      const { receipt } = state
+      if (!isSound(state) || typeof receipt.candidate_commit !== 'string' || typeof receipt.base_commit !== 'string') continue
       const commit = commitOf(root, receipt.candidate_commit)
       const from = commitOf(root, receipt.base_commit)
       if (commit && from && commit !== start && isAncestor(root, from, start) && isAncestor(root, start, commit) && isAncestor(root, commit, head)) {
@@ -125,7 +124,7 @@ export function validateGate({ root, gate, baseRef, headRef, tag }) {
     return from !== null && isAncestor(root, from, start)
   }
   const sameTree = receipts.filter(({ receipt }) => receipt.candidate_tree === headTree && reachesStart(receipt))
-  const sound = sameTree.find(({ status }) => SOUND.has(status))
+  const sound = sameTree.find(isSound)
   if (sound) return done('covered', { ...range, receipt: sound.status, lineage: sound.receipt.lineage })
 
   const worst = sameTree[0]
