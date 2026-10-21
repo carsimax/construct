@@ -41,8 +41,8 @@
 //                cells: last 60 of 'allowed' | 'asked' | 'denied' | 'sub'
 //                counts: { allowed, asked, denied, sub } totals, never capped
 //                lastDenied: { tool, detail } | null, detail masked and short
-//   receipt      { turnId, startedMs, endedMs, agents, edits, errors } | null (S5)
-//                endedMs null while the turn runs
+//   turn         { turnId } while a main turn runs, else null (the busy flag; a stored `receipt` from
+//                the last turn card is dropped on read)
 //   compactions  session.compact count
 //   main         { steps, model, effort, mode }  main-thread vitals (S3): steps counts main requests
 //                (turn.step without agentId, index.d.ts:14328-14354), model and effort are the latest
@@ -87,7 +87,7 @@ export function initialState() {
       buckets: zeroBuckets(),
       pending: {},
     },
-    receipt: null,
+    turn: null,
     compactions: 0,
     main: { steps: 0, model: null, effort: null, mode: null },
     blocked: false,
@@ -104,13 +104,13 @@ const str = (x) => (typeof x === 'string' && x !== '' ? x : null)
 export function merge(stored) {
   const base = initialState()
   if (!isObj(stored) || (stored.v !== SCHEMA_VERSION && stored.v !== 2 && stored.v !== 1)) return base
-  const { agents, inline, gate, receipt, compactions, main, blocked } = stored
+  const { agents, inline, gate, turn, compactions, main, blocked } = stored
   if (agents !== undefined && !Array.isArray(agents)) return base
   if (inline !== undefined && !isObj(inline)) return base
   if (gate !== undefined && !isObj(gate)) return base
   if (gate?.cells !== undefined && !Array.isArray(gate.cells)) return base
   if (gate?.counts !== undefined && !isObj(gate.counts)) return base
-  if (receipt !== undefined && receipt !== null && !isObj(receipt)) return base
+  if (turn !== undefined && turn !== null && !isObj(turn)) return base
   if (gate?.verdicts !== undefined && !isObj(gate.verdicts)) return base
   if (gate?.buckets !== undefined && !isObj(gate.buckets)) return base
   if (compactions !== undefined && !isNum(compactions)) return base
@@ -130,7 +130,7 @@ export function merge(stored) {
         Object.keys(base.gate.buckets).map((k) => [k, { ...base.gate.buckets[k], ...(isObj(buckets[k]) ? buckets[k] : {}) }]),
       ),
     },
-    receipt: receipt ?? null,
+    turn: turn ?? null,
     compactions: compactions ?? 0,
     main: { ...base.main, ...main },
     blocked: blocked === true,
@@ -213,9 +213,9 @@ export function onPermissionMode(state, e) {
   return mode && mode !== s.main.mode ? { ...s, main: { ...s.main, mode } } : s
 }
 
-// Busy while a main turn's receipt is open.
+// Busy while a main turn is open.
 export function mainBusy(state) {
-  return isObj(state) && isObj(state.receipt) && state.receipt.endedMs === null
+  return isObj(state) && isObj(state.turn)
 }
 
 // ---- blocked (S8b) --------------------------------------------------------
@@ -245,9 +245,6 @@ const patchAgent = (state, id, fn) => {
   return { ...state, agents: state.agents.map((a) => (a.id === id ? fn(a) : a)) }
 }
 
-const openReceipt = (state, fn) =>
-  state.receipt && state.receipt.endedMs === null ? { ...state, receipt: fn(state.receipt) } : state
-
 // A subagent started: add its card (role from the construct agent name, else the subagent type).
 export function onAgentSpawn(state, e) {
   const s = merge(state)
@@ -268,7 +265,7 @@ export function onAgentSpawn(state, e) {
     status: 'running',
   }
   const agents = [...s.agents.filter((a) => a.id !== id), card].slice(-MAX_AGENTS)
-  return openReceipt({ ...s, agents }, (r) => ({ ...r, agents: r.agents + 1 }))
+  return { ...s, agents }
 }
 
 // One request of a subagent: count the step, ctx is the request's whole input.
@@ -283,23 +280,15 @@ export function onTurnStep(state, e) {
   return patchAgent(s, id, (a) => ({ ...a, steps: a.steps + 1, ctx: ctx ?? a.ctx }))
 }
 
-// A turn began: a subagent runs again, a main turn opens a new receipt.
+// A turn began: a subagent runs again, a main turn marks the panel busy.
 export function onTurnStart(state, e) {
   const s = merge(state)
   const id = str(e?.agentId)
   if (id) return patchAgent(s, id, (a) => ({ ...a, status: 'running', endedMs: null }))
-  const receipt = {
-    turnId: str(e?.turnId),
-    startedMs: isNum(e?.nowMs) ? e.nowMs : 0,
-    endedMs: null,
-    agents: 0,
-    edits: 0,
-    errors: 0,
-  }
-  return { ...s, receipt }
+  return { ...s, turn: { turnId: str(e?.turnId) } }
 }
 
-// A turn ended: a subagent is done, the main receipt closes.
+// A turn ended: a subagent is done, the main turn stops being busy.
 export function onTurnComplete(state, e) {
   const s = merge(state)
   const nowMs = isNum(e?.nowMs) ? e.nowMs : 0
@@ -308,11 +297,8 @@ export function onTurnComplete(state, e) {
     return patchAgent(s, id, (x) => ({ ...x, status: 'done', endedMs: nowMs }))
   }
   const turnId = str(e?.turnId)
-  if (turnId && s.receipt?.turnId && s.receipt.turnId !== turnId) return s
-  return openReceipt(s, (r) => ({
-    ...r,
-    endedMs: nowMs,
-  }))
+  if (turnId && s.turn?.turnId && s.turn.turnId !== turnId) return s
+  return s.turn ? { ...s, turn: null } : s
 }
 
 // Up to `max` cards, running first then the most recent, and how many are left out.
@@ -329,15 +315,13 @@ export function agentsView(state, nowMs, max = 3) {
   return { cards, rest: ordered.length - cards.length, running: running.length }
 }
 
-// ---- tools: inline writes (S3) and receipt edits/errors (S5) -------------
+// ---- tools: inline writes (S3) -------------------------------------------
 
 // A finished tool call. `path` is the file it targets (filePathOf), `cwd` the project root.
 export function onToolCall(state, e) {
   let s = merge(state)
   const tool = str(e?.tool)
   const isWrite = tool !== null && WRITE_TOOLS.includes(tool)
-  if (isWrite) s = openReceipt(s, (r) => ({ ...r, edits: r.edits + 1 }))
-  if (e?.isError === true) s = openReceipt(s, (r) => ({ ...r, errors: r.errors + 1 }))
   const path = str(e?.path)
   if (isWrite && !str(e?.agentId) && path && isOutsideTasks(path, e?.cwd)) {
     s = { ...s, inline: { count: s.inline.count + 1, last: path } }

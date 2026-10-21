@@ -116,7 +116,8 @@ test('the Pane draws the panel for the construct pane id', async ($, on) => {
   const ui = await pane($)
   await ui.redraw()
   const text = await joined(ui)
-  expect(text).toContain('odd_worker')
+  expect(text).toContain('worker')
+  expect(text).not.toContain('odd_worker')
 })
 
 test('the AbovePrompt band is not drawn by the plugin', async ($, on) => {
@@ -175,8 +176,11 @@ test('spawn makes a card and passes the spawn result through', async ($, on) => 
   const p = await pane($)
   await p.redraw()
   const text = await joined(p)
-  expect(text).toContain('agents · 1 running · 1 total')
-  expect(text).toContain('1: odd_worker')
+  expect(text).toContain('agents')
+  expect(text).toContain('1 running · 1 total')
+  expect(text).toContain('worker')
+  expect(text).not.toContain('odd_worker')
+  expect(text).toContain('Sonnet')
 })
 
 test('new hooks pass events through unchanged', async ($, on) => {
@@ -321,14 +325,15 @@ test('5h and 7d show the reset time next to the gauges', async ($, on) => {
   expect(text).toContain('66k/200k')
 })
 
-test('a surface with Client support draws the rail as a Client of ./rail.tsx', async ($, on) => {
+test('a surface with Client support still draws no Client element and no rail', async ($, on) => {
   await start($, on)
   await $.turn.start({ text: 'go', turnId: 't3' })
   const p = await pane($)
   await p.redraw()
   const tree = JSON.stringify(await p.drawn())
-  expect(tree).toContain('"type":"Client"')
-  expect(tree).toContain('panel/rail.tsx')
+  expect(tree).not.toContain('"type":"Client"')
+  expect(tree).not.toContain('rail.tsx')
+  expect(tree).not.toContain('elapsed.tsx')
 })
 
 // ---- S8b blocked state: tool.check asks and the blocking tools, no classic hooks ----

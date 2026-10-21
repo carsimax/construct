@@ -9,7 +9,7 @@ const NOW = 1_000_000
 // ---- helpers -------------------------------------------------------------
 
 const flat = (node): string =>
-  typeof node === 'string' ? node : node?.type === 'Client' ? `[${node.props.module}]` : (node?.children ?? []).map(flat).join('')
+  typeof node === 'string' ? node : (node?.children ?? []).map(flat).join('')
 
 // Every Text leaf, nested Texts included.
 function leaves(node, out: { text: string; props: any }[] = []) {
@@ -21,15 +21,15 @@ function leaves(node, out: { text: string; props: any }[] = []) {
 const textOf = (tree) => lines(tree).join('\n')
 const find = (tree, needle: string) => leaves(tree).find((l) => l.text.includes(needle))
 
-// A line is a Text, a Client, or a Box whose children are all Texts and Clients; a title row joins with a space.
+// A line is a Text, or a Box whose children are all Texts; a title row joins with a space.
 function lines(node, out: string[] = []) {
   if (!node || typeof node === 'string') return out
   const kids = node.children ?? []
-  if (node.type === 'Text' || node.type === 'Client') {
+  if (node.type === 'Text') {
     out.push(flat(node))
     return out
   }
-  if (node.type === 'Box' && node.props?.flexDirection !== 'column' && kids.length > 0 && kids.every((k) => typeof k !== 'string' && (k.type === 'Text' || k.type === 'Client'))) {
+  if (node.type === 'Box' && node.props?.flexDirection !== 'column' && kids.length > 0 && kids.every((k) => typeof k !== 'string' && k.type === 'Text')) {
     out.push(kids.map(flat).join(node.props?.justifyContent === 'space-between' ? ' ' : ''))
     return out
   }
@@ -66,7 +66,8 @@ const full = () => ({
   agents: [agent(), agent({ id: 'a2', role: 'odd_explorer', status: 'done', endedMs: NOW - 15_000, startedMs: NOW - 30_000 })],
   inline: { count: 3, last: '/home/me/proj/plugins/construct/hooks/register.js' },
   gate: { ...initialState().gate, verdicts, buckets, denied: 2, lastDenied: { tool: 'Bash', detail: 'curl -H token=*** x' } },
-  receipt: { turnId: 't', startedMs: NOW - 17_000, endedMs: NOW - 1000, agents: 0, edits: 1, errors: 0, costStart: 1, cost: 0.44 },
+  // a receipt left in a stored panel by an older version: the panel ignores it
+  receipt: { turnId: 't', startedMs: NOW - 17_000, endedMs: NOW - 1000, agents: 0, edits: 1, errors: 0 },
   compactions: 2,
   main: { steps: 7, model: 'claude-opus-5-5', effort: 'medium', mode: 'auto' },
 })
@@ -105,9 +106,9 @@ test('no header and no legend: the panel starts with the main card', async () =>
 
 // ---- card order ------------------------------------------------------------
 
-test('cards come in order: main, ODD, REVIEW, GATE, agents, last turn, changes', async () => {
+test('cards come in order: main, ODD, REVIEW, GATE, agents, changes', async () => {
   const rows = rowsOf()
-  const at = ['Opus 5.5', 'ODD · flightdeck-panel', 'REVIEW', 'GATE · permissions', 'agents · 1 running · 2 total', 'last turn', 'feat/x ↑2'].map((n) => idx(rows, n))
+  const at = ['Opus 5.5', 'ODD · flightdeck-panel', 'REVIEW', 'GATE · permissions', 'agents 1 running · 2 total', 'feat/x ↑2'].map((n) => idx(rows, n))
   for (const i of at) expect(i).toBeGreaterThanOrEqual(0)
   expect([...at].sort((a, b) => a - b)).toEqual(at)
 })
@@ -151,28 +152,13 @@ test('main card shows without usage or replica, and is busy while a turn is open
   expect(rows).toContain('Sonnet ○ idle')
   expect(rows.some((r) => r.startsWith('ctx'))).toBe(false)
   expect(rows.some((r) => r.startsWith('effort ▯▯▯▯ —'))).toBe(true)
-  const busy = { ...full(), receipt: { ...full().receipt, endedMs: null } }
+  const busy = { ...full(), turn: { turnId: 't' } }
   expect(rowsOf({ panel: busy }).some((r) => r === 'Opus 5.5 ● busy')).toBe(true)
 })
 
 test('a high ctx is flagged in the error color', async () => {
   const hot = { ...usage, context: { window: 200_000, tokens: 180_000, percent: 90 } }
   expect(find(buildPanel(args({ usage: hot })), '▰▰▰▰▰▰▰▰▰')?.props.color).toBe('error')
-})
-
-// ---- rail ------------------------------------------------------------------
-
-test('rails between cards are Client rail.tsx when client is true and a static line otherwise', async () => {
-  const withClient = rowsOf({ client: true }).filter((r) => r === '[./rail.tsx]')
-  expect(withClient.length).toBe(2)
-  const stat = rowsOf({ client: false })
-  expect(stat.filter((r) => r === '─'.repeat(66)).length).toBe(2)
-  expect(stat.some((r) => r.includes('rail.tsx'))).toBe(false)
-  const tree = buildPanel(args({ client: true }))
-  const rail = (tree.children as any[]).find((c) => c.type === 'Client')
-  expect(rail.props.module).toBe('./rail.tsx')
-  expect(rail.props.props).toMatchObject({ active: false, width: 66, color: 'claude', dim: 'subtle' })
-  expect(typeof rail.props.key).toBe('string')
 })
 
 // ---- ODD card ----------------------------------------------------------------
@@ -246,53 +232,50 @@ test('stackBar sums to the width and keeps one cell per non-zero count', async (
 
 // ---- agents ------------------------------------------------------------------
 
-test('agents: header counts, one row per agent with mark, role, timeline bar and clock (static)', async () => {
-  const rows = rowsOf()
-  expect(idx(rows, 'agents · 1 running · 2 total')).toBeGreaterThan(0)
-  const running = rows.find((r) => r.startsWith('◐ 1: odd_worker'))!
-  const done = rows.find((r) => r.startsWith('✓ 2: odd_explorer'))!
-  expect(done).toBeTruthy()
-  expect(running).toMatch(/━+·*\s+1:05$/)
-  expect(done).toMatch(/^✓ 2: odd_explorer\s+·*━+·*\s+0:15$/)
-  expect(running.length).toBe(done.length)
-  const ids = rows.filter((r) => /^[◐✓] \d:/.test(r))
-  expect(ids.length).toBe(2)
-})
-
-test('agent rows use a Client elapsed for running agents only when client is true', async () => {
-  const rows = rowsOf({ client: true })
-  expect(rows.find((r) => r.includes('odd_worker'))).toMatch(/\[\.\/elapsed\.tsx\]$/)
-  expect(rows.find((r) => r.includes('odd_explorer'))).toMatch(/0:15$/)
-  const tree = buildPanel(args({ client: true }))
-  const clocks: any[] = []
-  const walk = (n) => { if (n?.type === 'Client' && n.props.module === './elapsed.tsx') clocks.push(n); (n?.children ?? []).forEach?.(walk) }
-  walk(tree)
-  expect(clocks.length).toBe(1)
-  expect(clocks[0].props.props).toEqual({ since: NOW - 65_000, now: NOW, endAt: null, color: 'inactive' })
-  expect(rowsOf({ client: false }).find((r) => r.includes('odd_worker'))).toMatch(/1:05$/)
-})
-
 test('agents are hidden when there are none and cap at six with +N earlier', async () => {
-  expect(rowsOf({ panel: { ...full(), agents: [] } }).some((r) => r.startsWith('agents ·'))).toBe(false)
+  expect(rowsOf({ panel: { ...full(), agents: [] } }).some((r) => r.startsWith('agents'))).toBe(false)
   const many = { ...full(), agents: Array.from({ length: 8 }, (_, i) => agent({ id: `x${i}`, status: 'done', startedMs: NOW - 80_000 + i * 1000, endedMs: NOW - 40_000 + i * 1000 })) }
   const rows = rowsOf({ panel: many })
-  expect(rows.filter((r) => /^✓ \d:/.test(r)).length).toBe(6)
+  expect(rows.filter((r) => /^✓ worker/.test(r)).length).toBe(6)
   expect(rows).toContain('+2 earlier')
 })
 
-// ---- last turn ---------------------------------------------------------------
+// ---- agents card (S1), no last turn (S2), no Client (S3) -----------------------
 
-test('last turn card: duration, agents, edits, errors', async () => {
+test('agents card: bordered, titled agents, short names, routed model with effort meter, static elapsed', async () => {
+  const panel = { ...full(), agents: [agent({ model: 'claude-sonnet-5-5' }), agent({ id: 'a2', role: 'odd_explorer', model: 'claude-haiku-4-5', effort: 'low', status: 'done', endedMs: NOW - 15_000, startedMs: NOW - 30_000 })] }
+  const tree = buildPanel(args({ panel }))
+  const box = (tree.children as any[]).find((c) => c.props?.borderStyle === 'round' && flat(c).startsWith('agents'))
+  expect(box).toBeTruthy()
+  expect(box.props.width).toBe(66)
+  const rows = rowsOf({ panel })
+  const squash = (r: string) => r.replace(/\s+/g, ' ')
+  expect(rows).toContain('agents 1 running · 2 total')
+  expect(rows.some((r) => r.includes('odd_worker') || r.includes('odd-worker'))).toBe(false)
+  expect(rows.map(squash)).toContain('◐ worker Sonnet 5.5 ▮▮▮▯ 1:05')
+  expect(rows.map(squash)).toContain('✓ explorer Haiku 4.5 ▮▯▯▯ 0:15')
+})
+
+test('agents card shows the subagent type for an agent with no construct role, and dashes the role', async () => {
+  const panel = { ...full(), agents: [agent({ id: 'g', role: 'Explore', type: 'Explore', model: null, effort: null }), agent({ id: 'r', role: 'review_risk', type: 'construct:review-risk' })] }
+  const rows = rowsOf({ panel })
+  expect(rows.some((r) => /^◐ Explore\s+— /.test(r))).toBe(true)
+  expect(rows.some((r) => r.startsWith('◐ review-risk'))).toBe(true)
+})
+
+test('no last turn row even when a receipt is stored in the panel', async () => {
   const rows = rowsOf()
-  expect(rows).toContain('✓ last turn 16s · 0 agents · 1 edit · 0 errors')
-  expect(rows.some((r) => r.includes('$'))).toBe(false)
-  expect(rowsOf({ panel: { ...full(), receipt: null } }).some((r) => r.includes('last turn'))).toBe(false)
-  const turnBox = (tree) => (tree.children as any[]).find((c) => c.props?.borderColor === 'claude' && flat(c).includes('turn'))
-  expect(turnBox(buildPanel(args())).props.borderDimColor).toBe(true)
-  expect(turnBox(buildPanel(args({ panel: { ...full(), receipt: { ...full().receipt, endedMs: null } } }))).props.borderDimColor).toBeUndefined()
-  const busy = { ...full(), receipt: { ...full().receipt, endedMs: null, startedMs: NOW - 90_000, cost: null, errors: 1 } }
-  expect(rowsOf({ panel: busy })).toContain('◐ turn 1:30 · 0 agents · 1 edit · 1 error')
-  expect(rowsOf({ panel: busy, client: true })).toContain('◐ turn [./elapsed.tsx] · 0 agents · 1 edit · 1 error')
+  expect(rows.some((r) => r.includes('last turn') || r.includes('turn '))).toBe(false)
+  expect(rows.some((r) => r.includes('◐ turn'))).toBe(false)
+})
+
+test('client: true draws no Client element and no rail; every section is a card of the same width', async () => {
+  const tree = buildPanel(args({ client: true }))
+  const walk = (n): boolean => n?.type === 'Client' || (n?.children ?? []).some?.(walk)
+  expect(walk(tree)).toBe(false)
+  const kids = tree.children as any[]
+  expect(kids.every((c) => c.props?.borderStyle === 'round' && c.props.width === 66)).toBe(true)
+  expect(rowsOf({ client: true }).some((r) => /^─+$/.test(r))).toBe(false)
 })
 
 // ---- changes card (S9) -----------------------------------------------------------
@@ -406,32 +389,32 @@ test('5h and 7d gauges show the time to reset from an ISO resetsAt', async () =>
 
 // ---- review fixes ---------------------------------------------------------------
 
-// Rows a tree takes: Text and Client one, a column Box its children plus border and marginTop.
+// Rows a tree takes: a Text one, a column Box its children plus border.
 function rowsHigh(node): number {
   if (!node || typeof node === 'string') return 0
   if (node.type !== 'Box' || node.props?.flexDirection !== 'column') return 1
-  return (node.props.borderStyle ? 2 : 0) + (node.props.marginTop ?? 0) + (node.children ?? []).reduce((n, k) => n + rowsHigh(k), 0)
+  return (node.props.borderStyle ? 2 : 0) + (node.children ?? []).reduce((n, k) => n + rowsHigh(k), 0)
 }
 
 test('the panel never takes more rows than the pane has: the changes rows shrink, then the card goes', async () => {
   const many = Array.from({ length: 30 }, (_, i) => ({ path: `src/f${i}.ts`, added: 30 - i, removed: 0 }))
   const lean = { odd: null, rdd: null, panel: initialState(), changes: many }
-  for (const rows of [9, 10, 11, 12, 13, 14, 20, 24, 26, 30, 60]) {
+  for (const rows of [8, 9, 10, 11, 12, 13, 14, 20, 24, 26, 30, 60]) {
     expect(rowsHigh(buildPanel(args({ ...lean, rows })))).toBeLessThanOrEqual(rows)
   }
   const shown = (rows: number) => rowsOf({ ...lean, rows }).filter((r) => r.startsWith('src/')).length
   expect(shown(26)).toBeGreaterThan(0)
-  expect(rowsOf({ ...lean, rows: 9 }).some(isTitle)).toBe(false)
+  expect(rowsOf({ ...lean, rows: 8 }).some(isTitle)).toBe(false)
   // only the frame fits: the title (branch, ↑↓) stays, the rows go
-  expect(rowsOf({ ...lean, rows: 11 }).some(isTitle)).toBe(true)
-  expect(shown(11)).toBe(0)
-  expect(rowsOf({ ...lean, rows: 12 }).at(-1)).toBe('+30 more')
+  expect(rowsOf({ ...lean, rows: 10 }).some(isTitle)).toBe(true)
+  expect(shown(10)).toBe(0)
+  expect(rowsOf({ ...lean, rows: 11 }).at(-1)).toBe('+30 more')
   expect(rowsOf({ ...lean, rows: 26 }).at(-1)).toMatch(/^\+\d+ more$/)
   // a full panel on a short pane: the changes go, the other cards stay
   for (const rows of [20, 24]) {
     const tree = buildPanel(args({ rows }))
     expect(rowsOf({ rows }).some(isTitle)).toBe(false)
-    expect(textOf(tree).includes('last turn')).toBe(true)
+    expect(textOf(tree).includes('agents')).toBe(true)
   }
 })
 
@@ -441,13 +424,13 @@ test('GATE masks the inline write path', async () => {
   expect(text).not.toContain('abcdef123456')
 })
 
-test('a running turn at 40 columns holds no row wider than the card interior', async () => {
-  const panel = { ...full(), receipt: { turnId: 't', startedMs: NOW - 17_000, endedMs: null, agents: 123456, edits: 123456, errors: 123456, costStart: 1, cost: null } }
-  const tree = buildPanel(args({ panel, columns: 40, client: true }))
-  const clock = (tree.children as any[]).find((c) => c.props?.borderStyle && rowsHigh(c) === 3 && flat(c).includes('turn'))
-  const row = clock.children[0]
-  const width = (n: any): number => (typeof n === 'string' ? n.length : n.type === 'Client' ? 6 : (n.children ?? []).map(width).reduce((a: number, b: number) => a + b, 0))
-  expect(width(row)).toBeLessThanOrEqual(40 - 4)
+test('agent rows at 40 columns are truncating Text rows inside a card of the card width', async () => {
+  const tree = buildPanel(args({ columns: 40 }))
+  const box = (tree.children as any[]).find((c) => c.props?.borderStyle === 'round' && flat(c).startsWith('agents'))
+  expect(box.props.width).toBe(40)
+  const rows = box.children.slice(1)
+  expect(rows.length).toBe(2)
+  for (const r of rows) expect(r.props.wrap).toBe('truncate')
 })
 
 // ---- S8b blocked indicator ----------------------------------------------------

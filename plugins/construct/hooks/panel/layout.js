@@ -26,35 +26,28 @@
 //
 // One column at any width (S1), asked at PANEL_COLUMNS (66) through `$.ui.open({ columns })`.
 // That is a request: a width the user dragged or kept wins, so the layout reads the real width from
-// `columns` (never below 40). Top to bottom:
+// `columns` (never below 40). Every section is a `card()` of that width (round border, bold title
+// left, status right); the borders separate the sections, there are no rails. Top to bottom:
 //
-//   main     round card: model, idle/busy, effort meter, mode, requests, ctx gauge, 5h and 7d
-//   rail
+//   main     model, idle/busy, effort meter, mode, requests, ctx gauge, 5h and 7d
 //   ODD      hidden without a feature: feature, current task, one checkpoint per task
 //   REVIEW   hidden unless RDD is on: its state word
-//   rail
 //   GATE     stacked verdict bar, allowed / decider / pending / denied, buckets, last denied, inline alert
-//   agents   one row per agent: mark, role, timeline bar on the session span, clock
-//   turn     round card: last (or running) turn duration, agents, edits, errors
-//   changes  round card titled with the branch, `↑N ↓N` on the right, one row per changed file
+//   agents   `N running · M total`; one row per agent: mark, short name, routed model and effort, elapsed
+//   changes  titled with the branch, `↑N ↓N` on the right, one row per changed file
 //            (`+added -removed`), rows clamped by changeRows with a `+N more` row when cut
 //
 // Cards that have nothing to show are left out; the main card always shows (it does not depend on
 // a statusLine, S3). Colors are theme keys only (draw.js PALETTE). Rows are `Text` elements with
 // `wrap: 'truncate'` holding nested `Text` pieces, so the pane clips a long row and nothing here pads
-// to the width except the timeline and the stacked bar, which are sized from it.
-//
-// `client: true` lets the tree carry `Client` elements: `./rail.tsx` for the rails and
-// `./elapsed.tsx` for running clocks. A `Client` module path is a string literal relative to the file
-// that holds the element (index.d.ts: ClientProps.module); the elements are plain objects here, built
-// in this file next to rail.tsx and elapsed.tsx, so the literals below are relative to this file.
-// Without `client` (a surface with no `Client`) the rails are a static `─` line and clocks are static.
+// to the width except the stacked bar, which is sized from it. Clocks are static text computed at
+// each redraw; no `Client` element is built here.
 //
 // No `$` calls live here, so these run (and test) in isolation. The wiring passes the panel state
 // (hooks/panel/state.js), the session usage, a clock and the Pane's `bodyColumns` / `scroll.bodyRows`.
 
 import { agentsView, mainBusy, maskSecrets } from './state.js'
-import { PALETTE, card, changeRows, effortMeter, fmtResetIn, gauge, laneBar, lanes, panelBox, stackBar } from './draw.js'
+import { PALETTE, card, changeRows, effortMeter, fmtResetIn, gauge, stackBar } from './draw.js'
 import { STATE_COLOR, text } from '../status/format.js'
 
 export const PANEL_COLUMNS = 66
@@ -70,17 +63,11 @@ const two = (n) => String(n).padStart(2, '0')
 // `s` clipped to `w` cells, with an ellipsis when it was cut.
 const fit = (s, w) => (s.length <= w ? s : w <= 1 ? s.slice(0, Math.max(0, w)) : `${s.slice(0, w - 1)}…`)
 
-// m:ss, or XhYY from an hour on (the Elapsed client's format).
+// m:ss, or XhYY from an hour on.
 function clock(ms) {
   const s = Math.max(0, Math.floor((isNum(ms) ? ms : 0) / 1000))
   const m = Math.floor(s / 60)
   return m < 60 ? `${m}:${two(s % 60)}` : `${Math.floor(m / 60)}h${two(m % 60)}`
-}
-
-// 17s, 1m05s.
-function duration(ms) {
-  const s = Math.max(0, Math.floor((isNum(ms) ? ms : 0) / 1000))
-  return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m${two(s % 60)}s`
 }
 
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`
@@ -118,7 +105,7 @@ const row = (children) => ({ type: 'Box', props: { flexDirection: 'row' }, child
 const faint = (s) => text(s, { color: PALETTE.faint })
 const dim = (s) => text(s, { dim: true })
 
-// Rows an element takes: Text and Client one, a column Box the sum of its children plus border and margin.
+// Rows an element takes: a Text one, a column Box the sum of its children.
 function height(node) {
   if (!node || typeof node === 'string') return 0
   if (node.type !== 'Box' || node.props?.flexDirection !== 'column') return 1
@@ -289,68 +276,50 @@ function gateCard({ gate, inline, mode, width }) {
   return card({ title: 'GATE · permissions', status: { text: `${total} checks`, dim: true }, color: PALETTE.gate, children: rows, width })
 }
 
-// ---- agents (S7) -----------------------------------------------------------------
+// ---- agents (S1) -----------------------------------------------------------------
 
 const AGENT_MARK = { running: ['◐', PALETTE.agent], done: ['✓', PALETTE.gate], failed: ['✗', PALETTE.warn] }
+const MAX_NAME = 18
 
-// A clock: static text, or a Client elapsed element for a running one when the pane has Clients.
-function clockPiece(name, since, endAt, color, nowMs, client) {
+// `odd_worker` / `construct:odd-worker` -> `worker`, `review_risk` -> `review-risk`; an agent with no
+// construct role keeps its subagent type.
+function shortName(a) {
+  const raw = String(a.role ?? a.type ?? 'agent')
+  const name = raw.replace(/^construct:/, '').replace(/^odd[_-]/, '').replaceAll('_', '-')
+  return name === '' ? 'agent' : name
+}
+
+// A clock: static text, `—` when the start is unknown.
+function clockPiece(since, endAt, color, nowMs) {
   if (!isNum(since) || since <= 0) return text('—', { color })
-  if (client && endAt === null) {
-    return { type: 'Client', props: { key: name, module: './elapsed.tsx', props: { since, now: nowMs, endAt, color } } }
-  }
   return text(clock((endAt ?? nowMs) - since), { color })
 }
 
-function agentsRows(panel, nowMs, width, client) {
+function agentsCard(panel, nowMs, width) {
   const view = agentsView(panel, nowMs, MAX_AGENT_ROWS)
-  if (view.cards.length === 0) return []
+  if (view.cards.length === 0) return null
   const shown = [...view.cards].sort((a, b) => (a.startedMs ?? 0) - (b.startedMs ?? 0))
-  const geo = lanes(shown, nowMs, Math.max(8, width - 28))
   const total = Array.isArray(panel.agents) ? panel.agents.length : shown.length
-  const out = [line(text(`agents · ${view.running} running · ${total} total`, { bold: true }))]
-  if (view.rest > 0) out.push(line(faint(`+${view.rest} earlier`)))
+  const names = shown.map((a) => fit(stripControl(shortName(a)), MAX_NAME))
+  const pad = Math.max(...names.map((n) => n.length))
+  const body = []
+  if (view.rest > 0) body.push(line(faint(`+${view.rest} earlier`)))
   shown.forEach((a, i) => {
     const [mark, color] = AGENT_MARK[a.status] ?? AGENT_MARK.done
-    const bar = laneBar(geo[i])
-    const label = fit(`${i + 1}: ${a.role ?? 'agent'}`, 16).padEnd(17)
+    const meter = a.effort ? effortMeter(a.effort) : null
     const end = a.status === 'running' ? null : isNum(a.endedMs) ? a.endedMs : nowMs
-    out.push(
-      row([
+    body.push(
+      line(
         text(`${mark} `, { color }),
-        text(label),
-        faint(` ${bar.before}`),
-        text(bar.bar, { color }),
-        faint(`${bar.after} `),
-        clockPiece(`agent-clock-${a.id}`, a.startedMs, end, PALETTE.dim, nowMs, client),
-      ]),
+        text(names[i].padEnd(pad)),
+        dim(`  ${a.model ? prettyModel(a.model) : '—'}`),
+        meter ? text(` ${meter.on}${meter.off}`, { color: PALETTE.agent }) : null,
+        text('  '),
+        clockPiece(a.startedMs, end, PALETTE.dim, nowMs),
+      ),
     )
   })
-  return out
-}
-
-// ---- last turn (S8) ----------------------------------------------------------------
-
-const TURN_LABEL = '◐ turn '
-const CLOCK_ROOM = 6 // m:ss up to 59:59, XhYY after
-
-function turnCard(receipt, nowMs, width, client) {
-  if (!receipt) return null
-  const running = receipt.endedMs === null || receipt.endedMs === undefined
-  const counts = ` · ${plural(receipt.agents ?? 0, 'agent')} · ${plural(receipt.edits ?? 0, 'edit')} · ${plural(receipt.errors ?? 0, 'error')}`
-  const body = running
-    ? line(
-        text(TURN_LABEL, { color: PALETTE.main }),
-        clockPiece('turn-clock', receipt.startedMs, null, PALETTE.main, nowMs, client),
-        // The row loses `wrap: 'truncate'` when it holds a Client (register.js realize), so its static
-        // parts are sized here: the card interior less the label and the clock's room.
-        dim(client ? fit(counts, Math.max(0, width - 4 - TURN_LABEL.length - CLOCK_ROOM)) : counts),
-      )
-    : line(
-        text('✓ ', { color: PALETTE.gate }),
-        text(`last turn ${duration(receipt.endedMs - receipt.startedMs)}${counts}`),
-      )
-  return panelBox({ color: PALETTE.main, dim: !running, width, children: [body] })
+  return card({ title: 'agents', status: { text: `${view.running} running · ${total} total`, dim: true }, color: PALETTE.agent, children: body, width })
 }
 
 // ---- changes card (S9) ----------------------------------------------------------------
@@ -423,40 +392,21 @@ function changesCard({ git, changes, rows, used, width }) {
     color: PALETTE.git,
     children: room === 0 ? [] : body,
     width,
-    marginTop: 1,
   })
-}
-
-// ---- rail ------------------------------------------------------------------------------
-
-function rail(name, active, width, client) {
-  if (!client) return line(faint('─'.repeat(width)))
-  return {
-    type: 'Client',
-    props: {
-      key: name,
-      module: './rail.tsx',
-      width,
-      height: 1,
-      props: { active, width, color: PALETTE.main, dim: PALETTE.faint, marks: [], isMerge: false },
-    },
-  }
 }
 
 // ---- the panel -------------------------------------------------------------------------
 
 // Builds the panel body; the main card always shows, so it is never null. `columns` and `rows` are
 // the Pane's bodyColumns and scroll.bodyRows. `usage` is `$.session.usage()`, `model` and `effort` are
-// the fallbacks for a main thread that has not made a request yet (the state's `main` wins). `client`
-// says the surface can draw `Client` elements. `git` is parseGitStatus's result (branch, ahead, behind)
+// the fallbacks for a main thread that has not made a request yet (the state's `main` wins). `git` is parseGitStatus's result (branch, ahead, behind)
 // and `changes` the changed files ({ path, added, removed, binary, untracked }) for the changes card.
-export function buildPanel({ panel, usage, odd, rdd, nowMs, columns, rows, model, effort, client = false, git, changes }) {
+export function buildPanel({ panel, usage, odd, rdd, nowMs, columns, rows, model, effort, git, changes }) {
   const state = panel ?? {}
   const width = isNum(columns) && columns > 0 ? Math.max(MIN_COLUMNS, Math.floor(columns)) : PANEL_COLUMNS
   const busy = mainBusy(state)
   const main = { ...state.main, effort: state.main?.effort ?? effort ?? null }
   const name = prettyModel(state.main?.model ?? model)
-  const showClient = client === true
 
   const children = []
   const push = (el) => {
@@ -464,14 +414,10 @@ export function buildPanel({ panel, usage, odd, rdd, nowMs, columns, rows, model
     return Boolean(el)
   }
   push(mainCard({ main, usage, model: name, busy, blocked: state.blocked === true, compactions: state.compactions ?? 0, branch: git?.branch, width, nowMs }))
-  const above = [oddCard(odd, width), reviewCard(rdd, width)].filter(Boolean)
-  const gate = gateCard({ gate: state.gate, inline: state.inline, mode: state.main?.mode, width })
-  if (above.length > 0) {
-    children.push(rail('rail-main', busy, width, showClient), ...above)
-  }
-  if (gate) children.push(rail('rail-gate', busy, width, showClient), gate)
-  children.push(...agentsRows(state, nowMs, width, showClient))
-  push(turnCard(state.receipt, nowMs, width, showClient))
+  push(oddCard(odd, width))
+  push(reviewCard(rdd, width))
+  push(gateCard({ gate: state.gate, inline: state.inline, mode: state.main?.mode, width }))
+  push(agentsCard(state, nowMs, width))
   const used = children.reduce((n, k) => n + height(k), 0)
   push(changesCard({ git, changes, rows, used, width }))
   return { type: 'Box', props: { flexDirection: 'column', width }, children }

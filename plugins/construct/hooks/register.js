@@ -224,41 +224,11 @@ async function readLive($) {
   return live
 }
 
-// The engine reads a Client's `module` off this file's source, as a string literal relative to it, so the
-// Client elements are made here (`els.Client`) from the placeholders layout.js leaves ({ type: 'Client',
-// props.module './rail.tsx' | './elapsed.tsx' }). A Client may not sit inside a Text, so a row that holds
-// one becomes a row Box. Only reached when the surface has Client.
-function realize(node, els) {
-  if (!node || typeof node === 'string') return node
-  if (node.type === 'Client') {
-    const { module, ...rest } = node.props ?? {}
-    if (module === './rail.tsx') return els.Client({ ...rest, module: './panel/rail.tsx' })
-    if (module === './elapsed.tsx') return els.Client({ ...rest, module: './panel/elapsed.tsx' })
-    return node
-  }
-  if (!Array.isArray(node.children)) return node
-  const children = node.children.map((k) => realize(k, els))
-  const hasClient = node.type === 'Text' && node.children.some((k) => k?.type === 'Client')
-  return hasClient ? { type: 'Box', props: { flexDirection: 'row' }, children } : { ...node, children }
-}
-
-// The surfaces whose element table declares `Client` (index.d.ts, Elements).
-const CLIENT_SURFACES = ['terminal', 'desktop']
-
 // The docked panel body, drawn only for this plugin's pane (its requestId is the pane id).
 async function drawPane($, e, next) {
   const data = status.data
   if (e.requestId !== PANEL_ID) return next(e)
   const live = await readLive($)
-  let els = null
-  try {
-    // $.ui.resolve completes a table to every element name (index.d.ts, ElementName), so a `Client` key
-    // proves nothing; the surface's own table does (Elements: terminal and desktop declare Client,
-    // vscode and mobile do not). e.surface is what the client declared, a rendering fact.
-    if (CLIENT_SURFACES.includes(e.surface)) els = $.ui.resolve(e)
-  } catch {
-    // no element table: draw static
-  }
   const panel = merge(await read($, PANEL))
   const tree = buildPanel({
     panel,
@@ -270,11 +240,10 @@ async function drawPane($, e, next) {
     odd: data?.odd ?? null,
     rdd: data?.rdd ?? null,
     nowMs: live.nowMs,
-    client: els !== null,
     columns: e.props?.bodyColumns,
     rows: e.props?.scroll?.bodyRows,
   })
-  return tree ? (els ? realize(tree, els) : tree) : next(e)
+  return tree ?? next(e)
 }
 
 async function openPane($) {
@@ -345,7 +314,7 @@ export function register(on, options) {
     return result
   }).catch(($, e, next) => next(e))
 
-  // A turn began: a main turn opens the receipt, a subagent's runs again.
+  // A turn began: a main turn marks the panel busy, a subagent's runs again.
   on('turn.start', async ($, e, next) => {
     const result = await next(e)
     try {

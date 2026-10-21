@@ -36,7 +36,8 @@ test('initialState carries the schema version and empty sections', () => {
   expect(s.agents).toEqual([])
   expect(s.inline).toEqual({ count: 0, last: null })
   expect(s.gate.denied).toBe(0)
-  expect(s.receipt).toBe(null)
+  expect(s.turn).toBe(null)
+  expect('receipt' in s).toBe(false)
   expect(s.compactions).toBe(0)
 })
 
@@ -244,38 +245,39 @@ test('maskSecrets masks Basic auth, URL userinfo, CLI passwords, cloud keys and 
   expect(maskSecrets('curl https://example.com/a/b?x=1')).toBe('curl https://example.com/a/b?x=1')
 })
 
-// ---- S5 receipt --------------------------------------------------------
+// ---- main turn busy flag (the receipt is gone) ---------------------------
 
-test('a main turn opens a receipt and completing it fixes duration, agents, edits and errors', () => {
+test('a main turn marks the panel busy and completing it clears the flag; no receipt is kept', () => {
   let s = onTurnStart(initialState(), { turnId: 't1', nowMs: 1000 })
-  expect(s.receipt).toMatchObject({ turnId: 't1', startedMs: 1000, endedMs: null, agents: 0, edits: 0, errors: 0 })
+  expect(s.turn).toEqual({ turnId: 't1' })
+  expect('receipt' in s).toBe(false)
   s = spawn(s, 'a1')
   s = onToolCall(s, { tool: 'Edit', path: 'a.js', cwd: '/r' })
-  s = onToolCall(s, { tool: 'Write', path: 'b.js', agentId: 'a1', cwd: '/r' })
-  s = onToolCall(s, { tool: 'Bash', isError: true })
-  s = onToolCall(s, { tool: 'Read', isError: false })
   s = onTurnComplete(s, { turnId: 't1', nowMs: 4000 })
-  expect(s.receipt).toMatchObject({ endedMs: 4000, agents: 1, edits: 2, errors: 1 })
-})
-
-test('a new main turn replaces the receipt; subagent turns do not', () => {
-  let s = onTurnStart(initialState(), { turnId: 't1', nowMs: 1 })
-  s = onTurnStart(s, { turnId: 'x', agentId: 'a1', nowMs: 2 })
-  expect(s.receipt.turnId).toBe('t1')
-  s = onTurnComplete(s, { turnId: 'x', agentId: 'a1', nowMs: 3 })
-  expect(s.receipt.endedMs).toBe(null)
-  s = onTurnStart(s, { turnId: 't2', nowMs: 10 })
-  expect(s.receipt).toMatchObject({ turnId: 't2', edits: 0 })
-})
-
-test('events after the receipt closed do not change it; complete with no start is safe', () => {
-  let s = onTurnComplete(initialState(), { turnId: 't', nowMs: 2 })
-  expect(s.receipt).toBe(null)
-  s = onTurnStart(s, { turnId: 't', nowMs: 1 })
-  s = onTurnComplete(s, { turnId: 't', nowMs: 2 })
-  s = onToolCall(s, { tool: 'Edit', path: 'a.js', cwd: '/r' })
-  expect(s.receipt.edits).toBe(0)
+  expect(s.turn).toBe(null)
+  expect('receipt' in s).toBe(false)
   expect(s.inline.count).toBe(1)
+})
+
+test('subagent turns do not touch the busy flag; a turn id mismatch does not close it', () => {
+  let s = onTurnStart(initialState(), { turnId: 't1', nowMs: 1 })
+  s = spawn(s, 'a1')
+  s = onTurnComplete(s, { turnId: 'x', agentId: 'a1', nowMs: 3 })
+  expect(s.turn).toEqual({ turnId: 't1' })
+  expect(s.agents[0]).toMatchObject({ status: 'done', endedMs: 3 })
+  s = onTurnStart(s, { turnId: 'x', agentId: 'a1', nowMs: 4 })
+  expect(s.agents[0]).toMatchObject({ status: 'running', endedMs: null })
+  expect(onTurnComplete(s, { turnId: 'other', nowMs: 5 }).turn).toEqual({ turnId: 't1' })
+  expect(onTurnComplete(s, { turnId: 't1', nowMs: 5 }).turn).toBe(null)
+})
+
+test('complete with no start is safe, and merge drops a stored receipt', () => {
+  expect(onTurnComplete(initialState(), { turnId: 't', nowMs: 2 }).turn).toBe(null)
+  const old: any = { ...initialState(), receipt: { turnId: 't', startedMs: 1, endedMs: null, agents: 0, edits: 0, errors: 0 } }
+  const m: any = merge(old)
+  expect('receipt' in m).toBe(false)
+  expect(mainBusy(m)).toBe(false)
+  expect(merge({ ...initialState(), turn: 3 })).toEqual(initialState())
 })
 
 test('compactions are counted', () => {
@@ -325,7 +327,7 @@ test('the permission mode is kept; an empty one leaves it', () => {
   expect(onPermissionMode(s, { mode: 'plan' }).main.mode).toBe('plan')
 })
 
-test('mainBusy is true only while a main receipt is open', () => {
+test('mainBusy is true only while a main turn is open', () => {
   expect(mainBusy(initialState())).toBe(false)
   const open = onTurnStart(initialState(), { turnId: 't', nowMs: 1 })
   expect(mainBusy(open)).toBe(true)
