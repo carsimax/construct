@@ -327,6 +327,22 @@ test('the changes card shows the branch, ahead and behind, tracked and untracked
   expect(text).toContain('+7')
 })
 
+test('git status runs with -z so a non-ASCII untracked path gets its line count', async ($, on) => {
+  const argvs: string[][] = []
+  await start($, on, {
+    git: '# branch.oid abc1234\0# branch.head main\0# branch.ab +0 -0\0? café.md\0',
+    untrackedCount: '5\t0\tcafé.md\n',
+    run: (a) => (argvs.push(a), a.includes('status') ? ok('# branch.oid abc1234\0# branch.head main\0# branch.ab +0 -0\0? café.md\0') : { ...ok('5\t0\tcafé.md\n'), exitCode: 1 }),
+  })
+  const p = await pane($)
+  await p.redraw()
+  expect(argvs.find((a) => a.includes('status'))).toContain('-z')
+  const text = await joined(p)
+  expect(text).toContain('café.md')
+  expect(text).toContain('+5')
+  expect(argvs.find((a) => a.includes('--no-index'))).toContain('café.md')
+})
+
 test('an untracked file whose count is unavailable shows new; a clean synced repo has no changes card', async ($, on) => {
   await start($, on, { git: '# branch.oid abc1234\n# branch.head main\n# branch.ab +0 -0\n? notes.md\n' })
   const p = await pane($)

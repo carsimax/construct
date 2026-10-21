@@ -140,7 +140,7 @@ async function collect($) {
     // no directory known
   }
   const [gitText, revText, numstatText] = await Promise.all([
-    runText($, ['git', '--no-optional-locks', 'status', '--porcelain=v2', '--branch'], cwd, GIT_MS),
+    runText($, ['git', '--no-optional-locks', 'status', '--porcelain=v2', '--branch', '-z'], cwd, GIT_MS),
     runText($, ['git', 'rev-parse', '--show-toplevel'], cwd, GIT_MS),
     runText($, ['git', '--no-optional-locks', 'diff', '--numstat', '--no-renames', 'HEAD'], cwd, GIT_MS),
   ])

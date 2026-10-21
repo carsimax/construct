@@ -2,14 +2,15 @@
 
 // A git path as plain text: C-style quotes undone (quotes and backslashes; octal escapes stay as
 // written) and control characters dropped, so a path cannot move the cursor or inject escapes.
-function cleanPath(raw) {
+function cleanPath(raw, quoted = true) {
   let path = raw
-  if (path.length >= 2 && path.startsWith('"') && path.endsWith('"')) path = path.slice(1, -1).replace(/\\(["\\])/g, '$1')
+  if (quoted && path.length >= 2 && path.startsWith('"') && path.endsWith('"')) path = path.slice(1, -1).replace(/\\(["\\])/g, '$1')
   // eslint-disable-next-line no-control-regex
   return path.replace(/[\u0000-\u001f\u007f-\u009f]/g, '')
 }
 
-// `git status --porcelain=v2 --branch`: branch, dirty entry count, ahead and behind, and the
+// `git status --porcelain=v2 --branch [-z]`: with -z, entries are NUL-separated and paths are never
+// C-quoted (a rename entry `2 ...` is followed by one more field, its origin path); the result is branch, dirty entry count, ahead and behind, and the
 // untracked paths (`? <path>` entries; a directory ends in `/`).
 export function parseGitStatus(text) {
   if (typeof text !== 'string' || !text.includes('# branch.')) return null
@@ -19,12 +20,16 @@ export function parseGitStatus(text) {
   let behind = 0
   let dirty = 0
   const untracked = []
-  for (const line of text.split('\n')) {
+  const z = text.includes('\0')
+  const lines = text.split(z ? '\0' : '\n')
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
     if (line === '') continue
     if (!line.startsWith('#')) {
       dirty++
+      if (z && line.startsWith('2 ')) i++
       if (line.startsWith('? ')) {
-        const path = cleanPath(line.slice(2))
+        const path = cleanPath(line.slice(2), !z)
         if (path !== '') untracked.push(path)
       }
     } else if (line.startsWith('# branch.oid ')) {

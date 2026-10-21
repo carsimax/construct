@@ -16,7 +16,7 @@ ENGRAM_REPO=Gentleman-Programming/engram
 CONSTRUCT_REPO=carsimax/construct
 CONSTRUCT_REF=v3.0.0 # the release this script belongs to; keep in step with the URL above
 CONSTRUCT_PLUGIN=construct@construct
-CODEGRAPH_PACKAGE=@colbymchenry/codegraph
+CODEGRAPH_PACKAGE=@colbymchenry/codegraph@1.6.2
 
 INSTALLED=""
 SKIPPED=""
@@ -126,6 +126,10 @@ add_marketplace() {
   marketplaces=$(run claude plugin marketplace list)
   if [[ "$marketplaces" == *"($1)"* || "$marketplaces" == *"($1#"* || "$marketplaces" == *"($1@"* ]]; then
     skipped "marketplace $1 (already added)"
+    # Never change an existing install silently: say when its pinned ref is not this release's.
+    if [ -n "${2:-}" ] && [[ "$marketplaces" =~ \("$1"#([^\)]*)\) ]] && [ "${BASH_REMATCH[1]}" != "$2" ]; then
+      warn "marketplace $1 is pinned to ${BASH_REMATCH[1]}, not $2; run: claude plugin marketplace update construct, then claude plugin update $CONSTRUCT_PLUGIN"
+    fi
   else
     say "Adding the $1 marketplace"
     run claude plugin marketplace add "$1${2:+#$2}"
@@ -137,7 +141,14 @@ install_plugin() {
   local plugins
   plugins=$(run claude plugin list)
   if [[ "$plugins" == *"$CONSTRUCT_PLUGIN"* ]]; then
-    skipped "$CONSTRUCT_PLUGIN (already installed)"
+    local have
+    have=$(printf '%s\n' "$plugins" | awk -v id="$CONSTRUCT_PLUGIN" 'index($0, id) { f = 1; next } f && /❯/ { exit } f && /Version:/ { print $2; exit }')
+    if [ -n "$have" ] && [ "$have" != "${CONSTRUCT_REF#v}" ]; then
+      skipped "$CONSTRUCT_PLUGIN (already installed, version $have)"
+      warn "$CONSTRUCT_PLUGIN $have is installed but this installer is for ${CONSTRUCT_REF#v}; run: claude plugin update $CONSTRUCT_PLUGIN"
+    else
+      skipped "$CONSTRUCT_PLUGIN (already installed)"
+    fi
   else
     say "Installing $CONSTRUCT_PLUGIN"
     run claude plugin install "$CONSTRUCT_PLUGIN"

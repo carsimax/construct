@@ -209,6 +209,12 @@ test('the probes are not run on render, only on session.start and turn.complete'
   expect(seen.length).toBeGreaterThan(after)
 })
 
+test('parseGitStatus reads the -z form: NUL entries, unquoted non-ASCII paths, a rename origin skipped', async () => {
+  const text = ['# branch.oid abc1234', '# branch.head main', '# branch.ab +0 -0', '2 R. N... 100644 100644 100644 a b R100 new.md', '? old.md', '? café.md', '? "q".md', ''].join('\0')
+  const git = parseGitStatus(text.replace('? old.md\0', 'old.md\0? ñ.md\0'))
+  expect(git).toEqual({ branch: 'main', dirty: 4, ahead: 0, behind: 0, untracked: ['ñ.md', 'café.md', '"q".md'] })
+})
+
 test('parseGitStatus lists untracked paths and keeps its other fields', async () => {
   const git = parseGitStatus('# branch.oid abc1234deadbeef\n# branch.head main\n# branch.ab +2 -1\n1 .M x\n? new.txt\n? dir/\n? "sp\\"q.txt"\n')
   expect(git).toEqual({ branch: 'main', dirty: 4, ahead: 2, behind: 1, untracked: ['new.txt', 'dir/', 'sp"q.txt'] })

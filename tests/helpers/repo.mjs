@@ -56,7 +56,7 @@ export function commitAll(repo, message) {
 // makeRepo creates a repository with one base commit holding `base`
 // (path -> content or {content, executable}).
 export function makeRepo(base = {}) {
-  const repo = mkdtempSync(join(tmpdir(), 'odd-assess-test-'))
+  const repo = mkdtempSync(join(tmpdir(), 'construct-test-'))
   created.push(repo)
   git(repo, 'init', '-q', '-b', 'main')
   git(repo, 'config', 'user.email', 'test@example.com')

@@ -458,3 +458,13 @@ test('phase: the busy status names the running agents phase, and blocked wins', 
   expect(rowsOf({ panel: { ...verifying, blocked: true } })[0]).toBe('Opus 5.5 ◆ blocked')
   expect(rowsOf({ panel: { ...full(), blocked: false } })[0]).toBe('Opus 5.5 ○ idle')
 })
+
+test('activeWork joins surplus cells from an unescaped pipe into the task column', async () => {
+  const text = DOC(['| T1 | S1 | a | b | done |', '| T2 | S1 | x | y | pending |'])
+  expect(activeWork([{ name: 'f.md', mtimeMs: 1, text }])).toEqual({
+    feature: 'f',
+    open: 1,
+    task: { id: 'T2', title: 'x|y' },
+    tasks: [{ id: 'T1', done: true }, { id: 'T2', done: false }],
+  })
+})

@@ -37,6 +37,9 @@ function scanTasks(markdown) {
   for (i += 2; i < lines.length && lines[i].trim().startsWith('|'); i++) {
     const cells = splitRow(lines[i])
     if (cells.length < header.length) return null
+    // An unescaped `|` in the task cell shifts the columns: join the surplus cells into it.
+    const extra = cells.length - header.length
+    if (extra > 0) cells.splice(titleCol, extra + 1, cells.slice(titleCol, titleCol + extra + 1).join('|'))
     tasks.push({ id: cells[idCol], done: FINISHED.has(cells[status].toLowerCase()) })
     if (!FINISHED.has(cells[status].toLowerCase())) {
       open++
