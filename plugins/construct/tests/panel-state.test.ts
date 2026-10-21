@@ -246,42 +246,33 @@ test('maskSecrets masks Basic auth, URL userinfo, CLI passwords, cloud keys and 
 
 // ---- S5 receipt --------------------------------------------------------
 
-test('a main turn opens a receipt and completing it fixes duration and cost added', () => {
-  let s = onTurnStart(initialState(), { turnId: 't1', nowMs: 1000, cost: 1.5 })
-  expect(s.receipt).toMatchObject({ turnId: 't1', startedMs: 1000, endedMs: null, agents: 0, edits: 0, errors: 0, cost: null })
+test('a main turn opens a receipt and completing it fixes duration, agents, edits and errors', () => {
+  let s = onTurnStart(initialState(), { turnId: 't1', nowMs: 1000 })
+  expect(s.receipt).toMatchObject({ turnId: 't1', startedMs: 1000, endedMs: null, agents: 0, edits: 0, errors: 0 })
   s = spawn(s, 'a1')
   s = onToolCall(s, { tool: 'Edit', path: 'a.js', cwd: '/r' })
   s = onToolCall(s, { tool: 'Write', path: 'b.js', agentId: 'a1', cwd: '/r' })
   s = onToolCall(s, { tool: 'Bash', isError: true })
   s = onToolCall(s, { tool: 'Read', isError: false })
-  s = onTurnComplete(s, { turnId: 't1', nowMs: 4000, cost: 2.0 })
-  expect(s.receipt).toMatchObject({ endedMs: 4000, agents: 1, edits: 2, errors: 1, cost: 0.5 })
+  s = onTurnComplete(s, { turnId: 't1', nowMs: 4000 })
+  expect(s.receipt).toMatchObject({ endedMs: 4000, agents: 1, edits: 2, errors: 1 })
 })
 
 test('a new main turn replaces the receipt; subagent turns do not', () => {
-  let s = onTurnStart(initialState(), { turnId: 't1', nowMs: 1, cost: 0 })
-  s = onTurnStart(s, { turnId: 'x', agentId: 'a1', nowMs: 2, cost: 0 })
+  let s = onTurnStart(initialState(), { turnId: 't1', nowMs: 1 })
+  s = onTurnStart(s, { turnId: 'x', agentId: 'a1', nowMs: 2 })
   expect(s.receipt.turnId).toBe('t1')
-  s = onTurnComplete(s, { turnId: 'x', agentId: 'a1', nowMs: 3, cost: 9 })
+  s = onTurnComplete(s, { turnId: 'x', agentId: 'a1', nowMs: 3 })
   expect(s.receipt.endedMs).toBe(null)
-  s = onTurnStart(s, { turnId: 't2', nowMs: 10, cost: 0 })
+  s = onTurnStart(s, { turnId: 't2', nowMs: 10 })
   expect(s.receipt).toMatchObject({ turnId: 't2', edits: 0 })
 })
 
-test('cost is null when a number is missing and never negative', () => {
-  let s = onTurnStart(initialState(), { turnId: 't', nowMs: 1 })
-  s = onTurnComplete(s, { turnId: 't', nowMs: 2, cost: 1 })
-  expect(s.receipt.cost).toBe(null)
-  s = onTurnStart(s, { turnId: 't', nowMs: 1, cost: 5 })
-  s = onTurnComplete(s, { turnId: 't', nowMs: 2, cost: 3 })
-  expect(s.receipt.cost).toBe(0)
-})
-
 test('events after the receipt closed do not change it; complete with no start is safe', () => {
-  let s = onTurnComplete(initialState(), { turnId: 't', nowMs: 2, cost: 1 })
+  let s = onTurnComplete(initialState(), { turnId: 't', nowMs: 2 })
   expect(s.receipt).toBe(null)
-  s = onTurnStart(s, { turnId: 't', nowMs: 1, cost: 0 })
-  s = onTurnComplete(s, { turnId: 't', nowMs: 2, cost: 1 })
+  s = onTurnStart(s, { turnId: 't', nowMs: 1 })
+  s = onTurnComplete(s, { turnId: 't', nowMs: 2 })
   s = onToolCall(s, { tool: 'Edit', path: 'a.js', cwd: '/r' })
   expect(s.receipt.edits).toBe(0)
   expect(s.inline.count).toBe(1)

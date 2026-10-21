@@ -122,14 +122,15 @@ test('one column: the root is a column Box and nothing splits at 140 columns', a
 
 // ---- main card ---------------------------------------------------------------
 
-test('main card: model, status, effort meter, mode, requests, ctx gauge with tokens, cost, 5h and 7d', async () => {
+test('main card: model, status, effort meter, mode, requests, ctx gauge with tokens, 5h and 7d, no session cost', async () => {
   const rows = rowsOf()
   expect(rows[idx(rows, 'Opus 5.5')]).toBe('Opus 5.5 ○ idle')
   const i = idx(rows, 'Opus 5.5')
   expect(rows[i + 1]).toBe('⎇ feat/x')
   expect(rows[i + 2]).toBe('effort ▮▮▯▯ medium   mode auto   7 req')
   expect(rows[i + 3]).toBe('ctx ▰▰▰▰▰▰▰▱▱▱ 67% 666k/1.0M  ⟲2')
-  expect(rows[i + 4]).toBe('$104   5h ▱▱▱▱▱ 4%   7d ▰▱▱▱▱ 13%')
+  expect(rows[i + 4]).toBe('5h ▱▱▱▱▱ 4%   7d ▰▱▱▱▱ 13%')
+  expect(rows.some((r) => r.includes('$'))).toBe(false)
   const card = buildPanel(args()).children.find((c) => c.props?.borderStyle === 'round')
   expect(card.props.borderColor).toBe('claude')
 })
@@ -281,9 +282,10 @@ test('agents are hidden when there are none and cap at six with +N earlier', asy
 
 // ---- last turn ---------------------------------------------------------------
 
-test('last turn card: duration, agents, edits, errors, cost added', async () => {
+test('last turn card: duration, agents, edits, errors', async () => {
   const rows = rowsOf()
-  expect(rows).toContain('✓ last turn 16s · 0 agents · 1 edit · 0 errors · +$0.44')
+  expect(rows).toContain('✓ last turn 16s · 0 agents · 1 edit · 0 errors')
+  expect(rows.some((r) => r.includes('$'))).toBe(false)
   expect(rowsOf({ panel: { ...full(), receipt: null } }).some((r) => r.includes('last turn'))).toBe(false)
   const turnBox = (tree) => (tree.children as any[]).find((c) => c.props?.borderColor === 'claude' && flat(c).includes('turn'))
   expect(turnBox(buildPanel(args())).props.borderDimColor).toBe(true)
@@ -291,8 +293,6 @@ test('last turn card: duration, agents, edits, errors, cost added', async () => 
   const busy = { ...full(), receipt: { ...full().receipt, endedMs: null, startedMs: NOW - 90_000, cost: null, errors: 1 } }
   expect(rowsOf({ panel: busy })).toContain('◐ turn 1:30 · 0 agents · 1 edit · 1 error')
   expect(rowsOf({ panel: busy, client: true })).toContain('◐ turn [./elapsed.tsx] · 0 agents · 1 edit · 1 error')
-  const nocost = { ...full(), receipt: { ...full().receipt, cost: null } }
-  expect(rowsOf({ panel: nocost })).toContain('✓ last turn 16s · 0 agents · 1 edit · 0 errors')
 })
 
 // ---- changes card (S9) -----------------------------------------------------------
@@ -397,11 +397,11 @@ test('5h and 7d gauges show the time to reset from an ISO resetsAt', async () =>
     ],
   }
   const rows = rowsOf({ usage: withReset })
-  expect(rows[idx(rows, '$104')]).toBe('$104   5h ▱▱▱▱▱ 4% ↻3h10m   7d ▰▱▱▱▱ 13% ↻4d2h')
+  expect(rows[idx(rows, '5h')]).toBe('5h ▱▱▱▱▱ 4% ↻3h10m   7d ▰▱▱▱▱ 13% ↻4d2h')
   // a past, missing or unparsable reset leaves the gauge as it was
   const none = { ...usage, rateLimits: [{ kind: 'five_hour', percentUsed: 4, resetsAt: 'soon' }, { kind: 'seven_day', percentUsed: 13, resetsAt: iso(-5) }] }
   const rows2 = rowsOf({ usage: none })
-  expect(rows2[idx(rows2, '$104')]).toBe('$104   5h ▱▱▱▱▱ 4%   7d ▰▱▱▱▱ 13%')
+  expect(rows2[idx(rows2, '5h')]).toBe('5h ▱▱▱▱▱ 4%   7d ▰▱▱▱▱ 13%')
 })
 
 // ---- review fixes ---------------------------------------------------------------

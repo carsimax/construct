@@ -63,15 +63,6 @@ async function nowMs($) {
   }
 }
 
-async function costUsd($) {
-  try {
-    const usd = (await $.session.usage())?.cost?.usd
-    return typeof usd === 'number' ? usd : undefined
-  } catch {
-    return undefined
-  }
-}
-
 // The project root the inline-write detector compares paths with.
 async function projectRoot($) {
   if (status.data?.root) return status.data.root
@@ -347,8 +338,7 @@ export function register(on, options) {
     if (e.agentId === undefined) void refresh($)
     try {
       const at = await nowMs($)
-      const cost = e.agentId === undefined ? await costUsd($) : undefined
-      await feed($, (s) => onTurnComplete(onUnblocked(s), { agentId: e.agentId, turnId: e.turnId, nowMs: at, cost }))
+      await feed($, (s) => onTurnComplete(onUnblocked(s), { agentId: e.agentId, turnId: e.turnId, nowMs: at }))
     } catch {
       // observe only
     }
@@ -360,8 +350,7 @@ export function register(on, options) {
     const result = await next(e)
     try {
       const at = await nowMs($)
-      const cost = e.agentId === undefined ? await costUsd($) : undefined
-      await feed($, (s) => onTurnStart(onUnblocked(s), { agentId: e.agentId, turnId: e.turnId, nowMs: at, cost }))
+      await feed($, (s) => onTurnStart(onUnblocked(s), { agentId: e.agentId, turnId: e.turnId, nowMs: at }))
     } catch {
       // observe only
     }

@@ -30,7 +30,7 @@
 // Pure state for the Construct panel: one reducer per engine event the panel
 // observes, plus selectors. No `$` calls live here and nothing throws on odd
 // input, so these run (and test) in isolation. The wiring passes plain data
-// (ids, usage, a clock, a cost number); every reducer returns a new state.
+// (ids, usage, a clock); every reducer returns a new state.
 //
 // Stored shape (SCHEMA_VERSION 3; version 3 dropped the session log, S9 as rewritten by L14):
 //   v            schema version
@@ -41,8 +41,8 @@
 //                cells: last 60 of 'allowed' | 'asked' | 'denied' | 'sub'
 //                counts: { allowed, asked, denied, sub } totals, never capped
 //                lastDenied: { tool, detail } | null, detail masked and short
-//   receipt      { turnId, startedMs, endedMs, agents, edits, errors, costStart, cost } | null (S5)
-//                endedMs null while the turn runs; cost is the cost added, null if unknown
+//   receipt      { turnId, startedMs, endedMs, agents, edits, errors } | null (S5)
+//                endedMs null while the turn runs
 //   compactions  session.compact count
 //   main         { steps, model, effort, mode }  main-thread vitals (S3): steps counts main requests
 //                (turn.step without agentId, index.d.ts:14328-14354), model and effort are the latest
@@ -295,13 +295,11 @@ export function onTurnStart(state, e) {
     agents: 0,
     edits: 0,
     errors: 0,
-    costStart: isNum(e?.cost) ? e.cost : null,
-    cost: null,
   }
   return { ...s, receipt }
 }
 
-// A turn ended: a subagent is done, the main receipt closes with the cost it added.
+// A turn ended: a subagent is done, the main receipt closes.
 export function onTurnComplete(state, e) {
   const s = merge(state)
   const nowMs = isNum(e?.nowMs) ? e.nowMs : 0
@@ -314,7 +312,6 @@ export function onTurnComplete(state, e) {
   return openReceipt(s, (r) => ({
     ...r,
     endedMs: nowMs,
-    cost: isNum(e?.cost) && isNum(r.costStart) ? Math.max(0, e.cost - r.costStart) : null,
   }))
 }
 

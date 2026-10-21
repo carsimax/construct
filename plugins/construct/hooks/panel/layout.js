@@ -28,14 +28,14 @@
 // That is a request: a width the user dragged or kept wins, so the layout reads the real width from
 // `columns` (never below 40). Top to bottom:
 //
-//   main     round card: model, idle/busy, effort meter, mode, requests, ctx gauge, cost, 5h and 7d
+//   main     round card: model, idle/busy, effort meter, mode, requests, ctx gauge, 5h and 7d
 //   rail
 //   ODD      hidden without a feature: feature, current task, one checkpoint per task
 //   REVIEW   hidden unless RDD is on: its state word
 //   rail
 //   GATE     stacked verdict bar, allowed / decider / pending / denied, buckets, last denied, inline alert
 //   agents   one row per agent: mark, role, timeline bar on the session span, clock
-//   turn     round card: last (or running) turn duration, agents, edits, errors, cost added
+//   turn     round card: last (or running) turn duration, agents, edits, errors
 //   changes  round card titled with the branch, `↑N ↓N` on the right, one row per changed file
 //            (`+added -removed`), rows clamped by changeRows with a `+N more` row when cut
 //
@@ -93,7 +93,6 @@ function kTokens(n) {
   return String(Math.round(n))
 }
 
-const money = (usd) => `$${usd >= 100 ? Math.round(usd) : usd.toFixed(2)}`
 
 // The last two path parts, so a long path stays readable.
 function shortPath(path) {
@@ -172,10 +171,8 @@ function mainCard({ main, usage, model, busy, blocked, compactions, branch, widt
   const limits = (Array.isArray(usage?.rateLimits) ? usage.rateLimits : [])
     .filter((l) => isNum(l?.percentUsed) && (l.kind === 'five_hour' || l.kind === 'seven_day'))
     .map((l) => limitPiece(l.kind === 'five_hour' ? '5h' : '7d', l.percentUsed, l.resetsAt, nowMs))
-  const usd = usage?.cost?.usd
-  if (isNum(usd) || limits.length > 0) {
-    const parts = [isNum(usd) ? [text(money(usd), { color: PALETTE.text })] : null, ...limits].filter(Boolean)
-    rows.push(line(parts.flatMap((p, i) => (i === 0 ? p : [text('   '), ...p]))))
+  if (limits.length > 0) {
+    rows.push(line(limits.flatMap((p, i) => (i === 0 ? p : [text('   '), ...p]))))
   }
   return card({
     title: model,
@@ -352,7 +349,6 @@ function turnCard(receipt, nowMs, width, client) {
     : line(
         text('✓ ', { color: PALETTE.gate }),
         text(`last turn ${duration(receipt.endedMs - receipt.startedMs)}${counts}`),
-        isNum(receipt.cost) ? text(` · +${money(receipt.cost)}`, { color: PALETTE.main }) : null,
       )
   return panelBox({ color: PALETTE.main, dim: !running, width, children: [body] })
 }
