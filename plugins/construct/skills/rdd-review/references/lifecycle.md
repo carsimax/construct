@@ -25,6 +25,7 @@ State lives under the git common directory (`odd-review/`), never in the worktre
 | `odd-review abandon --lineage L [--reason TEXT]` | Close an open review for good (terminal `abandoned`, no receipt) |
 | `odd-review invalidate --lineage L --reason TEXT` | Close a review no lens has touched (terminal `invalidated`); otherwise refused `not_pristine` |
 | `odd-review acknowledge --lineage L` | Write the receipt; needs `approved` |
+| `odd-review validate --gate pre-push\|pre-pr\|release [--base-ref B] [--head-ref H] [--tag T]` | The publication gate: exit 0 `ok`, or exit 1 `review_required` when the committed range being published is high risk without a sound receipt for its tree. The hook runs it before `git push`, `gh pr create`, and `gh release create` |
 
 `LIST` is a comma-separated subset of `risk,resilience,readability,reliability`. `odd-assess --json` assesses the uncommitted changes. For a committed range add `--base-ref B --committed-only`. It takes `--base-ref`, `--committed-only`, `--escalate-item`, `--escalate-reason`, and `--json`.
 

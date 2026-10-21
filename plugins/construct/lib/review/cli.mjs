@@ -9,6 +9,7 @@ import { UsageError, parseEscalation } from '../assess/escalation.mjs'
 import { goTrimSpace } from '../assess/text.mjs'
 import * as commands from './commands.mjs'
 import { reviewBoundary } from './boundary.mjs'
+import { GATES, validateGate } from './gate.mjs'
 import { readMode, readScope, writeMode } from './mode.mjs'
 import { DEFAULT_CONTEXT_BYTES } from './evidence.mjs'
 import { Refusal } from './errors.mjs'
@@ -44,6 +45,17 @@ in the worktree. Each command prints JSON that names the exact next command.
   invalidate --lineage L --reason TEXT       close a review no lens has touched
   acknowledge --lineage L                    needs approved; writes the receipt
   boundary                                   last reviewed boundary: {commit, source}
+  validate --gate pre-push|pre-pr|release [--base-ref REF] [--head-ref REF] [--tag NAME]
+        the publication gate: exit 1 (review_required, JSON on stderr) when RDD
+        is on and the committed range being published is review-due (high risk)
+        without an approved receipt for its tree whose hashes still match; exit 0
+        with {"ok":true,"result":"ok","reason":...} when RDD is off, nothing is
+        due (not_due, empty, no_base), or a receipt covers it. The range is
+        merge-base(base, head)..head, committed work only: the head is HEAD or
+        --head-ref; the base is --base-ref, else the upstream branch (pre-push),
+        else the nearest tag before --tag (release), else the default branch
+        (origin/HEAD, main, master). A sound receipt inside the range moves its
+        start up. There is no pre-commit gate
   mode enable|disable|status [--scope global|clone]
         the RDD switch (clone, then global, then default on)
 
@@ -70,6 +82,9 @@ const OPTIONS = {
   input: { type: 'string' },
   'max-bytes': { type: 'string' },
   scope: { type: 'string' },
+  gate: { type: 'string' },
+  'head-ref': { type: 'string' },
+  tag: { type: 'string' },
   help: { type: 'boolean', short: 'h' },
 }
 
@@ -87,6 +102,7 @@ const ACCEPTS = {
   status: ['lineage'],
   acknowledge: ['lineage'],
   boundary: [],
+  validate: ['gate', 'base-ref', 'head-ref', 'tag'],
   mode: ['scope'],
 }
 
@@ -168,6 +184,11 @@ function dispatch(command, values, root) {
     case 'invalidate':
       need(values, 'lineage', 'reason')
       return { json: commands.invalidate({ ...common, reason: reasonOf(values) }) }
+    case 'validate':
+      need(values, 'gate')
+      if (!GATES.includes(values.gate)) throw new UsageError(`--gate must be one of ${GATES.join(', ')}; there is no pre-commit gate`)
+      if (values.tag !== undefined && values.gate !== 'release') throw new UsageError('--tag applies to the release gate only')
+      return { json: validateGate({ root, gate: values.gate, baseRef: values['base-ref'], headRef: values['head-ref'], tag: values.tag }) }
     case 'boundary':
       return { json: reviewBoundary(root) }
     case 'status':

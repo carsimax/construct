@@ -36,6 +36,8 @@ Load this skill after each work-unit commit while the RDD switch is on, when `od
 | Stop gate blocked, naming a committed range | Review the committed range |
 | Stop gate blocked, naming "uncommitted changes" | Review the working-tree candidate |
 | Both candidates are high | Review the committed range first, then the uncommitted changes, or ask the user to commit first. Never leave high uncommitted work unreviewed: the gate reminds once per target per session, and uncommitted work changes the target |
+| The publication gate denied a `git push`, `gh pr create`, or `gh release create` (`review_required`) | Review the range it names: `odd-review start --base-ref <base> --committed-only` with the consent step, then acknowledge, then retry the command. A receipt for the published tree is what clears it. If the user declines the review, the user decides whether to run `odd-review mode disable`; never do it for them |
+| The Stop gate is silent about work you can see | It stays silent for a candidate that existed at session start (the session baseline); the publication gate still applies |
 | `boundary.source` is `root` | Do not review the whole history. Review only uncommitted changes, or ask the user which commit to use as the base |
 | `boundary.commit` equals HEAD | No committed range to review; only the working tree can be due |
 | `state` is `refutation_required`, `correction_required`, `validation_required`, or `approved` | Run the commands in `next` per the lifecycle steps below |

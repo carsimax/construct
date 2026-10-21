@@ -19,6 +19,20 @@
         ]
       },
       {
+        "matcher": "startup|resume|clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/review-gate.mjs",
+              "baseline"
+            ],
+            "timeout": 30
+          }
+        ]
+      },
+      {
         "matcher": "compact|resume",
         "hooks": [
           {
@@ -71,6 +85,19 @@
               "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/secret-guard.mjs"
             ],
             "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/publication-gate.mjs"
+            ],
+            "timeout": 30
           }
         ]
       },
