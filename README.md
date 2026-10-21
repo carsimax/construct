@@ -311,7 +311,7 @@ odd-review/receipts/<target hex>.json    # written by acknowledge
 
 Writes are a temporary file plus a rename. A second writer on a locked transaction is refused (`transaction_locked`); a lock left by a dead process (or an empty one older than 10 seconds) is reclaimed under a separate `<lock>.reclaim` lock, and only if it is still the very file (same inode and content) that was inspected as stale, so a live lock is never removed. A contender that cannot reclaim does not wait; it gets `transaction_locked`. No command changes the index, `HEAD`, or the working tree.
 
-### Secret guard
+### Secret guard and destructive commands
 
 A `PreToolUse` hook (`hooks/scripts/secret-guard.mjs`) denies tool calls that touch secrets. It replaces a `permissions.deny` list, which a plugin cannot set. It covers `Read`, `Edit`, `Write`, `MultiEdit`, `NotebookEdit`, `Grep`, `Glob`, and `Bash`, in the main session and in subagents, and holds under `bypassPermissions`.
 
@@ -323,6 +323,12 @@ Protected, anywhere in the tree (paths resolve against `cwd`; `~` and `$HOME` ex
 - `*.pem` and `*.key` files
 - any `secrets` directory
 - `rm -rf` (any flag order or spelling, with or without `sudo`) aimed at `/`, `~`, `$HOME`, or `/*`
+
+The same hook also applies two tiers to `Bash` commands (`hooks/scripts/command-guard.mjs`, a port of gentle-shell's destructive command guard). A hard deny names the rule and cannot be confirmed; the confirm tier returns `permissionDecision: "ask"`, so the user decides, and inside a subagent (the hook payload carries `agent_id`) it becomes a deny, because nothing can answer.
+
+- **Deny:** `rm -r` of `/`, `/*`, `~`, `$HOME`, `.`, or `..`; `git reset --hard`; `git clean` with force and directories (`-fd`, `-fdx`, `-xdf`); `git push` with `--force`, `--force-with-lease`, or `-f`; `chmod -R 777`; `chown -R`; `npm publish`.
+- **Confirm:** other `rm -r`; SQL `DROP`, `TRUNCATE`, or `DELETE` without `WHERE` fed to `psql`, `mysql`, `mariadb`, or `sqlite3`; `find -delete`; `git restore`; `git checkout -- <path>`; `git stash drop` and `clear`; `git push`; `git rebase`; `git branch -D`; `git clean -f` without directories.
+- **Unwrapping:** `sh`/`bash`/`zsh -c`, `eval`, `find -exec`, `$(...)`, backticks, and the wrappers `sudo`, `env`, `xargs`, `timeout`, `nice`, `command`, and variable assignments are looked through. Heredoc bodies and quoted arguments (`echo`, `printf`, `grep`, `rg`, `git commit -m`) are data, not commands, unless the heredoc feeds a shell or a SQL client.
 
 Exception: `.env.example`, `.env.sample`, and `.env.template` are allowed, since they are committed templates. Matching ignores case (`.ENV`, `~/.SSH/id_rsa`), including for the templates.
 

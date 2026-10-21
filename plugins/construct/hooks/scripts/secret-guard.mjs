@@ -1,10 +1,12 @@
-// PreToolUse hook: deny tool calls that touch secrets or run a catastrophic rm -rf.
+// PreToolUse hook: deny tool calls that touch secrets or run a catastrophic rm -rf, and
+// apply the destructive-command tiers of command-guard.mjs to Bash (deny, or ask).
 // Stands in for a permissions.deny list, which a plugin cannot set. Read-only: it
 // decides from the hook JSON alone and never touches the filesystem.
 // Usage: node secret-guard.mjs   (hook JSON on stdin: tool_name, tool_input, cwd)
 import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, isAbsolute, resolve } from 'node:path'
+import { commandVerdict } from './command-guard.mjs'
 
 const TEMPLATES = new Set(['.env.example', '.env.sample', '.env.template'])
 const SHELLS = new Set(['bash', 'sh', 'zsh', 'dash', 'ksh'])
@@ -346,7 +348,13 @@ function evaluate(event) {
   const input = event.tool_input ?? {}
   const cwd = typeof event.cwd === 'string' && event.cwd ? event.cwd : process.cwd()
   const str = (v) => (typeof v === 'string' && v ? v : null)
-  if (event.tool_name === 'Bash') return str(input.command) ? bashVerdict(input.command, cwd) : null
+  if (event.tool_name === 'Bash') {
+    if (!str(input.command)) return null
+    const secret = bashVerdict(input.command, cwd)
+    if (secret) return secret
+    // The destructive-command tiers; an agent_id marks a subagent call, where an ask is a deny.
+    return commandVerdict(input.command, { split: splitCommands, expand, subagent: Boolean(str(event.agent_id)) })
+  }
 
   const paths = [input.file_path, input.notebook_path, input.path].map(str).filter(Boolean)
   const searchDir = str(input.path) ?? cwd
@@ -365,13 +373,16 @@ function evaluate(event) {
   return null
 }
 
+// A secret verdict has a target and always denies; a command verdict carries its own
+// decision (deny or ask) and reason.
 function deny(verdict) {
   const reason =
+    verdict.reason ??
     `secret-guard blocked this call: rule "${verdict.rule}" (${verdict.target}). ` +
-    'The user can run it manually if it is intended.'
+      'The user can run it manually if it is intended.'
   process.stdout.write(
     JSON.stringify({
-      hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: reason },
+      hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: verdict.decision ?? 'deny', permissionDecisionReason: reason },
     }),
   )
 }
