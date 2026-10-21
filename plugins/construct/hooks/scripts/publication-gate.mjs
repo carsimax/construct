@@ -5,8 +5,10 @@
 //   exit 1 bad_ref           the hook passed a ref the CLI cannot read: the gate runs again
 //                            for HEAD (the checked-out branch) and that verdict decides, so
 //                            an unreadable ref never allows what HEAD would deny;
-//   anything else            allow (no repository, usage or internal errors, a timeout,
-//                            unreadable input): the hook fails open, as the other gates do.
+//   deadline                 all spawns of one hook call share one deadline (25 s, under the
+//                            hook's 30 s); on expiry the call is denied;
+//   anything else            allow (no repository, usage or internal errors, unreadable
+//                            input): the hook fails open, as the other gates do.
 // A push source containing `$` or a backtick (an unexpanded substitution or variable), or
 // one that does not resolve to a commit, is judged as HEAD.
 // Commands are found through the unwrapping command-guard uses (`sh -c [--]`, `env -S`, `eval`,
@@ -19,12 +21,14 @@ import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { extractHeredocs, nestedLines, substitutionBodies } from './command-guard.mjs'
 import { readInput } from './hook-io.mjs'
-import { splitCommands } from './shell-words.mjs'
+import { GIT_VALUE_FLAGS, splitCommands } from './shell-words.mjs'
 
 const BIN = join(dirname(fileURLToPath(import.meta.url)), '../../bin/odd-review')
+// One deadline for every `odd-review` spawn of a hook call; the hook's own timeout is 30 s.
 const TIMEOUT_MS = 25000
+let deadline = Date.now() + TIMEOUT_MS
+const EXPIRED = { code: 'deadline', message: `publication-gate: the review check did not finish within ${TIMEOUT_MS / 1000} s, so this publication is denied. Run it again, or run \`odd-review validate\` yourself first.` }
 const MAX_DEPTH = 4
-const GIT_VALUE_FLAGS = new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace', '--exec-path', '--super-prefix', '--config-env'])
 const PUSH_VALUE_FLAGS = new Set(['--repo', '-o', '--push-option', '--receive-pack', '--exec', '--force-with-lease-value'])
 const GH_VALUE_FLAGS = new Set(['-R', '--repo', '--hostname'])
 const RELEASE_VALUE_FLAGS = new Set(['-t', '--title', '-n', '--notes', '-F', '--notes-file', '--target', '--notes-start-tag', '--discussion-category', '-R', '--repo'])
@@ -143,6 +147,15 @@ function resolveDir(base, arg) {
   return base === null && !expanded.startsWith('/') ? null : resolve(base ?? '/', expanded)
 }
 
+// changeDir: the directory after `cd`/`pushd`/`popd`. `cd` with no target, `cd -`, `pushd` with
+// no target, and `popd` go somewhere the gate cannot know (null, the unresolvable-directory deny).
+function changeDir(where, name, args) {
+  const rest = args.filter((a) => a === '-' || !/^-[A-Za-z@]+$/.test(a))
+  const target = rest[0] === '--' ? rest[1] : rest[0]
+  if (name === 'popd' || target === undefined || target === '-') return null
+  return resolveDir(where, target)
+}
+
 // option reads `--name value`, `--name=value`, or a short `-N value`; null when absent.
 function optionValue(args, ...names) {
   for (let i = 0; i < args.length; i++) {
@@ -216,7 +229,7 @@ function publicationsIn(text, cwd, depth) {
     for (const word of words) for (const body of substitutionBodies(word)) nested(body, where)
     const { name, args, lines } = nestedLines(words)
     for (const line of lines) nested(line, where)
-    if (name === 'cd' && args[0] && !args[0].startsWith('-')) where = resolveDir(where, args[0])
+    if (name === 'cd' || name === 'pushd' || name === 'popd') where = changeDir(where, name, args)
     else if (name === 'git') {
       const push = gitPublication(args, where)
       if (push) found.push(push)
@@ -259,10 +272,13 @@ function gateArgs(pub) {
   return args
 }
 
-// gateError runs the gate CLI and returns its refusal ({code, message}); null for exit 0, a
-// timeout, or output that is not a refusal.
+// gateError runs the gate CLI and returns its refusal ({code, message}); null for exit 0 or
+// output that is not a refusal. A spawn that outlives the shared deadline is the EXPIRED refusal.
 function gateError(dir, args) {
-  const run = spawnSync(BIN, ['--cwd', dir, 'validate', ...args], { encoding: 'utf8', timeout: TIMEOUT_MS })
+  const left = deadline - Date.now()
+  if (left <= 0) return EXPIRED
+  const run = spawnSync(BIN, ['--cwd', dir, 'validate', ...args], { encoding: 'utf8', timeout: left })
+  if (run.error?.code === 'ETIMEDOUT') return EXPIRED
   if (run.status !== 1) return null
   try {
     const error = JSON.parse(run.stderr).error
@@ -278,6 +294,7 @@ function verdict(pub) {
     const single = pub.gate === 'pre-push' ? { ...pub, refspecs: spec === undefined ? [] : [spec] } : pub
     let error = gateError(pub.dir, gateArgs(single))
     if (error?.code === 'bad_ref') error = gateError(pub.dir, ['--gate', pub.gate])
+    if (error?.code === 'deadline') return error.message
     if (error?.code === 'review_required') return `publication-gate: ${error.message}`
   }
   return null
@@ -287,6 +304,7 @@ const unresolvable = (command) => `publication-gate: this publishes work from a 
 
 function main() {
   const input = readInput()
+  deadline = Date.now() + TIMEOUT_MS
   if (!input || input.tool_name !== 'Bash' || typeof input.cwd !== 'string' || input.cwd === '') return
   const command = input.tool_input?.command
   if (typeof command !== 'string' || command === '') return

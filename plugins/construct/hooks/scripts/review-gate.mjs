@@ -6,7 +6,7 @@
 // Usage: node review-gate.mjs [baseline]   (hook JSON on stdin: session_id, cwd, stop_hook_active)
 import { mkdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { dataDir, hasOpenSubagents, readInput, safeName } from './hook-io.mjs'
+import { dataDir, hasOpenSubagents, pruneState, readInput, safeName } from './hook-io.mjs'
 
 const MAX_REASONS = 3
 
@@ -15,14 +15,14 @@ const reminderFile = (session) => {
   return { dir, file: join(dir, `${safeName(session)}.json`) }
 }
 
-// readReminders returns the record ({targets, baseline}); a corrupt file throws (fail open).
+// readReminders returns the record ({targets, baseline}); an unreadable file is empty, a corrupt one throws (fail open).
 function readReminders(file) {
   let text
   try {
     text = readFileSync(file, 'utf8')
-  } catch (error) {
-    if (error.code === 'ENOENT') return { targets: [], baseline: [] }
-    throw error
+  } catch {
+    // Missing or unreadable: treated as empty, so one bad file cannot silence the gate.
+    return { targets: [], baseline: [] }
   }
   const parsed = JSON.parse(text)
   if (!Array.isArray(parsed?.targets) || (parsed.baseline !== undefined && !Array.isArray(parsed.baseline))) throw new Error('unexpected reminder file')
@@ -33,6 +33,7 @@ async function main() {
   const mode = process.argv[2]
   const input = readInput()
   if (!input || typeof input.cwd !== 'string' || (mode !== undefined && mode !== 'baseline')) return
+  if (mode === 'baseline') pruneState()
   if (mode === undefined) {
     if (input.stop_hook_active === true) return
     // Subagents may still be writing: every byte they change is a new target, so

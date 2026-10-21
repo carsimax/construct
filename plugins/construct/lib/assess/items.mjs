@@ -119,7 +119,8 @@ export function hasDestructiveSql(addedLines) {
   for (const statement of text.split(';')) {
     if (/\bdrop\s+(?:table|database|schema|column|index|view|constraint|trigger|function|procedure|type|sequence|user|role)\b/i.test(statement)) return true
     if (/\btruncate\b/i.test(statement)) return true
-    if (/\balter\s[\s\S]*\bdrop\b/i.test(statement)) return true
+    const alter = statement.search(/\balter\s/i)
+    if (alter >= 0 && /\bdrop\b/i.test(statement.slice(alter))) return true
     if (/\bdelete\s+from\b/i.test(statement) && !/\bwhere\b/i.test(statement)) return true
   }
   return false

@@ -11,7 +11,7 @@ export const HIGH_RISK_ITEMS = {
   6: 'no test would catch a regression',
 }
 
-export const ESCALATION_REASON_MAX_BYTES = 500
+const ESCALATION_REASON_MAX_BYTES = 500
 
 export class UsageError extends Error {}
 

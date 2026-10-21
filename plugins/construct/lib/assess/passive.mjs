@@ -12,7 +12,7 @@ export const SCAN_BYTE_LIMIT = 8 << 20
 const isRegularNonExecutableGitMode = (mode) => ['', '000000', '100644'].includes(mode)
 const isAlphaNum = (c) => (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')
 
-export function isOperationalMarkdownPath(logicalPath) {
+function isOperationalMarkdownPath(logicalPath) {
   const lower = asciiLower(logicalPath)
   const segments = lower.split('/')
   const base = goBase(lower)
@@ -29,9 +29,9 @@ export function isOperationalMarkdownPath(logicalPath) {
 }
 
 export function isPassiveDocumentExtension(logicalPath) {
+  if (isOperationalMarkdownPath(logicalPath)) return false
   const extension = goExt(logicalPath).toLowerCase()
-  if (extension === '.md') return !isOperationalMarkdownPath(logicalPath)
-  return ['.mdx', '.rst', '.adoc', '.png', '.jpg', '.jpeg', '.gif'].includes(extension)
+  return ['.md', '.mdx', '.rst', '.adoc', '.png', '.jpg', '.jpeg', '.gif'].includes(extension)
 }
 
 // isPassiveContentCandidatePath nominates a path for the passive tier.
@@ -47,9 +47,9 @@ export function isPassiveContentCandidatePath(logicalPath) {
   return !logicalPath.toLowerCase().split('/').some((segment) => segmentDenylist.includes(segment))
 }
 
-export const isPassiveImageExtension = (logicalPath) => ['.png', '.jpg', '.jpeg', '.gif'].includes(goExt(logicalPath).toLowerCase())
+const isPassiveImageExtension = (logicalPath) => ['.png', '.jpg', '.jpeg', '.gif'].includes(goExt(logicalPath).toLowerCase())
 
-export function hasPassiveImageSignature(content) {
+function hasPassiveImageSignature(content) {
   const magics = [Buffer.from('\x89PNG\r\n\x1a\n', 'latin1'), Buffer.from([0xff, 0xd8, 0xff]), Buffer.from('GIF87a'), Buffer.from('GIF89a')]
   return magics.some((magic) => content.length >= magic.length && content.subarray(0, magic.length).equals(magic))
 }

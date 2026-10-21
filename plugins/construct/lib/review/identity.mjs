@@ -27,7 +27,7 @@ export const refuterSubjectHashOf = ({ lineage, target, batchIds }) =>
 
 export const newLineage = () => `review-${randomBytes(8).toString('hex')}`
 
-const LINEAGE = /^review-[0-9a-f]{16}$/
+export const LINEAGE = /^review-[0-9a-f]{16}$/
 
 // assertLineage keeps an untrusted value from ever reaching a file path.
 export function assertLineage(value) {

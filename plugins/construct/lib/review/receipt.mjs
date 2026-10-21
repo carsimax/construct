@@ -1,9 +1,10 @@
 // The integrity hashes of a receipt, recomputed from the transaction. A receipt
 // stores them at acknowledge; status recomputes them to tell whether the
 // transaction or the receipt changed afterwards.
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { manifestDigest, sha256 } from './identity.mjs'
-import { receiptPath } from './store.mjs'
+import { readTransaction, receiptPath, storeDir } from './store.mjs'
 
 export const ONE_SHOT = ['full_reviews', 'refuter_batches', 'fix_batches', 'scoped_fix_validations', 'final_verifications']
 export const MAX_CORRECTION_LINES = 200
@@ -54,3 +55,40 @@ export function checkReceipt(root, transaction) {
   const mismatched = HASH_FIELDS.filter((field) => receipt[field] !== expected[field])
   return { status: mismatched.length === 0 ? 'ok' : 'mismatch', path: file, mismatched }
 }
+
+// readReceipts lists every readable receipt object; an unreadable one is skipped
+// (it covers nothing and sets no boundary).
+export function readReceipts(root) {
+  const dir = join(storeDir(root), 'receipts')
+  let names
+  try {
+    names = readdirSync(dir).filter((name) => name.endsWith('.json'))
+  } catch {
+    return []
+  }
+  const receipts = []
+  for (const name of names) {
+    try {
+      const receipt = JSON.parse(readFileSync(join(dir, name), 'utf8'))
+      if (receipt && typeof receipt === 'object') receipts.push(receipt)
+    } catch {
+      // Skipped.
+    }
+  }
+  return receipts
+}
+
+// receiptState reads one receipt and says whether it is sound: approved, with a
+// readable transaction whose recomputed hashes match (a legacy receipt is reported,
+// not sound).
+export function receiptState(root, receipt) {
+  if (receipt.outcome !== 'approved') return { status: 'not_approved', mismatched: [] }
+  try {
+    const { status, mismatched } = checkReceipt(root, readTransaction(root, receipt.lineage))
+    return { status, mismatched }
+  } catch {
+    return { status: 'unreadable', mismatched: [] }
+  }
+}
+
+export const isSound = (state) => state.status === 'ok'

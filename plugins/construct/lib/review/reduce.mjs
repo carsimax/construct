@@ -8,7 +8,7 @@
 // - Everything else (WARNING, SUGGESTION, pre-existing, base-only) is advisory.
 const SEVERE = ['BLOCKER', 'CRITICAL']
 
-const neutral = (finding) => ({ id: finding.id, location: finding.location, severity: finding.severity, claim: finding.claim, proof_refs: finding.proof_refs })
+export const neutral = (finding) => ({ id: finding.id, location: finding.location, severity: finding.severity, claim: finding.claim, proof_refs: finding.proof_refs })
 
 export function reduceLenses(findings) {
   const unknown = findings.filter((finding) => SEVERE.includes(finding.severity) && finding.causal_disposition === 'unknown')

@@ -14,6 +14,9 @@ const FINISHED = new Set(['done', 'dropped'])
 
 const clip = (text, max) => (text.length > max ? `${text.slice(0, max - 1)}…` : text)
 
+// This parser is kept apart from hooks/status/tasks.js on purpose: that file is a
+// plain .js the mod loads, and importing it here breaks on Node versions that read
+// a .js file without a package "type" as CommonJS. Keep the two in step by hand.
 function splitRow(line) {
   return line
     .trim()

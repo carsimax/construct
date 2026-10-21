@@ -14,20 +14,16 @@
 // work units are not judged again. The rest of the range is covered when an approved
 // receipt has the published tree as its candidate tree and its integrity hashes still
 // match its transaction (receipt_check ok); a due range without one fails.
-import { spawnSync } from 'node:child_process'
-import { readdirSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
 import { assessSnapshotRisk } from '../assess/classify.mjs'
 import { createIsolation, git } from '../assess/git.mjs'
 import { publicRisk } from '../assess/output.mjs'
+import { defaultBranchRefs, isAncestor } from './boundary.mjs'
 import { Refusal } from './errors.mjs'
 import { targetOf } from './identity.mjs'
 import { readMode } from './mode.mjs'
-import { checkReceipt } from './receipt.mjs'
-import { readTransaction, storeDir } from './store.mjs'
+import { isSound, readReceipts, receiptState } from './receipt.mjs'
 
 export const GATES = ['pre-push', 'pre-pr', 'release']
-const DEFAULT_BRANCH_REFS = ['origin/HEAD', 'main', 'master', 'origin/main', 'origin/master']
 const text = (buffer) => buffer.toString('utf8').trim()
 
 function commitOf(root, ref) {
@@ -37,9 +33,6 @@ function commitOf(root, ref) {
 }
 
 const treeOf = (root, commit) => text(git(root, ['rev-parse', `${commit}^{tree}`]))
-
-const isAncestor = (root, ancestor, descendant) =>
-  spawnSync('git', ['--no-replace-objects', '-C', root, 'merge-base', '--is-ancestor', ancestor, descendant], { stdio: 'ignore' }).status === 0
 
 const mergeBase = (root, a, b) => {
   const out = text(git(root, ['merge-base', a, b], { okStatuses: [0, 1, 128] }))
@@ -53,7 +46,7 @@ function derivedBase(root, gate, head, headIsHead, tag) {
     const args = ['describe', '--tags', '--abbrev=0', ...(tag ? ['--exclude', tag] : []), head]
     candidates.push(commitOf(root, text(git(root, args, { okStatuses: [0, 128] }))))
   }
-  for (const ref of DEFAULT_BRANCH_REFS) {
+  for (const ref of defaultBranchRefs(root)) {
     const tip = commitOf(root, ref)
     if (tip && tip !== head) candidates.push(tip)
   }
@@ -63,41 +56,6 @@ function derivedBase(root, gate, head, headIsHead, tag) {
     if (base) return base
   }
   return null
-}
-
-// receiptState reads one receipt and says whether it is sound: approved, with a
-// readable transaction whose recomputed hashes match (a legacy receipt is reported, not sound).
-function receiptState(root, receipt) {
-  if (receipt.outcome !== 'approved') return { status: 'not_approved', mismatched: [] }
-  try {
-    const { status, mismatched } = checkReceipt(root, readTransaction(root, receipt.lineage))
-    return { status, mismatched }
-  } catch {
-    return { status: 'unreadable', mismatched: [] }
-  }
-}
-
-// A legacy receipt (no hash fields) cannot prove its transaction is unchanged, so it is not sound.
-const SOUND = new Set(['ok'])
-
-function readReceipts(root) {
-  const dir = join(storeDir(root), 'receipts')
-  let names
-  try {
-    names = readdirSync(dir).filter((name) => name.endsWith('.json'))
-  } catch {
-    return []
-  }
-  const receipts = []
-  for (const name of names) {
-    try {
-      const receipt = JSON.parse(readFileSync(join(dir, name), 'utf8'))
-      if (receipt && typeof receipt === 'object') receipts.push(receipt)
-    } catch {
-      // An unreadable receipt covers nothing.
-    }
-  }
-  return receipts
 }
 
 export function validateGate({ root, gate, baseRef, headRef, tag }) {
@@ -128,8 +86,9 @@ export function validateGate({ root, gate, baseRef, headRef, tag }) {
   let start = base
   for (let moved = true; moved; ) {
     moved = false
-    for (const { receipt, status } of receipts) {
-      if (!SOUND.has(status) || typeof receipt.candidate_commit !== 'string' || typeof receipt.base_commit !== 'string') continue
+    for (const state of receipts) {
+      const { receipt } = state
+      if (!isSound(state) || typeof receipt.candidate_commit !== 'string' || typeof receipt.base_commit !== 'string') continue
       const commit = commitOf(root, receipt.candidate_commit)
       const from = commitOf(root, receipt.base_commit)
       if (commit && from && commit !== start && isAncestor(root, from, start) && isAncestor(root, start, commit) && isAncestor(root, commit, head)) {
@@ -165,7 +124,7 @@ export function validateGate({ root, gate, baseRef, headRef, tag }) {
     return from !== null && isAncestor(root, from, start)
   }
   const sameTree = receipts.filter(({ receipt }) => receipt.candidate_tree === headTree && reachesStart(receipt))
-  const sound = sameTree.find(({ status }) => SOUND.has(status))
+  const sound = sameTree.find(isSound)
   if (sound) return done('covered', { ...range, receipt: sound.status, lineage: sound.receipt.lineage })
 
   const worst = sameTree[0]

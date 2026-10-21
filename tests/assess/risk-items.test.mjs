@@ -2,7 +2,7 @@
 // raise the tier to high with a reason that names the item.
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { isGitHookPath, isMigrationPath } from '../../plugins/construct/lib/assess/items.mjs'
+import { hasDestructiveSql, isGitHookPath, isMigrationPath } from '../../plugins/construct/lib/assess/items.mjs'
 import { applyFiles, assessJson, makeRepo, reasonKeys } from './helpers.mjs'
 
 const DDL = 'ALTER TABLE users ADD COLUMN nick text;\n'
@@ -41,6 +41,8 @@ const HIGH = [
   ['.npmrc with an auth token', {}, { '.npmrc': '//registry.npmjs.org/:_authToken=abc\n' }, ['credential_file:.npmrc']],
   ['.pypirc with a password', {}, { '.pypirc': '[pypi]\npassword = hunter2\n' }, ['credential_file:.pypirc']],
   ['PEM private key header in a source file', {}, { 'src/keys.py': `KEY = """${PEM}"""\n` }, ['private_key_content:src/keys.py']],
+  ['PEM private key header in a markdown file', {}, { 'notes.md': PEM }, ['private_key_content:notes.md']],
+  ['PEM private key header in an html file', {}, { 'page.html': PEM }, ['private_key_content:page.html']],
   ['PEM private key header in a text file', {}, { 'notes/key.txt': PEM }, ['private_key_content:notes/key.txt']],
   // item 5: dependencies, container builds, git hooks
   ...[
@@ -125,6 +127,32 @@ describe('items 1, 2, 5 negatives keep their earlier tier', () => {
       assert.deepEqual(reasonKeys(json.reasons), keys)
     })
   }
+})
+
+describe('audit findings S10, S11, S12', () => {
+  test('S11: a 100k-alter statement is decided in linear time', () => {
+    const started = Date.now()
+    assert.equal(hasDestructiveSql(['alter '.repeat(100000)]), false)
+    assert.equal(hasDestructiveSql(['alter table t drop column c']), true)
+    assert.ok(Date.now() - started < 2000)
+  })
+
+  for (const [name, path] of [['orchestrator rst', 'orchestrator/guide.rst'], ['instructions rst', 'instructions/setup.rst']]) {
+    test(`S10: ${name} is not passive`, () => {
+      const repo = makeRepo()
+      applyFiles(repo, { [path]: 'Notes\n' })
+      const { json } = assessJson(repo)
+      assert.notEqual(json.risk, 'passive', JSON.stringify(json.reasons))
+    })
+  }
+
+  test('S12: a C-quoted diff header keeps its normal classification', () => {
+    const repo = makeRepo()
+    applyFiles(repo, { 'src/q"uote.js': 'export const a = 1\n', 'src/ü.js': 'export const b = 1\n' })
+    const { json } = assessJson(repo)
+    assert.equal(json.risk, 'medium', JSON.stringify(json.reasons))
+    assert.ok(!reasonKeys(json.reasons).some((key) => key.startsWith('process_scan_limit')), JSON.stringify(json.reasons))
+  })
 })
 
 describe('path predicates', () => {

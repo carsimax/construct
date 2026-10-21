@@ -2,7 +2,7 @@
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { applyFiles, captureAll, commitAll, git, highRepo, makeRepo, review, scratchDir, start } from '../review/helpers.mjs'
 
@@ -316,5 +316,43 @@ describe('both command views are analyzed', () => {
     const r = hook('git push origin feat', featureRepo())
     denied(r)
     assert.equal(r.stdout.trim().split('\n').length, 1)
+  })
+})
+
+describe('audit-findings T1', () => {
+  const repo = featureRepo()
+  test('S14: bare cd, cd -, and pushd leave an unknown directory, so a push is denied', () => {
+    for (const c of ['cd && git push', 'cd - && git push', 'pushd && git push', 'popd && git push', 'cd -P && git push']) {
+      const r = hook(c, repo)
+      assert.equal(r.decision, 'deny', c)
+      assert.match(r.reason, /directory the gate cannot resolve/, c)
+    }
+  })
+  test('S14: cd to a literal directory and pushd to one still resolve', () => {
+    for (const c of [`cd ${repo} && git push`, `pushd ${repo} && git push`, `cd -P ${repo} && git push`]) denied(hook(c, '/'))
+  })
+  test('S1: --super-prefix and --config-env values are skipped before push', () => {
+    denied(hook('git --super-prefix x push origin feat', repo))
+    denied(hook('git --config-env a=B push origin feat', repo))
+  })
+  test('S13: one deadline is shared by every odd-review spawn and expiry denies', () => {
+    const root = scratchDir('odd-pub-deadline-')
+    mkdirSync(join(root, 'hooks/scripts'), { recursive: true })
+    mkdirSync(join(root, 'bin'))
+    for (const f of ['publication-gate.mjs', 'command-guard.mjs', 'shell-words.mjs', 'hook-io.mjs']) {
+      let text = readFileSync(join(PLUGIN, 'hooks/scripts', f), 'utf8')
+      if (f === 'publication-gate.mjs') text = text.replace('const TIMEOUT_MS = 25000', 'const TIMEOUT_MS = 1500')
+      writeFileSync(join(root, 'hooks/scripts', f), text)
+    }
+    writeFileSync(join(root, 'bin/odd-review'), '#!/bin/sh\nsleep 5\n', { mode: 0o755 })
+    const started = Date.now()
+    const result = spawnSync('node', [join(root, 'hooks/scripts/publication-gate.mjs')], {
+      input: JSON.stringify({ session_id: 's', cwd: repo, tool_name: 'Bash', tool_input: { command: 'git push origin feat; git push origin feat2; gh pr create' } }),
+      encoding: 'utf8',
+    })
+    const out = JSON.parse(result.stdout).hookSpecificOutput
+    assert.equal(out.permissionDecision, 'deny')
+    assert.match(out.permissionDecisionReason, /did not finish/)
+    assert.ok(Date.now() - started < 4000, `took ${Date.now() - started} ms`)
   })
 })

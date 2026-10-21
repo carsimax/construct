@@ -4,7 +4,7 @@
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { finding, highRepo, lensResult, readTransaction, scratchDir, start } from '../review/helpers.mjs'
 
@@ -51,6 +51,9 @@ function lineage() {
   const txn = start(repo, { lenses: 'risk,reliability' })
   return { repo, txn, data: scratchDir('odd-hooks-data-') }
 }
+
+// The pending record is keyed by lens and lineage: PreToolUse cannot know the child's agent_id.
+const pendingOf = (data, txn, agent = 'construct_review-risk') => join(data, 'review-hooks', 's1', `${agent}.${txn.lineage}.json`)
 
 const fenced = (value) => `\`\`\`json\n${JSON.stringify(value)}\n\`\`\``
 
@@ -102,7 +105,7 @@ describe('context hook', () => {
     const pasted = `ODD_REVIEW_BINDING ${JSON.stringify({ lineage: txn.lineage, lens: 'review-risk' })}\nODD_REVIEW_CONTEXT\n...`
     const r = hook(CONTEXT_HOOK, spawnInput(repo, pasted), data)
     assert.equal(r.stdout, '')
-    assert.ok(existsSync(join(data, 'review-hooks', 's1', 'construct_review-risk.json')))
+    assert.ok(existsSync(pendingOf(data, txn)))
   })
 
   test('a prompt that only mentions ODD_REVIEW_CONTEXT still gets the context for its lineage', () => {
@@ -127,7 +130,7 @@ describe('context hook', () => {
 })
 
 describe('context hook binding validation', () => {
-  const pendingPath = (data) => join(data, 'review-hooks', 's1', 'construct_review-risk.json')
+  const recorded = (data) => (existsSync(join(data, 'review-hooks', 's1')) ? readdirSync(join(data, 'review-hooks', 's1')) : [])
   const binding = (value) => `ODD_REVIEW_BINDING ${typeof value === 'string' ? value : JSON.stringify(value)}`
   const cases = {
     'a lineage that is not a string': (txn) => `${binding({ lineage: 42, lens: 'review-risk' })}\nbody ${txn.lineage}`,
@@ -143,7 +146,7 @@ describe('context hook binding validation', () => {
       assert.equal(r.status, 0)
       assert.equal(r.json.hookSpecificOutput.permissionDecision, 'deny')
       assert.match(r.json.hookSpecificOutput.permissionDecisionReason, /ODD_REVIEW_BINDING/)
-      assert.equal(existsSync(pendingPath(data)), false)
+      assert.deepEqual(recorded(data), [])
     })
   }
 
@@ -152,7 +155,7 @@ describe('context hook binding validation', () => {
     const prompt = `${binding({ lineage: txn.lineage, lens: 'review-risk' })}\nbody ${txn.lineage}`
     const r = hook(CONTEXT_HOOK, spawnInput(repo, prompt), data)
     assert.equal(r.stdout, '')
-    assert.ok(existsSync(pendingPath(data)))
+    assert.ok(existsSync(pendingOf(data, txn)))
   })
 })
 
@@ -165,19 +168,19 @@ describe('context hook pasted context with patch text', () => {
     assert.notEqual(pasted, out.stdout)
     const r = hook(CONTEXT_HOOK, spawnInput(repo, pasted), data)
     assert.equal(r.stdout, '')
-    assert.ok(existsSync(join(data, 'review-hooks', 's1', 'construct_review-risk.json')))
+    assert.ok(existsSync(pendingOf(data, txn)))
   })
 })
 
 describe('context hook ambiguity', () => {
-  const pendingPath = (data, agent = 'construct_review-risk') => join(data, 'review-hooks', 's1', `${agent}.json`)
+  const recorded = (data) => (existsSync(join(data, 'review-hooks', 's1')) ? readdirSync(join(data, 'review-hooks', 's1')) : [])
 
   test('a prompt naming two distinct lineages is denied with a message to name one', () => {
     const { repo, txn, data } = lineage()
     const r = hook(CONTEXT_HOOK, spawnInput(repo, `Review ${txn.lineage} and review-0123456789abcdef`), data)
     assert.equal(r.json.hookSpecificOutput.permissionDecision, 'deny')
     assert.match(r.json.hookSpecificOutput.permissionDecisionReason, /exactly one lineage/)
-    assert.equal(existsSync(pendingPath(data)), false)
+    assert.deepEqual(recorded(data), [])
   })
 
   test('the same lineage named twice is allowed and gets the context', () => {
@@ -294,6 +297,33 @@ describe('capture hook', () => {
     assert.equal(readTransaction(repo, txn.lineage).results['review-risk'], undefined)
   })
 
+  test('two concurrent reviews of the same lens each capture into their own lineage, in any stop order', () => {
+    const one = lineage()
+    const two = lineage()
+    const data = one.data
+    spawned(one.repo, one.txn, data)
+    spawned(two.repo, two.txn, data)
+    const reply = (txn) => JSON.stringify(lensResult(txn.subjects['review-risk'], txn.manifest))
+    assert.equal(hook(CAPTURE_HOOK, stopInput(two.repo, reply(two.txn), 'construct:review-risk', { agent_id: 'b2' }), data).stdout, '')
+    assert.equal(hook(CAPTURE_HOOK, stopInput(one.repo, reply(one.txn), 'construct:review-risk', { agent_id: 'a1' }), data).stdout, '')
+    assert.ok(readTransaction(one.repo, one.txn.lineage).results['review-risk'])
+    assert.ok(readTransaction(two.repo, two.txn.lineage).results['review-risk'])
+    assert.deepEqual(readdirSync(join(data, 'review-hooks', 's1')), [])
+  })
+
+  test('a malformed reply retries the newest pending record of the lens, not a stale older one', () => {
+    const old = lineage()
+    const fresh = lineage()
+    const data = old.data
+    spawned(old.repo, old.txn, data)
+    spawned(fresh.repo, fresh.txn, data)
+    utimesSync(pendingOf(data, old.txn), new Date(1_000_000), new Date(1_000_000))
+    const r = hook(CAPTURE_HOOK, stopInput(fresh.repo, 'not json'), data)
+    assert.equal(r.json.decision, 'block')
+    assert.equal(JSON.parse(readFileSync(pendingOf(data, fresh.txn), 'utf8')).attempts, 1)
+    assert.equal(JSON.parse(readFileSync(pendingOf(data, old.txn), 'utf8')).attempts, 0)
+  })
+
   test('a lens that is already captured counts as done and the pending record is cleared', () => {
     const { repo, txn, data } = lineage()
     spawned(repo, txn, data)
@@ -302,6 +332,6 @@ describe('capture hook', () => {
     spawned(repo, txn, data)
     const again = hook(CAPTURE_HOOK, stopInput(repo, reply), data)
     assert.equal(again.stdout, '')
-    assert.equal(existsSync(join(data, 'review-hooks', 's1', 'construct_review-risk.json')), false)
+    assert.equal(existsSync(pendingOf(data, txn)), false)
   })
 })

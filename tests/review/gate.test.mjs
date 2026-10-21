@@ -141,6 +141,49 @@ describe('validate --gate: a receipt that does not cover the tree', () => {
   })
 })
 
+describe('validate --gate: a damaged receipt does not dead-end the suggested start (S6)', () => {
+  test('start accepts a target whose receipt is not sound, and the new review covers the gate', () => {
+    const repo = featureRepo()
+    const txn = approve(repo)
+    const file = transactionFile(repo, txn.lineage)
+    const data = JSON.parse(readFileSync(file, 'utf8'))
+    data.findings = [{ id: 'F9', tampered: true }]
+    writeFileSync(file, JSON.stringify(data))
+    assert.equal(gate(repo, 'pre-push').error.receipt, 'mismatch')
+    const again = review(repo, ['start', '--base-ref', 'main', '--committed-only', '--lenses', 'risk,reliability', '--lenses-reason', 'redo'])
+    assert.equal(again.status, 0, again.stderr)
+    captureAll(repo, again.json)
+    assert.equal(review(repo, ['acknowledge', '--lineage', again.json.lineage]).status, 0)
+    const r = gate(repo, 'pre-push')
+    assert.equal(r.status, 0)
+    assert.equal(r.json.receipt, 'ok')
+  })
+
+  test('the boundary ignores a receipt that is not sound', () => {
+    const repo = featureRepo()
+    const txn = approve(repo)
+    const file = transactionFile(repo, txn.lineage)
+    const data = JSON.parse(readFileSync(file, 'utf8'))
+    data.findings = [{ id: 'F9', tampered: true }]
+    writeFileSync(file, JSON.stringify(data))
+    assert.equal(review(repo, ['boundary']).json.source, 'merge-base')
+  })
+})
+
+describe('validate --gate: the default branch comes from init.defaultBranch (S7)', () => {
+  test('a repository whose default branch is develop still gates a high-risk push', () => {
+    const repo = highRepo()
+    git(repo, 'branch', '-m', 'main', 'develop')
+    git(repo, 'config', 'init.defaultBranch', 'develop')
+    git(repo, 'checkout', '-q', '-b', 'feat')
+    applyFiles(repo, { 'scripts/new.sh': 'echo new\n' })
+    commitAll(repo, 'high-risk unit')
+    const r = gate(repo, 'pre-push')
+    assert.equal(r.status, 1)
+    assert.equal(r.error.code, 'review_required')
+  })
+})
+
 describe('validate --gate: how the published range is derived', () => {
   test('pre-push uses the upstream branch as the base', () => {
     const repo = makeRepo({ 'src/app.js': 'export const a = 1\n' })

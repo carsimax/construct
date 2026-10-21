@@ -6,7 +6,7 @@
 // prompts that start with a valid binding line pass through. A malformed binding
 // line, or one whose lineage differs from another named outside the patch
 // blocks, is denied. A prompt naming two
-// distinct lineages is denied. A new spawn overwrites the lens's pending record.
+// distinct lineages is denied. A new spawn of the same lens and lineage overwrites its pending record.
 // Errors fail open.
 // Usage: node review-context.mjs   (hook JSON on stdin)
 import { spawnSync } from 'node:child_process'
@@ -28,15 +28,18 @@ function bindingOf(prompt) {
   const first = prompt.split('\n', 1)[0]
   if (!first.startsWith(BINDING)) return null
   let lineage
+  let subject
   try {
-    lineage = JSON.parse(first.slice(BINDING.length))?.lineage
+    const parsed = JSON.parse(first.slice(BINDING.length))
+    lineage = parsed?.lineage
+    subject = parsed?.subject_hash
   } catch {
     return { error: 'the binding line is not valid JSON' }
   }
   if (typeof lineage !== 'string' || !/^review-[0-9a-f]{16}$/.test(lineage)) {
     return { error: 'its lineage is not a string of the form review-<16 hex>' }
   }
-  return { lineage }
+  return { lineage, subject: typeof subject === 'string' ? subject : undefined }
 }
 
 // outsidePatches drops the ODD_REVIEW_PATH ... ODD_REVIEW_PATH_END blocks, which
@@ -64,7 +67,6 @@ function main() {
   const match = REVIEW_AGENT.exec(toolInput.subagent_type ?? '')
   if (!match) return
   const [agent, lens] = match
-  const pending = pendingFile(input.session_id, agent)
 
   // The orchestrator pasted the context itself (it starts with the binding
   // line): record its lineage, change nothing.
@@ -78,7 +80,7 @@ function main() {
       })
       return
     }
-    atomicWrite(pending, `${JSON.stringify({ lineage: pasted.lineage, lens, cwd: input.cwd, attempts: 0 })}\n`)
+    atomicWrite(pendingFile(input.session_id, agent, pasted.lineage), `${JSON.stringify({ lineage: pasted.lineage, lens, cwd: input.cwd, attempts: 0, subject_hash: pasted.subject })}\n`)
     return
   }
 
@@ -103,11 +105,12 @@ function main() {
     timeout: 25_000,
   })
   if (result.status !== 0) {
-    rmSync(pending, { force: true })
+    rmSync(pendingFile(input.session_id, agent, lineage), { force: true })
     decide('deny', { permissionDecisionReason: `odd-review context refused ${lens} for ${lineage}: ${(result.stderr || result.error?.message || '').trim()}` })
     return
   }
-  atomicWrite(pending, `${JSON.stringify({ lineage, lens, cwd: input.cwd, attempts: 0 })}\n`)
+  const subject = bindingOf(result.stdout)?.subject
+  atomicWrite(pendingFile(input.session_id, agent, lineage), `${JSON.stringify({ lineage, lens, cwd: input.cwd, attempts: 0, subject_hash: subject })}\n`)
   decide('allow', {
     permissionDecisionReason: `construct: injected the odd-review context for ${lens} (${lineage})`,
     updatedInput: { ...toolInput, prompt: result.stdout },

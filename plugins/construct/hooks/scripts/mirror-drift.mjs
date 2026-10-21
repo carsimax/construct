@@ -11,13 +11,13 @@ import { join } from 'node:path'
 import { dataDir, hasOpenSubagents, readInput, safeName } from './hook-io.mjs'
 import { readRecord, recordFile } from './risk-line.mjs'
 
-export const SAVE_TOOLS = ['mcp__engram__mem_save', 'mcp__plugin_engram_engram__mem_save']
+const SAVE_TOOLS = ['mcp__engram__mem_save', 'mcp__plugin_engram_engram__mem_save']
 // Only the tail of the transcript is read.
 // shortcut: a turn longer than this tail has no prompt boundary in view, so the gate stays silent, upgrade if long turns slip through.
 const TAIL_BYTES = 512 * 1024
 const DOC = /^odd\/tasks\/([^/]+)\.md$/
 
-export const topicKey = (feature) => `odd/${feature}/tasks`
+const topicKey = (feature) => `odd/${feature}/tasks`
 
 const rowsOf = (path) => {
   const fd = openSync(path, 'r')
@@ -45,7 +45,7 @@ const isPrompt = (row) => {
 
 // turnSince returns the id of the last real user prompt and the topic keys saved after it, or
 // null when the tail holds no such prompt.
-export function turnSince(path) {
+function turnSince(path) {
   const rows = rowsOf(path)
     .filter((line) => line.trim() !== '')
     .map((line) => {

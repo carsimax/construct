@@ -1,5 +1,29 @@
 // Shell-word tokenizer shared by the command hooks (secret-guard and publication-gate).
 // Pure: no I/O.
+import { resolve } from 'node:path'
+
+export const SHELLS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh'])
+// Flags of `git` that take a value, so the next word is not the subcommand.
+export const GIT_VALUE_FLAGS = new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace', '--exec-path', '--super-prefix', '--config-env'])
+
+// shortcut: `~/sub` and `$HOME/sub` are not a root target (command-guard asks for rm -r, as
+// upstream denies only the roots themselves); upgrade if a deny for home subtrees is wanted.
+const ROOTISH = /^(?:\/(?:\*+)?|~\/?|\$\{?HOME\}?\/?)$/
+const DOTS = /^\.{1,2}\/?$/
+
+// isRootOrHome: the one rm-root rule of both guards. True for /, ~, $HOME, and a `/*` glob of
+// one of them. Without `at`, `.` and `..` count too; with `at` ({ cwd, home }) a path counts
+// when it resolves to / or home, so a `.` in prose is not a root unless the cwd is one.
+export function isRootOrHome(target, expand, at, glob = false) {
+  const t = expand(target)
+  if (ROOTISH.test(target) || ROOTISH.test(t)) return true
+  if (at) {
+    const abs = resolve(at.cwd, t)
+    if (abs === '/' || abs === resolve(at.home)) return true
+  } else if (!glob && DOTS.test(target)) return true // `./*` and `../*` stay an ask, as at baseline
+  return /\/\*$/.test(target) && isRootOrHome(target.slice(0, -2) || '/', expand, at, true)
+}
+
 // splitCommands is a small shell-word splitter: quotes and backslashes group a word,
 // unquoted ; | & ( ) ` newline end a command, and < > are dropped as separators so
 // `cat <.env` yields the word `.env`. Each returned word keeps whether it was quoted.

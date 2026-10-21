@@ -1,7 +1,6 @@
 // Active ODD feature, by the rule of hooks/scripts/feature-state.mjs: a document
 // counts when its `## Tasks` table is well formed and holds a row whose status
-// is not `done` or `dropped`. A mod cannot import that script (it needs Node),
-// so the rule is restated here.
+// is not `done` or `dropped`.
 const FINISHED = new Set(['done', 'dropped'])
 
 function splitRow(line) {
@@ -47,11 +46,6 @@ function scanTasks(markdown) {
   return { open, first, tasks }
 }
 
-// Number of unfinished rows, or null when the table is missing or malformed.
-export function unfinishedCount(markdown) {
-  return scanTasks(markdown)?.open ?? null
-}
-
 function newest(docs) {
   let best = null
   for (const doc of docs) {
@@ -63,7 +57,7 @@ function newest(docs) {
       continue
     }
     if (!scan?.open) continue
-    if (best === null || doc.mtimeMs > best.mtimeMs) best = { mtimeMs: doc.mtimeMs, feature: doc.name.slice(0, -3), open: scan.open, task: scan.first, tasks: scan.tasks }
+    if (best === null || doc.mtimeMs > best.mtimeMs) best = { mtimeMs: doc.mtimeMs, feature: doc.name.slice(0, -3), open: scan.open, task: scan.first, tasks: scan.tasks.map(({ id, done }) => ({ id, done })) }
   }
   return best
 }

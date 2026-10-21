@@ -118,7 +118,7 @@ const SAFE_YAML_LOADER_ARG = /\bLoader\s*=\s*(?:yaml\.)?C?SafeLoader\b/
 
 // A SafeLoader protects its own yaml.load call, not a different call or an
 // unrelated assignment elsewhere on the line. Unbalanced calls stay unsafe.
-export function hasUnsafeYAMLLoad(line) {
+function hasUnsafeYAMLLoad(line) {
   for (const match of line.matchAll(YAML_LOAD_CALL)) {
     const start = match.index + match[0].length
     let depth = 1

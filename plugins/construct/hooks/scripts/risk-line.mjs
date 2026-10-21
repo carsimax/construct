@@ -57,7 +57,6 @@ async function main() {
   if (!headCommit(root)) return
 
   const { dir, file } = recordFile(input.session_id)
-  const { candidateTree } = freezeWorkingTree(root)
   const write = (record) => {
     mkdirSync(dir, { recursive: true })
     atomicWrite(file, `${JSON.stringify(record)}\n`)
@@ -74,10 +73,11 @@ async function main() {
       // A corrupt record is replaced.
     }
     if (previous && previous.root === root && previous.prompt_id === promptId) return
-    write({ root, tree: candidateTree, blocked: false, ...(promptId ? { prompt_id: promptId } : {}) })
+    write({ root, tree: freezeWorkingTree(root).candidateTree, blocked: false, ...(promptId ? { prompt_id: promptId } : {}) })
     return
   }
 
+  const { candidateTree } = freezeWorkingTree(root)
   const record = readRecord(file)
   // A record from another repository, or an old one without a root, is not this turn's.
   if (!record || record.root !== root || record.blocked === true || record.tree === candidateTree) return

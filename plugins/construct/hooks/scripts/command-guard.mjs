@@ -3,8 +3,8 @@
 // Pure: no I/O. secret-guard passes in its own shell-word splitter, so there is one tokenizer.
 //   tier "deny": never allowed.   tier "ask": the user confirms; inside a subagent it is a deny.
 import { basename } from 'node:path'
+import { GIT_VALUE_FLAGS, isRootOrHome, SHELLS } from './shell-words.mjs'
 
-const SHELLS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh'])
 const SQL_CLIENTS = new Set(['psql', 'mysql', 'mariadb', 'sqlite3'])
 const DATA_COMMANDS = new Set(['echo', 'printf'])
 const MAX_DEPTH = 4
@@ -34,7 +34,6 @@ const WRAPPERS = {
   until: new Set(),
 }
 const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/
-const GIT_VALUE_FLAGS = new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace', '--exec-path'])
 
 // unwrap walks past assignments, wrappers, their flags and values, and the positional
 // argument `timeout` takes (its DURATION). `at` is the index of the word that names the
@@ -160,10 +159,6 @@ export function nestedLines(live) {
   return { at, name, args, lines }
 }
 
-// shortcut: `~/sub` and `$HOME/sub` are an ask (rm -r), not a deny as upstream has them; S1 lists only
-// the roots themselves. Upgrade if a deny for home subtrees is wanted.
-const ROOTISH = /^(?:\/(?:\*+)?|\.{1,2}\/?|~\/?|\$\{?HOME\}?\/?)$/
-
 // gitMatches: rules for one `git` invocation (args are the words after `git`).
 function gitMatches(args, add) {
   let i = 0
@@ -209,7 +204,7 @@ function findMatches(command, deps, depth = 0) {
       if (payloads.some(sqlDestroys)) add('ask', 'SQL DROP/TRUNCATE/DELETE without WHERE')
     } else if (name === 'rm' && (hasFlag(args, 'r', '--recursive') || hasFlag(args, 'R'))) {
       const targets = args.filter((a) => !a.startsWith('-') || a === '-')
-      if (targets.some((t) => ROOTISH.test(t) || ROOTISH.test(expand(t))) || args.includes('--no-preserve-root')) add('deny', 'rm -rf of /, ~, $HOME, ., or ..')
+      if (targets.some((t) => isRootOrHome(t, expand)) || args.includes('--no-preserve-root')) add('deny', 'rm -rf of /, ~, $HOME, ., or ..')
       else add('ask', 'rm -r')
     } else if (name === 'find') {
       if (args.includes('-delete')) add('ask', 'find -delete')
