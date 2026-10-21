@@ -6,7 +6,7 @@ import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { applyFiles, makeRepo, scratchDir } from '../review/helpers.mjs'
+import { applyFiles, makeRepo, scratchDir } from '../helpers/repo.mjs'
 
 const PLUGIN = new URL('../../plugins/construct/', import.meta.url).pathname
 const MIRROR = join(PLUGIN, 'hooks/scripts/mirror-drift.mjs')

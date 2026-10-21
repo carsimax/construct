@@ -39,11 +39,6 @@ function world($, on, o: any = {}) {
     if (a[0] === 'git' && a.includes('--no-index')) return value(o.untrackedCount ? { ...ok(o.untrackedCount), exitCode: 1 } : { ...ok(''), exitCode: 128 })
     if (a[0] === 'git' && a.includes('--numstat')) return value(ok(o.numstat ?? ''))
     if (a[0] === 'git' && a.includes('rev-parse')) return value(ok('/home/me/proj\n.git\n.git\n'))
-    if (a.includes('mode')) return value(ok(JSON.stringify({ mode: 'on', source: 'default' })))
-    if (a.includes('boundary')) return value(ok(JSON.stringify({ commit: 'deadbeef', source: 'root' })))
-    if (a.some((x: string) => x.endsWith('odd-assess'))) {
-      return value(ok(JSON.stringify({ schema: 'x', risk: 'passive', reasons: [], candidate: { kind: 'k', consumed: false }, review_due: false, review_due_reason: 'passive' })))
-    }
     return value({ ...ok(''), exitCode: 1 })
   })
   on('ui.render', () => ({ type: 'Box', props: {}, children: [] }))
@@ -121,9 +116,6 @@ test('/construct doctor returns a report even when every process fails', { optio
   expect(text).toContain('✗ Node')
   expect(text).toContain('✗ engram@engram plugin enabled')
   expect(text).toContain('✗ CodeGraph index')
-  expect(text).toContain('✗ odd-review runnable')
-  expect(text).toContain('✗ odd-assess runnable')
-  expect(text).toContain('✗ RDD mode: unknown')
   expect(await isUp($)).toBe(false)
 })
 
@@ -140,13 +132,11 @@ test('/construct doctor reports a healthy setup', { options: { panel_open_on_sta
   const run = (a: string[]) => {
     if (a[0] === 'git') return ok('/home/me/proj\n.git\n.git\n')
     if (a[1] === '--version') return ok('v22.1.0\n')
-    if (a.includes('mode')) return ok(JSON.stringify({ mode: 'off', source: 'default' }))
     return ok('usage')
   }
   await start($, on, { run, settings: { enabledPlugins: { 'engram@engram': true } }, exists: true, version: '2.1.400' })
   const text = String((await $.command.run({ command: 'construct', args: 'doctor' }))?.text ?? '')
   expect(text).not.toContain('✗')
-  expect(text).toContain('✓ RDD mode: off')
 })
 
 test('the Pane draws the panel for the construct pane id', async ($, on) => {
@@ -335,6 +325,22 @@ test('the changes card shows the branch, ahead and behind, tracked and untracked
   expect(text).toContain('bin')
   expect(text).toContain('notes.md')
   expect(text).toContain('+7')
+})
+
+test('git status runs with -z so a non-ASCII untracked path gets its line count', async ($, on) => {
+  const argvs: string[][] = []
+  await start($, on, {
+    git: '# branch.oid abc1234\0# branch.head main\0# branch.ab +0 -0\0? café.md\0',
+    untrackedCount: '5\t0\tcafé.md\n',
+    run: (a) => (argvs.push(a), a.includes('status') ? ok('# branch.oid abc1234\0# branch.head main\0# branch.ab +0 -0\0? café.md\0') : { ...ok('5\t0\tcafé.md\n'), exitCode: 1 }),
+  })
+  const p = await pane($)
+  await p.redraw()
+  expect(argvs.find((a) => a.includes('status'))).toContain('-z')
+  const text = await joined(p)
+  expect(text).toContain('café.md')
+  expect(text).toContain('+5')
+  expect(argvs.find((a) => a.includes('--no-index'))).toContain('café.md')
 })
 
 test('an untracked file whose count is unavailable shows new; a clean synced repo has no changes card', async ($, on) => {

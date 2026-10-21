@@ -7,7 +7,7 @@
 import { mkdirSync, readFileSync, realpathSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { dataDir, hasOpenSubagents, readInput, safeName } from './hook-io.mjs'
+import { dataDir, hasOpenSubagents, pruneState, readInput, safeName } from './hook-io.mjs'
 
 const MAX_PATHS = 3
 // Optional list marker (-, *, +, 1., 1)) and emphasis around the label and the
@@ -42,11 +42,15 @@ async function main() {
   // Subagents may still be writing; the first Stop after they finish runs the check.
   if (mode === 'check' && hasOpenSubagents(input.session_id)) return
 
-  const [{ repositoryRoot, freezeWorkingTree, git }, { headCommit }, { atomicWrite }] = await Promise.all([
-    import('../../lib/assess/git.mjs'),
-    import('../../lib/review/boundary.mjs'),
-    import('../../lib/review/store.mjs'),
-  ])
+  const { dir, file } = recordFile(input.session_id)
+  // Cheap exits first: a spent block, or a Risk line already present, needs no git.
+  let record = null
+  if (mode === 'check') {
+    record = readRecord(file)
+    if (!record || record.blocked === true || RISK_LINE.test(input.last_assistant_message)) return
+  }
+
+  const { repositoryRoot, freezeWorkingTree, git, headCommit, atomicWrite } = await import('./git-tree.mjs')
 
   let root
   try {
@@ -56,13 +60,17 @@ async function main() {
   }
   if (!headCommit(root)) return
 
-  const { dir, file } = recordFile(input.session_id)
   const write = (record) => {
     mkdirSync(dir, { recursive: true })
     atomicWrite(file, `${JSON.stringify(record)}\n`)
   }
 
   if (mode === 'mark') {
+    try {
+      pruneState()
+    } catch {
+      // Best effort.
+    }
     // A task notification repeats UserPromptSubmit within one turn with the same prompt_id; the
     // turn's baseline (and its spent block) must survive it. Without a prompt_id every mark re-marks.
     const promptId = typeof input.prompt_id === 'string' && input.prompt_id !== '' ? input.prompt_id : null
@@ -78,10 +86,8 @@ async function main() {
   }
 
   const { candidateTree } = freezeWorkingTree(root)
-  const record = readRecord(file)
   // A record from another repository, or an old one without a root, is not this turn's.
-  if (!record || record.root !== root || record.blocked === true || record.tree === candidateTree) return
-  if (RISK_LINE.test(input.last_assistant_message)) return
+  if (record.root !== root || record.tree === candidateTree) return
   const paths = git(root, ['diff', '--no-renames', '--name-only', '-z', record.tree, candidateTree])
     .toString('utf8')
     .split('\0')

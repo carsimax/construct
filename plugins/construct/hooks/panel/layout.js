@@ -31,7 +31,6 @@
 //
 //   main     model, idle/busy, effort meter, mode, requests, ctx gauge, 5h and 7d
 //   ODD      hidden without a feature: feature, current task, one checkpoint per task
-//   REVIEW   hidden unless RDD is on: its state word
 //   GATE     stacked verdict bar, allowed / decider / pending / denied, buckets, last denied, inline alert
 //   agents   `N running · M total`; one row per agent: mark, short name, routed model and effort, elapsed
 //   changes  titled with the branch, `↑N ↓N` on the right, one row per changed file
@@ -48,7 +47,7 @@
 
 import { agentsView, mainBusy, maskSecrets, phaseOf, shortName } from './state.js'
 import { PALETTE, card, changeRows, effortMeter, fmtResetIn, gauge, stackBar } from './draw.js'
-import { STATE_COLOR, isNum, text } from '../status/format.js'
+import { isNum, text } from '../status/format.js'
 
 export const PANEL_COLUMNS = 66
 
@@ -201,20 +200,6 @@ function oddCard(odd, width) {
     status: { text: status, dim: true },
     color: PALETTE.odd,
     children: rows,
-    width,
-  })
-}
-
-// ---- REVIEW card (S5) ---------------------------------------------------------
-
-function reviewCard(rdd, width) {
-  if (rdd?.mode !== 'on') return null
-  const state = rdd.state
-  const color = state ? STATE_COLOR[state] : undefined
-  return card({
-    title: 'REVIEW · rdd on',
-    status: state ? (color ? { text: state, color } : { text: state, dim: true }) : null,
-    color: PALETTE.cleared,
     width,
   })
 }
@@ -390,7 +375,7 @@ function changesCard({ git, changes, rows, used, width }) {
 // the Pane's bodyColumns and scroll.bodyRows. `usage` is `$.session.usage()`, `model` and `effort` are
 // the fallbacks for a main thread that has not made a request yet (the state's `main` wins). `git` is parseGitStatus's result (branch, ahead, behind)
 // and `changes` the changed files ({ path, added, removed, binary, untracked }) for the changes card.
-export function buildPanel({ panel, usage, odd, rdd, nowMs, columns, rows, model, effort, git, changes }) {
+export function buildPanel({ panel, usage, odd, nowMs, columns, rows, model, effort, git, changes }) {
   const state = panel ?? {}
   const width = isNum(columns) && columns > 0 ? Math.max(MIN_COLUMNS, Math.floor(columns)) : PANEL_COLUMNS
   const busy = mainBusy(state)
@@ -405,7 +390,6 @@ export function buildPanel({ panel, usage, odd, rdd, nowMs, columns, rows, model
   }
   push(mainCard({ main, usage, model: name, busy, phase, blocked: state.blocked === true, compactions: state.compactions ?? 0, branch: git?.branch, width, nowMs }))
   push(oddCard(odd, width))
-  push(reviewCard(rdd, width))
   push(gateCard({ gate: state.gate, inline: state.inline, mode: state.main?.mode, width }))
   push(agentsCard(state, nowMs, width))
   const used = children.reduce((n, k) => n + height(k), 0)

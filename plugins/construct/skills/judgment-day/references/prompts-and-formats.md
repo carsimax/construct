@@ -18,7 +18,7 @@ Return one JSON object and no prose, using exactly this native result shape:
 This is a judgment-day judge result, not an RDD lens result. Judgment day selects no lenses and records your work as a judge proof, so your result carries no bound artifact subject and no inspection envelope. The only allowed top-level fields are `findings` and `evidence`, and the only allowed finding fields are `location`, `severity`, `claim`, `evidence_class`, `causal_disposition`, and `proof_refs`. Never emit `summary` or any other unknown field. Keep orchestration metadata outside the native result JSON; `evidence` contains only genuine inspection evidence. Return `{"findings":[],"evidence":["what was inspected"]}` when clean, then terminate.
 ```
 
-> This shape governs judgment-day judges only. An RDD review lens is a different result: it must additionally echo the binding's top-level `subject_hash` and a completed `inspection` envelope, and `odd-review` refuses it otherwise. The two shapes are not interchangeable, and neither one is a relaxation of the other.
+> This shape governs judgment-day judges only. An RDD review lens is a different result: it must additionally echo the binding's top-level `subject_hash` and a completed `inspection` envelope, and the review-capture hook refuses it otherwise. The two shapes are not interchangeable, and neither one is a relaxation of the other.
 
 ## Fix Actor Prompt
 

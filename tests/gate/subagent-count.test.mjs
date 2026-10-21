@@ -1,16 +1,15 @@
 // Stop gates wait for running subagents (S3): subagent-count.mjs start|stop keeps a
-// per-session record of open agents; review-gate.mjs and risk-line.mjs check stay
+// per-session record of open agents; risk-line.mjs check stays
 // silent while one is open and run as today afterwards.
 import { after, describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawn, spawnSync } from 'node:child_process'
-import { chmodSync, existsSync, readdirSync, readFileSync, rmSync, symlinkSync, utimesSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, rmSync, symlinkSync, utimesSync } from 'node:fs'
 import { join } from 'node:path'
-import { applyFiles, highRepo, makeRepo, scratchDir } from '../review/helpers.mjs'
+import { applyFiles, makeRepo, scratchDir } from '../helpers/repo.mjs'
 
 const PLUGIN = new URL('../../plugins/construct/', import.meta.url).pathname
 const COUNT = join(PLUGIN, 'hooks/scripts/subagent-count.mjs')
-const GATE = join(PLUGIN, 'hooks/scripts/review-gate.mjs')
 const RISK = join(PLUGIN, 'hooks/scripts/risk-line.mjs')
 
 const scratch = []
@@ -32,10 +31,6 @@ const stopAgent = (e, id, session = 's1') => count('stop', e, { session_id: sess
 const agentDir = (e, session = 's1') => join(e.CLAUDE_PLUGIN_DATA, 'subagent-count', session)
 const openIds = (e, session = 's1') => (existsSync(agentDir(e, session)) ? readdirSync(agentDir(e, session)).filter((n) => !n.startsWith('.')) : [])
 
-function gate(cwd, e, session = 's1') {
-  const r = spawnSync('node', [GATE], { input: JSON.stringify({ session_id: session, cwd, stop_hook_active: false }), encoding: 'utf8', env: hookEnv(e) })
-  return { status: r.status, stdout: r.stdout, json: r.stdout ? JSON.parse(r.stdout) : null }
-}
 const risk = (mode, cwd, e, session = 's1', message = 'Done.') => {
   const r = spawnSync('node', [RISK, mode], { input: JSON.stringify({ session_id: session, cwd, stop_hook_active: false, last_assistant_message: message }), encoding: 'utf8', env: hookEnv(e) })
   return { status: r.status, stdout: r.stdout, json: r.stdout ? JSON.parse(r.stdout) : null }
@@ -124,63 +119,6 @@ describe('subagent-count hook', () => {
     assert.deepEqual(openIds(e).sort(), ids.filter((_, i) => i % 2 === 1).sort())
     await Promise.all(ids.map((id, i) => (i % 2 === 1 ? run('stop', id) : null)))
     assert.deepEqual(openIds(e), [])
-  })
-})
-
-describe('review gate waits for subagents', () => {
-  test('silent while an agent is open, blocks after the matching stop', () => {
-    const e = envOf()
-    const repo = highRepo()
-    startAgent(e, 'a1')
-    silent(gate(repo, e))
-    applyFiles(repo, { 'scripts/more.sh': 'echo more\n' })
-    silent(gate(repo, e))
-    assert.equal(existsSync(join(e.CLAUDE_PLUGIN_DATA, 'review-gate')), false, 'no reminder recorded while waiting')
-    stopAgent(e, 'a1')
-    assert.equal(gate(repo, e).json.decision, 'block')
-  })
-
-  test('an entry older than the idle bound is ignored', () => {
-    const e = envOf()
-    const repo = highRepo()
-    startAgent(e, 'a1')
-    const old = new Date(Date.now() - 2 * 3600 * 1000)
-    utimesSync(join(agentDir(e), 'a1'), old, old)
-    assert.equal(gate(repo, e).json.decision, 'block')
-  })
-
-  test('another session open agent does not silence this session', () => {
-    const e = envOf()
-    const repo = highRepo()
-    startAgent(e, 'a1', 'other')
-    assert.equal(gate(repo, e).json.decision, 'block')
-  })
-
-  test('an entry aged 59 minutes still silences the gate, one aged 61 minutes does not', () => {
-    const e = envOf()
-    const repo = highRepo()
-    startAgent(e, 'a1')
-    const age = (minutes) => {
-      const at = new Date(Date.now() - minutes * 60 * 1000)
-      utimesSync(join(agentDir(e), 'a1'), at, at)
-    }
-    age(59)
-    silent(gate(repo, e))
-    age(61)
-    assert.equal(gate(repo, e).json.decision, 'block')
-  })
-
-  test('an unreadable state directory fails open to the gate running as today', (t) => {
-    if (process.getuid?.() === 0) return t.skip('root ignores directory permissions')
-    const e = envOf()
-    const repo = highRepo()
-    startAgent(e, 'a1')
-    chmodSync(agentDir(e), 0o000)
-    try {
-      assert.equal(gate(repo, e).json.decision, 'block')
-    } finally {
-      chmodSync(agentDir(e), 0o755)
-    }
   })
 })
 

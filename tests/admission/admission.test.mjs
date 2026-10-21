@@ -6,7 +6,7 @@ import { spawnSync } from 'node:child_process'
 import { mkdirSync, readdirSync, readFileSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, test } from 'node:test'
-import { makeRepo, scratchDir, write } from '../assess/helpers.mjs'
+import { makeRepo, scratchDir, write } from '../helpers/repo.mjs'
 
 const PLUGIN = new URL('../../plugins/construct/', import.meta.url).pathname
 const SCRIPT = join(PLUGIN, 'hooks/scripts/delegation-admission.mjs')
@@ -351,5 +351,59 @@ describe('A5: the construct: prefix is optional', () => {
   })
   test('other agents are untouched', () => {
     allowed(launch(plain(), env(), 'odd-explore', 'look'))
+  })
+})
+
+describe('start mode (F10)', () => {
+  const start = (e, type = WORKER) => run('start', { session_id: 's1', agent_id: 'a1', agent_type: type, hook_event_name: 'SubagentStart' }, e)
+  const age = (e, minutes) => {
+    const dir = join(e.CLAUDE_PLUGIN_DATA, 'delegation-admission', 's1')
+    for (const name of readdirSync(dir)) {
+      const file = join(dir, name)
+      const entry = JSON.parse(readFileSync(file, 'utf8'))
+      writeFileSync(file, JSON.stringify({ ...entry, at: new Date(Date.now() - minutes * 60_000).toISOString() }))
+    }
+  }
+  test('an unstarted record older than the grace no longer blocks an overlapping writer', () => {
+    const repo = plain()
+    const e = env()
+    allowed(launch(repo, e, WORKER, surfaces('src/a.js')))
+    age(e, 5)
+    allowed(launch(repo, e, WORKER, surfaces('src/a.js')))
+  })
+  test('a started record still blocks after the grace', () => {
+    const repo = plain()
+    const e = env()
+    allowed(launch(repo, e, WORKER, surfaces('src/a.js')))
+    allowed(start(e))
+    age(e, 5)
+    denied(launch(repo, e, WORKER, surfaces('src/a.js')), /overlap/)
+  })
+  test('start skips a record past the grace and marks the launch that is inside it', () => {
+    const repo = plain()
+    const e = env()
+    const file = join(scratchDir('odd-adm-b2-'), 'agent-b.jsonl')
+    const promptB = `${surfaces('src/a.js')}\nunit B`
+    writeFileSync(file, `${JSON.stringify({ type: 'user', message: { role: 'user', content: promptB } })}\n`)
+    allowed(launch(repo, e, WORKER, `${surfaces('src/a.js')}\nunit A`)) // declined by the host: never starts
+    age(e, 3)
+    allowed(launch(repo, e, WORKER, promptB))
+    allowed(start(e))
+    allowed(run('stop', { session_id: 's1', agent_id: 'b', agent_type: WORKER, hook_event_name: 'SubagentStop', agent_transcript_path: file }, e))
+    allowed(launch(repo, e, WORKER, `${surfaces('src/a.js')}\nunit D`))
+  })
+  test('a start for another agent type leaves the record unstarted', () => {
+    const repo = plain()
+    const e = env()
+    allowed(launch(repo, e, WORKER, surfaces('src/a.js')))
+    allowed(start(e, 'construct:odd-explorer'))
+    age(e, 5)
+    allowed(launch(repo, e, WORKER, surfaces('src/a.js')))
+  })
+  test('hooks.json registers start on SubagentStart in exec form', () => {
+    const hooks = JSON.parse(readFileSync(join(PLUGIN, 'hooks/hooks.json'), 'utf8')).hooks
+    const script = '${CLAUDE_PLUGIN_ROOT}/hooks/scripts/delegation-admission.mjs'
+    const entry = hooks.SubagentStart.flatMap((g) => g.hooks).find((h) => h.args?.[0] === script)
+    assert.deepEqual(entry, { type: 'command', command: 'node', args: [script, 'start'], timeout: 10 })
   })
 })

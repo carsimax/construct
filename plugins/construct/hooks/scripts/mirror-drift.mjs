@@ -72,11 +72,11 @@ async function main() {
   if (!input || typeof input.cwd !== 'string' || typeof input.transcript_path !== 'string' || input.stop_hook_active === true) return
   if (hasOpenSubagents(input.session_id)) return
 
-  const [{ repositoryRoot, freezeWorkingTree, git }, { headCommit }, { atomicWrite }] = await Promise.all([
-    import('../../lib/assess/git.mjs'),
-    import('../../lib/review/boundary.mjs'),
-    import('../../lib/review/store.mjs'),
-  ])
+  // No record, nothing to compare: skip git.
+  const record = readRecord(recordFile(input.session_id).file)
+  if (!record) return
+
+  const { repositoryRoot, freezeWorkingTree, git, headCommit, atomicWrite } = await import('./git-tree.mjs')
   let root
   try {
     root = repositoryRoot(input.cwd)
@@ -85,8 +85,7 @@ async function main() {
   }
   if (!headCommit(root)) return
 
-  const record = readRecord(recordFile(input.session_id).file)
-  if (!record || record.root !== root) return
+  if (record.root !== root) return
   const { candidateTree } = freezeWorkingTree(root)
   if (record.tree === candidateTree) return
   const features = git(root, ['diff', '--no-renames', '--diff-filter=AM', '--name-only', '-z', record.tree, candidateTree])

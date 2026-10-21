@@ -35,17 +35,9 @@ export function dataDir() {
 // safeName keeps a session id or agent type usable as one file name.
 export const safeName = (value) => String(value || 'unknown').replace(/[^A-Za-z0-9_-]/g, '_')
 
-// pendingDir holds the records review-context.mjs writes for the review lenses
-// it prepared in a session; review-capture.mjs finds them at SubagentStop. A
-// record is keyed by lens and lineage: PreToolUse runs before the child exists,
-// so it cannot know the child's agent_id, and two concurrent reviews of one
-// lens always have different lineages.
-export const pendingDir = (session) => join(dataDir(), 'review-hooks', safeName(session))
-export const pendingFile = (session, agent, lineage) => join(pendingDir(session), `${safeName(agent)}.${safeName(lineage)}.json`)
-
 // STATE_MAX_AGE_MS: per-session state older than this belongs to a finished session.
 const STATE_MAX_AGE_MS = 7 * 24 * 3600 * 1000
-const STATE_DIRS = ['review-gate', 'risk-line', 'review-hooks', 'subagent-count', 'delegation-admission', 'delivery-signals', 'mirror-drift']
+const STATE_DIRS = ['risk-line', 'subagent-count', 'delegation-admission', 'delivery-signals', 'mirror-drift']
 
 // pruneState removes this plugin's per-session state entries (a file or a
 // session directory directly under one of STATE_DIRS) idle for over 7 days.
@@ -70,8 +62,8 @@ export function pruneState(now = Date.now()) {
   }
 }
 
-// SUBAGENT_MAX_IDLE_MS is one hour, shorter than OPEN_LINEAGE_MAX_IDLE_MS (lib/review/store.mjs) because workers run minutes: an
-// open-agent entry older than this belongs to a crashed agent and is ignored.
+// SUBAGENT_MAX_IDLE_MS is one hour because workers run minutes: an open-agent entry older than this
+// belongs to a crashed agent and is ignored.
 export const SUBAGENT_MAX_IDLE_MS = 3600 * 1000
 
 // subagentDir holds one file per open subagent of a session (written by

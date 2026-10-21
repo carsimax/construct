@@ -7,7 +7,7 @@ import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { scratchDir } from '../assess/helpers.mjs'
+import { scratchDir } from '../helpers/repo.mjs'
 
 const INSTALLER = new URL('../../install.sh', import.meta.url).pathname
 
@@ -90,9 +90,9 @@ test('a clean machine gets every tool, in order, and the Construct settings', ()
     'brew install gentleman-programming/tap/engram',
     'engram setup claude-code',
     'claude plugin marketplace add Gentleman-Programming/engram',
-    'claude plugin marketplace add carsimax/construct#v2.1.0',
+    'claude plugin marketplace add carsimax/construct#v3.0.0',
     'claude plugin install construct@construct',
-    'npm install -g @colbymchenry/codegraph',
+    'npm install -g @colbymchenry/codegraph@1.6.2',
     'claude mcp add --scope user codegraph -- codegraph serve --mcp',
   ])
   assert.ok(!run.calls.some((c) => /context7/.test(c)), 'context7 is never registered')
@@ -447,4 +447,44 @@ test('--force with another theme leaves settings.json unchanged and makes no bac
   assert.equal(run.status, 0, run.stderr)
   assert.equal(readFileSync(settingsPath(box), 'utf8'), before)
   assert.deepEqual(backups(box), [])
+})
+
+const PLUGIN_LIST = (version) => `Installed plugins:\n\n  ❯ engram@engram\n    Version: 1.0.0\n\n  ❯ construct@construct\n${version ? `    Version: ${version}\n` : ''}    Scope: user\n`
+
+test('an installed construct at another version warns and names the update command, and changes nothing', () => {
+  const box = sandbox()
+  writeFileSync(join(box.state, 'plugins'), PLUGIN_LIST('2.1.0'))
+  const run = install(box)
+  assert.equal(run.status, 0, run.stderr)
+  assert.match(run.stderr, /construct@construct 2\.1\.0 is installed.*3\.0\.0.*claude plugin update construct@construct/)
+  assert.match(run.stdout, /Warnings:/)
+  assert.ok(!run.calls.some((c) => /^claude plugin (install|update)/.test(c)), 'the install is never modified')
+})
+
+test('an installed construct at this version, a newer one, or with no readable version, gets the plain skip', () => {
+  for (const version of ['3.0.0', '3.1.0', '']) {
+    const box = sandbox()
+    writeFileSync(join(box.state, 'plugins'), PLUGIN_LIST(version))
+    const run = install(box)
+    assert.equal(run.status, 0, run.stderr)
+    assert.doesNotMatch(run.stderr, /claude plugin update/)
+    assert.match(run.stdout, /construct@construct \(already installed\)/)
+  }
+})
+
+test('a marketplace pinned to another ref warns; the same ref skips quietly', () => {
+  for (const [ref, warns] of [['v2.1.0', true], ['v3.0.0', false]]) {
+    const box = sandbox()
+    writeFileSync(join(box.state, 'marketplaces'), `  ❯ construct\n    Source: GitHub (carsimax/construct#${ref})\n`)
+    const run = install(box)
+    assert.equal(run.status, 0, run.stderr)
+    assert.equal(/pinned to v2\.1\.0, not v3\.0\.0/.test(run.stderr), warns)
+  }
+})
+
+test('CONSTRUCT_REF and the header URL carry the plugin.json version', () => {
+  const { version } = JSON.parse(readFileSync(new URL('../../plugins/construct/.claude-plugin/plugin.json', import.meta.url), 'utf8'))
+  const text = readFileSync(INSTALLER, 'utf8')
+  assert.equal(/^CONSTRUCT_REF=(\S+)/m.exec(text)?.[1], `v${version}`)
+  assert.match(text, new RegExp(`raw\\.githubusercontent\\.com/carsimax/construct/v${version.replace(/\./g, '\\.')}/install\\.sh`))
 })

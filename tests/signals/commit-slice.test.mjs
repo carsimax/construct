@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { describe, test } from 'node:test'
-import { applyFiles, commitAll, git, makeRepo } from '../review/helpers.mjs'
+import { applyFiles, commitAll, git, makeRepo } from '../helpers/repo.mjs'
 import { featureRepo, hook, lines, PLUGIN, SCRIPT } from './helpers.mjs'
 
 const commit = (repo, extra = {}, command = 'git commit -m unit') =>

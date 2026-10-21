@@ -46,6 +46,8 @@ function unfinishedRows(lines) {
   for (i += 2; i < lines.length && lines[i].trim().startsWith('|'); i++) {
     const cells = splitRow(lines[i])
     if (cells.length < header.length) return null
+    // An unescaped `|` in the task cell shifts the columns: join the surplus back into it.
+    if (cells.length > header.length) cells.splice(task, cells.length - header.length + 1, cells.slice(task, task + cells.length - header.length + 1).join('|'))
     if (!FINISHED.has(cells[status].toLowerCase())) rows.push(`${clip(cells[id], MAX_CELL)} — ${clip(cells[task], MAX_CELL)}`)
   }
   return rows

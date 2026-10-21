@@ -16,7 +16,7 @@ Load only when the user explicitly requests Judgment Day or equivalent dual/adve
 - Resolve matching project skills before starting and pass the same paths to both judges (`construct:jd-judge-a`, `construct:jd-judge-b`) and the fix actor (`construct:jd-fix-agent`).
 - Build one complete immutable target, then launch two blind read-only judges in parallel with identical scope and criteria.
 - Each judge returns one neutral findings result and terminates. Wait for both; never accept a partial judgment.
-- Never launch `construct:review-refuter`; two-judge agreement is the corroboration mechanism.
+- Two-judge agreement is the corroboration mechanism; no further corroboration step exists.
 - Only the parent orchestrator merges/persists findings, launches the fix actor (`construct:jd-fix-agent`), and launches scoped re-judgment.
 - Fix only severe findings confirmed by both judges. WARNING/SUGGESTION rows remain `info`.
 - Permit at most two fix rounds and two scoped re-judgments. Re-judgment sees only the frozen ledger plus fix delta and may record fix-caused defects.

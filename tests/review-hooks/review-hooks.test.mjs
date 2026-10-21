@@ -1,22 +1,24 @@
 // The review hooks, driven as real hooks: review-context.mjs (PreToolUse on Agent)
-// and review-capture.mjs (SubagentStop), with the hook JSON on stdin and a
-// scratch CLAUDE_PLUGIN_DATA. They run against a real odd-review lineage.
+// and review-capture.mjs (SubagentStop), with the hook JSON on stdin, a real
+// two-commit repository, and scratch CLAUDE_PLUGIN_DATA and XDG_CONFIG_HOME.
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { existsSync, readdirSync, readFileSync, utimesSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, readdirSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { finding, highRepo, lensResult, readTransaction, scratchDir, start } from '../review/helpers.mjs'
+import { applyFiles, commitAll, git, makeRepo, scratchDir } from '../helpers/repo.mjs'
+import { requiredLenses } from '../../plugins/construct/hooks/scripts/review-lenses.mjs'
+import { readVerdicts, subjectHash, writeVerdict } from '../../plugins/construct/hooks/scripts/review-store.mjs'
 
 const PLUGIN = new URL('../../plugins/construct/', import.meta.url).pathname
 const CONTEXT_HOOK = join(PLUGIN, 'hooks/scripts/review-context.mjs')
 const CAPTURE_HOOK = join(PLUGIN, 'hooks/scripts/review-capture.mjs')
 
-function hook(script, input, data) {
+function hook(script, input) {
   const result = spawnSync('node', [script], {
     input: JSON.stringify(input),
     encoding: 'utf8',
-    env: { ...process.env, CLAUDE_PLUGIN_DATA: data, XDG_CONFIG_HOME: scratchDir('odd-hooks-xdg-') },
+    env: { ...process.env, CLAUDE_PLUGIN_DATA: scratchDir('review-hooks-data-'), XDG_CONFIG_HOME: scratchDir('review-hooks-xdg-') },
   })
   let json = null
   try {
@@ -46,292 +48,377 @@ const stopInput = (repo, message, agent = 'construct:review-risk', extra = {}) =
   ...extra,
 })
 
-function lineage() {
-  const repo = highRepo()
-  const txn = start(repo, { lenses: 'risk,reliability' })
-  return { repo, txn, data: scratchDir('odd-hooks-data-') }
+// reviewed is a two-commit repository: base on main, one change on top.
+function reviewed() {
+  const repo = makeRepo({ 'src/a.js': 'export const a = 1\n' })
+  applyFiles(repo, { 'src/a.js': 'export const a = 2\n', 'src/b.js': 'export const b = 1\n' })
+  commitAll(repo, 'change')
+  return repo
 }
 
-// The pending record is keyed by lens and lineage: PreToolUse cannot know the child's agent_id.
-const pendingOf = (data, txn, agent = 'construct_review-risk') => join(data, 'review-hooks', 's1', `${agent}.${txn.lineage}.json`)
+const prepare = (repo, agent = 'construct:review-risk') => {
+  const r = hook(CONTEXT_HOOK, spawnInput(repo, 'Please review.\nReview subject: HEAD~1\n', agent))
+  const prompt = r.json.hookSpecificOutput.updatedInput.prompt
+  return JSON.parse(prompt.split('\n')[0].slice('ODD_REVIEW_BINDING '.length))
+}
 
-const fenced = (value) => `\`\`\`json\n${JSON.stringify(value)}\n\`\`\``
+const result = (binding, findings = []) => ({
+  subject_hash: binding.subject_hash,
+  inspection: { status: 'completed', paths: binding.artifact_subject.changed_path_manifest },
+  findings,
+  evidence: ['read every patch'],
+})
+const critical = { location: 'src/a.js:1', severity: 'CRITICAL', claim: 'breaks callers', evidence_class: 'deterministic', causal_disposition: 'introduced', proof_refs: ['patch of src/a.js'] }
+
+describe('lens mapping', () => {
+  test('requiredLenses gives the sorted unique lenses and never readability', () => {
+    assert.deepEqual(requiredLenses([2, 4]), ['review-reliability', 'review-resilience', 'review-risk'])
+    assert.deepEqual(requiredLenses(new Set([3, 6])), ['review-reliability'])
+    assert.deepEqual(requiredLenses([]), [])
+    assert.ok(!requiredLenses([1, 2, 3, 4, 5, 6]).includes('review-readability'))
+  })
+})
 
 describe('registration', () => {
   test('hooks.json wires the context hook on Agent and the capture hook on review agents', () => {
     const hooks = JSON.parse(readFileSync(join(PLUGIN, 'hooks/hooks.json'), 'utf8')).hooks
     const pre = hooks.PreToolUse.find((entry) => entry.matcher === 'Agent')
-    assert.deepEqual(pre.hooks[0], {
-      type: 'command',
-      command: 'node',
-      args: ['${CLAUDE_PLUGIN_ROOT}/hooks/scripts/review-context.mjs'],
-      timeout: 30,
-    })
+    assert.deepEqual(pre.hooks[0], { type: 'command', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/hooks/scripts/review-context.mjs'], timeout: 30 })
     const stop = hooks.SubagentStop.find((entry) => entry.matcher === '^construct:review-')
-    assert.deepEqual(stop.hooks[0], {
-      type: 'command',
-      command: 'node',
-      args: ['${CLAUDE_PLUGIN_ROOT}/hooks/scripts/review-capture.mjs'],
-      timeout: 30,
-    })
+    assert.deepEqual(stop.hooks[0], { type: 'command', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/hooks/scripts/review-capture.mjs'], timeout: 30 })
   })
 })
 
 describe('context hook', () => {
-  test('a lineage in the prompt becomes the full odd-review context for that lens', () => {
-    const { repo, txn, data } = lineage()
-    const r = hook(CONTEXT_HOOK, spawnInput(repo, `Review lineage ${txn.lineage}`), data)
+  test('a subject line yields the binding, manifest, patches and checklist for the lens', () => {
+    const repo = reviewed()
+    const r = hook(CONTEXT_HOOK, spawnInput(repo, 'Review subject: HEAD~1'))
     assert.equal(r.status, 0)
     const out = r.json.hookSpecificOutput
-    assert.equal(out.hookEventName, 'PreToolUse')
     assert.equal(out.permissionDecision, 'allow')
     assert.equal(out.updatedInput.subagent_type, 'construct:review-risk')
     assert.equal(out.updatedInput.description, 'RDD risk lens')
-    const [binding] = out.updatedInput.prompt.split('\n')
-    assert.match(binding, /^ODD_REVIEW_BINDING /)
-    assert.equal(JSON.parse(binding.slice('ODD_REVIEW_BINDING '.length)).lens, 'review-risk')
-    assert.match(out.updatedInput.prompt, /ODD_REVIEW_CONTEXT_END\n?$/)
+    const prompt = out.updatedInput.prompt
+    const binding = JSON.parse(prompt.split('\n')[0].slice('ODD_REVIEW_BINDING '.length))
+    const base = git(repo, 'rev-parse', 'HEAD~1^{tree}').trim()
+    const head = git(repo, 'rev-parse', 'HEAD^{tree}').trim()
+    assert.equal(binding.lens, 'review-risk')
+    assert.equal(binding.subject_hash, subjectHash(base, head))
+    assert.deepEqual(binding.artifact_subject, { subject_hash: binding.subject_hash, base_tree: base, candidate_tree: head, changed_path_manifest: ['src/a.js', 'src/b.js'] })
+    assert.match(prompt, /ODD_REVIEW_CONTEXT\nbase_tree: /)
+    assert.match(prompt, /name-status:\nM\tsrc\/a\.js\nA\tsrc\/b\.js\nnumstat:\n1\t1\tsrc\/a\.js\n1\t0\tsrc\/b\.js\n/)
+    assert.match(prompt, /ODD_REVIEW_PATH \{"index":0,"path":"src\/a\.js"\}\n[\s\S]*\+export const a = 2\nODD_REVIEW_PATH_END 0\n/)
+    assert.match(prompt, /ODD_REVIEW_CHECKLIST_BEGIN\n[\s\S]+ODD_REVIEW_CHECKLIST_END\nODD_REVIEW_CONTEXT_END\n$/)
+  })
+
+  test('only review-risk gets the checklist', () => {
+    const r = hook(CONTEXT_HOOK, spawnInput(reviewed(), 'Review subject: HEAD~1', 'construct:review-reliability'))
+    assert.doesNotMatch(r.json.hookSpecificOutput.updatedInput.prompt, /ODD_REVIEW_CHECKLIST/)
+  })
+
+  test('a prompt without a subject line is denied with the expected form', () => {
+    const r = hook(CONTEXT_HOOK, spawnInput(reviewed(), 'please review my change'))
+    assert.equal(r.json.hookSpecificOutput.permissionDecision, 'deny')
+    assert.match(r.json.hookSpecificOutput.permissionDecisionReason, /Review subject: <base>`/)
+  })
+
+  test('a ref that does not resolve is denied', () => {
+    const r = hook(CONTEXT_HOOK, spawnInput(reviewed(), 'Review subject: no-such-ref'))
+    assert.equal(r.json.hookSpecificOutput.permissionDecision, 'deny')
+    assert.match(r.json.hookSpecificOutput.permissionDecisionReason, /could not be prepared/)
+  })
+
+  test('a ref equal to HEAD (nothing to review) is denied', () => {
+    const r = hook(CONTEXT_HOOK, spawnInput(reviewed(), 'Review subject: HEAD'))
+    assert.equal(r.json.hookSpecificOutput.permissionDecision, 'deny')
+  })
+
+  test('a diff over the size limit is denied with a range instruction', () => {
+    const repo = makeRepo({ 'a.txt': 'x\n' })
+    applyFiles(repo, { 'big.txt': 'y'.repeat(500 * 1024) + '\n' })
+    commitAll(repo, 'big')
+    const r = hook(CONTEXT_HOOK, spawnInput(repo, 'Review subject: HEAD~1'))
+    assert.equal(r.json.hookSpecificOutput.permissionDecision, 'deny')
+    assert.match(r.json.hookSpecificOutput.permissionDecisionReason, /smaller pull requests/)
   })
 
   test('other agents pass through untouched', () => {
-    const { repo, txn, data } = lineage()
-    const r = hook(CONTEXT_HOOK, spawnInput(repo, `Review lineage ${txn.lineage}`, 'construct:odd-worker'), data)
+    const r = hook(CONTEXT_HOOK, spawnInput(reviewed(), 'no subject here', 'construct:odd-worker'))
     assert.equal(r.status, 0)
     assert.equal(r.stdout, '')
-  })
-
-  test('a prompt that starts with the binding line passes through and is recorded for capture', () => {
-    const { repo, txn, data } = lineage()
-    const pasted = `ODD_REVIEW_BINDING ${JSON.stringify({ lineage: txn.lineage, lens: 'review-risk' })}\nODD_REVIEW_CONTEXT\n...`
-    const r = hook(CONTEXT_HOOK, spawnInput(repo, pasted), data)
-    assert.equal(r.stdout, '')
-    assert.ok(existsSync(pendingOf(data, txn)))
-  })
-
-  test('a prompt that only mentions ODD_REVIEW_CONTEXT still gets the context for its lineage', () => {
-    const { repo, txn, data } = lineage()
-    const r = hook(CONTEXT_HOOK, spawnInput(repo, `use ODD_REVIEW_CONTEXT for ${txn.lineage}`), data)
-    assert.match(r.json.hookSpecificOutput.updatedInput.prompt, /^ODD_REVIEW_BINDING /)
-  })
-
-  test('a review agent without a lineage is denied with the fix', () => {
-    const { repo, data } = lineage()
-    const r = hook(CONTEXT_HOOK, spawnInput(repo, 'please review my change'), data)
-    assert.equal(r.json.hookSpecificOutput.permissionDecision, 'deny')
-    assert.match(r.json.hookSpecificOutput.permissionDecisionReason, /review-<16 hex>/)
-  })
-
-  test('a lens the lineage did not select is denied with the odd-review error', () => {
-    const { repo, txn, data } = lineage()
-    const r = hook(CONTEXT_HOOK, spawnInput(repo, `lineage ${txn.lineage}`, 'construct:review-readability'), data)
-    assert.equal(r.json.hookSpecificOutput.permissionDecision, 'deny')
-    assert.match(r.json.hookSpecificOutput.permissionDecisionReason, /lens_not_selected/)
-  })
-})
-
-describe('context hook binding validation', () => {
-  const recorded = (data) => (existsSync(join(data, 'review-hooks', 's1')) ? readdirSync(join(data, 'review-hooks', 's1')) : [])
-  const binding = (value) => `ODD_REVIEW_BINDING ${typeof value === 'string' ? value : JSON.stringify(value)}`
-  const cases = {
-    'a lineage that is not a string': (txn) => `${binding({ lineage: 42, lens: 'review-risk' })}\nbody ${txn.lineage}`,
-    'a lineage that is not an id': () => `${binding({ lineage: 'nope', lens: 'review-risk' })}\nbody`,
-    'a binding that is not JSON': (txn) => `${binding('{oops')}\nbody ${txn.lineage}`,
-    'a lineage different from the one in the body': (txn) =>
-      `${binding({ lineage: txn.lineage, lens: 'review-risk' })}\nbody review-0123456789abcdef`,
-  }
-  for (const [name, make] of Object.entries(cases)) {
-    test(`${name} is denied and not recorded`, () => {
-      const { repo, txn, data } = lineage()
-      const r = hook(CONTEXT_HOOK, spawnInput(repo, make(txn)), data)
-      assert.equal(r.status, 0)
-      assert.equal(r.json.hookSpecificOutput.permissionDecision, 'deny')
-      assert.match(r.json.hookSpecificOutput.permissionDecisionReason, /ODD_REVIEW_BINDING/)
-      assert.deepEqual(recorded(data), [])
-    })
-  }
-
-  test('a binding whose lineage matches the body still passes through', () => {
-    const { repo, txn, data } = lineage()
-    const prompt = `${binding({ lineage: txn.lineage, lens: 'review-risk' })}\nbody ${txn.lineage}`
-    const r = hook(CONTEXT_HOOK, spawnInput(repo, prompt), data)
-    assert.equal(r.stdout, '')
-    assert.ok(existsSync(pendingOf(data, txn)))
-  })
-})
-
-describe('context hook pasted context with patch text', () => {
-  test('a real pasted context whose patch text mentions another lineage id is allowed and recorded', () => {
-    const { repo, txn, data } = lineage()
-    const out = spawnSync('node', [join(PLUGIN, 'bin/odd-review'), '--cwd', repo, 'context', '--lineage', txn.lineage, '--lens', 'risk'], { encoding: 'utf8' })
-    assert.equal(out.status, 0, out.stderr)
-    const pasted = out.stdout.replace('ODD_REVIEW_PATH_END 0', '+logged review-0123456789abcdef earlier\nODD_REVIEW_PATH_END 0')
-    assert.notEqual(pasted, out.stdout)
-    const r = hook(CONTEXT_HOOK, spawnInput(repo, pasted), data)
-    assert.equal(r.stdout, '')
-    assert.ok(existsSync(pendingOf(data, txn)))
-  })
-})
-
-describe('context hook ambiguity', () => {
-  const recorded = (data) => (existsSync(join(data, 'review-hooks', 's1')) ? readdirSync(join(data, 'review-hooks', 's1')) : [])
-
-  test('a prompt naming two distinct lineages is denied with a message to name one', () => {
-    const { repo, txn, data } = lineage()
-    const r = hook(CONTEXT_HOOK, spawnInput(repo, `Review ${txn.lineage} and review-0123456789abcdef`), data)
-    assert.equal(r.json.hookSpecificOutput.permissionDecision, 'deny')
-    assert.match(r.json.hookSpecificOutput.permissionDecisionReason, /exactly one lineage/)
-    assert.deepEqual(recorded(data), [])
-  })
-
-  test('the same lineage named twice is allowed and gets the context', () => {
-    const { repo, txn, data } = lineage()
-    const r = hook(CONTEXT_HOOK, spawnInput(repo, `Review ${txn.lineage} (again: ${txn.lineage})`), data)
-    assert.equal(r.json.hookSpecificOutput.permissionDecision, 'allow')
-    assert.match(r.json.hookSpecificOutput.updatedInput.prompt, /^ODD_REVIEW_BINDING /)
-  })
-
-  test('a lens spawn after an empty-reply stop is allowed and gets the context again', () => {
-    const { repo, txn, data } = lineage()
-    const prompt = `Review lineage ${txn.lineage}`
-    assert.equal(hook(CONTEXT_HOOK, spawnInput(repo, prompt), data).json.hookSpecificOutput.permissionDecision, 'allow')
-    hook(CAPTURE_HOOK, stopInput(repo, ''), data)
-    const again = hook(CONTEXT_HOOK, spawnInput(repo, prompt), data)
-    assert.equal(again.json.hookSpecificOutput.permissionDecision, 'allow')
-    assert.match(again.json.hookSpecificOutput.updatedInput.prompt, /^ODD_REVIEW_BINDING /)
   })
 })
 
 describe('capture hook', () => {
-  const spawned = (repo, txn, data, agent = 'construct:review-risk') =>
-    hook(CONTEXT_HOOK, spawnInput(repo, `Review lineage ${txn.lineage}`, agent), data)
-
-  test('a fenced reply is captured for the lens and the stop is allowed', () => {
-    const { repo, txn, data } = lineage()
-    spawned(repo, txn, data)
-    const reply = fenced(lensResult(txn.subjects['review-risk'], txn.manifest))
-    const r = hook(CAPTURE_HOOK, stopInput(repo, reply), data)
+  test('a clean fenced result is recorded as an approved verdict and the stop is allowed', () => {
+    const repo = reviewed()
+    const binding = prepare(repo)
+    const r = hook(CAPTURE_HOOK, stopInput(repo, `\`\`\`json\n${JSON.stringify(result(binding))}\n\`\`\``))
     assert.equal(r.status, 0)
     assert.equal(r.stdout, '')
-    assert.ok(readTransaction(repo, txn.lineage).results['review-risk'])
+    const verdict = readVerdicts(repo, binding.subject_hash)['review-risk']
+    assert.equal(verdict.approved, true)
+    assert.equal(verdict.subject_hash, binding.subject_hash)
+    assert.deepEqual(verdict.result, result(binding))
   })
 
-  // A background lens hands its report back through the SubagentHandback tool,
-  // so its final message has no text: the hook reads the agent's transcript.
-  const transcript = (entries) => {
-    const file = join(scratchDir('odd-hooks-transcript-'), 'agent.jsonl')
-    writeFileSync(file, entries.map((entry) => JSON.stringify(entry)).join('\n') + '\n')
-    return file
-  }
-  const handback = (message) => ({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', name: 'SubagentHandback', input: { message } }] } })
+  test('a CRITICAL finding is recorded as not approved', () => {
+    const repo = reviewed()
+    const binding = prepare(repo)
+    hook(CAPTURE_HOOK, stopInput(repo, JSON.stringify(result(binding, [critical]))))
+    assert.equal(readVerdicts(repo, binding.subject_hash)['review-risk'].approved, false)
+  })
 
-  test('a transcript part of type text without text is skipped and the reply is still captured', () => {
-    const { repo, txn, data } = lineage()
-    spawned(repo, txn, data)
-    const report = fenced(lensResult(txn.subjects['review-risk'], txn.manifest))
-    const path = transcript([
-      { type: 'assistant', message: { role: 'assistant', content: [{ type: 'text' }, { type: 'text', text: report }, { type: 'text', text: null }] } },
-      { type: 'assistant', message: { role: 'assistant', content: [{ type: 'text' }] } },
-    ])
-    const r = hook(CAPTURE_HOOK, stopInput(repo, undefined, 'construct:review-risk', { agent_transcript_path: path }), data)
+  test('a WARNING finding still approves', () => {
+    const repo = reviewed()
+    const binding = prepare(repo)
+    hook(CAPTURE_HOOK, stopInput(repo, JSON.stringify(result(binding, [{ ...critical, severity: 'WARNING' }]))))
+    assert.equal(readVerdicts(repo, binding.subject_hash)['review-risk'].approved, true)
+  })
+
+  test('the lens reply in a SubagentHandback transcript is captured', () => {
+    const repo = reviewed()
+    const binding = prepare(repo)
+    const file = join(scratchDir('review-hooks-transcript-'), 'agent.jsonl')
+    const entry = { type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', name: 'SubagentHandback', input: { message: JSON.stringify(result(binding)) } }] } }
+    writeFileSync(file, `${JSON.stringify(entry)}\n`)
+    const r = hook(CAPTURE_HOOK, stopInput(repo, '', 'construct:review-risk', { agent_transcript_path: file }))
     assert.equal(r.stdout, '')
-    assert.ok(readTransaction(repo, txn.lineage).results['review-risk'])
+    assert.equal(readVerdicts(repo, binding.subject_hash)['review-risk'].approved, true)
   })
 
-  test('a background lens reply delivered through SubagentHandback is captured from the transcript', () => {
-    const { repo, txn, data } = lineage()
-    spawned(repo, txn, data)
-    const report = JSON.stringify(lensResult(txn.subjects['review-risk'], txn.manifest))
-    const path = transcript([{ type: 'user', message: { role: 'user', content: 'ODD_REVIEW_BINDING ...' } }, handback(report)])
-    const r = hook(CAPTURE_HOOK, stopInput(repo, '', 'construct:review-risk', { agent_transcript_path: path }), data)
-    assert.equal(r.stdout, '')
-    assert.ok(readTransaction(repo, txn.lineage).results['review-risk'])
-  })
-
-  test('without a handback, the last assistant text in the transcript is captured', () => {
-    const { repo, txn, data } = lineage()
-    spawned(repo, txn, data)
-    const report = fenced(lensResult(txn.subjects['review-risk'], txn.manifest))
-    const path = transcript([{ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: report }] } }])
-    const r = hook(CAPTURE_HOOK, stopInput(repo, undefined, 'construct:review-risk', { agent_transcript_path: path }), data)
-    assert.equal(r.stdout, '')
-    assert.ok(readTransaction(repo, txn.lineage).results['review-risk'])
-  })
-
-  test('the last lens reduces the lineage', () => {
-    const { repo, txn, data } = lineage()
-    for (const lens of ['review-risk', 'review-reliability']) {
-      spawned(repo, txn, data, `construct:${lens}`)
-      hook(CAPTURE_HOOK, stopInput(repo, JSON.stringify(lensResult(txn.subjects[lens], txn.manifest)), `construct:${lens}`), data)
-    }
-    assert.equal(readTransaction(repo, txn.lineage).state, 'approved')
-  })
-
-  test('an invalid reply blocks with the validator message, at most twice', () => {
-    const { repo, txn, data } = lineage()
-    spawned(repo, txn, data)
-    const bad = JSON.stringify(lensResult(txn.subjects['review-risk'], txn.manifest, [finding({ evidence_class: 'static-analysis' })]))
+  test('a prose reply with one pending record of the same session retries, then clears only that record (S5)', () => {
+    const repo = reviewed()
+    const binding = prepare(repo)
+    const dir = join(repo, '.git', 'construct-review', 'pending')
+    const file = join(dir, `review-risk.${binding.subject_hash}.json`)
     for (let attempt = 0; attempt < 2; attempt++) {
-      const r = hook(CAPTURE_HOOK, stopInput(repo, bad, 'construct:review-risk', { stop_hook_active: attempt > 0 }), data)
+      const r = hook(CAPTURE_HOOK, stopInput(repo, 'not json'))
       assert.equal(r.json.decision, 'block')
-      assert.match(r.json.reason, /invalid_result/)
-      assert.match(r.json.reason, /evidence_class/)
+      assert.match(r.json.reason, /review-capture rejected/)
+      assert.equal(JSON.parse(readFileSync(file, 'utf8')).attempts, attempt + 1)
     }
-    const third = hook(CAPTURE_HOOK, stopInput(repo, bad, 'construct:review-risk', { stop_hook_active: true }), data)
-    assert.equal(third.stdout, '')
-    assert.equal(readTransaction(repo, txn.lineage).results['review-risk'], undefined)
+    assert.equal(hook(CAPTURE_HOOK, stopInput(repo, 'not json')).stdout, '')
+    assert.equal(existsSync(file), false)
+    assert.deepEqual(readVerdicts(repo, binding.subject_hash), {})
   })
 
-  test('a corrected reply after a block is captured', () => {
-    const { repo, txn, data } = lineage()
-    spawned(repo, txn, data)
-    hook(CAPTURE_HOOK, stopInput(repo, 'not json'), data)
-    const r = hook(CAPTURE_HOOK, stopInput(repo, JSON.stringify(lensResult(txn.subjects['review-risk'], txn.manifest)), 'construct:review-risk', { stop_hook_active: true }), data)
+  test('a prose reply never touches another session\'s pending record (F9)', () => {
+    const repo = reviewed()
+    const binding = prepare(repo)
+    const dir = join(repo, '.git', 'construct-review', 'pending')
+    const file = join(dir, `review-risk.${binding.subject_hash}.json`)
+    const before = readFileSync(file, 'utf8')
+    for (let attempt = 0; attempt < 3; attempt++) assert.equal(hook(CAPTURE_HOOK, { ...stopInput(repo, 'not json'), session_id: 's2' }).stdout, '')
+    assert.equal(readFileSync(file, 'utf8'), before)
+  })
+
+  test('a prose reply retries its own session and leaves a second session\'s record untouched', () => {
+    const repo = reviewed()
+    const mine = prepare(repo)
+    applyFiles(repo, { 'src/c.js': 'export const c = 1\n' })
+    commitAll(repo, 'more')
+    hook(CONTEXT_HOOK, { ...spawnInput(repo, 'Review subject: HEAD~2'), session_id: 's2' })
+    const dir = join(repo, '.git', 'construct-review', 'pending')
+    const other = readdirSync(dir).find((name) => !name.includes(mine.subject_hash))
+    const otherBefore = readFileSync(join(dir, other), 'utf8')
+    for (let attempt = 0; attempt < 2; attempt++) assert.equal(hook(CAPTURE_HOOK, stopInput(repo, 'not json')).json.decision, 'block')
+    assert.equal(hook(CAPTURE_HOOK, stopInput(repo, 'not json')).stdout, '')
+    assert.deepEqual(readdirSync(dir), [other])
+    assert.equal(readFileSync(join(dir, other), 'utf8'), otherBefore)
+  })
+
+  test('a record without session_id is never chosen by the fallback', () => {
+    const repo = reviewed()
+    const binding = prepare(repo)
+    const file = join(repo, '.git', 'construct-review', 'pending', `review-risk.${binding.subject_hash}.json`)
+    const { session_id, ...old } = JSON.parse(readFileSync(file, 'utf8'))
+    writeFileSync(file, `${JSON.stringify(old)}\n`)
+    const before = readFileSync(file, 'utf8')
+    assert.equal(hook(CAPTURE_HOOK, stopInput(repo, 'not json')).stdout, '')
+    assert.equal(readFileSync(file, 'utf8'), before)
+  })
+
+  test('the pending record stores the hook input session_id', () => {
+    const repo = reviewed()
+    const binding = prepare(repo)
+    const file = join(repo, '.git', 'construct-review', 'pending', `review-risk.${binding.subject_hash}.json`)
+    assert.equal(JSON.parse(readFileSync(file, 'utf8')).session_id, 's1')
+  })
+
+  test('a malformed reply with two pending subjects leaves both records (F9)', () => {
+    const repo = reviewed()
+    const first = prepare(repo)
+    applyFiles(repo, { 'src/c.js': 'export const c = 1\n' })
+    commitAll(repo, 'more')
+    const second = hook(CONTEXT_HOOK, spawnInput(repo, 'Review subject: HEAD~2'))
+    assert.notEqual(JSON.parse(second.json.hookSpecificOutput.updatedInput.prompt.split('\n')[0].slice(19)).subject_hash, first.subject_hash)
+    const dir = join(repo, '.git', 'construct-review', 'pending')
+    assert.equal(readdirSync(dir).length, 2)
+    assert.equal(hook(CAPTURE_HOOK, stopInput(repo, 'not json')).stdout, '')
+    assert.equal(readdirSync(dir).length, 2)
+  })
+
+  test('a consumed pending record is removed after the verdict is written (F20)', () => {
+    const repo = reviewed()
+    const binding = prepare(repo)
+    const file = join(repo, '.git', 'construct-review', 'pending', `review-risk.${binding.subject_hash}.json`)
+    assert.ok(existsSync(file))
+    hook(CAPTURE_HOOK, stopInput(repo, JSON.stringify(result(binding))))
+    assert.ok(!existsSync(file))
+  })
+
+  test('pending and verdict records older than 30 days are pruned when capture runs (F20)', () => {
+    const repo = reviewed()
+    const binding = prepare(repo)
+    const store = join(repo, '.git', 'construct-review')
+    const old = join(store, 'pending', 'review-risk.old.json')
+    writeFileSync(old, '{}')
+    mkdirSync(join(store, 'verdicts', 'oldsubject'), { recursive: true })
+    const verdict = join(store, 'verdicts', 'oldsubject', 'review-risk.json')
+    writeFileSync(verdict, '{}')
+    const past = new Date(Date.now() - 31 * 24 * 3600 * 1000)
+    utimesSync(old, past, past)
+    utimesSync(verdict, past, past)
+    hook(CAPTURE_HOOK, stopInput(repo, 'not json'))
+    assert.ok(!existsSync(old))
+    assert.ok(!existsSync(verdict))
+    assert.ok(existsSync(join(store, 'pending', `review-risk.${binding.subject_hash}.json`)))
+  })
+
+  test('an invalid result blocks with the validator message', () => {
+    const repo = reviewed()
+    const binding = prepare(repo)
+    const r = hook(CAPTURE_HOOK, stopInput(repo, JSON.stringify(result(binding, [{ ...critical, evidence_class: 'static-analysis' }]))))
+    assert.equal(r.json.decision, 'block')
+    assert.match(r.json.reason, /invalid_result/)
+    assert.match(r.json.reason, /evidence_class/)
+  })
+
+  test('a result for another subject from another session matches no pending record: ignored, nothing recorded (F9)', () => {
+    const repo = reviewed()
+    const binding = prepare(repo)
+    const r = hook(CAPTURE_HOOK, { ...stopInput(repo, JSON.stringify({ ...result(binding), subject_hash: 'f'.repeat(64) })), session_id: 's2' })
     assert.equal(r.stdout, '')
-    assert.ok(readTransaction(repo, txn.lineage).results['review-risk'])
+    assert.deepEqual(readVerdicts(repo, binding.subject_hash), {})
+    assert.ok(existsSync(join(repo, '.git', 'construct-review', 'pending', `review-risk.${binding.subject_hash}.json`)))
+  })
+
+  test('inspection paths that differ from the manifest are refused', () => {
+    const repo = reviewed()
+    const binding = prepare(repo)
+    const bad = { ...result(binding), inspection: { status: 'completed', paths: ['src/a.js'] } }
+    assert.match(hook(CAPTURE_HOOK, stopInput(repo, JSON.stringify(bad))).json.reason, /changed-path manifest/)
+  })
+
+  test('an incomplete inspection records nothing and does not block', () => {
+    const repo = reviewed()
+    const binding = prepare(repo)
+    const incomplete = { ...result(binding), inspection: { status: 'incomplete', paths: [] } }
+    assert.equal(hook(CAPTURE_HOOK, stopInput(repo, JSON.stringify(incomplete))).stdout, '')
+    assert.deepEqual(readVerdicts(repo, binding.subject_hash), {})
   })
 
   test('an agent the context hook did not prepare is left alone', () => {
-    const { repo, txn, data } = lineage()
-    const r = hook(CAPTURE_HOOK, stopInput(repo, JSON.stringify(lensResult(txn.subjects['review-risk'], txn.manifest))), data)
+    const repo = reviewed()
+    const binding = prepare(repo)
+    const r = hook(CAPTURE_HOOK, stopInput(repo, JSON.stringify(result(binding)), 'construct:review-reliability'))
     assert.equal(r.stdout, '')
-    assert.equal(readTransaction(repo, txn.lineage).results['review-risk'], undefined)
+    assert.deepEqual(readVerdicts(repo, binding.subject_hash), {})
   })
 
-  test('two concurrent reviews of the same lens each capture into their own lineage, in any stop order', () => {
-    const one = lineage()
-    const two = lineage()
-    const data = one.data
-    spawned(one.repo, one.txn, data)
-    spawned(two.repo, two.txn, data)
-    const reply = (txn) => JSON.stringify(lensResult(txn.subjects['review-risk'], txn.manifest))
-    assert.equal(hook(CAPTURE_HOOK, stopInput(two.repo, reply(two.txn), 'construct:review-risk', { agent_id: 'b2' }), data).stdout, '')
-    assert.equal(hook(CAPTURE_HOOK, stopInput(one.repo, reply(one.txn), 'construct:review-risk', { agent_id: 'a1' }), data).stdout, '')
-    assert.ok(readTransaction(one.repo, one.txn.lineage).results['review-risk'])
-    assert.ok(readTransaction(two.repo, two.txn.lineage).results['review-risk'])
-    assert.deepEqual(readdirSync(join(data, 'review-hooks', 's1')), [])
+  test('the verdict store lives under the git common dir in construct-review', () => {
+    const repo = reviewed()
+    const binding = prepare(repo)
+    hook(CAPTURE_HOOK, stopInput(repo, JSON.stringify(result(binding))))
+    const file = join(repo, '.git', 'construct-review', 'verdicts', binding.subject_hash, 'review-risk.json')
+    assert.equal(JSON.parse(readFileSync(file, 'utf8')).lens, 'review-risk')
+  })
+})
+
+describe('ranges, deleted paths, and verdict records (T8)', () => {
+  const treeOf = (repo, ref) => git(repo, 'rev-parse', `${ref}^{tree}`).trim()
+  const bindingOf = (r) => JSON.parse(r.json.hookSpecificOutput.updatedInput.prompt.split('\n')[0].slice('ODD_REVIEW_BINDING '.length))
+
+  // three is main plus two commits on top.
+  function three() {
+    const repo = makeRepo({ 'src/a.js': 'export const a = 1\n', 'src/gone.js': 'SECRET_REMOVED_BODY\n' })
+    applyFiles(repo, { 'src/a.js': 'export const a = 2\n' })
+    commitAll(repo, 'one')
+    applyFiles(repo, { 'src/gone.js': null, 'src/c.js': 'export const c = 1\n' })
+    commitAll(repo, 'two')
+    return repo
+  }
+
+  test('the subject is the base tree against HEAD: both trees bound, recorded as pending', () => {
+    const repo = three()
+    const binding = bindingOf(hook(CONTEXT_HOOK, spawnInput(repo, 'Review subject: HEAD~2')))
+    assert.equal(binding.subject_hash, subjectHash(treeOf(repo, 'HEAD~2'), treeOf(repo, 'HEAD')))
+    assert.equal(binding.artifact_subject.candidate_tree, treeOf(repo, 'HEAD'))
   })
 
-  test('a malformed reply retries the newest pending record of the lens, not a stale older one', () => {
-    const old = lineage()
-    const fresh = lineage()
-    const data = old.data
-    spawned(old.repo, old.txn, data)
-    spawned(fresh.repo, fresh.txn, data)
-    utimesSync(pendingOf(data, old.txn), new Date(1_000_000), new Date(1_000_000))
-    const r = hook(CAPTURE_HOOK, stopInput(fresh.repo, 'not json'), data)
-    assert.equal(r.json.decision, 'block')
-    assert.equal(JSON.parse(readFileSync(pendingOf(data, fresh.txn), 'utf8')).attempts, 1)
-    assert.equal(JSON.parse(readFileSync(pendingOf(data, old.txn), 'utf8')).attempts, 0)
+  test('the <base>..<head> form is gone (F17): it is denied', () => {
+    const repo = three()
+    for (const subject of ['HEAD~2..HEAD~1', 'HEAD~2..HEAD', 'HEAD~2..']) {
+      assert.equal(hook(CONTEXT_HOOK, spawnInput(repo, `Review subject: ${subject}`)).json.hookSpecificOutput.permissionDecision, 'deny', subject)
+    }
   })
 
-  test('a lens that is already captured counts as done and the pending record is cleared', () => {
-    const { repo, txn, data } = lineage()
-    spawned(repo, txn, data)
-    const reply = JSON.stringify(lensResult(txn.subjects['review-risk'], txn.manifest))
-    hook(CAPTURE_HOOK, stopInput(repo, reply), data)
-    spawned(repo, txn, data)
-    const again = hook(CAPTURE_HOOK, stopInput(repo, reply), data)
-    assert.equal(again.stdout, '')
-    assert.equal(existsSync(pendingOf(data, txn)), false)
+  test('the range denial says the form was removed and to review from the merge-base', () => {
+    const r = hook(CONTEXT_HOOK, spawnInput(three(), 'Review subject: HEAD~2..HEAD'))
+    assert.match(r.json.hookSpecificOutput.permissionDecisionReason, /form was removed.*merge-base/)
+  })
+
+  test('a deleted path stays in the manifest and the name-status, its removed body is omitted', () => {
+    const repo = three()
+    const r = hook(CONTEXT_HOOK, spawnInput(repo, 'Review subject: HEAD~1'))
+    const prompt = r.json.hookSpecificOutput.updatedInput.prompt
+    assert.ok(bindingOf(r).artifact_subject.changed_path_manifest.includes('src/gone.js'))
+    assert.match(prompt, /^D\tsrc\/gone\.js$/m)
+    assert.match(prompt, /deleted; content omitted/)
+    assert.doesNotMatch(prompt, /SECRET_REMOVED_BODY/)
+    assert.match(prompt, /export const c = 1/)
+  })
+
+  test('a lens can approve a context with a deleted path: the manifest still matches', () => {
+    const repo = three()
+    const binding = bindingOf(hook(CONTEXT_HOOK, spawnInput(repo, 'Review subject: HEAD~1')))
+    assert.equal(hook(CAPTURE_HOOK, stopInput(repo, JSON.stringify(result(binding)))).stdout, '')
+    assert.equal(readVerdicts(repo, binding.subject_hash)['review-risk'].approved, true)
+  })
+
+  test('the verdict record stores base_tree and head_tree', () => {
+    const repo = three()
+    const binding = bindingOf(hook(CONTEXT_HOOK, spawnInput(repo, 'Review subject: HEAD~2')))
+    hook(CAPTURE_HOOK, stopInput(repo, JSON.stringify(result(binding))))
+    const verdict = readVerdicts(repo, binding.subject_hash)['review-risk']
+    assert.equal(verdict.base_tree, treeOf(repo, 'HEAD~2'))
+    assert.equal(verdict.head_tree, treeOf(repo, 'HEAD'))
+  })
+
+  test('a rejected verdict is never replaced by an approval of the same subject', () => {
+    const repo = reviewed()
+    const record = (approved) => ({ lens: 'review-risk', subject_hash: 's1', base_tree: 'a', head_tree: 'b', approved, at: Date.now(), result: {} })
+    writeVerdict(repo, record(false))
+    writeVerdict(repo, record(true))
+    assert.equal(readVerdicts(repo, 's1')['review-risk'].approved, false)
+  })
+
+  test('an approval written after a rejection loses even when it was prepared first (F13)', () => {
+    const repo = reviewed()
+    const record = (approved, at) => ({ lens: 'review-risk', subject_hash: 's1', approved, at, result: {} })
+    writeVerdict(repo, record(true, 1))
+    writeVerdict(repo, record(false, 2))
+    assert.equal(readVerdicts(repo, 's1')['review-risk'].approved, false)
+    writeVerdict(repo, record(true, 3))
+    assert.equal(readVerdicts(repo, 's1')['review-risk'].approved, false)
+  })
+
+  test('the first approval stands: a later approval never replaces it (F13)', () => {
+    const repo = reviewed()
+    const record = (at) => ({ lens: 'review-risk', subject_hash: 's1', approved: true, at, result: {} })
+    writeVerdict(repo, record(1))
+    writeVerdict(repo, record(2))
+    assert.equal(readVerdicts(repo, 's1')['review-risk'].at, 1)
   })
 })

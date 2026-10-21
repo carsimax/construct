@@ -54,7 +54,6 @@ const odd = {
   feature: 'flightdeck-panel', open: 3, task: { id: 'T4', title: 'Card layout' },
   tasks: [{ id: 'T1', done: true }, { id: 'T2', done: true }, { id: 'T3', done: true }, { id: 'T4', done: false }, { id: 'T5', done: false }],
 }
-const rdd = { mode: 'on', state: 'review due' }
 const verdicts = { rule: 4, ask: 0, cleared: 16, deny: 2 }
 const buckets = {
   file: { rule: 2, ask: 0, cleared: 1, deny: 1 },
@@ -81,7 +80,7 @@ const changes = [
   { path: 'notes/new-file.md', added: 14, removed: 0, untracked: true },
 ]
 
-const args = (o: any = {}) => ({ panel: full(), usage, odd, rdd, nowMs: NOW, columns: 66, rows: 60, git, changes, ...o })
+const args = (o: any = {}) => ({ panel: full(), usage, odd, nowMs: NOW, columns: 66, rows: 60, git, changes, ...o })
 const rowsOf = (o: any = {}) => lines(buildPanel(args(o)))
 const idx = (rows: string[], needle: string) => rows.findIndex((r) => r.includes(needle))
 const lastIdx = (rows: string[], needle: string) => rows.findLastIndex((r) => r.includes(needle))
@@ -106,9 +105,9 @@ test('no header and no legend: the panel starts with the main card', async () =>
 
 // ---- card order ------------------------------------------------------------
 
-test('cards come in order: main, ODD, REVIEW, GATE, agents, changes', async () => {
+test('cards come in order: main, ODD, GATE, agents, changes', async () => {
   const rows = rowsOf()
-  const at = ['Opus 5.5', 'ODD · flightdeck-panel', 'REVIEW', 'GATE · permissions', 'agents 1 running · 2 total', 'feat/x ↑2'].map((n) => idx(rows, n))
+  const at = ['Opus 5.5', 'ODD · flightdeck-panel', 'GATE · permissions', 'agents 1 running · 2 total', 'feat/x ↑2'].map((n) => idx(rows, n))
   for (const i of at) expect(i).toBeGreaterThanOrEqual(0)
   expect([...at].sort((a, b) => a - b)).toEqual(at)
 })
@@ -159,7 +158,7 @@ test('main card branch row: first body row, clipped, control-stripped, hidden wi
 })
 
 test('main card shows without usage or replica, and is busy while a turn is open', async () => {
-  const rows = rowsOf({ usage: null, panel: { ...initialState() }, odd: null, rdd: null, model: 'sonnet' })
+  const rows = rowsOf({ usage: null, panel: { ...initialState() }, odd: null, model: 'sonnet' })
   expect(rows).toContain('Sonnet ○ idle')
   expect(rows.some((r) => r.startsWith('ctx'))).toBe(false)
   expect(rows.some((r) => r.startsWith('effort ▯▯▯▯ —'))).toBe(true)
@@ -191,16 +190,6 @@ test('ODD card shows the feature, open count, current task and one checkpoint pe
   // without per-task rows only the title row and the task show
   const bare = rowsOf({ odd: { feature: 'x', open: 1 } })
   expect(bare[idx(bare, 'ODD · x')]).toBe('ODD · x 1 open')
-})
-
-// ---- REVIEW ------------------------------------------------------------------
-
-test('REVIEW card shows the RDD state and is hidden when off or empty', async () => {
-  const rows = rowsOf()
-  expect(rows[idx(rows, 'REVIEW')]).toBe('REVIEW · rdd on review due')
-  expect(find(buildPanel(args()), 'review due')?.props.color).toBe('error')
-  for (const r of [null, { mode: 'off' }, undefined]) expect(rowsOf({ rdd: r }).some((x) => x.startsWith('REVIEW'))).toBe(false)
-  expect(rowsOf({ rdd: { mode: 'on', state: 'clear' } }).find((x) => x.startsWith('REVIEW'))).toBe('REVIEW · rdd on clear')
 })
 
 // ---- GATE --------------------------------------------------------------------
@@ -411,7 +400,7 @@ function rowsHigh(node): number {
 
 test('the panel never takes more rows than the pane has: the changes rows shrink, then the card goes', async () => {
   const many = Array.from({ length: 30 }, (_, i) => ({ path: `src/f${i}.ts`, added: 30 - i, removed: 0 }))
-  const lean = { odd: null, rdd: null, panel: initialState(), changes: many }
+  const lean = { odd: null, panel: initialState(), changes: many }
   for (const rows of [8, 9, 10, 11, 12, 13, 14, 20, 24, 26, 30, 60]) {
     expect(rowsHigh(buildPanel(args({ ...lean, rows })))).toBeLessThanOrEqual(rows)
   }
@@ -468,4 +457,14 @@ test('phase: the busy status names the running agents phase, and blocked wins', 
   expect(rowsOf({ panel: verifying })[0]).toBe('Opus 5.5 ● verifying')
   expect(rowsOf({ panel: { ...verifying, blocked: true } })[0]).toBe('Opus 5.5 ◆ blocked')
   expect(rowsOf({ panel: { ...full(), blocked: false } })[0]).toBe('Opus 5.5 ○ idle')
+})
+
+test('activeWork joins surplus cells from an unescaped pipe into the task column', async () => {
+  const text = DOC(['| T1 | S1 | a | b | done |', '| T2 | S1 | x | y | pending |'])
+  expect(activeWork([{ name: 'f.md', mtimeMs: 1, text }])).toEqual({
+    feature: 'f',
+    open: 1,
+    task: { id: 'T2', title: 'x|y' },
+    tasks: [{ id: 'T1', done: true }, { id: 'T2', done: false }],
+  })
 })

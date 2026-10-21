@@ -19,8 +19,6 @@ const S6 = {
   'review-readability': ['sonnet', 'medium'],
   'review-reliability': ['sonnet', 'medium'],
   'review-resilience': ['sonnet', 'medium'],
-  'review-refuter': ['opus', 'medium'],
-  'review-validator': ['opus', 'medium'],
   'odd-general': ['sonnet', 'medium'],
 }
 

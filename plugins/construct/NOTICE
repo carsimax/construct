@@ -3,7 +3,7 @@ Construct includes material adapted from the Gentle AI project
 
 Adapted material:
 - agents/review-risk.md, review-readability.md, review-reliability.md,
-  review-resilience.md, review-refuter.md, jd-judge-a.md, jd-judge-b.md,
+  review-resilience.md, jd-judge-a.md, jd-judge-b.md,
   jd-fix-agent.md
 - skills/branch-pr, chained-pr, cognitive-doc-design, comment-writer,
   go-testing, judgment-day, skill-creator, skill-improver, work-unit-commits

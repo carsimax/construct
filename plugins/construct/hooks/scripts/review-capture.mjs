@@ -1,22 +1,20 @@
 // SubagentStop hook for construct:review-* agents that review-context.mjs
-// prepared: pipe the agent's report (its final reply, or the SubagentHandback
-// message a background agent sends, read from its transcript) to odd-review (capture,
-// capture-refuter, or capture-validation), so no result is copied by hand. Only
-// a surrounding code fence is removed; the JSON itself is never edited. A
-// malformed or invalid reply blocks the stop with the validator's message, at
-// most MAX_RETRIES times; any other answer lets the agent stop, and the
-// orchestrator reads `odd-review status`. Errors fail open.
+// prepared: it takes the agent's report (its final reply, or the SubagentHandback
+// message a background agent sends, read from its transcript), validates it
+// against the pending record, and writes the verdict record. Only a surrounding
+// code fence is removed; the JSON itself is never edited. The record is the one whose
+// subject_hash the reply names; a reply naming none (malformed JSON, an unknown hash) falls back to
+// the only pending record of the same lens and session_id, and touches nothing when there are zero
+// or several, so it cannot clear another session's record. An invalid reply for a
+// pending subject blocks the stop with the reason, at most MAX_RETRIES times. Errors fail open.
 // Usage: node review-capture.mjs   (hook JSON on stdin)
-import { spawnSync } from 'node:child_process'
-import { readdirSync, readFileSync, rmSync, statSync } from 'node:fs'
-import { join } from 'node:path'
-import { atomicWrite } from '../../lib/review/store.mjs'
-import { pendingDir, readInput, safeName } from './hook-io.mjs'
+import { readFileSync } from 'node:fs'
+import { repositoryRoot } from './git-tree.mjs'
+import { readInput } from './hook-io.mjs'
+import { checkLensResult, clearPending, pendingRecords, pruneStore, writePending, writeVerdict } from './review-store.mjs'
 
-const ODD_REVIEW = new URL('../../bin/odd-review', import.meta.url).pathname
 const MAX_RETRIES = 2
-const RETRYABLE = new Set(['malformed_result', 'invalid_result'])
-
+const AGENT = /^construct:(review-[a-z]+)$/
 const FENCE = /^```[A-Za-z]*[ \t]*\r?\n([\s\S]*?)\r?\n```$/
 const unfence = (text) => FENCE.exec(text.trim())?.[1] ?? text
 
@@ -45,80 +43,45 @@ function replyOf(input) {
   return handback ?? text
 }
 
-function captureArgs({ lineage, lens }) {
-  if (lens === 'review-refuter') return ['capture-refuter', '--lineage', lineage]
-  if (lens === 'review-validator') return ['capture-validation', '--lineage', lineage]
-  return ['capture', '--lineage', lineage, '--lens', lens]
-}
-
-function refusalOf(stderr) {
-  try {
-    return JSON.parse(stderr).error ?? {}
-  } catch {
-    return {}
-  }
-}
-
-// pendingFor picks the pending record of the stopping agent: records are keyed by
-// lens and lineage, so among several of one lens it takes the one whose
-// subject_hash the reply carries, else the newest (the latest spawn wins).
-function pendingFor(input, reply) {
-  const dir = pendingDir(input.session_id)
-  const prefix = `${safeName(input.agent_type)}.`
-  const records = []
-  for (const name of readdirSync(dir)) {
-    if (!name.startsWith(prefix) || !name.endsWith('.json')) continue
-    try {
-      const file = join(dir, name)
-      records.push({ file, pending: JSON.parse(readFileSync(file, 'utf8')), at: statSync(file).mtimeMs })
-    } catch {
-      // Unreadable record: not a candidate.
-    }
-  }
-  records.sort((a, b) => a.at - b.at || a.file.localeCompare(b.file))
-  let subject
-  try {
-    subject = JSON.parse(unfence(reply))?.subject_hash
-  } catch {
-    // Not JSON: the newest record takes the retry.
-  }
-  return records.find((record) => subject !== undefined && record.pending.subject_hash === subject) ?? records[records.length - 1]
-}
+const block = (reason) => process.stdout.write(`${JSON.stringify({ decision: 'block', reason })}\n`)
 
 function main() {
   const input = readInput()
-  if (typeof input?.agent_type !== 'string') return
-  let reply
-  try {
-    reply = replyOf(input)
-  } catch {
-    return
-  }
+  const lens = AGENT.exec(input?.agent_type ?? '')?.[1]
+  if (!lens || typeof input.cwd !== 'string') return
+  const reply = replyOf(input)
   if (reply === null) return
-  let found
+  const root = repositoryRoot(input.cwd)
+  pruneStore(root)
+  let parsed
   try {
-    found = pendingFor(input, reply)
+    parsed = JSON.parse(unfence(reply))
   } catch {
+    parsed = null
+  }
+  const records = pendingRecords(root, lens)
+  let pending = records.find((record) => record.subject_hash === parsed?.subject_hash)
+  if (!pending) {
+    // No hash match (prose, malformed JSON, unknown hash): only this session's one record of the lens can be retried.
+    const own = typeof input.session_id === 'string' ? records.filter((record) => record.session_id === input.session_id) : []
+    if (own.length !== 1) return
+    pending = own[0]
+  }
+  const refusal = checkLensResult(parsed, { subjectHash: pending.subject_hash, manifest: pending.manifest })
+  if (refusal.code === undefined) {
+    writeVerdict(root, { lens, subject_hash: pending.subject_hash, base_tree: pending.base_tree, head_tree: pending.head_tree, approved: refusal.approved, at: Date.now(), result: parsed })
+    clearPending(root, pending)
     return
   }
-  if (!found) return
-  const { file, pending } = found
-  const args = captureArgs(pending)
-  const result = spawnSync('node', [ODD_REVIEW, '--cwd', pending.cwd, ...args, '--input', '-'], {
-    input: unfence(reply),
-    encoding: 'utf8',
-    timeout: 25_000,
-  })
-  const refusal = result.status === 0 ? null : refusalOf(result.stderr)
-  if (refusal && RETRYABLE.has(refusal.code) && pending.attempts < MAX_RETRIES) {
-    atomicWrite(file, `${JSON.stringify({ ...pending, attempts: pending.attempts + 1 })}\n`)
-    const reason =
-      `odd-review ${args[0]} rejected your result (${refusal.code}): ${refusal.message}. ` +
-      'Reply again with only the complete corrected JSON object for the same binding, with no code fence and no other text.'
-    process.stdout.write(`${JSON.stringify({ decision: 'block', reason })}\n`)
+  if (refusal.code === 'invalid_result' && pending.attempts < MAX_RETRIES) {
+    writePending(root, { ...pending, attempts: pending.attempts + 1 })
+    block(
+      `review-capture rejected your result (${refusal.code}): ${refusal.message}. ` +
+        'Reply again with only the complete corrected JSON object for the same binding, with no code fence and no other text.',
+    )
     return
   }
-  rmSync(file, { force: true })
+  clearPending(root, pending)
 }
 
 try {

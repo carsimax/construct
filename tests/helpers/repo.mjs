@@ -1,11 +1,9 @@
-// Shared fixtures for the odd-assess tests: throwaway git repositories built in
-// temporary directories, and a runner for the real CLI.
+// Shared fixtures for the hook tests: throwaway git repositories and scratch directories,
+// removed when the test process exits.
 import { spawnSync } from 'node:child_process'
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-
-export const BIN = new URL('../../plugins/construct/bin/odd-assess', import.meta.url).pathname
 
 const created = []
 process.on('exit', () => {
@@ -32,27 +30,10 @@ export function write(repo, path, content, { executable = false } = {}) {
   chmodSync(file, executable ? 0o755 : 0o644)
 }
 
-// makeRepo creates a repository with one unchanged base commit holding `base`
-// (path -> content or {content, executable}).
-// A temporary directory removed when the test process exits
 export function scratchDir(prefix) {
   const dir = mkdtempSync(join(tmpdir(), prefix))
   created.push(dir)
   return dir
-}
-
-export function makeRepo(base = {}) {
-  const repo = mkdtempSync(join(tmpdir(), 'odd-assess-test-'))
-  created.push(repo)
-  git(repo, 'init', '-q', '-b', 'main')
-  git(repo, 'config', 'user.email', 'test@example.com')
-  git(repo, 'config', 'user.name', 'Test')
-  git(repo, 'config', 'commit.gpgsign', 'false')
-  git(repo, 'config', 'core.fileMode', 'true')
-  write(repo, '.base-anchor', 'anchor\n')
-  applyFiles(repo, base)
-  commitAll(repo, 'base')
-  return repo
 }
 
 export function applyFiles(repo, files) {
@@ -72,19 +53,18 @@ export function commitAll(repo, message) {
   git(repo, 'commit', '-q', '-m', message)
 }
 
-// assess runs the real CLI and returns {status, stdout, stderr, json}.
-export function assess(repo, args = []) {
-  const result = spawnSync(BIN, ['--cwd', repo, ...args], { encoding: 'utf8' })
-  let json = null
-  try {
-    json = JSON.parse(result.stdout)
-  } catch {
-    // Human output or a usage error: no JSON.
-  }
-  return { status: result.status, stdout: result.stdout, stderr: result.stderr, json }
+// makeRepo creates a repository with one base commit holding `base`
+// (path -> content or {content, executable}).
+export function makeRepo(base = {}) {
+  const repo = mkdtempSync(join(tmpdir(), 'construct-test-'))
+  created.push(repo)
+  git(repo, 'init', '-q', '-b', 'main')
+  git(repo, 'config', 'user.email', 'test@example.com')
+  git(repo, 'config', 'user.name', 'Test')
+  git(repo, 'config', 'commit.gpgsign', 'false')
+  git(repo, 'config', 'core.fileMode', 'true')
+  write(repo, '.base-anchor', 'anchor\n')
+  applyFiles(repo, base)
+  commitAll(repo, 'base')
+  return repo
 }
-
-export const assessJson = (repo, args = []) => assess(repo, [...args, '--json'])
-
-// reasonKeys flattens reasons to sorted "code:path" strings (no path: just code).
-export const reasonKeys = (reasons) => reasons.map((r) => (r.path ? `${r.code}:${r.path}` : r.code)).sort()

@@ -1,7 +1,7 @@
 {
   "name": "construct",
   "displayName": "Construct",
-  "version": "2.1.0",
+  "version": "3.0.0",
   "license": "MIT",
   "description": "Organic Driven Development orchestration, review lenses, and delivery skills for Claude Code",
   "author": {
@@ -269,58 +269,6 @@
       "type": "string",
       "title": "RDD Resilience effort",
       "description": "Effort level for the review-resilience agent; default keeps the model's own level",
-      "options": [
-        "default",
-        "low",
-        "medium",
-        "high",
-        "xhigh",
-        "max"
-      ],
-      "default": "medium"
-    },
-    "model_review_refuter": {
-      "type": "string",
-      "title": "RDD Refuter model",
-      "description": "Model the review-refuter agent runs on",
-      "options": [
-        "haiku",
-        "sonnet",
-        "opus",
-        "fable"
-      ],
-      "default": "opus"
-    },
-    "effort_review_refuter": {
-      "type": "string",
-      "title": "RDD Refuter effort",
-      "description": "Effort level for the review-refuter agent; default keeps the model's own level",
-      "options": [
-        "default",
-        "low",
-        "medium",
-        "high",
-        "xhigh",
-        "max"
-      ],
-      "default": "medium"
-    },
-    "model_review_validator": {
-      "type": "string",
-      "title": "RDD Validator model",
-      "description": "Model the review-validator agent runs on",
-      "options": [
-        "haiku",
-        "sonnet",
-        "opus",
-        "fable"
-      ],
-      "default": "opus"
-    },
-    "effort_review_validator": {
-      "type": "string",
-      "title": "RDD Validator effort",
-      "description": "Effort level for the review-validator agent; default keeps the model's own level",
       "options": [
         "default",
         "low",

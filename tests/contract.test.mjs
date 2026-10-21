@@ -65,7 +65,8 @@ test('the session contract carries the ODD protocol, task size, risk line, and d
     'construct:task-size-risk',
     'construct:lossless-prompts',
     'construct:rdd-review',
-    'odd-review mode',
+    'Review subject:',
+    'review is mandatory',
   ]) {
     assert.ok(text.toLowerCase().includes(anchor.toLowerCase()), `missing ${anchor}`)
   }
@@ -78,8 +79,8 @@ test('the session contract scales autonomy to the verifier and closes with check
   assert.match(flat, /strong verifier[^.]*loop until it passes/i)
   assert.match(flat, /weak verifier[^.]*one small step[^.]*stop/i)
   assert.match(flat, /docs-only[^.]*reviewed diff is the verifier/i)
-  const close = text.match(/^7\. Close\..*$/m)?.[0]
-  assert.ok(close, 'step 7 Close line not found')
+  const close = text.match(/^8\. Close\..*$/m)?.[0]
+  assert.ok(close, 'step 8 Close line not found')
   assert.match(close, /skipped|unverified/i)
   assert.match(close, /Risk line/)
   assert.ok(text.includes('Risk: item N (reason)') && text.includes('Risk: none'))
@@ -128,7 +129,7 @@ test('SubagentStart carries the S2 engineering rules for writers', () => {
 })
 
 test('SubagentStart injects nothing into agents that must return a single JSON object', () => {
-  for (const agent of ['construct:review-risk', 'construct:review-refuter', 'construct:review-validator', 'construct:jd-judge-a', 'construct:jd-judge-b', 'review-risk', 'jd-judge-b']) {
+  for (const agent of ['construct:review-risk', 'construct:jd-judge-a', 'construct:jd-judge-b', 'review-risk', 'jd-judge-b']) {
     const { code, stdout } = run('subagent', { hook_event_name: 'SubagentStart', agent_type: agent })
     assert.equal(code, 0, agent)
     assert.equal(stdout, '', agent)

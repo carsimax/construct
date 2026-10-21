@@ -20,9 +20,9 @@ import {
   onTurnStep,
   onUnblocked,
 } from './panel/state.js'
-import { checkAssessCli, checkClaude, checkCodegraph, checkEngram, checkMode, checkNode, checkReviewCli, formatReport } from './status/doctor.js'
+import { checkClaude, checkCodegraph, checkEngram, checkNode, formatReport } from './status/doctor.js'
 import { activeWork } from './status/tasks.js'
-import { parseAssess, parseBoundary, parseGitStatus, parseMode, parseNumstat, parseRevParse, reviewState } from './status/data.js'
+import { parseGitStatus, parseNumstat, parseRevParse } from './status/data.js'
 
 // Role of each subagent this session spawned, keyed by agent id, so
 // turn.step can apply the role's effort to that subagent's requests
@@ -35,7 +35,6 @@ const MAX_ROLES = 256
 // redraw never runs a command. A mod's `$` calls must be written in this file.
 
 const GIT_MS = 3000
-const CLI_MS = 8000
 const MAX_UNTRACKED = 20
 const status = { data: null, effort: null, running: false, again: false }
 
@@ -130,27 +129,10 @@ async function readDocs($, root) {
   return docs
 }
 
-// The RDD switch and, when it is on, whether the committed range or the uncommitted changes are due.
-async function readRdd($, root) {
-  const pluginRoot = $.plugin.root
-  const cli = (name) => `${pluginRoot}/bin/${name}`
-  const mode = parseMode(await runText($, ['node', cli('odd-review'), '--cwd', root, 'mode', 'status'], root, CLI_MS))
-  if (mode !== 'on') return mode ? { mode, state: null } : null
-  const boundary = parseBoundary(await runText($, ['node', cli('odd-review'), '--cwd', root, 'boundary'], root, CLI_MS))
-  const committed = boundary && (boundary.source === 'receipt' || boundary.source === 'merge-base')
-  const [dirty, range] = await Promise.all([
-    runText($, ['node', cli('odd-assess'), '--cwd', root, '--json'], root, CLI_MS),
-    committed
-      ? runText($, ['node', cli('odd-assess'), '--cwd', root, '--base-ref', boundary.commit, '--committed-only', '--json'], root, CLI_MS)
-      : undefined,
-  ])
-  return { mode, state: reviewState([parseAssess(dirty), parseAssess(range)]) }
-}
-
 // Gathers everything the panel caches. Each source fails on its own: a gap leaves its segment out.
 async function collect($) {
   // The plugin forces its output style, which overrides settings.outputStyle
-  const data = { git: null, changes: [], root: null, odd: null, rdd: null }
+  const data = { git: null, changes: [], root: null, odd: null }
   let cwd
   try {
     cwd = await $.session.cwd()
@@ -158,7 +140,7 @@ async function collect($) {
     // no directory known
   }
   const [gitText, revText, numstatText] = await Promise.all([
-    runText($, ['git', '--no-optional-locks', 'status', '--porcelain=v2', '--branch'], cwd, GIT_MS),
+    runText($, ['git', '--no-optional-locks', 'status', '--porcelain=v2', '--branch', '-z'], cwd, GIT_MS),
     runText($, ['git', 'rev-parse', '--show-toplevel'], cwd, GIT_MS),
     runText($, ['git', '--no-optional-locks', 'diff', '--numstat', '--no-renames', 'HEAD'], cwd, GIT_MS),
   ])
@@ -169,7 +151,6 @@ async function collect($) {
   data.root = root ?? null
   if (root) {
     data.odd = activeWork(await readDocs($, root))
-    data.rdd = rev ? await readRdd($, root) : null
   }
   return data
 }
@@ -235,7 +216,6 @@ async function drawPane($, e, next) {
     git: data?.git ?? null,
     changes: data?.changes ?? [],
     odd: data?.odd ?? null,
-    rdd: data?.rdd ?? null,
     nowMs: live.nowMs,
     columns: e.props?.bodyColumns,
     rows: e.props?.scroll?.bodyRows,
@@ -272,17 +252,13 @@ async function runDoctor($) {
   const cwd = await probe(() => $.session.cwd())
   const rev = parseRevParse(await probe(() => runText($, ['git', 'rev-parse', '--show-toplevel'], cwd ?? undefined, GIT_MS)))
   const root = rev?.root ?? cwd
-  const cli = (name) => `${$.plugin.root}/bin/${name}`
-  const cliArgs = root ? ['--cwd', root] : []
-  const [version, node, plugins, codegraph, review, assess] = await Promise.all([
+  const [version, node, plugins, codegraph] = await Promise.all([
     probe(async () => (await $.session.version()).version),
     probe(() => runText($, ['node', '--version'], cwd ?? undefined, GIT_MS)),
     probe(() => $.settings.read({ key: 'enabledPlugins' })),
     probe(() => (root ? $.fs.exists(`${root}/.codegraph`) : null)),
-    probe(() => runText($, ['node', cli('odd-review'), ...cliArgs, 'mode', 'status'], root ?? undefined, GIT_MS)),
-    probe(() => runText($, ['node', cli('odd-assess'), '--help'], root ?? undefined, GIT_MS)),
   ])
-  return formatReport([checkClaude(version), checkNode(node), checkEngram(plugins), checkCodegraph(codegraph), checkReviewCli(review), checkAssessCli(assess), checkMode(review)])
+  return formatReport([checkClaude(version), checkNode(node), checkEngram(plugins), checkCodegraph(codegraph)])
 }
 
 // /construct opens the pane, /construct close closes it, /construct doctor reports the setup.

@@ -1,125 +1,100 @@
-// PreToolUse hook on Agent: a construct:review-* lens whose prompt names a
-// lineage (review-<16 hex>) gets the full `odd-review context` output as its
-// prompt, so the orchestrator never pastes or transcribes the evidence. It also
-// records the lineage for review-capture.mjs. A review agent without a lineage,
-// or one odd-review refuses, is denied with the reason; other agents and
-// prompts that start with a valid binding line pass through. A malformed binding
-// line, or one whose lineage differs from another named outside the patch
-// blocks, is denied. A prompt naming two
-// distinct lineages is denied. A new spawn of the same lens and lineage overwrites its pending record.
-// Errors fail open.
+// PreToolUse hook on Agent: a construct:review-* lens gets its whole context
+// from here, so the orchestrator never pastes evidence. The prompt names the
+// subject with one line, `Review subject: <base>` (the head is HEAD). The hook builds the binding, name-status, numstat, per-path
+// patches (a deleted path is listed with a marker, not its removed content; plus the
+// security checklist for review-risk) from the two trees, replaces the
+// prompt with it, and records the pending lens for review-capture.mjs. A review
+// agent it cannot prepare is denied; other agents pass untouched, errors for
+// them fail open.
 // Usage: node review-context.mjs   (hook JSON on stdin)
-import { spawnSync } from 'node:child_process'
-import { rmSync } from 'node:fs'
-import { atomicWrite } from '../../lib/review/store.mjs'
-import { pendingFile, readInput } from './hook-io.mjs'
+import { readFileSync } from 'node:fs'
+import { git, repositoryRoot } from './git-tree.mjs'
+import { readInput } from './hook-io.mjs'
+import { subjectHash, writePending } from './review-store.mjs'
 
-const ODD_REVIEW = new URL('../../bin/odd-review', import.meta.url).pathname
-const REVIEW_AGENT = /^construct:(review-(?:risk|resilience|readability|reliability|refuter|validator))$/
-const LINEAGE = /\breview-[0-9a-f]{16}\b/g
-const BINDING = 'ODD_REVIEW_BINDING '
+const REVIEW_AGENT = /^construct:(review-(?:risk|resilience|readability|reliability))$/
+const SUBJECT_LINE = /^Review subject: (\S+)[ \t]*$/m
+const CHECKLIST = new URL('../../skills/rdd-review/references/security-checklist.md', import.meta.url)
+const MAX_CONTEXT_BYTES = 400 * 1024
+const DIFF_FLAGS = ['--no-color', '--no-ext-diff', '--no-textconv', '--no-renames', '--ignore-submodules=none']
+const FORM = 'Review subject: <base>'
 
 const decide = (permissionDecision, extra) =>
   process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision, ...extra } })}\n`)
+const deny = (reason) => decide('deny', { permissionDecisionReason: reason })
+const out = (root, args) => git(root, args).toString('utf8')
+const withNewline = (text) => (text.endsWith('\n') ? text : `${text}\n`)
 
-// bindingOf reads a leading binding line: null when the prompt has none,
-// { error } when the line is malformed, { lineage } otherwise.
-function bindingOf(prompt) {
-  const first = prompt.split('\n', 1)[0]
-  if (!first.startsWith(BINDING)) return null
-  let lineage
-  let subject
-  try {
-    const parsed = JSON.parse(first.slice(BINDING.length))
-    lineage = parsed?.lineage
-    subject = parsed?.subject_hash
-  } catch {
-    return { error: 'the binding line is not valid JSON' }
+function buildContext(root, lens, base, head) {
+  const baseTree = out(root, ['rev-parse', '--verify', `${base}^{tree}`]).trim()
+  const headTree = out(root, ['rev-parse', '--verify', `${head}^{tree}`]).trim()
+  const subject = subjectHash(baseTree, headTree)
+  const records = out(root, ['diff', '--name-status', '-z', ...DIFF_FLAGS, baseTree, headTree, '--']).split('\0')
+  const nameStatus = []
+  for (let i = 0; i + 1 < records.length; i += 2) nameStatus.push({ status: records[i], path: records[i + 1] })
+  const manifest = nameStatus.map((entry) => entry.path)
+  if (manifest.length === 0) throw new Error(`${base} and ${head} have the same tree: nothing to review`)
+  const numstat = out(root, ['diff', '--numstat', '-z', ...DIFF_FLAGS, baseTree, headTree, '--'])
+    .split('\0')
+    .filter(Boolean)
+    .map((line) => line.split('\t').slice(0, 3).join('\t'))
+  const binding = { lens, subject_hash: subject, artifact_subject: { subject_hash: subject, base_tree: baseTree, candidate_tree: headTree, changed_path_manifest: manifest } }
+  let text = [
+    `ODD_REVIEW_BINDING ${JSON.stringify(binding)}`,
+    'ODD_REVIEW_CONTEXT',
+    `base_tree: ${baseTree}`,
+    `candidate_tree: ${headTree}`,
+    'name-status:',
+    ...nameStatus.map((entry) => `${entry.status}\t${entry.path}`),
+    'numstat:',
+    ...numstat,
+  ].join('\n') + '\n'
+  manifest.forEach((path, index) => {
+    // A deleted file's body is noise to a reviewer and can alone exceed the budget.
+    const patch = nameStatus[index].status.startsWith('D') ? 'deleted; content omitted\n' : withNewline(out(root, ['diff', ...DIFF_FLAGS, baseTree, headTree, '--', `:(literal)${path}`]))
+    text += `ODD_REVIEW_PATH ${JSON.stringify({ index, path })}\n${patch}ODD_REVIEW_PATH_END ${index}\n`
+  })
+  if (lens === 'review-risk') text += `ODD_REVIEW_CHECKLIST_BEGIN\n${withNewline(readFileSync(CHECKLIST, 'utf8'))}ODD_REVIEW_CHECKLIST_END\n`
+  text += 'ODD_REVIEW_CONTEXT_END\n'
+  const bytes = Buffer.byteLength(text)
+  if (bytes > MAX_CONTEXT_BYTES) {
+    throw new Error(`the review context is ${bytes} bytes, above the ${MAX_CONTEXT_BYTES} byte budget; split the delivery into smaller pull requests, each under the budget`)
   }
-  if (typeof lineage !== 'string' || !/^review-[0-9a-f]{16}$/.test(lineage)) {
-    return { error: 'its lineage is not a string of the form review-<16 hex>' }
-  }
-  return { lineage, subject: typeof subject === 'string' ? subject : undefined }
-}
-
-// outsidePatches drops the ODD_REVIEW_PATH ... ODD_REVIEW_PATH_END blocks, which
-// carry patch text of the reviewed repository (it may mention any lineage id);
-// what remains is the context's own header plus any text around it.
-function outsidePatches(prompt) {
-  let inPatch = false
-  return prompt
-    .split('\n')
-    .filter((line) => {
-      if (/^ODD_REVIEW_PATH_END \d+$/.test(line)) {
-        inPatch = false
-        return false
-      }
-      if (/^ODD_REVIEW_PATH \{/.test(line)) inPatch = true
-      return !inPatch
-    })
-    .join('\n')
+  return { text, subject, manifest, baseTree, headTree }
 }
 
 function main() {
   const input = readInput()
   const toolInput = input?.tool_input
-  if (input?.tool_name !== 'Agent' || typeof toolInput?.prompt !== 'string' || typeof input.cwd !== 'string') return
+  if (input?.tool_name !== 'Agent' || typeof toolInput?.prompt !== 'string') return
   const match = REVIEW_AGENT.exec(toolInput.subagent_type ?? '')
   if (!match) return
   const [agent, lens] = match
-
-  // The orchestrator pasted the context itself (it starts with the binding
-  // line): record its lineage, change nothing.
-  const pasted = bindingOf(toolInput.prompt)
-  if (pasted) {
-    const others = [...new Set(outsidePatches(toolInput.prompt).match(LINEAGE) ?? [])].filter((id) => id !== pasted.lineage)
-    const problem = pasted.error ?? (others.length > 0 ? `its lineage ${pasted.lineage} differs from ${others.join(', ')} named in the prompt` : null)
-    if (problem) {
-      decide('deny', {
-        permissionDecisionReason: `${agent} has a malformed ODD_REVIEW_BINDING line: ${problem}. Paste the \`odd-review context\` output unchanged, or name one lineage (review-<16 hex>) and let this hook inject it.`,
-      })
-      return
-    }
-    atomicWrite(pendingFile(input.session_id, agent, pasted.lineage), `${JSON.stringify({ lineage: pasted.lineage, lens, cwd: input.cwd, attempts: 0, subject_hash: pasted.subject })}\n`)
+  const base = SUBJECT_LINE.exec(toolInput.prompt)?.[1]
+  const head = 'HEAD'
+  if (base?.includes('..')) {
+    deny(`${agent} was given a range (${base}): the \`<base>..<head>\` form was removed. Review the whole branch from the merge-base with the default branch, with one line \`${FORM}\`.`)
     return
   }
-
-  const lineages = [...new Set(toolInput.prompt.match(LINEAGE) ?? [])]
-  if (lineages.length > 1) {
-    decide('deny', {
-      permissionDecisionReason: `${agent} was given ${lineages.length} lineages (${lineages.join(', ')}): name exactly one lineage (review-<16 hex>) in the prompt.`,
-    })
+  if (!base || base.startsWith('-')) {
+    deny(`${agent} needs its subject: put one line \`${FORM}\` in the prompt (the head is HEAD), and this hook injects the evidence.`)
     return
   }
-  const lineage = lineages[0]
-  if (!lineage) {
-    decide('deny', {
-      permissionDecisionReason: `${agent} needs a review lineage: put its id (review-<16 hex>) from \`odd-review start\` in the prompt, and this hook injects the evidence.`,
-    })
-    return
+  try {
+    const root = repositoryRoot(input.cwd)
+    git(root, ['rev-parse', '--verify', '-q', `${base}^{commit}`])
+    git(root, ['rev-parse', '--verify', '-q', `${head}^{commit}`])
+    const { text, subject, manifest, baseTree, headTree } = buildContext(root, lens, base, head)
+    writePending(root, { lens, subject_hash: subject, base_tree: baseTree, head_tree: headTree, manifest, session_id: input.session_id, attempts: 0, at: Date.now() })
+    decide('allow', { permissionDecisionReason: `construct: injected the review context for ${lens}`, updatedInput: { ...toolInput, prompt: text } })
+  } catch (error) {
+    deny(`${agent} could not be prepared: ${error.message}. Use \`${FORM}\` naming a ref that resolves in this repository, with at least one commit on HEAD.`)
   }
-
-  const result = spawnSync('node', [ODD_REVIEW, '--cwd', input.cwd, 'context', '--lineage', lineage, '--lens', lens], {
-    encoding: 'utf8',
-    maxBuffer: 8 * 1024 * 1024,
-    timeout: 25_000,
-  })
-  if (result.status !== 0) {
-    rmSync(pendingFile(input.session_id, agent, lineage), { force: true })
-    decide('deny', { permissionDecisionReason: `odd-review context refused ${lens} for ${lineage}: ${(result.stderr || result.error?.message || '').trim()}` })
-    return
-  }
-  const subject = bindingOf(result.stdout)?.subject
-  atomicWrite(pendingFile(input.session_id, agent, lineage), `${JSON.stringify({ lineage, lens, cwd: input.cwd, attempts: 0, subject_hash: subject })}\n`)
-  decide('allow', {
-    permissionDecisionReason: `construct: injected the odd-review context for ${lens} (${lineage})`,
-    updatedInput: { ...toolInput, prompt: result.stdout },
-  })
 }
 
 try {
   main()
 } catch {
-  // Fail open: no output, exit 0.
+  // Fail open for anything that is not a review agent: no output, exit 0.
 }
 process.exitCode = 0

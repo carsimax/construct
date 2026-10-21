@@ -204,6 +204,9 @@ export function surfacesOverlap(a, b) {
 }
 
 const recordDir = (session) => join(dataDir(), 'delegation-admission', safeName(session))
+// A record never marked started (SubagentStart) after this long belongs to a declined or failed launch.
+const START_GRACE_MS = 2 * 60 * 1000
+const qualify = (type) => (typeof type === 'string' && !type.includes(':') ? `construct:${type}` : type)
 const promptKey = (text) => createHash('sha256').update(text.trim()).digest('hex')
 
 // openWriters lists the live records of the session in this repository; a stale
@@ -225,6 +228,7 @@ function openWriters(session, root, now = Date.now()) {
         continue
       }
       const entry = JSON.parse(readFileSync(join(dir, name), 'utf8'))
+      if (entry.started === false && now - Date.parse(entry.at) > START_GRACE_MS) continue
       if (entry.root === root && Array.isArray(entry.surfaces)) live.push(entry)
     } catch {
       // unreadable record: ignore it (fail open)
@@ -233,13 +237,13 @@ function openWriters(session, root, now = Date.now()) {
   return live
 }
 
-function record(session, root, prompt, surfaces) {
+function record(session, root, prompt, surfaces, type) {
   const dir = recordDir(session)
   mkdirSync(dir, { recursive: true })
   const key = promptKey(prompt)
   const temporary = join(dir, `.${key}.${process.pid}.tmp`)
   try {
-    writeFileSync(temporary, `${JSON.stringify({ root, surfaces })}\n`)
+    writeFileSync(temporary, `${JSON.stringify({ root, surfaces, type, started: false, at: new Date().toISOString() })}\n`)
     renameSync(temporary, join(dir, key))
   } catch (error) {
     rmSync(temporary, { force: true })
@@ -289,7 +293,7 @@ function admit(input) {
   if (input.tool_name !== 'Agent' || !tool || typeof tool !== 'object' || Array.isArray(tool)) return
   const raw = tool.subagent_type
   // The prefix is optional: the agent registry accepts both spellings.
-  const type = typeof raw === 'string' && !raw.includes(':') ? `construct:${raw}` : raw
+  const type = qualify(raw)
   const prompt = typeof tool.prompt === 'string' ? tool.prompt : ''
   if (type === VERIFIER) {
     if (!RISK_LINE.test(prompt)) deny(`${VERIFIER} needs a high-risk item declared in its prompt. ${RISK_FORM}`)
@@ -319,7 +323,7 @@ function admit(input) {
       )
       return
     }
-    record(input.session_id, root, prompt, parsed.paths)
+    record(input.session_id, root, prompt, parsed.paths, type)
   })
 }
 
@@ -348,10 +352,44 @@ function clear(input) {
   if (prompt) rmSync(join(recordDir(input.session_id), promptKey(prompt)), { force: true })
 }
 
+// start marks the oldest unstarted record of the agent type inside the grace as started. SubagentStart input
+// carries no prompt, so the match is session plus agent type (shortcut: two same-type
+// launches in flight may swap records, upgrade if the host adds the prompt to the input).
+function start(input) {
+  const type = qualify(input.agent_type)
+  if (!WRITERS.has(type)) return
+  const dir = recordDir(input.session_id)
+  withLock(input.session_id, () => {
+    const unstarted = []
+    for (const name of readdirSync(dir)) {
+      if (name.startsWith('.')) continue
+      try {
+        const entry = JSON.parse(readFileSync(join(dir, name), 'utf8'))
+        // A record past the grace was declined by the host and no longer blocks: it is not the launch that started.
+        if (entry.started === false && entry.type === type && !(Date.now() - Date.parse(entry.at) > START_GRACE_MS)) unstarted.push({ name, entry })
+      } catch {
+        // unreadable record: ignore it
+      }
+    }
+    const oldest = unstarted.sort((a, b) => a.entry.at.localeCompare(b.entry.at))[0]
+    if (!oldest) return
+    const temporary = join(dir, `.${oldest.name}.${process.pid}.start.tmp`)
+    try {
+      writeFileSync(temporary, `${JSON.stringify({ ...oldest.entry, started: true })}\n`)
+      renameSync(temporary, join(dir, oldest.name))
+    } catch (error) {
+      rmSync(temporary, { force: true })
+      throw error
+    }
+  })
+}
+
 function main() {
   const input = readInput()
   if (!input || typeof input !== 'object' || Array.isArray(input)) return
-  if (process.argv[2] === 'stop') clear(input)
+  const mode = process.argv[2]
+  if (mode === 'stop') clear(input)
+  else if (mode === 'start') start(input)
   else admit(input)
 }
 

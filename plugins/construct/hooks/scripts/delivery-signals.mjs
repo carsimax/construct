@@ -12,10 +12,13 @@
 import { spawnSync } from 'node:child_process'
 import { closeSync, mkdirSync, openSync, readSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { isGeneratedGoldenPath } from '../../lib/assess/stats.mjs'
 import { dataDir, readInput, safeName } from './hook-io.mjs'
 
 const SLICE_LINES = 400
+const isGeneratedGoldenPath = (logicalPath) => {
+  const normalized = `/${logicalPath.replace(/^\.\//, '')}`
+  return normalized.includes('/testdata/golden/') && normalized.endsWith('.golden')
+}
 // Lock files and minified bundles are not authored lines.
 const GENERATED = [/(^|\/)(pnpm-lock\.yaml|package-lock\.json|yarn\.lock|bun\.lockb?|Cargo\.lock|go\.sum|poetry\.lock|composer\.lock|Gemfile\.lock)$/, /\.min\.(js|css)$/]
 // `git [-C dir | -c key=value]... commit` at the start of a segment, after any variable assignments.

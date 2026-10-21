@@ -139,12 +139,6 @@ function unwrap(texts) {
   return { at: i, strings, rest: texts.slice(i) }
 }
 
-// headIndex is the index of the word that names the command: past assignments, wrappers,
-// their flags and values, and the duration `timeout` takes.
-export function headIndex(texts) {
-  return unwrap(texts).at
-}
-
 const HEREDOC_RE = /<<-?\s*(['"]?)([A-Za-z_]\w*)\1[^\n]*\n[\s\S]*?\n[ \t]*\2(?=\n|$)/g
 
 // extractHeredocs removes heredoc bodies from the command (they are data) and returns them
