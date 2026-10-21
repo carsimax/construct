@@ -82,7 +82,6 @@ function kTokens(n) {
   return String(Math.round(n))
 }
 
-
 // The last two path parts, so a long path stays readable.
 function shortPath(path) {
   const parts = String(path).split('/').filter(Boolean)

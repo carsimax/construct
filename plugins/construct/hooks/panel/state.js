@@ -41,8 +41,7 @@
 //                cells: last 60 of 'allowed' | 'asked' | 'denied' | 'sub'
 //                counts: { allowed, asked, denied, sub } totals, never capped
 //                lastDenied: { tool, detail } | null, detail masked and short
-//   turn         { turnId } while a main turn runs (a stored turn that still has startedMs reads as is), else null (the busy flag; a stored `receipt` from
-//                the last turn card is dropped on read)
+//   turn         { turnId } while a main turn runs, else null: the busy flag; merge drops a stored `receipt`
 //   compactions  session.compact count
 //   main         { steps, model, effort, mode }  main-thread vitals (S3): steps counts main requests
 //                (turn.step without agentId, index.d.ts:14328-14354), model and effort are the latest
@@ -326,7 +325,7 @@ export function shortName(a) {
 // The ODD phase the running agents imply (S5); null with none running. The most advanced phase wins.
 const PHASES = [
   ['verifying', (n) => n === 'verify'],
-  ['reviewing', (n) => n.startsWith('review-') || n.startsWith('jd-') && n !== 'jd-fix-agent'],
+  ['reviewing', (n) => n !== 'jd-fix-agent' && (n.startsWith('review-') || n.startsWith('jd-'))],
   ['implementing', (n) => n === 'worker' || n === 'jd-fix-agent'],
   ['exploring', (n) => n === 'explorer'],
 ]

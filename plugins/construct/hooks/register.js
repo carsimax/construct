@@ -251,10 +251,20 @@ async function openPane($) {
   return $.ui.open({ id: PANEL_ID, title: 'Construct', columns: PANEL_COLUMNS })
 }
 
+// Settles with the promise, or with null after `ms`; the timer is cleared once the promise settles.
+async function withTimeout(promise, ms) {
+  let timer
+  try {
+    return await Promise.race([promise, new Promise((resolve) => { timer = setTimeout(resolve, ms, null) })])
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 // Runs one doctor probe; a failure or a timeout is null, never a throw.
 async function probe(read) {
   try {
-    return (await read()) ?? null
+    return (await withTimeout(read(), GIT_MS)) ?? null
   } catch {
     return null
   }

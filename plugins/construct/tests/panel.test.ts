@@ -25,7 +25,7 @@ function world($, on, o: any = {}) {
   on('session.usage', () => value({ startedAt: 0, context: { window: 200000, tokens: 66000, percent: 33 }, rateLimits: o.rateLimits ?? [], cost: { usd: o.cost ?? 1 } }))
   on('session.model', () => value('claude-opus-4'))
   on('session.cwd', () => value('/home/me/proj'))
-  on('settings.read', () => value(o.settings ?? {}))
+  on('settings.read', () => (o.hang?.() ? new Promise(() => {}) : value(o.settings ?? {})))
   on('env.get', () => value('/home/me'))
   on('fs.exists', () => value(o.exists ?? false))
   on('session.version', () => value({ version: o.version ?? '2.1.304', base: o.version ?? '2.1.304' }))
@@ -125,6 +125,15 @@ test('/construct doctor returns a report even when every process fails', { optio
   expect(text).toContain('✗ odd-assess runnable')
   expect(text).toContain('✗ RDD mode: unknown')
   expect(await isUp($)).toBe(false)
+})
+
+test('/construct doctor turns a hanging in-process probe into a failed row', { options: { panel_open_on_start: false } }, async ($, on) => {
+  let hang = false
+  await start($, on, { run: () => ({ ...ok(''), exitCode: 1 }), hang: () => hang })
+  hang = true
+  const text = String((await $.command.run({ command: 'construct', args: 'doctor' }))?.text ?? '')
+  expect(text).toContain('Construct doctor')
+  expect(text).toContain('✗ engram@engram plugin enabled')
 })
 
 test('/construct doctor reports a healthy setup', { options: { panel_open_on_start: false } }, async ($, on) => {
