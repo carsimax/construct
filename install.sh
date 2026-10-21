@@ -124,7 +124,7 @@ setup_engram() {
 add_marketplace() {
   local marketplaces
   marketplaces=$(run claude plugin marketplace list)
-  if [[ "$marketplaces" == *"($1"* ]]; then
+  if [[ "$marketplaces" == *"($1)"* || "$marketplaces" == *"($1#"* || "$marketplaces" == *"($1@"* ]]; then
     skipped "marketplace $1 (already added)"
   else
     say "Adding the $1 marketplace"

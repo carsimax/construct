@@ -51,6 +51,14 @@ test('one active document lists path, title, branch, unfinished rows, and the la
   assert.ok(text.trimEnd().endsWith('Read the full document before continuing; the engram mirror is under topic `odd/alpha/tasks`.'))
 })
 
+test('runs on a Node without require(esm) detection (S18)', () => {
+  const repo = makeRepo()
+  write(repo, 'odd/tasks/a.md', doc({ rows: [['T1', 'x', 'pending']] }))
+  const r = spawnSync('node', ['--no-experimental-detect-module', SCRIPT], { input: JSON.stringify({ cwd: repo, source: 'compact' }), encoding: 'utf8', cwd: scratchDir('fs-run-') })
+  assert.equal(r.status, 0)
+  assert.match(context(r), /T1 — x/)
+})
+
 test('a Branch: header line is also reported', () => {
   const repo = makeRepo()
   write(repo, 'odd/tasks/b.md', doc({ branch: 'Branch: `odd/b`', rows: [['T1', 'x', 'pending']] }))

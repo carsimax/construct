@@ -380,7 +380,7 @@ function evaluate(event) {
 function deny(verdict) {
   const reason =
     verdict.reason ??
-    `secret-guard blocked this call: rule "${verdict.rule}" (${verdict.target}). ` +
+    `secret-guard blocked this call: rule "${verdict.rule}" (${verdict.target}${/[*?[]/.test(verdict.target) ? ', a glob that can match this protected name' : ''}). ` +
       'The user can run it manually if it is intended.'
   process.stdout.write(
     JSON.stringify({

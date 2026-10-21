@@ -156,4 +156,9 @@ export const corpus = [
   ["audit-s3-var-glob", "f=.en; cat ${f}v", "allow", "a variable next to a literal suffix can build the protected env name; the expansion now counts as a wildcard"],
   ["audit-s3-subst", "cat .e$(true)nv", "allow", "a command substitution inside a name can build the protected env name; the expansion now counts as a wildcard"],
   ["audit-s3-ansi-c", "cat $'.en\\x76'", "allow", "an ANSI-C quoted escape spelled the protected env name and was never decoded"],
+  ["audit-s3-dotglob-1", 'ls .*', "allow", "a glob that can match a protected dotfile or directory is denied (fail closed)"],
+  ["audit-s3-dotglob-2", 'du -sh ~/.*', "allow", "a glob that can match a protected dotfile or directory is denied (fail closed)"],
+  ["audit-s3-dotglob-3", 'ls -la ~/.??*', "allow", "a glob that can match a protected dotfile or directory is denied (fail closed)"],
+  ["audit-s3-dotglob-4", 'ls .[!.]*', "allow", "a glob that can match a protected dotfile or directory is denied (fail closed)"],
+  ["audit-s3-dotglob-5", 'ls -d .*/', "allow", "a glob that can match a protected dotfile or directory is denied (fail closed)"],
 ]

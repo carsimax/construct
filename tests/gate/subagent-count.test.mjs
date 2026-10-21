@@ -84,6 +84,15 @@ describe('subagent-count hook', () => {
     assert.deepEqual(openIds(e), [])
   })
 
+  test('a duplicate stop for an already closed id leaves another live agent open', () => {
+    const e = envOf()
+    startAgent(e, 'a')
+    startAgent(e, 'b')
+    stopAgent(e, 'a')
+    stopAgent(e, 'a')
+    assert.deepEqual(openIds(e), ['b'])
+  })
+
   test('an entry that vanishes mid-stop does not abort the close', () => {
     const e = envOf()
     startAgent(e, 'a1')

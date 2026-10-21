@@ -169,7 +169,6 @@ test('MIN_CLAUDE and MIN_NODE match the doctor minimums', () => {
   const sh = readFileSync(INSTALLER, 'utf8')
   const doctor = readFileSync(new URL('../../plugins/construct/hooks/status/doctor.js', import.meta.url), 'utf8')
   for (const k of ['MIN_CLAUDE', 'MIN_NODE']) {
-    assert.equal(/^MIN_CLAUDE=|^MIN_NODE=/m.test(sh), true)
     assert.equal(sh.match(new RegExp(`^${k}=(\\S+)`, 'm'))[1], doctor.match(new RegExp(`${k} = '?([\\d.]+)`))[1], k)
   }
 })
@@ -240,6 +239,15 @@ test('a second run changes nothing and installs nothing', () => {
   assert.equal(readFileSync(settingsPath(box), 'utf8'), settings)
   assert.deepEqual(backups(box), [])
   assert.match(second.stdout, /Skipped:/)
+})
+
+test('a marketplace whose name only starts with the repository is not counted as added', () => {
+  const box = sandbox()
+  writeFileSync(join(box.state, 'marketplaces'), '    Source: GitHub (carsimax/construct-foo)\n    Source: GitHub (Gentleman-Programming/engram)\n')
+  const run = install(box)
+  assert.equal(run.status, 0, run.stderr)
+  assert.ok(run.calls.some((c) => /^claude plugin marketplace add carsimax\/construct#/.test(c)), 'construct marketplace is added')
+  assert.equal(run.calls.some((c) => /marketplace add Gentleman-Programming\/engram/.test(c)), false, 'the exact match is skipped')
 })
 
 test('--no-mcp leaves the codegraph MCP server and CLI alone', () => {

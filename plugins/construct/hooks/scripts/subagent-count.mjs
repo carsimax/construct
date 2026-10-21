@@ -18,8 +18,8 @@ function main() {
   if (!input || (mode !== 'start' && mode !== 'stop')) return
   const dir = subagentDir(input.session_id)
   // The hook input's agent_id keys the entry. Without one, a start is anonymous
-  // and a stop closes the oldest anonymous entry (shortcut: anonymous entries
-  // may close out of order, upgrade if the host stops sending agent_id).
+  // and a stop closes the oldest entry of any name (shortcut: entries may close
+  // out of order, upgrade if the host stops sending agent_id).
   const id = typeof input.agent_id === 'string' && input.agent_id !== '' ? safeName(input.agent_id) : null
 
   if (mode === 'start') {
@@ -36,15 +36,16 @@ function main() {
     return
   }
 
-  // A stop whose id has a file closes it. Any other stop (no id, or an id the
-  // start never recorded) closes the oldest entry of any name, so a start/stop
-  // id mismatch cannot hold the gates open.
+  // A stop whose id has a file closes it. A stop with no id closes the oldest
+  // entry of any name; a stop with an unknown id (a duplicate stop, or a start
+  // that carried no id) closes only the oldest anonymous entry, so it never
+  // closes another live agent.
   if (id && existsSync(join(dir, id))) {
     rmSync(join(dir, id), { force: true })
     return
   }
   const oldest = readdirSync(dir)
-    .filter((name) => !name.startsWith('.'))
+    .filter((name) => !name.startsWith('.') && (!id || name.startsWith(ANON)))
     .flatMap((name) => {
       try {
         return [{ name, at: statSync(join(dir, name)).mtimeMs }]
