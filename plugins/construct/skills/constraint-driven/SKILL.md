@@ -35,7 +35,7 @@ Always enforced, no setup:
 - No credentials or keys in source.
 - `CONSTRAINTS.md` is never weakened to make a change pass.
 
-The `odd-assess` signal `verifier_weakening` is the mechanical check of the suppression and skipped-test items: it flags added lines that introduce them and raises the tier to `high`. It does not cover stubs, empty catch, credentials, or threshold edits; review those in the diff by hand.
+No tool checks the suppression and skipped-test items for you. Read the diff for added suppressions, skipped tests, stubs, empty catch blocks, credentials, and threshold edits.
 
 ## Decision Gates
 

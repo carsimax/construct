@@ -11,8 +11,8 @@ Construct: a Claude Code plugin (in `plugins/construct/`) plus its local marketp
 ## Commands
 
 ```bash
-node --test tests/                              # repository tests (contract, skills, agents, odd-assess, odd-review, hook gates and guard, installer)
-node --test tests/assess/cli.test.mjs           # one test file
+node --test tests/                              # repository tests (contract, skills, agents, review hooks, publication gate and store guard, hook gates, installer)
+node --test tests/publication/publication.test.mjs  # one test file
 node --test --test-name-pattern="Risk-line" tests/   # tests matching a name
 claude plugin test plugins/construct            # mod tests (plugins/construct/tests/*.test.ts)
 claude plugin validate --strict .               # marketplace manifest
@@ -34,8 +34,7 @@ A plugin cannot ship a `CLAUDE.md`, so the ODD rules load in layers:
 Other moving parts:
 
 - **Mod** (`hooks/register.js`, listed under `modules` in `hooks/hooks.json`): routes each agent role's model and effort from the plugin's `userConfig` (`model_<role>`, `effort_<role>`, where role is the agent name with dashes turned into underscores; see `hooks/routing.js`), and renders the status panel (`hooks/status/`, `hooks/panel/`). Agent frontmatter is the fallback when the mod cannot run.
-- **Command hooks** (`hooks/scripts/`): `publication-gate.mjs` (PreToolUse on Bash: denies `git push`, `gh pr create`, and `gh release create` while an RDD review is due; sharing `shell-words.mjs`), `review-context.mjs` / `review-capture.mjs` / `review-gate.mjs` (RDD review plumbing), `risk-line.mjs` (Risk-line gate: `mark` on UserPromptSubmit records the tree, `check` on Stop blocks once per turn when paths outside `odd/tasks/` changed and the reply has no Risk line; fails open), `subagent-count.mjs` (SubagentStart/SubagentStop record open agents so `review-gate.mjs` and `risk-line.mjs` stay silent while subagents run), all sharing `hook-io.mjs`. Hooks are registered in exec form (`command: "node"`, `args: [...]`), which tests check.
-- **CLIs on the PATH** (`plugins/construct/bin/`): thin entry points into `lib/`. `odd-assess` (`lib/assess/`) classifies a diff's risk from git stats, signals, and sinks; `odd-review` (`lib/review/`) runs the receipt-driven review lifecycle, its mode switch, and its store.
+- **Command hooks** (`hooks/scripts/`): `publication-gate.mjs` (PreToolUse on Bash: denies `git push`, `gh pr create`, and `gh release create` until the required review lenses approve the published ref; sharing `shell-words.mjs`), `review-context.mjs` (PreToolUse on `Agent`: builds a `construct:review-*` lens's context from its `Review subject:` line and records the pending lens), `review-capture.mjs` (SubagentStop: validates the lens report and records the verdict), `review-store-guard.mjs` (denies Write, Edit, and Bash commands that touch the review store), `review-lenses.mjs` (`LENSES_BY_RISK`, the Risk-to-lens mapping) and `review-store.mjs` (the store under the git common dir, `construct-review/`), `risk-line.mjs` (Risk-line gate: `mark` on UserPromptSubmit records the tree, `check` on Stop blocks once per turn when paths outside `odd/tasks/` changed and the reply has no Risk line; fails open), `subagent-count.mjs` (SubagentStart/SubagentStop record open agents so `risk-line.mjs` stays silent while subagents run), all sharing `hook-io.mjs`. Hooks are registered in exec form (`command: "node"`, `args: [...]`), which tests check.
 - **Evals** (`plugins/construct/evals/<case>/`): `case.yaml`, `prompt.md`, `fixture.sh`, and Markdown graders, run by `claude plugin eval`.
 - **Feature documents** (`odd/tasks/<feature>.md`): specs (`S#`), tasks (`T#`), and log for each tracked feature. Tests and comments reference spec ids such as `S6`.
 

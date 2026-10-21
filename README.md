@@ -9,10 +9,10 @@ Construct is a Claude Code plugin that makes every request follow Organic Driven
 ## What you get
 
 - **ODD workflow.** A session contract, injected by hooks, that Claude follows on every request without being asked.
-- **Role agents with model routing.** 13 agents (explorer, worker, verifier, judges, review lenses). You choose each role's model and effort in `/config`.
+- **Role agents with model routing.** 11 agents (explorer, worker, verifier, judges, review lenses). You choose each role's model and effort in `/config`.
 - **Skills.** Procedures that load on demand: workflow, delegation, task sizing, debugging, quality bar, migrations, branches and pull requests, and more.
-- **Receipt-driven review.** `odd-assess` classifies risk and `odd-review` runs a bounded outside review of high-risk changes, with your consent.
-- **Status panel.** A docked panel with the model, context, plan limits, active feature, review state, permission gate, agents, and changes. Open it with `/construct`.
+- **Mandatory review.** Work whose Risk names a high-risk item is reviewed by lens agents before it can be published. Hooks build the evidence, record the verdicts, and gate `git push`, `gh pr create`, and `gh release create`.
+- **Status panel.** A docked panel with the model, context, plan limits, active feature, permission gate, agents, and changes. Open it with `/construct`.
 - **Output style.** The `Principal Engineer` output style.
 
 Memory comes from the separate `engram@engram` plugin, which Construct depends on.
@@ -22,8 +22,8 @@ Memory comes from the separate `engram@engram` plugin, which Construct depends o
 | Requirement | Why |
 |---|---|
 | Claude Code 2.1.304 or later, signed in | The panel is a mod, and the panel needs 2.1.304. Tested on 2.1.304 |
-| Node.js 20 or later, with npm | The plugin's scripts and hooks (`odd-assess`, `odd-review`, the hook scripts). Claude Code's native install does not bundle Node.js |
-| `git` on the PATH | `odd-assess` and `odd-review` read the repository |
+| Node.js 20 or later, with npm | The plugin's scripts and hooks. Claude Code's native install does not bundle Node.js |
+| `git` on the PATH | The review and publication hooks read the repository |
 | Homebrew (macOS or Linux) | Installs the engram binary |
 
 ## Install
@@ -92,8 +92,7 @@ The manual steps the installer runs, for when you want to run them yourself:
 
    - Ask "what does your Construct contract say about Risk lines?". The answer quotes the `Risk: item N` rule.
    - `/agents` lists the `construct:` agents, such as `construct:odd-worker` and `construct:review-risk`.
-   - Ask Claude to run `odd-review mode status`; it prints `{"mode":"on","source":"default"}`. The plugin's `bin/` is on the PATH of Claude's Bash tool only, not your own shell.
-   - After a turn ends, the panel shows the RDD state (`clear`, `review due` or `reviewed`); `/construct` opens it.
+   - `/construct` opens the panel; `/construct doctor` prints a setup report.
 
 ## First session
 
@@ -105,7 +104,7 @@ Open Claude Code in a git repository and make a request. Construct applies the s
 4. **Implement test-first.** A worker writes a failing test, makes it pass, then refactors, inside the edit surfaces it was given.
 5. **Close with evidence.** One report: what was verified, what failed or was skipped, the next step, and a Risk line (`Risk: none` or `Risk: item N (reason)`).
 
-Commit, push, pull request, and merge stay your decisions. For a high-risk change, Construct offers a review and asks for your consent first. `odd-review mode disable` turns the review off.
+Commit, push, pull request, and merge stay your decisions. A change whose Risk line names a high-risk item is reviewed before it can be published; see [Mandatory review](#mandatory-review-and-the-publication-gate). There is no switch to turn the review off.
 
 To confirm the install works, see step 6 of [Manual install](#manual-install).
 
@@ -139,7 +138,7 @@ Options are plugin settings, edited in `/config`:
 
 ### Agents and model routing
 
-The plugin ships 13 agents. Each role's model and effort can be changed in `/config`, where every option appears as a row such as `ODD Worker model` or `RDD Risk effort`.
+The plugin ships 11 agents. Each role's model and effort can be changed in `/config`, where every option appears as a row such as `ODD Worker model` or `RDD Risk effort`.
 
 | Role | Agent | Model | Effort |
 |---|---|---|---|
@@ -153,8 +152,6 @@ The plugin ships 13 agents. Each role's model and effort can be changed in `/con
 | RDD Readability | `construct:review-readability` | sonnet | medium |
 | RDD Reliability | `construct:review-reliability` | sonnet | medium |
 | RDD Resilience | `construct:review-resilience` | sonnet | medium |
-| RDD Refuter | `construct:review-refuter` | opus | medium |
-| RDD Validator | `construct:review-validator` | opus | medium |
 | General delegation | `construct:odd-general` and the built-in `general-purpose` | sonnet | medium |
 
 How the routing works:
@@ -225,122 +222,37 @@ Existing components gained matching material:
 
 - `judgment-day` has a decision mode for a plan, design, or claim before implementation. Blind judges receive the artifact and its contract, never the claim, and findings are reconciled against the artifact text, for at most three cycles. Code-review mode is unchanged.
 - `construct:odd-verify` applies a standing Definition of Done (correctness, quality, integration, documentation, ship-readiness) to every `S#`, and reports a line it cannot verify as `not verified`.
-- `construct:review-risk` carries a security checklist category list; the full checklist is `skills/rdd-review/references/security-checklist.md`. The agent has no tools, so `odd-review context` embeds that file in the review-risk context between `ODD_REVIEW_CHECKLIST_BEGIN` and `ODD_REVIEW_CHECKLIST_END`, before `ODD_REVIEW_CONTEXT_END`, and counts it against the context budget. The agent applies the categories as triage over the supplied patches.
+- `construct:review-risk` carries a security checklist category list; the full checklist is `skills/rdd-review/references/security-checklist.md`. The agent has no tools, so the review-context hook embeds that file in the review-risk context between `ODD_REVIEW_CHECKLIST_BEGIN` and `ODD_REVIEW_CHECKLIST_END`, before `ODD_REVIEW_CONTEXT_END`, and counts it against the context budget. The agent applies the categories as triage over the supplied patches.
 - `odd-workflow`'s testing reference tells the worker to discover the repository's own test stack first and states the Floor as "never weaken the verifier" examples.
 
-### Risk assessment: odd-assess
+### Mandatory review and the publication gate
 
-`bin/odd-assess` is a Node.js port of the deterministic risk classifier that decides whether a change needs review. The plugin's `bin/` directory is on the `PATH` of the Bash tool while the plugin is enabled.
+Review is a mandatory ODD phase for high-risk work. A work unit whose Risk line names an item (1-6) is reviewed by lens agents before it can be published. There is no mode switch and no per-candidate consent. The `construct:rdd-review` skill holds the procedure; hooks do the rest.
 
-```bash
-odd-assess                                   # current working state against HEAD
-odd-assess --base-ref main --committed-only  # main..HEAD, committed changes only
-odd-assess --json                            # machine-readable result
-odd-assess --escalate-item 2 --escalate-reason "touches the login guard" --json
-```
+**Lenses.** The required lenses come from the Risk numbers in the `## Tasks` table of the feature documents changed on the branch (`LENSES_BY_RISK` in `hooks/scripts/review-lenses.mjs`):
 
-| Option | Meaning |
+| Risk item | Lenses |
 |---|---|
-| `--cwd DIR` | Repository path (default: current directory) |
-| `--base-ref REF` | Assess `REF` to `HEAD`. Tracked files must be clean, or pass `--committed-only` to ignore them |
-| `--committed-only` | Acknowledge that `--base-ref` ignores dirty tracked changes. It only qualifies `--base-ref`: passing it alone is a usage error (exit `2`) |
-| `--escalate-item N`, `--escalate-reason TEXT` | Raise the tier to `high` by citing high-risk item 1 to 6 (one-line reason, at most 500 bytes). Both flags or neither; a tier is never lowered |
-| `--json` | Print the `construct.review-assessment/v1` object instead of a short summary |
+| 1 | `review-risk`, `review-resilience` |
+| 2 | `review-risk` |
+| 3 | `review-reliability` |
+| 4 | `review-reliability`, `review-resilience` |
+| 5 | `review-risk`, `review-resilience` |
+| 6 | `review-reliability` |
 
-Without `--base-ref`, the candidate is the working tree (tracked plus untracked, not ignored), frozen through a temporary index. Your real index is never changed.
+`review-readability` is optional and never gates publication.
 
-JavaScript and TypeScript module files (`.mjs`, `.cjs`, `.mts`, `.cts`) are read as source, like `.js` and `.ts`: an added line that spawns a process (`process_boundary`) or calls a dangerous sink (`dangerous_sink`) makes the change `high`. In any source file outside tests, an added non-comment line that names a hook's `permissionDecision` (`permission_decision`, signal `permissions`) also makes it `high`. An added line that weakens the verifier (`verifier_weakening`, signal `verifier_weakening`) makes it `high` too: a suppression comment (`@ts-ignore`, `@ts-expect-error`, `@ts-nocheck`, `eslint-disable`, `# noqa`, `# type: ignore`, `//nolint`) in a source or test file, or a skip or focus marker (`.skip(`, `.only(`, `xit(`, `xdescribe(`, `test.todo(`, `{ skip:` or `{ todo:` in `node:test`, `@pytest.mark.skip`, `t.Skip(`) in a test file. Removed lines never count, and `docs/`, fixtures, and testdata are excluded.
+**Launching a lens.** The orchestrator launches each lens as `construct:review-<lens>` with one prompt line, `Review subject: <base>` or `Review subject: <base>..<head>`. The base is normally the merge-base with the default branch; the head defaults to `HEAD`. Large branches can be reviewed as consecutive ranges `<a>..<b>`.
 
-Three high-risk items are recognized by path or content, and each reason carries `high-risk item N (...)` in its `detail`. Item 1 (`database_migration`, `destructive_sql`, signal `data_loss`): code, SQL, or config files (`.sql`, `.py`, `.rb`, JS/TS, `.go`, `.php`, `.java`, `.kt`, `.cs`, `.ex`/`.exs`, `.yaml`/`.yml`, `.json`, `.xml`, and extensionless files, which fail toward high) under `migrations/` or `migration/` directories (Django, Prisma, Knex, Flyway) or Rails `db/migrate/`, files under `alembic/versions/`, Flyway `V<n>__*.sql`, `U<n>__*.sql`, and repeatable `R__*.sql` names (anywhere in the tree), and added `DROP`, `TRUNCATE`, `ALTER ... DROP`, or `DELETE FROM` without `WHERE` in a `.sql` file (comments are ignored). Item 2 (`private_key`, `credential_file`, `private_key_content`, signal `security`): `id_rsa`/`id_dsa`/`id_ecdsa`/`id_ed25519` with an optional suffix (never `*.pub`), `.pem`, `.key`, `.p12`, `.pfx`, `.jks`, `.keystore`, `.ppk`, `credentials.json`, `.npmrc` or `.pypirc` with an added token or password line, and an added PEM `PRIVATE KEY` header in any scanned text file. Item 5 (`dependency_manifest`, `git_hook`, signal `delivery`): package manifests and lockfiles (npm, pnpm, yarn, pip `requirements*.txt`, pyproject, poetry, Pipfile, Go, Cargo, Bundler, Composer), `Dockerfile*`, and git hooks (`.githooks/`, `.husky/`, `.git/hooks/`, `lefthook.yml`, `.pre-commit-config.yaml`). Test files and `test`, `tests`, `spec`, `docs`, `fixtures`, `testdata` directories are never evidence for these items, Markdown and HTML outside `docs/` and fixtures are high only when they add a PEM private-key header; otherwise Markdown stays passive. Known fail-toward-high cases: a Keynote `.key` file and a string literal such as `SELECT 'drop table'` still count.
+- **`PreToolUse` on `Agent`** (`hooks/scripts/review-context.mjs`). For a `construct:review-*` agent it resolves the subject, builds the context (binding, name-status, numstat, and the diff, with deleted paths listed but their removed content omitted; the security checklist for `review-risk`), replaces the prompt with it, and records the pending lens. A prompt with no readable subject, an unresolvable ref, an empty diff, or a context over 400 KiB is denied with the expected form.
+- **`SubagentStop` on `^construct:review-`** (`hooks/scripts/review-capture.mjs`). It takes the lens report from `last_assistant_message` (the transcript for a background agent), validates it against the lens result shape (`subject_hash`, `inspection`, `findings`, `evidence`), and writes one verdict per lens. A malformed report goes back to the agent with the reason, at most twice.
+- **Verdicts.** Approved means a completed inspection and no BLOCKER or CRITICAL finding. A rejection stands for that lens and tree: fix with a new commit and review again. The orchestrator never writes or pastes evidence or verdicts.
 
-The JSON result has `risk` (`passive`, `medium`, `high`), `reasons`, `changed_paths`, `changed_lines`, `candidate`, `review_due`, `review_due_reason`, and `lenses` (empty for passive and medium, the four canonical lenses for high). Only `high` makes a review due; `medium` reports `under_budget` and `passive` reports `passive`. When the exact candidate already has a receipt from `odd-review acknowledge`, `candidate.consumed` is `true` and the result reports `review_due: false` with `review_due_reason: "already_reviewed"`, whatever the tier.
+**Store.** `$(git rev-parse --git-common-dir)/construct-review/`, shared by linked worktrees, with `pending/<lens>.<subject>.json` and `verdicts/<subject>/<lens>.json`. A `PreToolUse` hook (`hooks/scripts/review-store-guard.mjs`) denies Write, Edit, and Bash commands that name the store. The guard is a heuristic: an indirect path to the store is not caught.
 
-Exit codes: `0` for a successful assessment; `2` for bad usage, with the message on stderr. Without `--json`, an unassessable candidate (for example a bad `--base-ref`, a non-repository, or no pending changes) prints the fail-closed summary and exits 1; with `--json` the result is printed and the exit status stays 0. Usage errors exit 2.
+**Publication gate.** The `PreToolUse` hook on `Bash` (`hooks/scripts/publication-gate.mjs`) denies `git push`, `gh pr create`, and `gh release create` (also through `sh -c`, `eval`, `$(...)`, backticks, wrappers, heredocs, and the `gh pr new` and `gh release new` aliases) until the required lenses approve the published ref. It judges every ref being published (push sources, `gh pr create --head`, `gh release create --target`; `HEAD` when none is named). It finds the feature documents changed from the merge-base with the default branch, reads every Risk number, and requires each required lens to approve either one subject from the merge-base tree to the ref tree or a chain of approved ranges. A Risk cell that is neither `none` nor readable denies, and so does any internal error. The denial names the missing lenses and the `construct:rdd-review` skill. The hook entry sets `onFailure: "block"`.
 
-### Review lifecycle (`odd-review`)
-
-`bin/odd-review` runs the review lifecycle without any external binary: it freezes the candidate, serves immutable evidence to the review agents, validates their results, drives one bounded correction, and records a receipt. It never asks for consent; that belongs to the review skill.
-
-```bash
-odd-review start                                    # lenses from odd-assess; or --base-ref main --committed-only
-odd-review start --lenses risk,reliability --lenses-reason "touches the login guard"   # explicit lenses
-odd-review start --escalate-item 2 --escalate-reason "touches the login guard"   # raise the tier to high first
-odd-review context --lineage L --lens risk          # evidence for one lens (binding + block)
-odd-review capture --lineage L --lens risk --input result.json     # one per selected lens ("-" reads stdin)
-odd-review capture-refuter --lineage L --input refuter.json        # only after refutation_required
-odd-review correct --lineage L                      # once, after correction_required
-odd-review capture-validation --lineage L --input validator.json
-odd-review status --lineage L                       # counters; receipt_check once acknowledged
-odd-review abandon --lineage L                      # close an open review; invalidate needs --reason and a pristine review
-odd-review capture-unachievable --lineage L --lens risk --reason "agent could not run"   # escalates
-odd-review start --request-context spec.md           # freeze the specs the change must meet; shown to every lens
-odd-review start --focus resilience                 # a medium candidate gets that one lens
-odd-review acknowledge --lineage L                  # only when approved; writes the receipt
-odd-review validate --gate pre-push                 # the publication gate; see below
-```
-
-States: `collecting` to `approved`, `refutation_required`, or `correction_required`; `refutation_required` to `approved` or `correction_required`; `correction_required` to `validation_required`; `validation_required` to `approved` or `escalated` (a human decision); `approved` to `acknowledged`.
-
-- Every command prints JSON with the exact `next` commands. Exit `0` is success, `1` a refused transition (`{"error":{"code","message"}}` on stderr), `2` bad usage.
-- Lenses are `review-risk`, `review-resilience`, `review-readability`, and `review-reliability`; the short names work and the canonical order is kept. Without `--lenses` (and `--lenses-reason`), `start` takes the lenses `odd-assess` assigns to the frozen candidate, all four for `high`, and records `odd-assess: <risk> risk (<reasons>)` as the reason; a `medium` candidate takes one lens with `--focus LENS` (not with `--lenses`; a `high` candidate ignores it), and without it, like a `passive` one, refuses with `lenses_required`. `--escalate-item N --escalate-reason TEXT` (same validation as `odd-assess`, both or neither) raises a `medium` or `passive` candidate to `high` before the lenses are chosen, so it gets all four and the reason includes the `agent_escalation` detail; it cannot be combined with `--lenses`. `--lenses` and `--lenses-reason` go together.
-- The candidate is frozen into immutable git trees (the working state goes through a temporary index). `context` serves name-status, numstat, and one verbatim patch per changed path from those trees only, and refuses with `context_budget_exceeded` above 400 KB (`--max-bytes N` overrides it); split the change into smaller slices when that happens.
-- `capture` validates the result against the agent's output contract: matching `subject_hash`, no unknown or missing fields, a completed inspection that lists exactly the changed paths, a selected lens, and one capture per lens.
-- Only a BLOCKER or CRITICAL finding introduced by the candidate (`introduced`, `behavior-activated`, or `worsened`) blocks. Deterministic ones need a correction; inferential ones go to the refuter first, and a refuter `inconclusive` goes to correction. A severe `unknown` or `insufficient` finding escalates. A severe candidate-caused claim that touches no changed line is downgraded to `unknown` (the claim is kept). A validator `inconclusive` may be captured again, up to 3 attempts; the 3rd escalates. Everything else is advisory and lands in the receipt.
-- While RDD is off, `start`, `capture`, `capture-refuter`, `capture-validation`, `capture-unachievable`, `correct`, `abandon`, `invalidate`, and `acknowledge` refuse with `rdd_disabled`; `status`, `context`, `boundary`, `validate`, and `mode` still work. The review hooks stay silent when off.
-- `start --request-context FILE` freezes the file's text (at most 32 KiB; `request_context_too_large`, `request_context_empty`, `request_context_unreadable`, and `request_context_framing` when any line starts with `ODD_REVIEW_`, because the text is printed unescaped) and its sha256 into the lineage, and `context` prints it for every lens, the refuter, and the validator in an `ODD_REVIEW_REQUEST_CONTEXT` block before the patches. The review skill passes the feature document's relevant specs this way.
-- `correct` is allowed once per lineage and may change at most `min(200, ceil(n/2))` lines, where `n` is the reviewed line count, with a floor of 2 so a one-line candidate fits one line replacement. A correction over the budget is refused and does not use up the one correction.
-- One-shot counters (`full_reviews`, `refuter_batches`, `fix_batches`, `scoped_fix_validations`, `final_verifications`) are printed by every command. A second batch of a kind in a live review (for example a second `correct`) makes the transaction terminal `escalated` with `reason: budget_exhausted` and the counter's name. The lifecycle has no final verification step, so `final_verifications` stays 0; `full_reviews` counts the completed lens collection.
-- `capture-unachievable --lens LENS --reason TEXT` records that a selected lens cannot run and escalates the review (`lens_unachievable`), since it can no longer approve. `abandon [--reason TEXT]` closes any open review (`abandoned`); `invalidate --reason TEXT` closes one that no lens has touched (`invalidated`, otherwise `not_pristine`). Neither writes a receipt, and both stop counting as an open lineage for the Stop gate.
-- The receipt carries `paths_digest`, `policy_hash`, `ledger_hash`, `evidence_hash`, `fix_delta_hash` (the empty-input hash when there was no correction), and the counters. After acknowledgement `status` recomputes the hashes and prints `receipt_check` (`ok`, `mismatch` with the field names, `legacy` for a receipt from before the hashes, `missing`, `unreadable`). Schema ids stay `v1`: every change is an additive field.
-- The refuter result must carry the `subject_hash` from its `ODD_REVIEW_BINDING`, which binds it to the lineage, target, and batch (`subject_mismatch` otherwise).
-- `acknowledge` accepts only `approved` and refuses a replay. If a crash left the receipt written but the transaction still `approved`, running it again completes the transaction and reports `recovered: true`; a receipt of another lineage is refused as `target_already_acknowledged`. `start` refuses a candidate only when its existing receipt is sound; a damaged or legacy receipt does not block it, and `acknowledge` replaces it.
-
-#### The RDD switch, the boundary, and the Stop gate
-
-```bash
-odd-review mode status                      # {"mode":"on","source":"default"}; read-only
-odd-review mode status --scope clone        # {"scope":"clone","mode":"off"|"on"|null,"set":…,"effective":{…}}; one scope only
-odd-review mode disable                     # global scope (default); enable turns it back on
-odd-review mode enable --scope clone        # this clone only
-odd-review boundary                         # {"commit":"<sha>","source":"receipt|merge-base|root"}
-```
-
-- The switch is on by default. Precedence is the clone file (`<git-common-dir>/odd-review/mode.json`), then the global file (`${XDG_CONFIG_HOME:-$HOME/.config}/construct/rdd.json`), then the default. An unreadable file is skipped. Writes are atomic.
-- `boundary` is the start of the next committed range: among the receipts whose `candidate_commit` is an ancestor of (or equal to) `HEAD`, the one closest to `HEAD` by ancestry (ties go to the newest acknowledgement, so reviewing an older commit later never moves the boundary back), else the merge-base with the default branch (the first of `origin/HEAD`, `main`, `master`, `origin/main`, `origin/master`, then `init.defaultBranch` and `origin/<it>`, that resolves and differs from `HEAD`), else the root commit. Receipts of committed-mode reviews record `candidate_commit` (and `base_commit` when `--base-ref` names a commit); older receipts without them stay valid and are ignored by `boundary`, which considers only sound receipts.
-- The plugin's `Stop` hook (`hooks/scripts/review-gate.mjs`) assesses any uncommitted changes, and `boundary..HEAD` when the boundary comes from a receipt or a merge-base. A root boundary (for example the default branch of an existing repository with no receipts) never opens a committed range, so the gate does not review a whole history. When one is `high`, has no receipt, and was not yet reminded in this session, it blocks the stop once with the range, up to three reasons, and the next step (load `construct:rdd-review`, ask for consent, or skip). Reminders are kept per session under `${CLAUDE_PLUGIN_DATA}/review-gate/`; without `CLAUDE_PLUGIN_DATA` they go to a private `construct-<uid>` directory in the system temp dir, which must be owned by the user with no group or other access (otherwise the gate stays silent). It does nothing when the switch is off, outside a repository, in a repository without commits, or when `stop_hook_active` is set, stays silent for a target that has an open lineage (any state but `escalated`, `acknowledged`, `abandoned`, and `invalidated`, with a transition in the last six hours; an older one counts as abandoned), and fails open on any error. While a subagent of the session is open (`hooks/scripts/subagent-count.mjs` records each start on `SubagentStart` and removes it on `SubagentStop`, one file per agent id under `${CLAUDE_PLUGIN_DATA}/subagent-count/`, and an entry older than one hour counts as abandoned, and a stop without an id closes the oldest entry, and a stop whose id was never recorded closes only the oldest entry that has no id), the gate stays silent and records nothing, so the check runs at the first `Stop` after the agents finish; missing or unreadable state means the gate runs as usual.
-- The Risk line gate (`hooks/scripts/risk-line.mjs`) has two hooks. `mark` runs on `UserPromptSubmit`, records the working-state tree for the session under `${CLAUDE_PLUGIN_DATA}/risk-line/`, and prints nothing. `UserPromptSubmit` also fires again inside one turn (for example for a task notification) with the same `prompt_id`; such a repeat keeps the turn's record, and only a new `prompt_id` (or none) marks again. `check` runs on `Stop`: when paths outside `odd/tasks/` changed since the mark and the final message has no `Risk: none` or `Risk: item N` (N 1-6) line, it blocks the stop once per turn, naming up to three changed paths and the expected form. The line may start with a list marker (`-`, `*`, `+`, `1.`, `1)`) and may wrap the label or the value in Markdown emphasis (`**Risk**: none`, `Risk: **none**`, `` Risk: `none` ``), with or without a space after the colon; `risk: none`, `Risk: None`, a quote or heading prefix, and the phrase mid-sentence do not count. The record stores the repository root, and a record from another repository, or an old one without a root, is ignored. It fails open on a missing record, no repository, no commits, `stop_hook_active`, a missing final message, or any error. While a subagent of the session is open (see the review gate above), `check` stays silent and leaves the turn's record unspent, so it runs at the first `Stop` after the agents finish.
-
-#### Publication gate and session baseline
-
-```bash
-odd-review validate --gate pre-push                 # exit 0 {"ok":true,"result":"ok","reason":…} or exit 1 review_required
-odd-review validate --gate pre-pr --base-ref main   # the PR base branch
-odd-review validate --gate release --tag v1.2.0     # the nearest earlier tag is the base
-odd-review validate --gate pre-push --head-ref feat --base-ref origin/feat
-```
-
-- `validate --gate pre-push|pre-pr|release` fails with `review_required` (JSON on stderr: `gate`, `base`, `head`, `tree`, `target`, `risk`, `receipt`) when RDD is on and the committed range being published is review-due (`high` by `odd-assess`) without a sound receipt for its tree. A receipt is sound when its outcome is `approved`, its `candidate_tree` equals the published tree, and its transaction still reproduces its hashes (`receipt_check` `ok`); a `legacy` receipt (from before the hashes), a `mismatch`, or an unreadable transaction is reported as the receipt state and does not cover. A receipt that records a `base_commit` covers the range only when that base is the range start or an ancestor of it; a working-tree review (no `base_commit`) covers it only when its recorded `base_tree` equals the tree at the range start, so it never hides an unreviewed commit before the reviewed changes, and a receipt with neither covers nothing. It exits 0 with `reason` `rdd_off`, `not_due`, `empty`, `no_base`, `no_commits`, or `covered`. There is no `pre-commit` gate: Construct reviews committed work units. A bad `--base-ref` or `--head-ref` is a `bad_ref` refusal, and `--gate` must be one of the three names (exit 2 otherwise).
-- Published range (assumptions): committed work only, `merge-base(base, head)..head`, so uncommitted changes are never part of it. The head is `HEAD` or `--head-ref`. The base is `--base-ref`; else for `pre-push` the upstream branch (`@{upstream}`, when the head is `HEAD`); else for `release` the nearest tag reachable from the head, skipping `--tag`; else the first default-branch ref that is not the head (`origin/HEAD`, `main`, `master`, `origin/main`, `origin/master`, `init.defaultBranch`, `origin/<init.defaultBranch>`). With no base at all (for example pushing the default branch with no upstream) the gate allows with `no_base`. A sound receipt whose `candidate_commit` lies inside the range and whose `base_commit` is the current start or an ancestor of it moves the start up (repeated until nothing moves), so work units reviewed one by one are not judged again, while a review of only `A..B` never hides an unreviewed `A`; a receipt with no `base_commit` (a working-tree review) does not narrow; the rest of the range is then assessed and needs a receipt for the head tree.
-- The `PreToolUse` hook on `Bash` (`hooks/scripts/publication-gate.mjs`) runs the gate for `git push`, `gh pr create`, and `gh release create`, including through `sh -c`/`bash -c`, `eval`, `$(...)`, backticks, wrappers (`sudo`, `env`, `timeout`, `nice`, `xargs`, ...), `git -C DIR`, and a preceding `cd DIR`, and denies with the gate's reason. Commands are found through the unwrapping in `shell-words.mjs` (`sh -c [--] 'cmd'`, `env -S`/`--split-string`, `eval`, substitutions, wrappers). In `-C` and `cd` directories, `~`, `$HOME`, and `${HOME}` expand from `HOME`; any other directory with `$` or a backtick (`git -C "$REPO" push`, `cd "$(pwd)" && git push`) is denied with a reason asking for the path written literally, because the gate cannot know the repository; a bare `cd`, `cd -`, `pushd`, or `popd` counts the same way (unresolvable, denied). A literal directory that does not exist or is not a repository keeps the allow (git itself fails there). A dry run (`-n`, `--dry-run`), a branch deletion (`--delete`, `:ref`), and every other command are not gated. The hook maps the command onto the range: for `git push REMOTE SRC[:DST]` the head is `SRC` (unless `HEAD`) and the base is `refs/remotes/REMOTE/DST` when that ref exists; for `gh pr create --base B` the base is `origin/B` or the local `B`; for `gh release create TAG --target T` the head is `T` when it resolves. `git push --all`, `--mirror`, and `--tags` are judged as a push of `HEAD`, and only the first refspec of a multi-refspec push picks the base. A push source that contains `$` or a backtick, or does not resolve to a commit, is judged as `HEAD`, and a `bad_ref` answer from the CLI is retried for `HEAD`, so an unreadable ref never allows what `HEAD` would deny. Only `review_required` denies; the hook fails open on every other outcome: no repository, a usage or internal `odd-review` error, or unreadable input means no output and exit 0. All `odd-review` spawns of one hook call share one 25-second deadline (under the 30-second hook timeout), and its expiry denies.
-- Session baseline: `review-gate.mjs baseline` runs on `SessionStart` (`startup`, `resume`, `clear`; not `compact`), records the identities of the review-due candidates that already exist under `${CLAUDE_PLUGIN_DATA}/review-gate/<session>.json` (`baseline`, next to the reminded `targets`), and prints nothing. The Stop gate stays silent for a candidate whose identity equals a recorded one, because this session did not produce it; any other candidate, including the same files after another change, still blocks once. A new baseline replaces the old one.
-
-#### Review hooks: context in, results out
-
-Two hooks move the hand-offs between the orchestrator and the lens agents into code. The orchestrator launches each lens with only the lineage id as its prompt (for example `Review lineage review-0123456789abcdef`).
-
-- **`PreToolUse` on `Agent`** (`hooks/scripts/review-context.mjs`). For a `construct:review-*` agent (the four lenses, the refuter, and the validator) whose prompt names a lineage, it runs `odd-review context` for that agent and returns it as `updatedInput.prompt` with `permissionDecision: allow`. A review agent without a lineage, or one `odd-review` refuses (for example `lens_not_selected`), is denied with the reason. A prompt naming two or more distinct lineages is denied with a message to name exactly one (the same lineage repeated is fine). A new spawn of a lens overwrites that lens's pending record. A prompt that already starts with the `ODD_REVIEW_BINDING` line passes through. Other agents are untouched. The `allow` only skips the permission prompt: Claude Code still evaluates the user's deny and ask rules against the rewritten input, so a matching deny rule blocks the lens and a matching ask rule still prompts.
-- **`SubagentStop` on `^construct:review-`** (`hooks/scripts/review-capture.mjs`). For an agent the first hook prepared, it pipes the agent's report to `capture`, `capture-refuter`, or `capture-validation`: `last_assistant_message`, or, when that has no text (a background agent reports through its `SubagentHandback` call), the handback message or last text read from `agent_transcript_path`. Only a surrounding code fence is removed; the JSON is never edited. A `malformed_result` or `invalid_result` refusal blocks the stop with the validator's message, at most twice; any other answer lets the agent stop. The orchestrator then reads `odd-review status`.
-
-The lineage of each spawned agent is kept per session and agent type under `${CLAUDE_PLUGIN_DATA}/review-hooks/` (same fallback rules as the gate). Both hooks fail open on errors.
-
-Store: `$(git rev-parse --git-common-dir)/odd-review/`, so nothing is written into the worktree and linked worktrees share it.
-
-```
-odd-review/transactions/<lineage>.json   # one per review; <lineage>.lock while a command writes it
-odd-review/receipts/<target hex>.json    # written by acknowledge
-```
-
-Writes are a temporary file plus a rename. A second writer on a locked transaction is refused (`transaction_locked`); a lock left by a dead process (or an empty one older than 10 seconds) is reclaimed under a separate `<lock>.reclaim` lock, and only if it is still the very file (same inode and content) that was inspected as stale, so a live lock is never removed. A non-empty lock older than 60 seconds is stale even when its PID is alive. A contender waits up to about 2 seconds for a live holder, then gets `transaction_locked`. No command changes the index, `HEAD`, or the working tree.
+An approval never authorizes delivery. Commit, push, pull request, and merge stay your decisions.
 
 ### Delivery signals
 
@@ -359,7 +271,7 @@ The ODD feature documents (`odd/tasks/<f>.md`) are mirrored into engram so a lat
 
 The mod draws one thing: a docked **panel** (a `Pane` with id `construct`) laid out as [claude-flightdeck](https://github.com/scasella/claude-flightdeck) cards and adapted to the ODD flow: one column at any width, no header or legend, `round` bordered cards, the bold title on the left and the status on the right. The band above the prompt is not drawn. It needs Claude Code 2.1.304 or later and does not appear in `claude -p` runs, which draw no interface.
 
-**Commands and opening.** `/construct` opens the panel, `/construct close` closes it, and `/construct doctor` prints a setup report instead: one line per check, `✓ label` or `✗ label — hint`, for Claude Code 2.1.304 or later, Node 20 or later, the `engram@engram` plugin enabled (read from the merged `enabledPlugins` setting), a CodeGraph index (`.codegraph/`) at the project root, `odd-review` and `odd-assess` runnable, and the RDD mode (on or off). The checks run in parallel with a 3 s timeout each, and a failed check shows as `✗` and never throws. The panel opens at every session start; to turn that off, set the plugin option `panel_open_on_start` (boolean, default `true`) to `false`.
+**Commands and opening.** `/construct` opens the panel, `/construct close` closes it, and `/construct doctor` prints a setup report instead: one line per check, `✓ label` or `✗ label — hint`, for Claude Code 2.1.304 or later, Node 20 or later, the `engram@engram` plugin enabled (read from the merged `enabledPlugins` setting), a CodeGraph index (`.codegraph/`) at the project root. The checks run in parallel with a 3 s timeout each, and a failed check shows as `✗` and never throws. The panel opens at every session start; to turn that off, set the plugin option `panel_open_on_start` (boolean, default `true`) to `false`.
 
 **Width.** The panel asks for 66 columns when it opens (`columns: 66` on `ui.open`). That is a request, not a guarantee: a width you drag or keep wins, and the layout reads the real width (never below 40). Rows that do not fit are clipped, and the changes card keeps only the file rows that fit the pane height.
 
@@ -369,12 +281,11 @@ The mod draws one thing: a docked **panel** (a `Pane` with id `construct`) laid 
 
 1. **main card** (always drawn, with or without a `statusLine`): `<Model>` (no suffix) and idle, busy (named by the ODD phase of the running agents: `● verifying`, `● reviewing`, `● implementing`, `● exploring`, `● working`; plain `● busy` with none running), or `◆ blocked` (warning color) while Claude waits on you: a `tool.check` verdict of `ask` on a real call (the permission prompt), or a `tool.call` on `AskUserQuestion` or `ExitPlanMode` while it is open; the next settled `tool.call`, `turn.start` or `turn.complete` clears it, and the idle "waiting for your input" state never sets it (it is the one indicator, with no extra row; the mod's `classic.*` hooks are bypassed by a higher-tier module, so none is used); the current git branch (`⎇ <branch>`, hidden without one); the effort meter (`▮▯`), the permission mode (from the main thread's spawns), and the main request count; the context gauge with tokens used and window; the 5-hour and 7-day gauges (`▰▱`) with the time to each reset (`↻3h10m`, `↻4d2h`), omitted when the figure is missing, for example off a subscription.
 2. **ODD card** (only with an active feature): the feature (newest `odd/tasks/*.md` with an unfinished task, the rule of `feature-state.mjs`), the current task, one checkpoint per task (done filled, current highlighted) and the open count.
-3. **REVIEW card** (only when RDD is on): the state `review due`, `reviewed` or `clear` (a `root` boundary is not assessed).
-4. **GATE card**: a stacked bar of permission verdicts, allowed / asked (`you`, or `classifier` in `auto` mode) / pending / denied counts, `file`, `shell` and `other` bucket counts, the last denied tool with credential-like values masked, and the inline-write alert (a main-thread `Edit`, `Write`, `MultiEdit` or `NotebookEdit` outside `odd/tasks/`: the count and last path, error color). It only observes and never blocks.
-5. **agents card**: titled `agents`, with `N running · M total` on the right, one row per subagent (up to 6, then `+N earlier`): a status mark, a short name (the construct role without the `odd_` prefix, as in `worker` or `review-risk`; the subagent type when there is no construct role), the routed model with its effort meter (for example `Sonnet 5.5 ▮▮▮▯`), and the elapsed time as static text.
-6. **changes card** (only with something to show): round card titled with the branch, `↑N` (commits to push) and `↓N` (commits to pull) on the right, each shown only when above 0. One row per changed file, biggest change first: the path (long paths keep their basename: `…/dir/name`) and `+added` / `-removed` lines (`bin` for a binary file). Changes are the working tree against `HEAD`, staged and unstaged; an untracked file shows `+lines` (counted for the first 20 untracked files) or `new` when it is a directory, past the first 20, or not countable. Rows fit the pane height; when some are cut the last row is `+N more`. The card is hidden when the repository is clean and in sync.
+3. **GATE card**: a stacked bar of permission verdicts, allowed / asked (`you`, or `classifier` in `auto` mode) / pending / denied counts, `file`, `shell` and `other` bucket counts, the last denied tool with credential-like values masked, and the inline-write alert (a main-thread `Edit`, `Write`, `MultiEdit` or `NotebookEdit` outside `odd/tasks/`: the count and last path, error color). It only observes and never blocks.
+4. **agents card**: titled `agents`, with `N running · M total` on the right, one row per subagent (up to 6, then `+N earlier`): a status mark, a short name (the construct role without the `odd_` prefix, as in `worker` or `review-risk`; the subagent type when there is no construct role), the routed model with its effort meter (for example `Sonnet 5.5 ▮▮▮▯`), and the elapsed time as static text.
+5. **changes card** (only with something to show): round card titled with the branch, `↑N` (commits to push) and `↓N` (commits to pull) on the right, each shown only when above 0. One row per changed file, biggest change first: the path (long paths keep their basename: `…/dir/name`) and `+added` / `-removed` lines (`bin` for a binary file). Changes are the working tree against `HEAD`, staged and unstaged; an untracked file shows `+lines` (counted for the first 20 untracked files) or `new` when it is a directory, past the first 20, or not countable. Rows fit the pane height; when some are cut the last row is `+N more`. The card is hidden when the repository is clean and in sync.
 
-**Refresh and fail-open.** Git (status, `diff --numstat HEAD` and a line count per untracked file), `odd-review`, `odd-assess`, and the feature documents are read only on `session.start` and after each main-thread `turn.complete`, in the background with a timeout, never on a redraw. Context and the plan limits are read from the session usage on each redraw. Nothing is animated: the agents' elapsed times are static text computed at each redraw, which happens on the events below, not on a timer. The panel's own state is kept in a versioned `atom` fed from engine events (`agent.spawn`, `turn.start`, `turn.step`, `tool.call`, `tool.check`, `turn.complete`, and `session.compact`); the panel redraws on those events, not per token. These hooks only observe: each passes its event on unchanged and swallows its own failures, and the model and effort routing is untouched. Any error leaves out the affected card and never blocks or delays a turn.
+**Refresh and fail-open.** Git (status, `diff --numstat HEAD` and a line count per untracked file) and the feature documents are read only on `session.start` and after each main-thread `turn.complete`, in the background with a timeout, never on a redraw. Context and the plan limits are read from the session usage on each redraw. Nothing is animated: the agents' elapsed times are static text computed at each redraw, which happens on the events below, not on a timer. The panel's own state is kept in a versioned `atom` fed from engine events (`agent.spawn`, `turn.start`, `turn.step`, `tool.call`, `tool.check`, `turn.complete`, and `session.compact`); the panel redraws on those events, not per token. These hooks only observe: each passes its event on unchanged and swallows its own failures, and the model and effort routing is untouched. Any error leaves out the affected card and never blocks or delays a turn.
 
 **Credit.** The drawing code (gauges, effort meter, and the card layout) is adapted from [claude-flightdeck](https://github.com/scasella/claude-flightdeck) by Stephen Casella, MIT License. The copyright and permission notice are in [`plugins/construct/LICENSE-flightdeck`](plugins/construct/LICENSE-flightdeck) and at the top of each adapted file.
 
@@ -385,12 +296,9 @@ The mod draws one thing: a docked **panel** (a `Pane` with id `construct`) laid 
 | `.claude-plugin/marketplace.json` | Local marketplace `construct`; allows the cross-marketplace `engram` dependency |
 | `install.sh` | One-command installer (see [One command](#one-command)) |
 | `plugins/construct/` | The plugin (manifest name `construct`) |
-| `plugins/construct/agents/` | The 13 role agents |
+| `plugins/construct/agents/` | The 11 role agents |
 | `plugins/construct/skills/` | Delivery and review skills (`branch-pr`, `chained-pr`, `work-unit-commits`, `judgment-day`, `debugging`, `constraint-driven`, ...) |
-| `plugins/construct/hooks/` | `hooks.json`, the mod (`register.js`), its routing helpers, the status modules (`status/`), the panel modules (`panel/`), and the command hooks (`scripts/`: contract, feature state, the `shell-words` tokenizer, delivery signals, review gate and session baseline, publication gate, Risk line gate, mirror drift gate, subagent count, delegation admission, review context and capture) |
-| `plugins/construct/bin/` | Executable scripts put on the `PATH` (`odd-assess`, `odd-review`) |
-| `plugins/construct/lib/assess/` | `odd-assess` modules: git, stats, passive, signals, sinks, content, classify, escalation, output |
-| `plugins/construct/lib/review/` | `odd-review` modules: the review lifecycle, its mode switch, and its store |
+| `plugins/construct/hooks/` | `hooks.json`, the mod (`register.js`), its routing helpers, the status modules (`status/`), the panel modules (`panel/`), and the command hooks (`scripts/`: contract, feature state, the `shell-words` tokenizer, delivery signals, publication gate, review store guard, Risk line gate, mirror drift gate, subagent count, delegation admission, review context and capture) |
 | `plugins/construct/hooks/contract/` | Session and subagent contract texts injected by hooks |
 | `plugins/construct/evals/` | Behavior eval cases run by `claude plugin eval` |
 | `plugins/construct/tests/` | Mod tests run by `claude plugin test` |

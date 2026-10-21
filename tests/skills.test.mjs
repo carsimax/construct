@@ -2,6 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
+import { LENSES_BY_RISK } from '../plugins/construct/hooks/scripts/review-lenses.mjs'
 
 const pluginRoot = new URL('../plugins/construct/', import.meta.url).pathname
 const skillsRoot = join(pluginRoot, 'skills')
@@ -90,30 +91,19 @@ test('the MIT notice for the ported material ships with the plugin', () => {
   assert.match(notice, /Copyright \(c\) 2025 Gentleman Programming/)
 })
 
-test('every odd-review command and CLI flag named in rdd-review exists in the CLI implementations', () => {
-  const reviewCli = readFileSync(join(pluginRoot, 'lib/review/cli.mjs'), 'utf8')
-  const assessCli = readFileSync(join(pluginRoot, 'lib/assess/cli.mjs'), 'utf8')
-  const commandBlock = reviewCli.match(/const ACCEPTS = \{([\s\S]*?)\n\}/)?.[1] ?? ''
-  const commands = new Set([...commandBlock.matchAll(/^\s*'?([a-z-]+)'?:/gm)].map((m) => m[1]))
-  const flags = (src) => new Set([...src.matchAll(/^\s*'?([a-z-]+)'?: \{ type:/gm)].map((m) => m[1]))
-  const known = new Set([...flags(reviewCli), ...flags(assessCli)])
-  const text = filesUnder(join(skillsRoot, 'rdd-review')).map((f) => readFileSync(f, 'utf8')).join('\n')
-  const used = [...text.matchAll(/odd-review ([a-z][a-z-]*)/g)].map((m) => m[1])
-  assert.ok(used.length > 5, 'the skill names odd-review commands')
-  for (const name of new Set(used)) assert.ok(commands.has(name), `odd-review ${name} is not implemented in lib/review/cli.mjs`)
-  const usedFlags = [...text.matchAll(/(?<![\w-])--([a-z][a-z-]*)/g)].map((m) => m[1])
-  assert.ok(usedFlags.length > 5, 'the skill names flags')
-  for (const flag of new Set(usedFlags)) assert.ok(known.has(flag), `--${flag} is not implemented`)
+test('rdd-review quotes the lens mapping of review-lenses.mjs', () => {
+  const text = readFileSync(join(skillsRoot, 'rdd-review', 'SKILL.md'), 'utf8')
+  for (const [item, lenses] of Object.entries(LENSES_BY_RISK)) {
+    const row = `| ${item} | ${lenses.map((l) => `\`${l}\``).join(', ')} |`
+    assert.ok(text.includes(row), `missing mapping row ${row}`)
+  }
 })
 
-test('rdd-review covers the working-tree candidate, the root boundary rule, and the correction budget', () => {
+test('rdd-review names the Review subject forms and no longer names the removed CLIs or the switch', () => {
   const text = filesUnder(join(skillsRoot, 'rdd-review')).map((f) => readFileSync(f, 'utf8')).join('\n')
-  const lines = text.split('\n')
-  assert.ok(lines.some((l) => /odd-review start/.test(l) && !/--base-ref/.test(l)), 'working-tree odd-review start')
-  assert.ok(lines.some((l) => /odd-assess --json/.test(l) && !/--base-ref/.test(l)), 'working-tree odd-assess --json')
-  assert.match(text, /`root`/)
-  assert.match(text, /correction_budget_exceeded/)
-  assert.doesNotMatch(text, /`next` is `/)
+  assert.match(text, /Review subject: <base>\.\.<head>/)
+  assert.match(text, /Review subject: <base>`/)
+  assert.doesNotMatch(text, /odd-review|odd-assess|review_due|refuter|validator/)
 })
 
 test('the codegraph skill uses the upstream CLI and the user-scope MCP tool, never a plugin MCP server', () => {
