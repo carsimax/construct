@@ -273,16 +273,20 @@ function defaultBranch(root, base) {
   return candidates.find((ref) => ref && ok(root, ref)) ?? null
 }
 
-// riskItems reads the Risk column of the Tasks table: `none` names no item, any other cell must hold
+// riskItems reads the Risk column of the Tasks table (a heading of level 2-6): `none` names no item, any other cell must hold
 // an integer 1-6. An unreadable cell or a missing column throws, so the gate denies.
 function riskItems(markdown, path) {
   const items = new Set()
   let inTasks = false
+  let level = 0
   let column = -1
   let seenHeader = false
   for (const line of markdown.split('\n')) {
-    if (/^##\s/.test(line)) {
-      inTasks = /^##\s+Tasks\b/i.test(line)
+    const heading = /^(#{2,6})\s/.exec(line)
+    // A Tasks heading of any level 2-6 opens the section; the next heading of the same or a higher level closes it.
+    if (heading && (!inTasks || heading[1].length <= level)) {
+      inTasks = /^#{2,6}\s+Tasks\b/i.test(line)
+      level = heading[1].length
       column = -1
       seenHeader = false
     } else if (inTasks && line.trim().startsWith('|') && !/^[\s|:-]+$/.test(line)) {

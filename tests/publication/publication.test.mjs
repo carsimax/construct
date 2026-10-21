@@ -595,6 +595,20 @@ describe('Risk ranges, rejection poison, and a suffixed Tasks heading (L17)', ()
       denied(hook('git push', repo))
     }
   })
+  test('a Tasks heading of level 3 to 6 is read, and a deeper subheading does not end the section', () => {
+    for (const heading of ['### Tasks', '###### Tasks (wave 2)']) {
+      const repo = makeRepo({ 'src/app.js': 'export const a = 1\n' })
+      git(repo, 'checkout', '-q', '-b', 'feat')
+      applyFiles(repo, { 'odd/tasks/f.md': TABLE('2').replace('## Tasks', heading), 'src/app.js': 'export const a = 2\n' })
+      commitAll(repo, 'unit')
+      denied(hook('git push', repo))
+    }
+    const repo = makeRepo({ 'src/app.js': 'export const a = 1\n' })
+    git(repo, 'checkout', '-q', '-b', 'feat')
+    applyFiles(repo, { 'odd/tasks/f.md': TABLE('2').replace('## Tasks\n', '## Tasks\n\n#### Notes\n'), 'src/app.js': 'export const a = 2\n' })
+    commitAll(repo, 'unit')
+    denied(hook('git push', repo))
+  })
   test('re-splitting a rejected range with no code change denies; a changed tree can be approved', () => {
     const repo = featureRepo('2')
     applyFiles(repo, { 'src/more.js': 'export const m = 1\n' })

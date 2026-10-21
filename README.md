@@ -104,7 +104,7 @@ Open Claude Code in a git repository and make a request. Construct applies the s
 4. **Implement test-first.** A worker writes a failing test, makes it pass, then refactors, inside the edit surfaces it was given.
 5. **Close with evidence.** One report: what was verified, what failed or was skipped, the next step, and a Risk line (`Risk: none` or `Risk: item N (reason)`).
 
-Commit, push, pull request, and merge stay your decisions. A change whose Risk line names a high-risk item is reviewed before it can be published; see [Mandatory review](#mandatory-review-and-the-publication-gate). There is no switch to turn the review off.
+Commit, push, pull request, and merge stay your decisions. A change whose task in the feature document has a Risk column naming a high-risk item is reviewed before it can be published; see [Mandatory review](#mandatory-review-and-the-publication-gate). There is no switch to turn the review off.
 
 To confirm the install works, see step 6 of [Manual install](#manual-install).
 
@@ -227,7 +227,7 @@ Existing components gained matching material:
 
 ### Mandatory review and the publication gate
 
-Review is a mandatory ODD phase for high-risk work. A work unit whose Risk line names an item (1-6) is reviewed by lens agents before it can be published. There is no mode switch and no per-candidate consent. The `construct:rdd-review` skill holds the procedure; hooks do the rest.
+Review is a mandatory ODD phase for high-risk work. A work unit whose task's Risk column (in the `## Tasks` table of the feature documents changed on the branch) names an item (1-6) is reviewed by lens agents before it can be published. There is no mode switch and no per-candidate consent. The `construct:rdd-review` skill holds the procedure; hooks do the rest.
 
 **Lenses.** The required lenses come from the Risk numbers in the `## Tasks` table of the feature documents changed on the branch (`LENSES_BY_RISK` in `hooks/scripts/review-lenses.mjs`):
 

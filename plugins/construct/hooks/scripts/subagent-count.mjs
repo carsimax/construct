@@ -1,6 +1,6 @@
 // Subagent lifecycle hook for the Stop gates: `start` (SubagentStart) records an
 // open agent for the session and `stop` (SubagentStop) removes it, so
-// review-gate.mjs and risk-line.mjs stay silent while writers may still be
+// risk-line.mjs and mirror-drift.mjs stay silent while writers may still be
 // running. One file per agent under subagentDir keeps parallel agents from
 // racing on a shared record; each file is written to a temp name and renamed.
 // Never blocks, never prints: any error means exit 0 (the gates then run as today).
