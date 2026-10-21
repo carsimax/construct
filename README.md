@@ -1,7 +1,7 @@
 # Construct
 
 [![Claude Code](https://img.shields.io/badge/Claude_Code-2.1.304%2B-blue)](#requirements)
-[![Plugin version](https://img.shields.io/badge/version-1.3.1-informational)](plugins/construct/.claude-plugin/plugin.json)
+[![Plugin version](https://img.shields.io/badge/version-1.4.0-informational)](plugins/construct/.claude-plugin/plugin.json)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 Construct is a Claude Code plugin that makes every request follow Organic Driven Development (ODD): authorize, explore, size, track, implement test-first, and close with evidence and a Risk line.
@@ -32,7 +32,7 @@ Memory comes from the separate `engram@engram` plugin, which Construct depends o
 ### One command
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v1.3.1/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v1.4.0/install.sh | bash
 ```
 
 The installer checks the requirements above and stops before changing anything if one is missing, or if `~/.claude` or `~/.claude/settings.json` is not writable, or if `settings.json` is a directory. Then it runs the manual steps below for you:
@@ -52,7 +52,7 @@ Every step is skipped when it is already done, so running the installer again ch
 Pass options after `bash -s --`, for example `curl -fsSL <url> | bash -s -- --no-mcp`. To read the script before running it:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v1.3.1/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v1.4.0/install.sh -o install.sh
 less install.sh
 bash install.sh
 ```
@@ -81,7 +81,7 @@ The manual steps the installer runs, for when you want to run them yourself:
    claude plugin install construct@construct
    ```
 
-   The installer (`install.sh`) pins this marketplace to the release tag (`carsimax/construct#v1.3.1`); the command above follows the default branch. A failed `claude mcp add` in the installer warns and the install continues.
+   The installer (`install.sh`) pins this marketplace to the release tag (`carsimax/construct#v1.4.0`); the command above follows the default branch. A failed `claude mcp add` in the installer warns and the install continues.
 
    The install output ends with `(+ 1 dependency: engram)` when engram was not installed yet.
 
@@ -447,7 +447,14 @@ Setup, checks, and pull request rules are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Status
 
-Current version: 1.3.1 (`plugins/construct/.claude-plugin/plugin.json`); fixes from the repository audit: guard bypasses closed, review gate and lock fixes, odd-assess key and parsing fixes, and an installer that survives an MCP failure and pins the marketplace to the release tag. Releases are tagged `vX.Y.Z`.
+Current version: 1.4.0 (`plugins/construct/.claude-plugin/plugin.json`); gentle-ai v4.2.0 review parity (a refuter's inconclusive verdict goes to correction, finding admission, validator retries, `rdd_disabled`, and `start --request-context`), write-scope path identity on case-insensitive volumes, the secret-guard bracket-glob false positive fixed, and an explicit agent model winning over the configured one. Releases are tagged `vX.Y.Z`.
+
+Upgrading from 1.3.1:
+
+- Plain `odd-assess` (no `--json`) exits 1 on an unassessable candidate.
+- `odd-review` mutating commands refuse with `rdd_disabled` while RDD is off.
+- Lens results with a location outside the candidate's paths, line 0, or a reversed range are refused (`invalid_result`), and a severe claim on unchanged lines is downgraded to `unknown`.
+- A `model` passed on the Agent call now wins over `model_<role>`.
 
 Upgrading from 1.1.0:
 
