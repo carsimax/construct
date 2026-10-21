@@ -142,8 +142,6 @@ test('Bash allows templates, look-alikes, and unrelated commands', () => {
     'cat docs/secrets.md',
     'git commit -m "add .env.example"',
     'git status',
-    'rm -rf build/',
-    'rm -rf ./node_modules',
     'rm file.txt',
   ]) {
     assertAllow(bash(command))
@@ -171,10 +169,8 @@ test('Bash denies every catastrophic rm -rf spelling', () => {
 })
 
 test('rm without both flags, or on other targets, is allowed', () => {
-  assertAllow(bash('rm -r build'))
+  // rm -r on other targets is no longer silent: command-guard asks (tests/guard/command-guard.test.mjs, S1).
   assertAllow(bash('rm -f /tmp/x.log'))
-  assertAllow(bash('rm -rf build/'))
-  assertAllow(bash('rm -rf /tmp/some-dir'))
 })
 
 test('unrelated tools are allowed', () => {
@@ -323,7 +319,7 @@ test('verifier probes', () => {
   ]) {
     assertDeny(bash(command))
   }
-  for (const command of ['rm -rf ./', 'rm -rf ~/projects/old']) assertAllow(bash(command))
+  // `rm -rf ./` is now a command-guard deny and `rm -rf ~/projects/old` an ask (S1); neither is silent.
   assertAllow(call('Edit', { file_path: 'config/keys/index.ts' }))
 })
 

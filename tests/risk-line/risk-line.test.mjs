@@ -192,3 +192,46 @@ describe('mark', () => {
     assert.equal(JSON.parse(readFileSync(join(e.CLAUDE_PLUGIN_DATA, 'risk-line', 's1.json'), 'utf8')).root, realpathSync(repo))
   })
 })
+
+// A task-notification repeats UserPromptSubmit within one turn with the same prompt_id
+// (observed live, T10); a repeat after the change must not move the turn's baseline.
+describe('mark across repeated UserPromptSubmit', () => {
+  const mark = (repo, e, prompt_id, prompt = 'x') => run('mark', repo, e, { extra: { prompt_id, prompt } })
+
+  test('a repeat with the same prompt_id keeps the record, so check still blocks', () => {
+    const repo = makeRepo({ 'src/a.js': 'export const a = 1\n' })
+    const e = env()
+    silent(mark(repo, e, 'p1', 'do it'))
+    applyFiles(repo, { 'src/a.js': 'export const a = 2\n' })
+    silent(mark(repo, e, 'p1', '<task-notification>\nnote\n</task-notification>'))
+    assert.equal(check(repo, e, 'Done.').json.decision, 'block')
+  })
+
+  test('a new prompt_id re-arms: the new baseline includes the earlier change', () => {
+    const repo = makeRepo({ 'src/a.js': 'export const a = 1\n' })
+    const e = env()
+    silent(mark(repo, e, 'p1'))
+    applyFiles(repo, { 'src/a.js': 'export const a = 2\n' })
+    silent(mark(repo, e, 'p2'))
+    silent(check(repo, e, 'Done.'))
+  })
+
+  test('a spent block stays spent when the same prompt_id repeats', () => {
+    const repo = makeRepo({ 'src/a.js': 'export const a = 1\n' })
+    const e = env()
+    silent(mark(repo, e, 'p1'))
+    applyFiles(repo, { 'src/a.js': 'export const a = 2\n' })
+    assert.equal(check(repo, e, 'Done.').json.decision, 'block')
+    silent(mark(repo, e, 'p1'))
+    silent(check(repo, e, 'Done.'))
+  })
+
+  test('without a prompt_id every mark re-marks, as before', () => {
+    const repo = makeRepo({ 'src/a.js': 'export const a = 1\n' })
+    const e = env()
+    silent(run('mark', repo, e))
+    applyFiles(repo, { 'src/a.js': 'export const a = 2\n' })
+    silent(run('mark', repo, e))
+    silent(check(repo, e, 'Done.'))
+  })
+})

@@ -2,8 +2,9 @@
 // Read-only and fail-open: any problem produces no output and exit code 0.
 // Usage: node feature-state.mjs  (SessionStart hook JSON on stdin)
 import { execFileSync } from 'node:child_process'
-import { readFileSync, readdirSync, statSync } from 'node:fs'
+import { readFileSync, readdirSync, realpathSync, statSync } from 'node:fs'
 import { basename, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 const MAX_DOCS = 3
 const MAX_TOTAL = 2500
@@ -89,21 +90,20 @@ function render(docs) {
   return text.length <= MAX_TOTAL ? text : `${text.slice(0, MAX_TOTAL - footer.length - 2)}\n\n${footer}`.slice(0, MAX_TOTAL)
 }
 
-function main() {
-  let input
+// projectRoot is the git top level of cwd, or cwd itself outside a repository.
+export function projectRoot(cwd) {
   try {
-    input = JSON.parse(readFileSync(0, 'utf8') || '{}')
+    return execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() || cwd
   } catch {
-    return
+    return cwd
   }
-  if (!input || typeof input !== 'object' || Array.isArray(input)) return
-  const cwd = typeof input.cwd === 'string' && input.cwd ? input.cwd : process.cwd()
-  let root = cwd
-  try {
-    root = execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() || cwd
-  } catch {
-    // not a repository: fall back to cwd
-  }
+}
+
+// activeDocuments returns the feature documents under <root>/odd/tasks with an
+// unfinished task, newest first: { doc, mtime }. A missing directory throws.
+// delegation-admission.mjs reuses it, so "an unfinished feature document
+// exists" means the same thing there as for the re-injection.
+export function activeDocuments(root) {
   const dir = join(root, 'odd', 'tasks')
   const docs = []
   for (const name of readdirSync(dir)) {
@@ -116,15 +116,30 @@ function main() {
       // unreadable document: skip it
     }
   }
+  return docs.sort((a, b) => b.mtime - a.mtime)
+}
+
+function main() {
+  let input
+  try {
+    input = JSON.parse(readFileSync(0, 'utf8') || '{}')
+  } catch {
+    return
+  }
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return
+  const cwd = typeof input.cwd === 'string' && input.cwd ? input.cwd : process.cwd()
+  const docs = activeDocuments(projectRoot(cwd))
   if (docs.length === 0) return
-  docs.sort((a, b) => b.mtime - a.mtime)
   const text = render(docs.slice(0, MAX_DOCS).map((d) => d.doc))
   process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: text } }))
 }
 
-try {
-  main()
-} catch {
-  // fail open
+// Run only as a script; delegation-admission.mjs imports the helpers above.
+if (process.argv[1] && fileURLToPath(import.meta.url) === realpathSync(process.argv[1])) {
+  try {
+    main()
+  } catch {
+    // fail open
+  }
+  process.exit(0)
 }
-process.exit(0)

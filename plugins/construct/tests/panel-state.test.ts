@@ -3,12 +3,16 @@ import {
   SCHEMA_VERSION,
   agentsView,
   initialState,
+  isBlocked,
+  isBlockingTool,
   isOutsideTasks,
   maskSecrets,
   merge,
   mainBusy,
   onAgentSpawn,
+  onBlocked,
   onCompact,
+  onUnblocked,
   onMainStep,
   onPermissionMode,
   onToolSettle,
@@ -434,4 +438,32 @@ test('spawn, done, denied and inline write no longer touch a log', () => {
   s = onToolCall(s, { tool: 'Edit', path: '/p/src/a.ts', cwd: '/p', nowMs: 9 })
   expect('log' in s).toBe(false)
   expect(s.inline).toEqual({ count: 1, last: '/p/src/a.ts' })
+})
+
+// ---- S8b blocked state -------------------------------------------------
+
+test('initialState is not blocked and merge defaults a stored value without the field', () => {
+  expect(initialState().blocked).toBe(false)
+  expect(isBlocked(initialState())).toBe(false)
+  const { blocked, ...old } = initialState()
+  expect(merge(old).blocked).toBe(false)
+  expect(merge({ ...initialState(), blocked: 'yes' }).blocked).toBe(false)
+})
+
+test('AskUserQuestion and ExitPlanMode are the blocking tools', () => {
+  expect(isBlockingTool('AskUserQuestion')).toBe(true)
+  expect(isBlockingTool('ExitPlanMode')).toBe(true)
+  for (const t of ['Bash', 'Read', 'askuserquestion', '', undefined]) expect(isBlockingTool(t as any)).toBe(false)
+})
+
+test('onBlocked sets and onUnblocked clears the flag, both idempotent and leaving the rest alone', () => {
+  const s = onTurnStart(initialState(), { agentId: undefined, turnId: 't1', nowMs: 5 })
+  const b = onBlocked(s)
+  expect(isBlocked(b)).toBe(true)
+  expect(onBlocked(b)).toEqual(b)
+  const c = onUnblocked(b)
+  expect(isBlocked(c)).toBe(false)
+  expect(c).toEqual(s)
+  expect(onUnblocked(s)).toEqual(s)
+  expect(isBlocked(null as any)).toBe(false)
 })

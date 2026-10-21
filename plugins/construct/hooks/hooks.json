@@ -19,6 +19,20 @@
         ]
       },
       {
+        "matcher": "startup|resume|clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/review-gate.mjs",
+              "baseline"
+            ],
+            "timeout": 30
+          }
+        ]
+      },
+      {
         "matcher": "compact|resume",
         "hooks": [
           {
@@ -75,6 +89,19 @@
         ]
       },
       {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/publication-gate.mjs"
+            ],
+            "timeout": 30
+          }
+        ]
+      },
+      {
         "matcher": "Agent",
         "hooks": [
           {
@@ -84,6 +111,29 @@
               "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/review-context.mjs"
             ],
             "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/delegation-admission.mjs"
+            ],
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/delivery-signals.mjs",
+              "post"
+            ],
+            "timeout": 10
           }
         ]
       }
@@ -96,6 +146,19 @@
             "command": "node",
             "args": [
               "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/subagent-count.mjs",
+              "stop"
+            ],
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/delegation-admission.mjs",
               "stop"
             ],
             "timeout": 10
@@ -133,6 +196,14 @@
             "args": [
               "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/risk-line.mjs",
               "check"
+            ],
+            "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/mirror-drift.mjs"
             ],
             "timeout": 30
           }

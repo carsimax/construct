@@ -48,7 +48,7 @@ function world($, on, o: any = {}) {
   const seen = o.seen ?? {}
   on('turn.start', (_$, e) => ((seen.start = e), { turnId: e.turnId }))
   on('turn.complete', ($, e) => ({ text: e.answer }))
-  on('tool.call', (_$, e) => ((seen.call = e), { ref: 'r', result: {}, text: 'ok', ...(o.isError ? { isError: true } : {}) }))
+  on('tool.call', async (_$, e) => ((seen.call = e), await o.hold?.(), { ref: 'r', result: {}, text: 'ok', ...(o.isError ? { isError: true } : {}) }))
   on('tool.check', (_$, e) => ((seen.check = e), { decision: o.decision ?? 'allow' }))
   on('agent.spawn', (_$, e) => ({ model: e.model, agentId: 'ag-1' }))
   on('turn.step', async function* (_$, e) {
@@ -329,4 +329,94 @@ test('a surface with Client support draws the rail as a Client of ./rail.tsx', a
   const tree = JSON.stringify(await p.drawn())
   expect(tree).toContain('"type":"Client"')
   expect(tree).toContain('panel/rail.tsx')
+})
+
+// ---- S8b blocked state: tool.check asks and the blocking tools, no classic hooks ----
+
+// One pane per test: mount it once, redraw it for each reading.
+const reader = async ($) => {
+  const p = await pane($)
+  return async () => (await p.redraw(), joined(p))
+}
+
+const CALL = { tool: 'Bash', input: { command: 'ls' }, tool_use_id: 'tu-1' }
+
+test('a real tool.check ask shows blocked until the call settles', async ($, on) => {
+  await start($, on, { decision: 'ask' })
+  const status = await reader($)
+  expect(await status()).toContain('○ idle')
+  await $.tool.check(CALL)
+  await settle()
+  expect(await status()).toContain('◆ blocked')
+  await $.tool.call({ tool: 'Bash', command: 'ls', tool_use_id: 'tu-1' })
+  await settle()
+  expect(await status()).not.toContain('blocked')
+})
+
+test('an allow verdict and a query ask do not block', async ($, on) => {
+  await start($, on, { decision: 'allow' })
+  const status = await reader($)
+  await $.tool.check(CALL)
+  await settle()
+  expect(await status()).not.toContain('blocked')
+})
+
+test('a tool.check ask without a tool_use_id (a query) does not block', async ($, on) => {
+  await start($, on, { decision: 'ask' })
+  const status = await reader($)
+  await $.tool.check({ tool: 'Bash', input: { command: 'ls' } })
+  await settle()
+  expect(await status()).not.toContain('blocked')
+})
+
+// A tool.call whose core step stays open until `release()`, as a question waits on the person.
+async function openCall($, on, tool: string) {
+  let release: () => void = () => {}
+  const gate = new Promise<void>((r) => (release = r))
+  await start($, on, { hold: () => gate })
+  const status = await reader($)
+  const call = $.tool.call({ tool })
+  await settle()
+  return { status, release, call }
+}
+
+for (const tool of ['AskUserQuestion', 'ExitPlanMode']) {
+  test(`${tool} blocks while its tool.call is open and clears when it returns`, async ($, on) => {
+    const { status, release, call } = await openCall($, on, tool)
+    expect(await status()).toContain('◆ blocked')
+    release()
+    await call
+    await settle()
+    expect(await status()).not.toContain('blocked')
+  })
+}
+
+test('another tool does not block while its tool.call is open', async ($, on) => {
+  const { status, release, call } = await openCall($, on, 'Bash')
+  expect(await status()).not.toContain('blocked')
+  release()
+  await call
+})
+
+test('turn.start and turn.complete clear a block', async ($, on) => {
+  await start($, on, { decision: 'ask' })
+  const status = await reader($)
+  for (const clear of [
+    () => $.turn.start({ text: 'go', turnId: 't1' }),
+    () => $.turn.complete({ turnId: 't1', answer: 'done' }),
+  ]) {
+    await $.tool.check(CALL)
+    await settle()
+    expect(await status()).toContain('◆ blocked')
+    await clear()
+    await settle()
+    expect(await status()).not.toContain('blocked')
+  }
+})
+
+test('the blocked-state wiring passes tool.check and tool.call results through unchanged', async ($, on) => {
+  await start($, on, { decision: 'ask' })
+  expect((await $.tool.check(CALL)).decision).toBe('ask')
+  const r = await $.tool.call({ tool: 'AskUserQuestion' })
+  expect(r.text).toBe('ok')
 })
