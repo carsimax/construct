@@ -250,7 +250,7 @@ test('maskSecrets masks Basic auth, URL userinfo, CLI passwords, cloud keys and 
 
 test('a main turn marks the panel busy and completing it clears the flag; no receipt is kept', () => {
   let s = onTurnStart(initialState(), { turnId: 't1', nowMs: 1000 })
-  expect(s.turn).toEqual({ turnId: 't1', startedMs: 1000 })
+  expect(s.turn).toEqual({ turnId: 't1' })
   expect('receipt' in s).toBe(false)
   s = spawn(s, 'a1')
   s = onToolCall(s, { tool: 'Edit', path: 'a.js', cwd: '/r' })
@@ -264,11 +264,11 @@ test('subagent turns do not touch the busy flag; a turn id mismatch does not clo
   let s = onTurnStart(initialState(), { turnId: 't1', nowMs: 1 })
   s = spawn(s, 'a1')
   s = onTurnComplete(s, { turnId: 'x', agentId: 'a1', nowMs: 3 })
-  expect(s.turn).toEqual({ turnId: 't1', startedMs: 1 })
+  expect(s.turn).toEqual({ turnId: 't1' })
   expect(s.agents[0]).toMatchObject({ status: 'done', endedMs: 3 })
   s = onTurnStart(s, { turnId: 'x', agentId: 'a1', nowMs: 4 })
   expect(s.agents[0]).toMatchObject({ status: 'running', endedMs: null })
-  expect(onTurnComplete(s, { turnId: 'other', nowMs: 5 }).turn).toEqual({ turnId: 't1', startedMs: 1 })
+  expect(onTurnComplete(s, { turnId: 'other', nowMs: 5 }).turn).toEqual({ turnId: 't1' })
   expect(onTurnComplete(s, { turnId: 't1', nowMs: 5 }).turn).toBe(null)
 })
 
@@ -491,7 +491,7 @@ test('phaseOf is null with no agents or only done agents, and ignores odd input'
 })
 
 test('a main turn start keeps its start time; a stored turn without one is read as is', () => {
-  expect(onTurnStart(initialState(), { turnId: 't1' }).turn).toEqual({ turnId: 't1', startedMs: null })
+  expect(onTurnStart(initialState(), { turnId: 't1' }).turn).toEqual({ turnId: 't1' })
   const old: any = { ...initialState(), turn: { turnId: 't9' } }
   expect(merge(old).turn).toEqual({ turnId: 't9' })
   expect(onTurnComplete(old, { turnId: 't9', nowMs: 5 }).turn).toBe(null)

@@ -41,7 +41,7 @@
 //                cells: last 60 of 'allowed' | 'asked' | 'denied' | 'sub'
 //                counts: { allowed, asked, denied, sub } totals, never capped
 //                lastDenied: { tool, detail } | null, detail masked and short
-//   turn         { turnId, startedMs } while a main turn runs (a stored turn without startedMs reads as is), else null (the busy flag; a stored `receipt` from
+//   turn         { turnId } while a main turn runs (a stored turn that still has startedMs reads as is), else null (the busy flag; a stored `receipt` from
 //                the last turn card is dropped on read)
 //   compactions  session.compact count
 //   main         { steps, model, effort, mode }  main-thread vitals (S3): steps counts main requests
@@ -285,7 +285,7 @@ export function onTurnStart(state, e) {
   const s = merge(state)
   const id = str(e?.agentId)
   if (id) return patchAgent(s, id, (a) => ({ ...a, status: 'running', endedMs: null }))
-  return { ...s, turn: { turnId: str(e?.turnId), startedMs: isNum(e?.nowMs) ? e.nowMs : null } }
+  return { ...s, turn: { turnId: str(e?.turnId) } }
 }
 
 // A turn ended: a subagent is done, the main turn stops being busy.
