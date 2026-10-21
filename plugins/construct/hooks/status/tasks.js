@@ -1,7 +1,6 @@
 // Active ODD feature, by the rule of hooks/scripts/feature-state.mjs: a document
 // counts when its `## Tasks` table is well formed and holds a row whose status
-// is not `done` or `dropped`. The script imports `scanTasks` from here: this file
-// needs no Node module, so the mod and the hook script share one parser.
+// is not `done` or `dropped`.
 const FINISHED = new Set(['done', 'dropped'])
 
 function splitRow(line) {
@@ -16,7 +15,7 @@ function splitRow(line) {
 // { open, first } of the Tasks table: the unfinished row count and the first
 // unfinished row's { id, title } (null when none), or null when the table is
 // missing or malformed.
-export function scanTasks(markdown) {
+function scanTasks(markdown) {
   const lines = String(markdown).split(/\r?\n/)
   const start = lines.findIndex((l) => /^##\s+Tasks\s*$/.test(l))
   if (start < 0) return null
@@ -38,7 +37,7 @@ export function scanTasks(markdown) {
   for (i += 2; i < lines.length && lines[i].trim().startsWith('|'); i++) {
     const cells = splitRow(lines[i])
     if (cells.length < header.length) return null
-    tasks.push({ id: cells[idCol], title: cells[titleCol], done: FINISHED.has(cells[status].toLowerCase()) })
+    tasks.push({ id: cells[idCol], done: FINISHED.has(cells[status].toLowerCase()) })
     if (!FINISHED.has(cells[status].toLowerCase())) {
       open++
       first ??= { id: cells[idCol], title: cells[titleCol] }
