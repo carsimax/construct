@@ -25,7 +25,7 @@ Load this skill before launching any subagent for ODD work, or when deciding whe
 | Trigger | Condition | Agent |
 |---|---|---|
 | Evidence budget | Decide or verify within one parallel batch (at most 3 calls, about 10k tokens) | none: the parent reads |
-| Mapping | Needs more evidence than one batch, or more than about 5 sequential lookups | `construct:odd-explorer` (one), then re-evaluate task size |
+| Mapping | Needs more evidence than one batch, or more than about 5 sequential lookups | `construct:odd-explorer` (one per independent front, up to 3, launched together), then re-evaluate task size |
 | Writer | Any authorized write to repository code, tests, or docs | `construct:odd-worker`, one per unit; disjoint units launched together, dependent units one after another |
 | Verification | A Risk line that names a high-risk item, after the unit's own checks; for a tracked feature with several such units, one verifier at the feature's end over the whole branch instead of one per unit, and a unit alone only when it must ship or be relied on before then | `construct:odd-verify` (one) |
 | Per action | Long suites, builds, installs, broad research | `construct:odd-general` |
@@ -45,6 +45,16 @@ A unit is one independent piece of behavior with its code, tests, and docs toget
 ## Launch deduplication
 
 Keep a list of `(role, task fingerprint)` pairs launched this turn, where the fingerprint is a normalized summary of the task text. Never launch a second agent for a pair already launched while it runs or after it returned; emit one launch per distinct task.
+
+## Parallel explorers
+
+- An independent front is a separate module, layer, or question whose answer does not depend on another front's answer.
+- Launch one `construct:odd-explorer` per independent front, up to 3, in one message. One front stays one explorer.
+- Each prompt names its front and question, and lists the other fronts as out of scope.
+- A front that needs another front's answer runs after it.
+- Distinct fronts are distinct fingerprints, so deduplication does not block them.
+- The limit is 3 because 3 reports of about 2k tokens stay inside the parent's 10k batch budget.
+- The parent spot checks one claim per report, then re-evaluates task size.
 
 ## Checking contract
 
