@@ -41,15 +41,14 @@ function closingBacktick(text, from) {
 // closingParen returns the index of the `)` that closes a `$(` whose body starts at `from`, or -1.
 // The body is scanned with quote state: a `)` inside single or double quotes, after a backslash,
 // or inside a nested `$(...)` or backtick span does not close it.
-function closingParen(text, from, inDouble = false) {
+function closingParen(text, from) {
   for (let i = from; i < text.length; i++) {
     const c = text[i]
     if (c === '\\') i++
-    else if (c === "'" && !inDouble) {
+    else if (c === "'") {
       i = text.indexOf("'", i + 1)
       if (i < 0) return -1
     } else if (c === '"') {
-      if (inDouble) return -1
       i = closingDouble(text, i + 1)
       if (i < 0) return -1
     } else if (c === '`') {
@@ -107,8 +106,32 @@ function quoteSubstitutions(text) {
   return out
 }
 
-// Heredoc bodies are data, not commands; substitutions are quoted into single words.
-const stripHeredocs = (command) => quoteSubstitutions(extractHeredocs(command).text)
+// stripComments removes `#` comments (a `#` that starts a word, outside quotes, to the end of the
+// line): the tokenizer does not know them, so a quote inside a comment would open a quote run.
+function stripComments(text) {
+  let out = ''
+  let quote = null
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i]
+    if (c === '\\' && quote !== "'") out += text[i++]
+    else if (c === "'" && quote !== '"') quote = quote === "'" ? null : "'"
+    else if (c === '"' && quote !== "'") quote = quote === '"' ? null : '"'
+    else if (c === '#' && quote === null && (i === 0 || /[\s;&|(`]/.test(text[i - 1]))) {
+      while (i + 1 < text.length && text[i + 1] !== '\n') i++
+      continue
+    }
+    out += text[i] ?? ''
+  }
+  return out
+}
+
+// Heredoc bodies are data, not commands. Each command is read in three views: as written, with
+// substitutions quoted into single words, and with comments removed as well, so a scanner mistake
+// in one view cannot hide a push another sees.
+const views = (command) => {
+  const text = extractHeredocs(command).text
+  return [text, quoteSubstitutions(text), quoteSubstitutions(stripComments(text))]
+}
 
 // resolveDir returns the directory a `-C`/`cd` argument names, or null when it cannot be known:
 // `~`, `$HOME`, and `${HOME}` expand from HOME; any other `$` or backtick, or a relative path
@@ -175,11 +198,19 @@ function ghPublication(args, cwd) {
 
 // findPublications walks a command line and returns every publication it contains.
 function findPublications(command, cwd, depth = 0) {
+  const seen = new Map()
+  for (const text of views(command)) {
+    for (const pub of publicationsIn(text, cwd, depth)) seen.set(JSON.stringify(pub), pub)
+  }
+  return [...seen.values()]
+}
+
+function publicationsIn(text, cwd, depth) {
   if (depth > MAX_DEPTH) return []
   const found = []
   const nested = (line, at) => found.push(...findPublications(line, at, depth + 1))
   let where = cwd
-  for (const tokens of splitCommands(stripHeredocs(command))) {
+  for (const tokens of splitCommands(text)) {
     // A redirection target is not a word.
     const words = tokens.filter((w) => !w.r).map((w) => w.t)
     for (const word of words) for (const body of substitutionBodies(word)) nested(body, where)
@@ -259,7 +290,9 @@ function main() {
   if (!input || input.tool_name !== 'Bash' || typeof input.cwd !== 'string' || input.cwd === '') return
   const command = input.tool_input?.command
   if (typeof command !== 'string' || command === '') return
-  for (const pub of findPublications(command, input.cwd)) {
+  // An unresolvable directory is reported first: its reason says what to fix.
+  const pubs = findPublications(command, input.cwd).sort((a, b) => (b.dir === null) - (a.dir === null))
+  for (const pub of pubs) {
     const reason = pub.dir === null ? unresolvable(pub.gate === 'pre-push' ? 'git push' : pub.gate === 'pre-pr' ? 'gh pr create' : 'gh release create') : verdict(pub)
     if (reason) {
       process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: reason } })}\n`)

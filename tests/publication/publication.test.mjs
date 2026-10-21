@@ -293,3 +293,28 @@ describe('quoted delimiters inside substitutions do not hide a later push', () =
     assert.match(r.reason, /literal/)
   })
 })
+
+// T15: detection runs on the original and the rewritten command text, so a scanner mistake in one view cannot hide a push.
+describe('both command views are analyzed', () => {
+  test('a quote inside a comment inside a substitution does not hide a push', () => {
+    const r = hook("echo $(echo a #'\n); git push origin feat; echo ')'", featureRepo())
+    denied(r)
+    assert.equal(r.stdout.trim().split('\n').length, 1)
+  })
+
+  test('a non-publishing command with odd quoting stays silent', () => {
+    const repo = featureRepo()
+    silent(hook("echo $(echo a #'\n); echo ')'", repo))
+    silent(hook("echo $(echo ')'; echo \"git push\"", repo))
+  })
+
+  test('a push with nothing due allows once, without output', () => {
+    silent(hook('git push origin main; echo $(echo ok)', makeRepo()))
+  })
+
+  test('the same push seen in both views is denied once', () => {
+    const r = hook('git push origin feat', featureRepo())
+    denied(r)
+    assert.equal(r.stdout.trim().split('\n').length, 1)
+  })
+})
