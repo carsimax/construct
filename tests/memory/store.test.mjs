@@ -83,7 +83,7 @@ describe('schema (S2)', () => {
     const columns = raw(store, 'PRAGMA table_info(observations)').map((r) => r.name)
     assert.deepEqual(columns, [
       'id', 'session_id', 'type', 'title', 'content', 'topic_key', 'normalized_hash', 'revision_count',
-      'duplicate_count', 'last_seen_at', 'review_after', 'created_at', 'updated_at', 'deleted_at',
+      'duplicate_count', 'last_seen_at', 'review_after', 'created_at', 'updated_at', 'deleted_at', 'import_id',
     ])
     assert.match(raw(store, "SELECT sql FROM sqlite_master WHERE name = 'observations_fts'")[0].sql, /trigram/)
     assert.match(raw(store, "SELECT sql FROM sqlite_master WHERE name = 'prompts_fts'")[0].sql, /trigram/)

@@ -45,7 +45,7 @@ describe('construct-memory', () => {
     const repo = makeRepo()
     for (const args of [[], ['help']]) {
       const out = ok(cli(repo, args))
-      for (const word of ['save', 'search', 'get', 'context', 'update', 'delete', 'summary', 'review']) assert.match(out, new RegExp(word))
+      for (const word of ['save', 'search', 'get', 'context', 'update', 'delete', 'summary', 'review', 'import']) assert.match(out, new RegExp(word))
     }
   })
 

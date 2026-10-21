@@ -1,0 +1,21 @@
+{
+  "version": "0.2.0",
+  "exported_at": "2026-03-01T00:00:00Z",
+  "sessions": [
+    { "id": "sess-a1", "project": "Alpha", "directory": "/work/alpha", "started_at": "2026-01-10T09:00:00Z", "ended_at": "2026-01-10T10:00:00Z", "summary": "Goal: wire the cache. Accomplished: cache wired." },
+    { "id": "sess-a2", "project": "alpha", "directory": "/work/alpha", "started_at": "2026-02-01T09:00:00Z" },
+    { "id": "sess-b1", "project": "beta", "directory": "/work/beta", "started_at": "2026-01-15T09:00:00Z", "summary": "Beta session" }
+  ],
+  "observations": [
+    { "id": 1, "sync_id": "obs-a-1", "session_id": "sess-a1", "type": "decision", "title": "Use LRU cache", "content": "Chose an LRU cache for the lookup path because eviction is cheap.", "project": "alpha", "scope": "project", "topic_key": "arch/cache", "revision_count": 2, "duplicate_count": 1, "last_seen_at": "2026-01-12T08:00:00Z", "created_at": "2026-01-10T09:30:00Z", "updated_at": "2026-01-12T08:00:00Z" },
+    { "id": 2, "sync_id": "obs-a-2", "session_id": "sess-a1", "type": "bugfix", "title": "Fixed token leak", "content": "Public note. <private>api key sk-secret-123</private> Rotated afterwards.", "project": "Alpha", "scope": "project", "created_at": "2026-01-11T09:30:00Z", "updated_at": "2026-01-11T09:30:00Z" },
+    { "id": 3, "sync_id": "obs-a-3", "session_id": "sess-a1", "type": "discovery", "title": "Obsolete finding", "content": "This one was deleted upstream.", "project": "alpha", "scope": "project", "created_at": "2026-01-11T10:30:00Z", "updated_at": "2026-01-11T10:30:00Z", "deleted_at": "2026-01-20T00:00:00Z" },
+    { "id": 4, "sync_id": "obs-a-4", "session_id": "sess-a2", "type": "manual", "title": "Session two note", "content": "Project taken from the session, not the row.", "scope": "project", "created_at": "2026-02-01T09:30:00Z", "updated_at": "2026-02-01T09:30:00Z" },
+    { "id": 5, "sync_id": "obs-b-1", "session_id": "sess-b1", "type": "decision", "title": "Beta uses Postgres", "content": "Beta stores everything in Postgres.", "project": "beta", "scope": "project", "created_at": "2026-01-16T09:30:00Z", "updated_at": "2026-01-16T09:30:00Z" }
+  ],
+  "prompts": [
+    { "id": 1, "sync_id": "pr-a-1", "session_id": "sess-a1", "content": "please wire the cache", "project": "alpha", "created_at": "2026-01-10T09:01:00Z" },
+    { "id": 2, "sync_id": "pr-a-2", "session_id": "sess-a2", "content": "what did we decide about eviction", "created_at": "2026-02-01T09:01:00Z" },
+    { "id": 3, "sync_id": "pr-b-1", "session_id": "sess-b1", "content": "set up postgres for beta", "project": "beta", "created_at": "2026-01-15T09:01:00Z" }
+  ]
+}

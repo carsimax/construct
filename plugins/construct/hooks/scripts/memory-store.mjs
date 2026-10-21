@@ -46,8 +46,10 @@ CREATE TABLE IF NOT EXISTS observations (
   review_after TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
-  deleted_at TEXT
+  deleted_at TEXT,
+  import_id TEXT
 );
+CREATE UNIQUE INDEX IF NOT EXISTS observations_import ON observations(import_id) WHERE import_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS observations_topic ON observations(topic_key) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS observations_hash ON observations(normalized_hash) WHERE deleted_at IS NULL;
 CREATE TABLE IF NOT EXISTS observation_versions (
@@ -70,8 +72,10 @@ CREATE TABLE IF NOT EXISTS user_prompts (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   session_id TEXT NOT NULL,
   content TEXT NOT NULL,
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  import_id TEXT
 );
+CREATE UNIQUE INDEX IF NOT EXISTS prompts_import ON user_prompts(import_id) WHERE import_id IS NOT NULL;
 CREATE VIRTUAL TABLE IF NOT EXISTS observations_fts USING fts5(
   title, content, type, topic_key, content='observations', content_rowid='id', tokenize='trigram'
 );
@@ -127,6 +131,14 @@ const addMonths = (date, months) => {
   d.setUTCMonth(d.getUTCMonth() + months)
   return d.toISOString()
 }
+// isoTime reads an export timestamp; engram writes RFC 3339, older rows may be 'YYYY-MM-DD HH:MM:SS' (UTC).
+const isoTime = (text) => {
+  const d = new Date(/^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d$/.test(text) ? `${text.replace(' ', 'T')}Z` : text)
+  if (Number.isNaN(d.getTime())) throw new Error(`invalid timestamp in export: ${JSON.stringify(text)}`)
+  return d.toISOString()
+}
+const EXPORT_VERSIONS = ['0.1.0', '0.2.0']
+const projectName = (name) => String(name ?? '').trim().toLowerCase()
 const reviewAfter = (type, from) => (type in REVIEW_MONTHS ? addMonths(from, REVIEW_MONTHS[type]) : null)
 
 // openMemory returns the store of the repository containing cwd, or null outside one.
@@ -376,6 +388,65 @@ function makeStore(db, path, now) {
 
     // hasHash is true when a live (not soft-deleted) observation has this normalized_hash.
     hasHash: (hash) => Boolean(one('SELECT 1 AS found FROM observations WHERE normalized_hash = ? AND deleted_at IS NULL', hash)),
+
+    // importExport loads one project of an engram export (versions 0.1.0 and 0.2.0) as history, in
+    // one transaction: original timestamps kept, no dedup or topic_key upsert, redaction and the cap
+    // still applied. Each row's sync_id (or id) is stored, so a re-run skips what is already in.
+    importExport(data, { project } = {}) {
+      if (data === null || typeof data !== 'object' || Array.isArray(data)) throw new Error('not an engram export')
+      if (!EXPORT_VERSIONS.includes(data.version)) throw new Error(`unsupported export version ${JSON.stringify(data.version)} (accepted: ${EXPORT_VERSIONS.join(', ')})`)
+      const list = (key) => {
+        if (data[key] === undefined) return []
+        if (!Array.isArray(data[key])) throw new Error(`not an engram export: ${key} is not a list`)
+        return data[key]
+      }
+      const sessions = list('sessions')
+      const observations = list('observations')
+      const prompts = list('prompts')
+      const projectOfSession = new Map(sessions.map((s) => [s.id, projectName(s.project)]))
+      const projectOf = (row) => projectName(row.project) || projectOfSession.get(row.session_id) || ''
+      const projects = [...new Set([...sessions.map((s) => projectName(s.project)), ...observations.map(projectOf), ...prompts.map(projectOf)])].filter(Boolean).sort()
+      let chosen = projectName(project)
+      if (chosen === '' && projects.length > 1) throw new Error(`the export holds ${projects.length} projects; pick one with --project: ${projects.join(', ')}`)
+      if (chosen === '') chosen = projects[0] ?? ''
+      else if (!projects.includes(chosen)) throw new Error(`project ${JSON.stringify(chosen)} is not in the export; it holds: ${projects.join(', ') || 'nothing'}`)
+      const idOf = (kind, row) => (row.sync_id ? String(row.sync_id) : `${kind}:${chosen}:${row.id}`)
+      const counts = { observations: 0, sessions: 0, prompts: 0, skipped: 0, deleted: 0 }
+      return write(() => {
+        for (const s of sessions.filter((r) => projectName(r.project) === chosen)) {
+          const { changes } = run('INSERT OR IGNORE INTO sessions (id, started_at, ended_at, summary) VALUES (?, ?, ?, ?)', s.id, s.started_at, s.ended_at ?? null, s.summary ? stripPrivate(s.summary) : null)
+          if (changes) counts.sessions++
+          else counts.skipped++
+        }
+        for (const o of observations.filter((r) => projectOf(r) === chosen)) {
+          if (o.deleted_at) {
+            counts.deleted++
+            continue
+          }
+          const importId = idOf('obs', o)
+          if (one('SELECT 1 AS found FROM observations WHERE import_id = ?', importId)) {
+            counts.skipped++
+            continue
+          }
+          const title = clean(o.title, 'title')
+          const body = capContent(clean(o.content, 'content'))
+          const type = o.type || 'manual'
+          run('INSERT INTO observations (session_id, type, title, content, topic_key, normalized_hash, revision_count, duplicate_count, last_seen_at, review_after, created_at, updated_at, import_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            o.session_id || null, type, title, body, normalizeTopicKey(o.topic_key) || null, normalizedHash(body), o.revision_count ?? 0, o.duplicate_count ?? 0, o.last_seen_at || o.updated_at || o.created_at, reviewAfter(type, isoTime(o.created_at)), o.created_at, o.updated_at || o.created_at, importId)
+          counts.observations++
+        }
+        for (const p of prompts.filter((r) => projectOf(r) === chosen)) {
+          const importId = idOf('prompt', p)
+          if (one('SELECT 1 AS found FROM user_prompts WHERE import_id = ?', importId)) {
+            counts.skipped++
+            continue
+          }
+          run('INSERT INTO user_prompts (session_id, content, created_at, import_id) VALUES (?, ?, ?, ?)', p.session_id, clean(p.content, 'content'), p.created_at, importId)
+          counts.prompts++
+        }
+        return counts
+      })
+    },
 
     close: () => db.close(),
   }

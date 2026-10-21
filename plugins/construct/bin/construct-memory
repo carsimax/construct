@@ -14,6 +14,7 @@ const USAGE = `usage: construct-memory <command> [options]
   delete <id>
   summary --session <id>            summary on stdin; stores it and ends the session
   review list | review done <id>
+  import <file> [--project <name>]  load one project of an engram export JSON file (versions 0.1.0, 0.2.0)
   help`
 
 class UsageError extends Error {}
@@ -66,11 +67,13 @@ function main(argv) {
   const { values, positionals } = parseArgs({
     args: rest,
     allowPositionals: true,
-    options: { type: { type: 'string' }, limit: { type: 'string' }, any: { type: 'boolean' }, history: { type: 'boolean' }, session: { type: 'string' } },
+    options: { type: { type: 'string' }, limit: { type: 'string' }, any: { type: 'boolean' }, history: { type: 'boolean' }, session: { type: 'string' }, project: { type: 'string' } },
   })
-  const known = ['save', 'search', 'get', 'context', 'update', 'delete', 'summary', 'review']
+  const known = ['save', 'search', 'get', 'context', 'update', 'delete', 'summary', 'review', 'import']
   if (!known.includes(command)) fail(`unknown command: ${command} (run construct-memory help)`)
   if (command === 'review' && !['list', 'done'].includes(positionals[0])) fail('review needs list or done <id>')
+
+  if (command === 'import' && !positionals[0]) fail('import needs a file: construct-memory import <file> [--project <name>]')
 
   const store = openMemory(process.cwd())
   if (!store) fail('memory is off: not inside a git repository')
@@ -111,6 +114,22 @@ function main(argv) {
         if (!summary.trim()) fail('summary content is required on stdin')
         store.endSession(values.session, summary)
         return `summary saved, session ${values.session} ended\n`
+      }
+      case 'import': {
+        let text
+        try {
+          text = readFileSync(positionals[0], 'utf8')
+        } catch (error) {
+          fail(`cannot read ${positionals[0]}: ${error.code ?? error.message}`)
+        }
+        let data
+        try {
+          data = JSON.parse(text)
+        } catch {
+          fail(`${positionals[0]} is not valid JSON`)
+        }
+        const n = store.importExport(data, { project: values.project })
+        return `imported ${n.observations} observations, ${n.sessions} sessions, ${n.prompts} prompts; skipped ${n.skipped} already imported, ${n.deleted} deleted\n`
       }
       case 'review': {
         if (positionals[0] === 'list') {
