@@ -1,10 +1,12 @@
-// S6: the publication gate hook, driven as a real PreToolUse hook on Bash.
+// S2, S6: the publication gate hook, driven as a real PreToolUse hook on Bash: it decides from the
+// Risk column of the feature documents the branch changed and the verdicts in the review store.
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { applyFiles, captureAll, commitAll, git, highRepo, makeRepo, review, scratchDir, start } from '../review/helpers.mjs'
+import { applyFiles, commitAll, git, makeRepo, scratchDir } from '../helpers/repo.mjs'
+import { readVerdicts, subjectHash, writeVerdict } from '../../plugins/construct/hooks/scripts/review-store.mjs'
 
 const PLUGIN = new URL('../../plugins/construct/', import.meta.url).pathname
 const HOOK = join(PLUGIN, 'hooks/scripts/publication-gate.mjs')
@@ -26,19 +28,27 @@ function hook(command, cwd, e = env(), { input, tool_name = 'Bash' } = {}) {
   return { status: result.status, stdout: result.stdout, stderr: result.stderr, json, decision: json?.hookSpecificOutput?.permissionDecision, reason: json?.hookSpecificOutput?.permissionDecisionReason }
 }
 
-// featureRepo: main holds the base commit; feat adds one committed high-risk unit.
-function featureRepo() {
-  const repo = highRepo()
+const TABLE = (risk) => `# Feature\n\n## Tasks\n\n| ID | Specs | Task | Route | Risk | Status | Commit |\n|---|---|---|---|---|---|---|\n| T1 | S1 | work | odd-worker | ${risk} | done | \`abc\` |\n\n## Log\n\n- 1 | none | x\n`
+
+// featureRepo: main holds the base commit; feat adds one committed unit whose feature document has the given Risk cell.
+function featureRepo(risk = '2') {
+  const repo = makeRepo({ 'src/app.js': 'export const a = 1\n' })
   git(repo, 'checkout', '-q', '-b', 'feat')
-  commitAll(repo, 'high-risk unit')
+  applyFiles(repo, { 'odd/tasks/f.md': TABLE(risk), 'src/app.js': 'export const a = 2\n' })
+  commitAll(repo, 'unit')
   return repo
 }
+
+// subjectOf is the review subject of the checked-out branch against main.
+const subjectOf = (repo) => subjectHash(git(repo, 'rev-parse', 'main^{tree}').trim(), git(repo, 'rev-parse', 'HEAD^{tree}').trim())
+const approve = (repo, lens, subject = subjectOf(repo), approved = true) => writeVerdict(repo, { lens, subject_hash: subject, approved, at: Date.now(), result: {} })
 
 const denied = (r) => {
   assert.equal(r.status, 0)
   assert.equal(r.decision, 'deny', r.stdout)
   assert.match(r.reason, /publication-gate/)
-  assert.match(r.reason, /odd-review start/)
+  assert.match(r.reason, /review-risk/)
+  assert.match(r.reason, /construct:rdd-review/)
 }
 const silent = (r) => {
   assert.equal(r.status, 0)
@@ -51,7 +61,7 @@ describe('registration', () => {
     const entry = hooks.hooks.PreToolUse.find((e) => e.hooks.some((h) => h.args?.[0]?.endsWith('publication-gate.mjs')))
     assert.ok(entry)
     assert.equal(entry.matcher, 'Bash')
-    assert.deepEqual(entry.hooks[0], { type: 'command', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/hooks/scripts/publication-gate.mjs'], timeout: 30 })
+    assert.deepEqual(entry.hooks[0], { type: 'command', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/hooks/scripts/publication-gate.mjs'], timeout: 30, onFailure: 'block' })
   })
 
   test('hooks.json registers no secret-guard hook', () => {
@@ -100,10 +110,12 @@ describe('publication commands are gated', () => {
     denied(hook(`cd ${repo} && git push`, scratchDir('odd-pub-elsewhere-')))
   })
 
-  test('the reason names the gate', () => {
+  test('the reason names the gate, the subject line, and the skill', () => {
     assert.match(hook('git push', repo).reason, /pre-push/)
     assert.match(hook('gh pr create', repo).reason, /pre-pr/)
     assert.match(hook('gh release create v1', repo).reason, /release/)
+    const mergeBase = git(repo, 'merge-base', 'main', 'HEAD').trim()
+    assert.match(hook('git push', repo).reason, new RegExp(`Review subject: ${mergeBase}`))
   })
 })
 
@@ -141,42 +153,99 @@ describe('other commands are untouched', () => {
   })
 })
 
-describe('allows when nothing is due, RDD is off, or a receipt covers the range', () => {
-  test('RDD off', () => {
-    const e = env()
-    const repo = featureRepo()
-    review(repo, ['mode', 'disable'], { env: e })
-    silent(hook('git push', repo, e))
-  })
-
-  test('a passive change', () => {
-    const repo = makeRepo({ 'src/app.js': 'export const a = 1\n' })
-    git(repo, 'checkout', '-q', '-b', 'feat')
-    applyFiles(repo, { 'docs/note.md': 'a note\n' })
-    commitAll(repo, 'docs')
+describe('the decision follows the Risk items and the verdicts', () => {
+  test('only none risks allow', () => {
+    const repo = featureRepo('none')
     silent(hook('git push', repo))
     silent(hook('gh pr create', repo))
   })
 
-  test('an approved receipt for the published tree', () => {
-    const e = env()
-    const repo = featureRepo()
-    const txn = start(repo, { args: ['--base-ref', 'main', '--committed-only'] })
-    captureAll(repo, txn)
-    assert.equal(review(repo, ['acknowledge', '--lineage', txn.lineage], { env: e }).status, 0)
-    silent(hook('git push', repo, e))
-    silent(hook('gh pr create', repo, e))
-    silent(hook('gh release create v1', repo, e))
+  test('a branch without a feature document allows', () => {
+    const repo = makeRepo({ 'src/app.js': 'export const a = 1\n' })
+    git(repo, 'checkout', '-q', '-b', 'feat')
+    applyFiles(repo, { 'src/app.js': 'export const a = 2\n' })
+    commitAll(repo, 'code')
+    silent(hook('git push', repo))
   })
 
-  test('a push of a branch that is not the checked-out one is judged by its own range', () => {
-    const repo = makeRepo({ 'src/app.js': 'export const a = 1\n' })
-    git(repo, 'checkout', '-q', '-b', 'quiet')
-    git(repo, 'checkout', '-q', '-b', 'feat')
-    applyFiles(repo, { 'scripts/build.sh': 'echo hi\n' })
-    commitAll(repo, 'high')
-    silent(hook('git push origin quiet', repo))
-    denied(hook('git push origin feat', repo))
+  test('Risk 2 without a verdict is denied, naming review-risk', () => {
+    const r = hook('git push', featureRepo('2'))
+    denied(r)
+    assert.match(r.reason, /no verdict from review-risk/)
+    assert.doesNotMatch(r.reason, /review-reliability/)
+  })
+
+  test('cells read an integer or a comma list at the start: "3 (text)" and "1, 3"', () => {
+    assert.match(hook('git push', featureRepo('3 (contract text)')).reason, /review-reliability/)
+    const r = hook('git push', featureRepo('1, 3'))
+    assert.match(r.reason, /review-reliability, review-resilience, review-risk/)
+  })
+
+  test('an approved verdict for the exact subject allows, every required lens needed', () => {
+    const repo = featureRepo('1')
+    approve(repo, 'review-risk')
+    const partial = hook('git push', repo)
+    assert.equal(partial.decision, 'deny')
+    assert.match(partial.reason, /no verdict from review-resilience/)
+    approve(repo, 'review-resilience')
+    silent(hook('git push', repo))
+    silent(hook('gh pr create', repo))
+    silent(hook('gh release create v1', repo))
+  })
+
+  test('a verdict for an older subject is not enough after a new commit', () => {
+    const repo = featureRepo('2')
+    approve(repo, 'review-risk')
+    silent(hook('git push', repo))
+    applyFiles(repo, { 'src/app.js': 'export const a = 3\n' })
+    commitAll(repo, 'later')
+    denied(hook('git push', repo))
+  })
+
+  test('an unapproved verdict is denied and named as rejected', () => {
+    const repo = featureRepo('2')
+    approve(repo, 'review-risk', subjectOf(repo), false)
+    const r = hook('git push', repo)
+    denied(r)
+    assert.match(r.reason, /not approved by review-risk/)
+  })
+
+  test('the seeded verdict is the one the gate reads', () => {
+    const repo = featureRepo('2')
+    approve(repo, 'review-risk')
+    assert.equal(readVerdicts(repo, subjectOf(repo))['review-risk'].approved, true)
+  })
+
+  test('a deleted feature document adds no risk, a merged-in default branch adds none', () => {
+    const repo = featureRepo('none')
+    git(repo, 'rm', '-q', 'odd/tasks/f.md')
+    commitAll(repo, 'drop')
+    silent(hook('git push', repo))
+  })
+
+  test('no resolvable default branch is denied with the reason', () => {
+    const repo = featureRepo('none')
+    git(repo, 'branch', '-m', 'main', 'trunk')
+    const r = hook('git push', repo)
+    assert.equal(r.decision, 'deny')
+    assert.match(r.reason, /default branch cannot be resolved/)
+  })
+
+  test('a gh pr create --base branch is the default branch to compare with', () => {
+    const repo = featureRepo('2')
+    git(repo, 'branch', '-m', 'main', 'trunk')
+    denied(hook('gh pr create --base trunk', repo))
+    git(repo, 'checkout', '-q', 'trunk')
+    silent(hook('gh pr create --base trunk', repo))
+  })
+
+  test('an unreadable document or git failure denies with a reason', () => {
+    const repo = featureRepo('2')
+    git(repo, 'checkout', '-q', '--orphan', 'orphan')
+    commitAll(repo, 'unrelated')
+    const r = hook('git push', repo)
+    assert.equal(r.decision, 'deny')
+    assert.match(r.reason, /could not be checked/)
   })
 })
 
@@ -194,23 +263,18 @@ describe('an unreadable push source is judged as HEAD', () => {
   for (const command of cases) test(`denies: ${command}`, () => denied(hook(command, repo)))
 
   test('the same refs allow when HEAD is not due', () => {
-    const quiet = makeRepo({ 'src/app.js': 'export const a = 1\n' })
-    git(quiet, 'checkout', '-q', '-b', 'feat')
-    applyFiles(quiet, { 'docs/note.md': 'a note\n' })
-    commitAll(quiet, 'docs')
+    const quiet = featureRepo('none')
     silent(hook('git push -u origin "$(git branch --show-current)"', quiet))
     silent(hook('git push origin no-such-branch', quiet))
   })
 
-  test('a bad_ref from the CLI is retried against HEAD, so it cannot allow what HEAD would deny', () => {
-    // A tag named like a branch does not resolve as a commit-less ref; the source below is a
-    // blob ref, which `rev-parse ^{commit}` rejects, so only the HEAD retry can decide.
+  test('a pushed blob ref is judged as HEAD', () => {
     const blob = git(repo, 'rev-parse', 'HEAD:src/app.js').trim()
     denied(hook(`git push origin ${blob}`, repo))
   })
 })
 
-describe('the hook fails open', () => {
+describe('the hook passes what it cannot judge', () => {
   test('not a repository', () => silent(hook('git push', scratchDir('odd-pub-norepo-'))))
   test('unreadable input', () => {
     silent(hook('', '', env(), { input: 'not json' }))
@@ -326,38 +390,18 @@ describe('both command views are analyzed', () => {
 
 describe('audit-findings T1', () => {
   const repo = featureRepo()
-  test('S14: bare cd, cd -, and pushd leave an unknown directory, so a push is denied', () => {
+  test('bare cd, cd -, and pushd leave an unknown directory, so a push is denied', () => {
     for (const c of ['cd && git push', 'cd - && git push', 'pushd && git push', 'popd && git push', 'cd -P && git push']) {
       const r = hook(c, repo)
       assert.equal(r.decision, 'deny', c)
       assert.match(r.reason, /directory the gate cannot resolve/, c)
     }
   })
-  test('S14: cd to a literal directory and pushd to one still resolve', () => {
+  test('cd to a literal directory and pushd to one still resolve', () => {
     for (const c of [`cd ${repo} && git push`, `pushd ${repo} && git push`, `cd -P ${repo} && git push`]) denied(hook(c, '/'))
   })
-  test('S1: --super-prefix and --config-env values are skipped before push', () => {
+  test('--super-prefix and --config-env values are skipped before push', () => {
     denied(hook('git --super-prefix x push origin feat', repo))
     denied(hook('git --config-env a=B push origin feat', repo))
-  })
-  test('S13: one deadline is shared by every odd-review spawn and expiry denies', () => {
-    const root = scratchDir('odd-pub-deadline-')
-    mkdirSync(join(root, 'hooks/scripts'), { recursive: true })
-    mkdirSync(join(root, 'bin'))
-    for (const f of ['publication-gate.mjs', 'shell-words.mjs', 'hook-io.mjs']) {
-      let text = readFileSync(join(PLUGIN, 'hooks/scripts', f), 'utf8')
-      if (f === 'publication-gate.mjs') text = text.replace('const TIMEOUT_MS = 25000', 'const TIMEOUT_MS = 1500')
-      writeFileSync(join(root, 'hooks/scripts', f), text)
-    }
-    writeFileSync(join(root, 'bin/odd-review'), '#!/bin/sh\nsleep 5\n', { mode: 0o755 })
-    const started = Date.now()
-    const result = spawnSync('node', [join(root, 'hooks/scripts/publication-gate.mjs')], {
-      input: JSON.stringify({ session_id: 's', cwd: repo, tool_name: 'Bash', tool_input: { command: 'git push origin feat; git push origin feat2; gh pr create' } }),
-      encoding: 'utf8',
-    })
-    const out = JSON.parse(result.stdout).hookSpecificOutput
-    assert.equal(out.permissionDecision, 'deny')
-    assert.match(out.permissionDecisionReason, /did not finish/)
-    assert.ok(Date.now() - started < 4000, `took ${Date.now() - started} ms`)
   })
 })

@@ -1,32 +1,29 @@
 // Publication gate (PreToolUse on Bash). Before `git push`, `gh pr create`, or
-// `gh release create` it runs `odd-review validate --gate pre-push|pre-pr|release` and denies
-// the call when the gate reports review_required. Outcomes of the CLI:
-//   exit 1 review_required   deny;
-//   exit 1 bad_ref           the hook passed a ref the CLI cannot read: the gate runs again
-//                            for HEAD (the checked-out branch) and that verdict decides, so
-//                            an unreadable ref never allows what HEAD would deny;
-//   deadline                 all spawns of one hook call share one deadline (25 s, under the
-//                            hook's 30 s); on expiry the call is denied;
-//   anything else            allow (no repository, usage or internal errors, unreadable
-//                            input): the hook fails open, as the other gates do.
-// A push source containing `$` or a backtick (an unexpanded substitution or variable), or
-// one that does not resolve to a commit, is judged as HEAD.
+// `gh release create` it decides from the feature documents the branch changed:
+//   - the default branch and its merge-base with HEAD come from git (origin/HEAD, origin or local
+//     main/master; a `gh pr create --base` branch is tried first); when none resolves, deny;
+//   - the `odd/tasks/*.md` files changed in merge-base..HEAD are read at HEAD, and the integers
+//     1-6 at the start of each Risk cell of their Tasks table name the Risk items;
+//   - requiredLenses(items) (review-lenses.mjs) says which lenses must have approved the subject,
+//     the hash of the merge-base tree and the HEAD tree (review-store.mjs). None required: allow;
+//     a required lens without a verdict, or with an unapproved one: deny, naming the lenses, the
+//     `Review subject: <merge-base sha>` line, and the construct:rdd-review skill;
+//   - any error while deciding (git failure, unreadable document) denies with its reason. Outside a
+//     git repository there is nothing to publish, so the call passes.
+// The decision is about HEAD whatever the pushed refspec is: new commits change the subject, so
+// the review must run again. The hook entry sets onFailure: "block", so a crash denies as well.
 // Commands are found through the unwrapping shell-words.mjs does (`sh -c [--]`, `env -S`, `eval`,
 // `$(...)`, backticks, wrappers such as sudo or env), `git -C DIR`, and a preceding `cd DIR`. A
 // directory with a variable or substitution other than ~ or $HOME cannot be checked: it is denied. A dry run and a branch deletion publish no
 // work, so they are not gated.
 // Usage: node publication-gate.mjs   (hook JSON on stdin)
-import { spawnSync } from 'node:child_process'
-import { basename, dirname, join, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { resolve } from 'node:path'
+import { git, repositoryRoot } from './git-tree.mjs'
 import { readInput } from './hook-io.mjs'
+import { requiredLenses } from './review-lenses.mjs'
+import { readVerdicts, subjectHash } from './review-store.mjs'
 import { extractHeredocs, GIT_VALUE_FLAGS, nestedLines, splitCommands, substitutionBodies } from './shell-words.mjs'
 
-const BIN = join(dirname(fileURLToPath(import.meta.url)), '../../bin/odd-review')
-// One deadline for every `odd-review` spawn of a hook call; the hook's own timeout is 30 s.
-const TIMEOUT_MS = 25000
-let deadline = Date.now() + TIMEOUT_MS
-const EXPIRED = { code: 'deadline', message: `publication-gate: the review check did not finish within ${TIMEOUT_MS / 1000} s, so this publication is denied. Run it again, or run \`odd-review validate\` yourself first.` }
 const MAX_DEPTH = 4
 const PUSH_VALUE_FLAGS = new Set(['--repo', '-o', '--push-option', '--receive-pack', '--exec', '--force-with-lease-value'])
 const GH_VALUE_FLAGS = new Set(['-R', '--repo', '--hostname'])
@@ -240,70 +237,72 @@ function publicationsIn(text, cwd, depth) {
   return found
 }
 
-function resolves(dir, ref) {
-  if (!ref || ref.startsWith('-')) return false
-  return spawnSync('git', ['-C', dir, 'rev-parse', '--verify', '-q', `${ref}^{commit}`], { stdio: 'ignore' }).status === 0
+const out = (root, args) => git(root, args).toString('utf8').trim()
+const ok = (root, ref) => git(root, ['rev-parse', '--verify', '-q', `${ref}^{commit}`], { okStatuses: [0, 1] }).toString('utf8').trim() !== ''
+
+// defaultBranch returns the first resolvable candidate: a `gh pr create --base` branch, origin's HEAD,
+// then origin or local main and master; null when none exists.
+function defaultBranch(root, base) {
+  const head = git(root, ['symbolic-ref', '-q', 'refs/remotes/origin/HEAD'], { okStatuses: [0, 1] }).toString('utf8').trim()
+  const named = base && !base.startsWith('-') ? [`refs/remotes/origin/${base.replace(/^refs\/heads\//, '')}`, `refs/heads/${base.replace(/^refs\/heads\//, '')}`] : []
+  const candidates = [...named, head, ...['main', 'master'].flatMap((b) => [`refs/remotes/origin/${b}`, `refs/heads/${b}`])]
+  return candidates.find((ref) => ref && ok(root, ref)) ?? null
 }
 
-const branchOf = (ref) => ref.replace(/^refs\/heads\//, '')
-
-// gateArgs maps a publication to `odd-review validate` arguments: a pushed source is the head,
-// a known remote-tracking branch is the base, a PR base branch is the base, and a release
-// target is the head. Anything that does not resolve locally is left to the CLI's defaults.
-function gateArgs(pub) {
-  const args = ['--gate', pub.gate]
-  if (pub.gate === 'pre-push') {
-    const spec = (pub.refspecs[0] ?? '').replace(/^\+/, '')
-    const [src, dst] = spec.split(':')
-    if (src && src !== 'HEAD' && !/[$`]/.test(src) && resolves(pub.dir, src)) args.push('--head-ref', src)
-    const branch = branchOf(dst || src || '')
-    if (pub.remote && branch && branch !== 'HEAD' && resolves(pub.dir, `refs/remotes/${pub.remote}/${branch}`)) args.push('--base-ref', `refs/remotes/${pub.remote}/${branch}`)
-  } else if (pub.gate === 'pre-pr') {
-    const base = pub.base && branchOf(pub.base)
-    if (base) {
-      const ref = [`refs/remotes/origin/${base}`, `refs/heads/${base}`].find((candidate) => resolves(pub.dir, candidate))
-      if (ref) args.push('--base-ref', ref)
+// riskItems reads the Risk column of the Tasks table: the integers 1-6 at the start of each cell, or in a comma list.
+function riskItems(markdown) {
+  const items = new Set()
+  let inTasks = false
+  let column = -1
+  for (const line of markdown.split('\n')) {
+    if (/^##\s/.test(line)) {
+      inTasks = /^##\s+Tasks\s*$/.test(line)
+      column = -1
+    } else if (inTasks && line.trim().startsWith('|')) {
+      const cells = line.trim().replace(/^\||\|$/g, '').split('|').map((c) => c.trim())
+      if (column < 0) column = cells.findIndex((c) => c.toLowerCase() === 'risk')
+      else if (cells[column] !== undefined) {
+        for (const n of /^\d+(?:\s*,\s*\d+)*/.exec(cells[column])?.[0].split(',') ?? []) if (Number(n) >= 1 && Number(n) <= 6) items.add(Number(n))
+      }
     }
-  } else {
-    if (pub.tag) args.push('--tag', pub.tag)
-    if (pub.target && resolves(pub.dir, pub.target)) args.push('--head-ref', pub.target)
   }
-  return args
-}
-
-// gateError runs the gate CLI and returns its refusal ({code, message}); null for exit 0 or
-// output that is not a refusal. A spawn that outlives the shared deadline is the EXPIRED refusal.
-function gateError(dir, args) {
-  const left = deadline - Date.now()
-  if (left <= 0) return EXPIRED
-  const run = spawnSync(BIN, ['--cwd', dir, 'validate', ...args], { encoding: 'utf8', timeout: left })
-  if (run.error?.code === 'ETIMEDOUT') return EXPIRED
-  if (run.status !== 1) return null
-  try {
-    const error = JSON.parse(run.stderr).error
-    return typeof error?.code === 'string' && typeof error.message === 'string' ? error : null
-  } catch {
-    return null
-  }
+  return items
 }
 
 function verdict(pub) {
-  const refspecs = pub.gate === 'pre-push' && pub.refspecs.length > 1 ? pub.refspecs : [pub.refspecs?.[0]]
-  for (const spec of refspecs) {
-    const single = pub.gate === 'pre-push' ? { ...pub, refspecs: spec === undefined ? [] : [spec] } : pub
-    let error = gateError(pub.dir, gateArgs(single))
-    if (error?.code === 'bad_ref') error = gateError(pub.dir, ['--gate', pub.gate])
-    if (error?.code === 'deadline') return error.message
-    if (error?.code === 'review_required') return `publication-gate: ${error.message}`
+  let root
+  try {
+    root = repositoryRoot(pub.dir)
+  } catch {
+    return null
   }
-  return null
+  try {
+    const base = defaultBranch(root, pub.base)
+    if (!base) return 'publication-gate: the default branch cannot be resolved (no origin/HEAD, origin or local main or master), so the review state cannot be checked. Create or fetch it, then publish again.'
+    const mergeBase = out(root, ['merge-base', base, 'HEAD'])
+    const names = out(root, ['diff', '--name-only', '-z', '--diff-filter=d', mergeBase, 'HEAD', '--']).split('\0')
+    const items = new Set()
+    for (const path of names.filter((p) => /^odd\/tasks\/[^/]+\.md$/.test(p))) {
+      for (const item of riskItems(out(root, ['show', `HEAD:${path}`]))) items.add(item)
+    }
+    const required = requiredLenses(items)
+    if (required.length === 0) return null
+    const subject = subjectHash(out(root, ['rev-parse', `${mergeBase}^{tree}`]), out(root, ['rev-parse', 'HEAD^{tree}']))
+    const verdicts = readVerdicts(root, subject)
+    const missing = required.filter((lens) => verdicts[lens] === undefined)
+    const rejected = required.filter((lens) => verdicts[lens] !== undefined && verdicts[lens].approved !== true)
+    if (missing.length === 0 && rejected.length === 0) return null
+    const parts = [missing.length > 0 && `no verdict from ${missing.join(', ')}`, rejected.length > 0 && `not approved by ${rejected.join(', ')}`].filter(Boolean)
+    return `publication-gate: ${pub.gate} is denied because the branch's feature documents name Risk items ${[...items].sort().join(', ')} and HEAD is not reviewed: ${parts.join('; ')}. Run the construct:rdd-review skill with the subject line \`Review subject: ${mergeBase}\`, fix what a lens rejects, and publish again; new commits change the subject, so review after the last commit.`
+  } catch (error) {
+    return `publication-gate: the review state could not be checked (${error.message}), so this publication is denied.`
+  }
 }
 
 const unresolvable = (command) => `publication-gate: this publishes work from a directory the gate cannot resolve (${command}). Write the repository path literally (no variable or substitution besides ~ and $HOME), so the gate can check its review state.`
 
 function main() {
   const input = readInput()
-  deadline = Date.now() + TIMEOUT_MS
   if (!input || input.tool_name !== 'Bash' || typeof input.cwd !== 'string' || input.cwd === '') return
   const command = input.tool_input?.command
   if (typeof command !== 'string' || command === '') return
