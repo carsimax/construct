@@ -24,6 +24,18 @@ Before inspection, require the binding subject_hash to equal artifact_subject.su
 
 Inspect behavior, tests, boundaries, invalid inputs, failure paths, determinism, and regressions. Require externally observable assertions at the cheapest useful test level; report missing coverage only when it leaves candidate behavior unproved.
 
+## Review rules
+
+- Flag behavior changes without tests that assert the externally visible contract.
+- Flag tests that are implementation-centric instead of behavior-centric.
+- Flag missing edge cases: boundaries, invalid inputs, empty states, retries, failure paths.
+- Flag CI that can pass with `test.only`; require `forbidOnly` or equivalent.
+- Flag misallocated coverage: heavy end-to-end tests where cheaper deterministic unit or integration tests would cover the behavior.
+- Require evidence of determinism: same input, same output; external dependencies mocked or controlled.
+- Flag weak selectors in UI tests; prefer semantic, user-visible queries.
+- Do not flag intentional reliance on built-in async waiting over custom polling.
+- Require evidence that new APIs or components have example usage or a documented contract.
+
 ## Candidate-Causal Admission
 
 Report real user-impacting defects only. BLOCKER/CRITICAL need changed-hunk, created-path, differential-test, or before/after proof of introduced, behavior-activated, or worsened behavior. Mark unchanged defects pre-existing/base-only and unproved causality unknown. Style or suspicion is not a finding.
@@ -42,6 +54,8 @@ Severity rules. A BLOCKER or CRITICAL finding must be caused by this change -- t
 Each finding needs path:line or contiguous path:start-end, neutral claim, evidence class, causal disposition, and concrete proof. Never invent evidence or placeholders.
 
 ## Output
+
+Accepted `causal_disposition` values: `introduced`, `behavior-activated`, `worsened`, `pre-existing`, `base-only`, `unknown`. Accepted `evidence_class` values: `deterministic`, `inferential`, `insufficient`.
 
 Return one JSON object and no prose. Use exactly this result shape:
 

@@ -27,7 +27,7 @@ Load this skill before launching any subagent for ODD work, or when deciding whe
 | Evidence budget | Decide or verify within one parallel batch (at most 3 calls, about 10k tokens) | none: the parent reads |
 | Mapping | Needs more evidence than one batch, or more than about 5 sequential lookups | `construct:odd-explorer` (one), then re-evaluate task size |
 | Writer | Any authorized write to repository code, tests, or docs | `construct:odd-worker`, one per unit; disjoint units launched together, dependent units one after another |
-| Verification | The change's Risk line names a high-risk item, after its own checks | `construct:odd-verify` (one) |
+| Verification | A feature's end (one verifier over the whole feature document); per unit only when that unit's Risk line names a high-risk item, after its own checks | `construct:odd-verify` (one) |
 | Per action | Long suites, builds, installs, broad research | `construct:odd-general` |
 
 A unit is one independent piece of behavior with its code, tests, and docs together. Never split one behavior into separate test, docs, and code writers. A delivery that depends on another is not independent.
@@ -41,6 +41,21 @@ A unit is one independent piece of behavior with its code, tests, and docs toget
 5. Check each writer's diff against its surface before accepting it. Run one seam check (the full suite, once) after parallel units.
 6. Spot check one reported command yourself.
 7. Remove scratch paths that workers report.
+
+## Launch deduplication
+
+Keep a list of `(role, task fingerprint)` pairs launched this turn, where the fingerprint is a normalized summary of the task text. Never launch a second agent for a pair already launched while it runs or after it returned; emit one launch per distinct task.
+
+## Checking contract
+
+- Run formatters, generators, and normalizers before verification. After verification only check-only commands run; any byte change after it re-runs the affected checks.
+- Proof that is unavailable, partial, declined, or exhausted is never a pass. Report it as one **Needs your decision** result naming the missing proof.
+- A docs-only change gets a structural readback by the parent, not a verifier. Executable, operational, mode-changing, or unknown content gets the Verification trigger above.
+
+## Subagent memory
+
+- The parent searches engram for relevant project context and passes it in the prompt. Subagents do not search engram; `construct:odd-explorer` is the exception.
+- Include in each prompt: save validated project facts, decisions, and bug fixes with `mem_save` before returning.
 
 ## Parallel writers
 

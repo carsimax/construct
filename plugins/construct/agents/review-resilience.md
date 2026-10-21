@@ -24,6 +24,17 @@ Before inspection, require the binding subject_hash to equal artifact_subject.su
 
 Inspect failure handling, rollback or fix-forward behavior, retry safety, graceful degradation, observability, latency, and load. Require a concrete production failure mode or measured impact; do not report generic operational speculation.
 
+## Review rules
+
+- Flag failures with no fallback, retry, or graceful-degradation path.
+- Flag changes that ignore production error-rate or build/test thresholds already stated in the repository or request.
+- Flag releases that can regress without alerting or observability hooks.
+- Require evidence of rollback or fix-forward readiness: a concrete recovery path must exist.
+- Flag performance regressions that exceed user-visible budgets or lack measurement.
+- Flag missing production visibility for error or performance issues expected in the wild.
+- Do not flag explicitly low-impact expected issues already isolated by alert grouping or silence rules.
+- Require evidence of latency or load impact, not generic "might be slow" claims.
+
 ## Candidate-Causal Admission
 
 Report real user-impacting defects only. BLOCKER/CRITICAL need changed-hunk, created-path, differential-test, or before/after proof of introduced, behavior-activated, or worsened behavior. Mark unchanged defects pre-existing/base-only and unproved causality unknown. Style or suspicion is not a finding.
@@ -42,6 +53,8 @@ Severity rules. A BLOCKER or CRITICAL finding must be caused by this change -- t
 Each finding needs path:line or contiguous path:start-end, neutral claim, evidence class, causal disposition, and concrete proof. Never invent evidence or placeholders.
 
 ## Output
+
+Accepted `causal_disposition` values: `introduced`, `behavior-activated`, `worsened`, `pre-existing`, `base-only`, `unknown`. Accepted `evidence_class` values: `deterministic`, `inferential`, `insufficient`.
 
 Return one JSON object and no prose. Use exactly this result shape:
 
