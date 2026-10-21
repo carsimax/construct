@@ -285,3 +285,41 @@ describe('feature-state still works after the export', () => {
     assert.match(JSON.parse(r.stdout).hookSpecificOutput.additionalContext, /odd\/tasks\/feat\.md/)
   })
 })
+
+describe('concurrent admission (L7 gap)', () => {
+  test('parallel launches with overlapping surfaces admit exactly one', async () => {
+    const { spawn } = await import('node:child_process')
+    const launchAsync = (repo, e, prompt) =>
+      new Promise((done) => {
+        const child = spawn('node', [SCRIPT], { env: { ...process.env, ...e } })
+        let out = ''
+        child.stdout.on('data', (d) => (out += d))
+        child.on('close', () => done(out))
+        child.stdin.end(
+          JSON.stringify({ session_id: 'par', cwd: repo, hook_event_name: 'PreToolUse', tool_name: 'Agent', tool_input: { subagent_type: WORKER, prompt, description: 'u' } }),
+        )
+      })
+    for (let round = 0; round < 3; round++) {
+      const repo = plain()
+      const e = env()
+      const outs = await Promise.all(Array.from({ length: 8 }, (_, i) => launchAsync(repo, e, `${surfaces('src/a.js')}\nunit ${i}`)))
+      assert.equal(outs.filter((o) => o === '').length, 1, `round ${round}: ${outs.map((o) => (o ? 'deny' : 'admit')).join(',')}`)
+      assert.equal(readdirSync(join(e.CLAUDE_PLUGIN_DATA, 'delegation-admission', 'par')).filter((n) => !n.startsWith('.')).length, 1)
+    }
+  })
+  test('a stale lock is broken and the launch is admitted', () => {
+    const repo = plain()
+    const e = env()
+    const lock = join(e.CLAUDE_PLUGIN_DATA, 'delegation-admission', 's1.lock')
+    mkdirSync(lock, { recursive: true })
+    const old = new Date(Date.now() - 60_000)
+    utimesSync(lock, old, old)
+    allowed(launch(repo, e, WORKER, surfaces('src/a.js')))
+    assert.equal(readdirSync(join(e.CLAUDE_PLUGIN_DATA, 'delegation-admission', 's1')).length, 1)
+  })
+  test('no lock directory is left behind', () => {
+    const e = env()
+    allowed(launch(plain(), e, WORKER, surfaces('src/a.js')))
+    assert.deepEqual(readdirSync(join(e.CLAUDE_PLUGIN_DATA, 'delegation-admission')), ['s1'])
+  })
+})

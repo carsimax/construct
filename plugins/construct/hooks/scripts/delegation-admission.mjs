@@ -12,17 +12,21 @@
 // user row of agent_transcript_path (the subagent's prompt) and removes the record
 // with that hash. Records live under ${CLAUDE_PLUGIN_DATA}/delegation-admission/<session>/
 // and expire after SUBAGENT_MAX_IDLE_MS (one hour), like subagent-count.mjs entries.
-// Fails open on unreadable input or any internal error.
+// The check-then-record of open writers runs under an mkdir lock (withLock), so parallel
+// launches in one batch cannot both pass. Fails open on unreadable input, any internal
+// error, or a lock that cannot be taken. write-scope.mjs imports parseSurfaces and
+// firstUserPrompt (S3 reads the same section from the writer's own transcript).
 // Ported from gentle-shell lib/bounded-writer-admission.ts, lib/verifier-admission.ts
 // and lib/writer-surfaces.ts; the Spec rule is adapted (see S2 of odd/tasks/gentle-parity.md).
 // Usage: node delegation-admission.mjs [stop]   (hook JSON on stdin)
 import { createHash } from 'node:crypto'
 import { lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { isAbsolute, join, relative, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { activeDocuments, projectRoot } from './feature-state.mjs'
 import { dataDir, readInput, safeName, SUBAGENT_MAX_IDLE_MS } from './hook-io.mjs'
 
-const WRITERS = new Set(['construct:odd-worker', 'construct:jd-fix-agent'])
+export const WRITERS = new Set(['construct:odd-worker', 'construct:jd-fix-agent'])
 const VERIFIER = 'construct:odd-verify'
 
 const HEADING = /^## Allowed edit surfaces[ \t]*$/gim
@@ -52,7 +56,7 @@ function narrowPath(value, backticked) {
 }
 
 // parseSurfaces returns { paths } (sorted, unique) or { problem }.
-function parseSurfaces(prompt) {
+export function parseSurfaces(prompt) {
   let expected
   for (const heading of prompt.matchAll(HEADING)) {
     const lines = prompt.slice(heading.index + heading[0].length).split(/\r?\n/)
@@ -244,6 +248,43 @@ function record(session, root, prompt, surfaces) {
   }
 }
 
+const LOCK_WAIT_MS = 3000
+const LOCK_STALE_MS = 10_000
+
+// withLock runs fn while holding an mkdir lock next to the session's records (mkdir
+// is atomic across processes). A lock older than LOCK_STALE_MS belonged to a crashed
+// hook and is broken. If the lock cannot be taken within LOCK_WAIT_MS, or the state
+// directory is unusable, fn runs without it (fail open, as before the lock existed).
+function withLock(session, fn) {
+  const lock = `${recordDir(session)}.lock`
+  let held = false
+  const sleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
+  try {
+    mkdirSync(join(lock, '..'), { recursive: true })
+    for (const start = Date.now(); !held && Date.now() - start < LOCK_WAIT_MS; ) {
+      try {
+        mkdirSync(lock)
+        held = true
+      } catch (error) {
+        if (error.code !== 'EEXIST') break
+        try {
+          if (Date.now() - statSync(lock).mtimeMs > LOCK_STALE_MS) rmSync(lock, { recursive: true, force: true })
+          else sleep(10)
+        } catch {
+          // the holder released it between the two calls: try again
+        }
+      }
+    }
+  } catch {
+    // no usable state directory: run unlocked
+  }
+  try {
+    fn()
+  } finally {
+    if (held) rmSync(lock, { recursive: true, force: true })
+  }
+}
+
 function admit(input) {
   const tool = input.tool_input
   if (input.tool_name !== 'Agent' || !tool || typeof tool !== 'object' || Array.isArray(tool)) return
@@ -266,22 +307,23 @@ function admit(input) {
     deny(`${type} needs a Spec line: no \`Spec:\` line in the prompt names an existing regular file under odd/tasks/. ${SPEC_FORM}`)
     return
   }
-  const pairs = []
-  for (const open of openWriters(input.session_id, root)) {
-    for (const mine of parsed.paths) for (const theirs of open.surfaces) if (surfacesOverlap(mine, theirs)) pairs.push(`${mine} / ${theirs}`)
-  }
-  if (pairs.length > 0) {
-    deny(
-      `${type} edit surfaces overlap those of a writer still open (${[...new Set(pairs)].slice(0, 5).join('; ')}). Wait for that writer to finish, or give each writer disjoint surfaces; an entry this check cannot interpret counts as overlapping.`,
-    )
-    return
-  }
-  // shortcut: check-then-record is not atomic, so two launches in one parallel batch can both pass; upgrade if the host serializes PreToolUse hooks per event.
-  record(input.session_id, root, prompt, parsed.paths)
+  withLock(input.session_id, () => {
+    const pairs = []
+    for (const open of openWriters(input.session_id, root)) {
+      for (const mine of parsed.paths) for (const theirs of open.surfaces) if (surfacesOverlap(mine, theirs)) pairs.push(`${mine} / ${theirs}`)
+    }
+    if (pairs.length > 0) {
+      deny(
+        `${type} edit surfaces overlap those of a writer still open (${[...new Set(pairs)].slice(0, 5).join('; ')}). Wait for that writer to finish, or give each writer disjoint surfaces; an entry this check cannot interpret counts as overlapping.`,
+      )
+      return
+    }
+    record(input.session_id, root, prompt, parsed.paths)
+  })
 }
 
 // firstUserPrompt reads the subagent's prompt: the first user row of its transcript.
-function firstUserPrompt(file) {
+export function firstUserPrompt(file) {
   for (const line of readFileSync(file, 'utf8').split('\n')) {
     if (!line) continue
     let row
@@ -312,9 +354,12 @@ function main() {
   else admit(input)
 }
 
-try {
-  main()
-} catch {
-  // Fail open: no output, exit 0.
+// Run only as a script; write-scope.mjs imports the helpers above.
+if (process.argv[1] && fileURLToPath(import.meta.url) === realpathSync(process.argv[1])) {
+  try {
+    main()
+  } catch {
+    // Fail open: no output, exit 0.
+  }
+  process.exitCode = 0
 }
-process.exitCode = 0

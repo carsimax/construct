@@ -1,12 +1,15 @@
 // PreToolUse hook: deny tool calls that touch secrets or run a catastrophic rm -rf, and
 // apply the destructive-command tiers of command-guard.mjs to Bash (deny, or ask).
-// Stands in for a permissions.deny list, which a plugin cannot set. Read-only: it
-// decides from the hook JSON alone and never touches the filesystem.
+// Edit/Write/MultiEdit/NotebookEdit also go through write-scope.mjs (main thread does not
+// write in the repository; a writer stays in its surfaces). Stands in for a
+// permissions.deny list, which a plugin cannot set. Read-only: the secret and command
+// rules decide from the hook JSON alone; write-scope only reads git and the transcript.
 // Usage: node secret-guard.mjs   (hook JSON on stdin: tool_name, tool_input, cwd)
 import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, isAbsolute, resolve } from 'node:path'
 import { commandVerdict } from './command-guard.mjs'
+import { writeScopeVerdict } from './write-scope.mjs'
 
 const TEMPLATES = new Set(['.env.example', '.env.sample', '.env.template'])
 const SHELLS = new Set(['bash', 'sh', 'zsh', 'dash', 'ksh'])
@@ -370,7 +373,13 @@ function evaluate(event) {
     const rule = ruleFor(p, resolve(cwd, expand(searchDir))) ?? globRule(expand(p))
     if (rule) return { rule, target: p }
   }
-  return null
+  // After the secret rules: who may write where (S3 writer surfaces, S4 main thread).
+  try {
+    return writeScopeVerdict(event)
+  } catch (error) {
+    process.stderr.write(`secret-guard: write-scope error, allowing (${error.message})\n`)
+    return null
+  }
 }
 
 // A secret verdict has a target and always denies; a command verdict carries its own
