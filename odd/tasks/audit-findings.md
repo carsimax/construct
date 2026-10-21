@@ -42,6 +42,7 @@ Source for every spec: the user's "trabaja en los 20 puntos" (L1) over the audit
 | T9 | S17 | dead `scanTasks` export | odd-worker | none | done | this commit |
 | T10 | L7 F3, F4 | `rm -r ./*` back to ask; gate uses `isSound` | odd-worker | 2 | done | `d0e4f58` |
 | T11 | L7 F1, F2 | newest pending record on a hashless reply; drop whole-file PEM check | odd-worker | 2 | done | `72579ff` |
+| T12 | release | bump 1.3.0 → 1.3.1 (`plugin.json`, `install.sh` ref and URL, README, install test) | odd-worker | 5 | done | `chore: release 1.3.1` |
 
 ## Log
 
@@ -55,3 +56,4 @@ Source for every spec: the user's "trabaja en los 20 puntos" (L1) over the audit
 - **L8 (2026-10-20, user + correction):** On fixing F3 and F4: "Corrige". T10: the `/*` recursion in `isRootOrHome` skips the cwd-less dot check (RED by reverting the guard → GREEN). Probe through the registered hook (secret-guard) vs `bfdd691`: `rm -r ./*`, `../*`, `rm -rf ./*`, `build/*` ask on both; `/*` deny on both; `~/*` ask → deny (intended, L3). `odd-assess cdce373..HEAD`: medium, no review due. `node --test tests/`: 1254 pass; `claude plugin test`: 160 pass. F1, F2 stay open follow-ups.
 - **L9 (2026-10-20, user + correction):** "Podemos atacar los pendientes?" T11 `72579ff`: `pendingFor` falls back to the newest record; the passive.mjs PEM check is deleted (the key-only scan reads added lines only). RED 2 → GREEN. `node --test tests/`: 1257 pass. `odd-assess 04cb656..HEAD`: medium, no review due. No follow-ups open.
 - **L10 (2026-10-20, user):** "mandemos pr". Pushed `fix/audit-findings`; PR #24 against main, one PR over the ~400-line budget (task commits are the slices).
+- **L11 (2026-10-20, user):** "Fusionado": PR #24 squash-merged as `c863e9a`. On preparing release 1.3.1: "sip". Branch `chore/release-1.3.1`.

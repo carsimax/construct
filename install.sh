@@ -3,7 +3,7 @@
 # codegraph MCP server, and merges the Construct settings into
 # ~/.claude/settings.json. Safe to run again; a second run changes nothing.
 #
-#   curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v1.3.0/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v1.3.1/install.sh | bash
 #   curl -fsSL .../install.sh | bash -s -- --no-mcp
 #
 # Runs under the macOS system bash (3.2): no associative arrays, no ${x,,}.
@@ -14,7 +14,7 @@ MIN_NODE=20
 ENGRAM_FORMULA=gentleman-programming/tap/engram
 ENGRAM_REPO=Gentleman-Programming/engram
 CONSTRUCT_REPO=carsimax/construct
-CONSTRUCT_REF=v1.3.0 # the release this script belongs to; keep in step with the URL above
+CONSTRUCT_REF=v1.3.1 # the release this script belongs to; keep in step with the URL above
 CONSTRUCT_PLUGIN=construct@construct
 CODEGRAPH_PACKAGE=@colbymchenry/codegraph
 
