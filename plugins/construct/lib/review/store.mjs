@@ -10,7 +10,7 @@ import {
 import { join, resolve } from 'node:path'
 import { git } from '../assess/git.mjs'
 import { Refusal } from './errors.mjs'
-import { assertLineage } from './identity.mjs'
+import { assertLineage, LINEAGE } from './identity.mjs'
 
 export const storeDir = (root) => join(resolve(root, git(root, ['rev-parse', '--git-common-dir']).toString().trim()), 'odd-review')
 
@@ -22,7 +22,7 @@ export const receiptPath = (root, target) => join(storeDir(root), 'receipts', `$
 
 export const receiptExists = (root, target) => existsSync(receiptPath(root, target))
 
-const TERMINAL_STATES = new Set(['escalated', 'acknowledged', 'abandoned', 'invalidated'])
+export const TERMINAL_STATES = new Set(['escalated', 'acknowledged', 'abandoned', 'invalidated'])
 // A review runs for minutes; one idle longer than this was abandoned.
 export const OPEN_LINEAGE_MAX_IDLE_MS = 6 * 3600 * 1000
 
@@ -34,7 +34,7 @@ export function openLineageTargets(root, now = Date.now()) {
   const dir = join(storeDir(root), 'transactions')
   let names
   try {
-    names = readdirSync(dir).filter((name) => /^review-[0-9a-f]{16}\.json$/.test(name))
+    names = readdirSync(dir).filter((name) => name.endsWith('.json') && LINEAGE.test(name.slice(0, -5)))
   } catch {
     return new Set()
   }
@@ -111,7 +111,13 @@ const processAlive = (pid) => {
   }
 }
 
-const LOCK_ATTEMPTS = 5
+// A live holder is waited for up to LOCK_WAIT_MS (parallel lens captures queue
+// instead of losing their result); a non-empty lock older than LOCK_MAX_AGE_MS is
+// stale even if its pid is alive (a recycled pid or a hung holder).
+const LOCK_WAIT_MS = 2000
+const LOCK_POLL_MS = 25
+const LOCK_MAX_AGE_MS = 60_000
+const sleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
 
 // inspectLock reads the lock and its identity (device, inode, content, mtime), or
 // returns null when the holder released it meanwhile (ENOENT).
@@ -177,16 +183,18 @@ function reclaimStale(lock, seen, locked) {
 
 // withLock runs fn while holding the transaction's lock file. Acquisition is
 // open(wx) plus the pid. A second writer is refused. A lock whose process is gone
-// (or an empty one older than EMPTY_LOCK_STALE_MS) is reclaimed through
-// reclaimStale, which verifies the file's identity under a reclaim lock, so a
-// live lock is never removed. A lock released while being inspected is acquired
-// on the next of a bounded number of attempts.
+// (an empty one older than EMPTY_LOCK_STALE_MS, or one older than LOCK_MAX_AGE_MS)
+// is reclaimed through reclaimStale, which verifies the file's identity under a
+// reclaim lock, so a live lock is never removed. A live holder is waited for up
+// to LOCK_WAIT_MS before the refusal; a lock released while being inspected is
+// acquired on the next attempt.
 export function withLock(root, lineage, fn) {
   const lock = transactionPath(root, lineage).replace(/\.json$/, '.lock')
   const locked = () => new Refusal('transaction_locked', `transaction ${lineage} is being written by another process; try again`)
   mkdirSync(join(lock, '..'), { recursive: true })
+  const deadline = Date.now() + LOCK_WAIT_MS
   let acquired = false
-  for (let attempt = 0; attempt < LOCK_ATTEMPTS && !acquired; attempt++) {
+  while (!acquired) {
     try {
       const fd = openSync(lock, 'wx')
       writeFileSync(fd, `${process.pid}\n`)
@@ -196,12 +204,12 @@ export function withLock(root, lineage, fn) {
       if (error.code !== 'EEXIST') throw error
       const seen = inspectLock(lock)
       if (seen === null) continue
-      const stale = seen.holder === null ? seen.ageMs > EMPTY_LOCK_STALE_MS : !processAlive(seen.holder)
-      if (!stale) throw locked()
-      reclaimStale(lock, seen, locked)
+      const stale = seen.holder === null ? seen.ageMs > EMPTY_LOCK_STALE_MS : seen.ageMs > LOCK_MAX_AGE_MS || !processAlive(seen.holder)
+      if (stale) reclaimStale(lock, seen, locked)
+      else if (Date.now() >= deadline) throw locked()
+      else sleep(LOCK_POLL_MS)
     }
   }
-  if (!acquired) throw locked()
   try {
     return fn()
   } finally {

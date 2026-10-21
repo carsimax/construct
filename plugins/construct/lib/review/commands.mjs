@@ -16,9 +16,9 @@ import { headCommit } from './boundary.mjs'
 import { buildContext, DEFAULT_CONTEXT_BYTES } from './evidence.mjs'
 import { Refusal } from './errors.mjs'
 import { REFUTER, VALIDATOR, newLineage, refuterSubjectHashOf, subjectHashOf, targetOf, manifestDigest, canonicalLens } from './identity.mjs'
-import { checkReceipt, correctionBudget, emptyCounters, MAX_CORRECTION_LINES, receiptHashes } from './receipt.mjs'
-import { reduceLenses } from './reduce.mjs'
-import { atomicCreate, readTransaction, receiptExists, receiptPath, withLock, writeTransaction } from './store.mjs'
+import { checkReceipt, correctionBudget, emptyCounters, isSound, MAX_CORRECTION_LINES, receiptHashes, receiptState } from './receipt.mjs'
+import { neutral, reduceLenses } from './reduce.mjs'
+import { atomicCreate, atomicWrite, readTransaction, receiptPath, TERMINAL_STATES, withLock, writeTransaction } from './store.mjs'
 import { validateLensResult, validateRefuterResult, validateValidatorResult } from './validate.mjs'
 
 export const SCHEMA = 'construct.review-transaction/v1'
@@ -55,7 +55,6 @@ const budgetOf = (transaction) => correctionBudget(transaction.changed_lines)
 // A transaction written before the counters existed reads as all zeros.
 const countersOf = (transaction) => ({ ...emptyCounters(), ...transaction.counters })
 
-const TERMINAL = ['escalated', 'acknowledged', 'abandoned', 'invalidated']
 const LIVE = ['collecting', 'refutation_required', 'correction_required', 'validation_required']
 
 // spent reports whether a one-shot counter is already used in a transaction
@@ -72,8 +71,6 @@ function exhaust(transaction, counter) {
   transaction.escalation = { reason: 'budget_exhausted', counter, finding_ids: [] }
   transition(transaction, 'escalated')
 }
-
-const neutral = (finding) => ({ id: finding.id, location: finding.location, severity: finding.severity, claim: finding.claim, proof_refs: finding.proof_refs })
 
 // view is the JSON every transition prints.
 function view(transaction, cwd, extra = {}) {
@@ -175,7 +172,8 @@ export function start({ root, cwd, baseRef, committedOnly, lenses: requested, le
     const assessment = assessSnapshotRisk({ root, baseTree: candidate.baseTree, candidateTree: candidate.candidateTree, isolation })
     if (assessment.changedPaths === 0) throw new Refusal('start_refused', 'the candidate has no pending changes; review committed work with --base-ref <commit>')
     const target = targetOf(candidate.baseTree, candidate.candidateTree, assessment.manifest)
-    if (receiptExists(root, target)) {
+    // A receipt that is not sound (damaged, legacy, transaction gone) does not block a new review.
+    if (soundReceiptAt(root, target)) {
       throw new Refusal('target_already_acknowledged', 'this exact candidate already has a receipt; change the candidate to review it again', { target })
     }
     const { risk, lenses, lensesReason } = requested ? { risk: publicRisk(assessment.level), lenses: requested, lensesReason: requestedReason } : assessedLenses(assessment, escalation, focus)
@@ -320,10 +318,6 @@ export function captureRefuter({ root, cwd, lineage, input }) {
   const result = readInput(input)
   return modify(root, lineage, (transaction) => {
     requireState(transaction, 'refutation_required')
-    if (spent(transaction, 'refuter_batches')) {
-      exhaust(transaction, 'refuter_batches')
-      return view(transaction, cwd)
-    }
     const valid = validateRefuterResult(result, {
       subjectHash: transaction.refutation_subject,
       expectedIds: transaction.refutation_batch.map((finding) => finding.id),
@@ -421,10 +415,6 @@ export function captureValidation({ root, cwd, lineage, input }) {
   const result = readInput(input)
   return modify(root, lineage, (transaction) => {
     requireState(transaction, 'validation_required')
-    if (spent(transaction, 'scoped_fix_validations')) {
-      exhaust(transaction, 'scoped_fix_validations')
-      return view(transaction, cwd)
-    }
     const valid = validateValidatorResult(result, {
       subjectHash: transaction.correction.subject_hash,
       expectedIds: transaction.to_correct.map((finding) => finding.id),
@@ -451,7 +441,7 @@ function close(transaction, state, reason) {
 
 export function abandon({ root, cwd, lineage, reason }) {
   return modify(root, lineage, (transaction) => {
-    if (TERMINAL.includes(transaction.state)) throw new Refusal('wrong_state', `the transaction is already ${transaction.state}`, { state: transaction.state })
+    if (TERMINAL_STATES.has(transaction.state)) throw new Refusal('wrong_state', `the transaction is already ${transaction.state}`, { state: transaction.state })
     close(transaction, 'abandoned', reason)
     return view(transaction, cwd)
   })
@@ -459,7 +449,7 @@ export function abandon({ root, cwd, lineage, reason }) {
 
 export function invalidate({ root, cwd, lineage, reason }) {
   return modify(root, lineage, (transaction) => {
-    if (TERMINAL.includes(transaction.state)) throw new Refusal('wrong_state', `the transaction is already ${transaction.state}`, { state: transaction.state })
+    if (TERMINAL_STATES.has(transaction.state)) throw new Refusal('wrong_state', `the transaction is already ${transaction.state}`, { state: transaction.state })
     if (transaction.state !== 'collecting' || Object.keys(transaction.results).length > 0 || countersOf(transaction).full_reviews > 0) {
       throw new Refusal('not_pristine', 'invalidate only closes a review that no lens has touched; use abandon', { state: transaction.state })
     }
@@ -495,12 +485,19 @@ function commitsOfReceipt(transaction, fix) {
   return out
 }
 
-function readReceiptLineage(root, target) {
+// receiptAt reads the receipt stored for a target, or null.
+function receiptAt(root, target) {
   try {
-    return JSON.parse(readFileSync(receiptPath(root, target), 'utf8')).lineage
+    const receipt = JSON.parse(readFileSync(receiptPath(root, target), 'utf8'))
+    return receipt && typeof receipt === 'object' ? receipt : null
   } catch {
     return null
   }
+}
+
+const soundReceiptAt = (root, target) => {
+  const receipt = receiptAt(root, target)
+  return receipt !== null && isSound(receiptState(root, receipt))
 }
 
 export function acknowledge({ root, cwd, lineage }) {
@@ -536,10 +533,14 @@ export function acknowledge({ root, cwd, lineage }) {
       // A crash after the receipt and before the transaction update leaves an
       // approved transaction with its own receipt: complete it. A receipt of
       // another lineage is a different review of the same candidate.
-      if (readReceiptLineage(root, target) !== lineage) {
+      const existing = receiptAt(root, target)
+      if (existing?.lineage === lineage) recovered = true
+      else if (existing !== null && isSound(receiptState(root, existing))) {
         throw new Refusal('target_already_acknowledged', 'this exact candidate already has a receipt', { target })
+      } else {
+        // The old receipt is damaged or its transaction is gone: this review replaces it.
+        atomicWrite(receiptPath(root, target), `${JSON.stringify(receipt, null, 2)}\n`)
       }
-      recovered = true
     }
     transition(transaction, 'acknowledged')
     transaction.acknowledged_at = now

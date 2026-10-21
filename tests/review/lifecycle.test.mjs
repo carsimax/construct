@@ -445,12 +445,24 @@ describe('idempotent acknowledge', () => {
     assert.equal(ack(repo, txn).json.recovered, undefined)
   })
 
-  test('a receipt naming a different lineage still refuses', () => {
-    const { repo, txn } = crashed('review-0123456789abcdef')
-    const refused = ack(repo, txn)
+  test('a sound receipt of a different lineage still refuses', () => {
+    const repo = highRepo()
+    const first = start(repo)
+    const second = start(repo)
+    captureAll(repo, first)
+    captureAll(repo, second)
+    assert.equal(ack(repo, first).status, 0)
+    const refused = ack(repo, second)
     assert.equal(refused.status, 1)
     assert.equal(refused.error.code, 'target_already_acknowledged')
-    assert.equal(readTransaction(repo, txn.lineage).state, 'approved')
+    assert.equal(readTransaction(repo, second.lineage).state, 'approved')
+  })
+
+  test('a receipt of a different lineage that is not sound is replaced (S6)', () => {
+    const { repo, txn } = crashed('review-0123456789abcdef')
+    const done = ack(repo, txn)
+    assert.equal(done.status, 0, done.stderr)
+    assert.equal(JSON.parse(readFileSync(storeReceiptPath(repo, txn.target), 'utf8')).lineage, txn.lineage)
   })
 })
 

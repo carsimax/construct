@@ -284,6 +284,47 @@ describe('store, locking and atomicity', () => {
     assert.ok(existsSync(lock), 'the foreign lock is left alone')
   })
 
+  test('a writer waits for a live holder that releases within the bound (S5)', async () => {
+    const repo = highRepo()
+    const txn = start(repo)
+    const lock = `${transactionFile(repo, txn.lineage).replace(/\.json$/, '')}.lock`
+    const holder = spawn(process.execPath, ['-e', `require('fs').writeFileSync(${JSON.stringify(lock)}, process.pid + '\\n'); setTimeout(() => { require('fs').unlinkSync(${JSON.stringify(lock)}) }, 600)`])
+    for (let i = 0; i < 100 && !existsSync(lock); i++) await new Promise((resolve) => setTimeout(resolve, 20))
+    const run = new Promise((resolve) => {
+      const child = spawn(process.execPath, [REVIEW_BIN, '--cwd', repo, 'capture', '--lineage', txn.lineage, '--lens', 'review-risk', '--input', '-'], { stdio: ['pipe', 'pipe', 'pipe'] })
+      child.on('close', resolve)
+      child.stdin.end(JSON.stringify(lensResult(txn.subjects['review-risk'], txn.manifest)))
+    })
+    assert.equal(await run, 0)
+    holder.kill()
+  })
+
+  test('four parallel writers on one lineage all land (S5)', async () => {
+    const repo = highRepo()
+    const txn = start(repo, { lenses: 'risk,resilience,readability,reliability' })
+    const run = (lens) =>
+      new Promise((resolve) => {
+        const child = spawn(process.execPath, [REVIEW_BIN, '--cwd', repo, 'capture', '--lineage', txn.lineage, '--lens', lens, '--input', '-'], { stdio: ['pipe', 'pipe', 'pipe'] })
+        child.on('close', resolve)
+        child.stdin.end(JSON.stringify(lensResult(txn.subjects[lens], txn.manifest)))
+      })
+    const statuses = await Promise.all(['review-risk', 'review-resilience', 'review-readability', 'review-reliability'].map(run))
+    assert.deepEqual(statuses, [0, 0, 0, 0])
+    assert.equal(Object.keys(readTransaction(repo, txn.lineage).results).length, 4)
+  })
+
+  test('a non-empty lock older than the bound is stale even if its pid is alive (S20)', () => {
+    const repo = highRepo()
+    const txn = start(repo)
+    const lock = `${transactionFile(repo, txn.lineage).replace(/\.json$/, '')}.lock`
+    writeFileSync(lock, `${process.pid}\n`)
+    const old = new Date(Date.now() - 3600_000)
+    utimesSync(lock, old, old)
+    const r = capture(repo, txn, 'review-risk', lensResult(hashOf(txn), txn.manifest))
+    assert.equal(r.status, 0, r.stderr)
+    assert.ok(!existsSync(lock))
+  })
+
   test('a lock left by a dead process is reclaimed', async () => {
     const repo = highRepo()
     const txn = start(repo)
