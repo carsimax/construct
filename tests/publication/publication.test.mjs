@@ -272,3 +272,24 @@ describe('target directories', () => {
     silent(hook('git -C ~/work push', elsewhere(), { ...env(), HOME: cleanHome }))
   })
 })
+
+// T14: substitution spans are scanned with quote state, so a quoted `)` or backtick does not end one early.
+describe('quoted delimiters inside substitutions do not hide a later push', () => {
+  const repo = featureRepo()
+  const cases = [
+    "echo $(echo ')'); git push origin feat",
+    'echo $(echo "a)b"); git push origin feat',
+    "echo `echo ')'`; git push origin feat",
+    "echo $(echo $(echo ')')); git push origin feat",
+    "echo $(echo \\)); git push origin feat",
+    'echo $(echo foo; git push origin feat',
+    "echo $(echo ')'; git push origin feat",
+  ]
+  for (const command of cases) test(`denies: ${command}`, () => denied(hook(command, repo)))
+
+  test('a substitution directory with a quoted paren is still unresolvable', () => {
+    const r = hook("git -C $(echo ')') push origin feat", repo)
+    assert.equal(r.decision, 'deny')
+    assert.match(r.reason, /literal/)
+  })
+})

@@ -29,22 +29,71 @@ const PUSH_VALUE_FLAGS = new Set(['--repo', '-o', '--push-option', '--receive-pa
 const GH_VALUE_FLAGS = new Set(['-R', '--repo', '--hostname'])
 const RELEASE_VALUE_FLAGS = new Set(['-t', '--title', '-n', '--notes', '-F', '--notes-file', '--target', '--notes-start-tag', '--discussion-category', '-R', '--repo'])
 
-// quoteSubstitutions wraps each unquoted `$(...)` or backtick span in double quotes. The tokenizer
-// would split such a span into commands of its own, so a directory argument like `git -C $(pwd)`
-// would vanish; quoted, it stays one word and is seen as unresolvable.
+// closingBacktick returns the index of the backtick that closes the span opened before `from`, or -1.
+function closingBacktick(text, from) {
+  for (let i = from; i < text.length; i++) {
+    if (text[i] === '\\') i++
+    else if (text[i] === '`') return i
+  }
+  return -1
+}
+
+// closingParen returns the index of the `)` that closes a `$(` whose body starts at `from`, or -1.
+// The body is scanned with quote state: a `)` inside single or double quotes, after a backslash,
+// or inside a nested `$(...)` or backtick span does not close it.
+function closingParen(text, from, inDouble = false) {
+  for (let i = from; i < text.length; i++) {
+    const c = text[i]
+    if (c === '\\') i++
+    else if (c === "'" && !inDouble) {
+      i = text.indexOf("'", i + 1)
+      if (i < 0) return -1
+    } else if (c === '"') {
+      if (inDouble) return -1
+      i = closingDouble(text, i + 1)
+      if (i < 0) return -1
+    } else if (c === '`') {
+      i = closingBacktick(text, i + 1)
+      if (i < 0) return -1
+    } else if (c === '$' && text[i + 1] === '(') {
+      i = closingParen(text, i + 2)
+      if (i < 0) return -1
+    } else if (c === ')') return i
+  }
+  return -1
+}
+
+// closingDouble returns the index of the `"` that closes a double-quoted string whose body starts
+// at `from`, or -1. Substitutions inside it are skipped whole.
+function closingDouble(text, from) {
+  for (let i = from; i < text.length; i++) {
+    const c = text[i]
+    if (c === '\\') i++
+    else if (c === '"') return i
+    else if (c === '`') {
+      i = closingBacktick(text, i + 1)
+      if (i < 0) return -1
+    } else if (c === '$' && text[i + 1] === '(') {
+      i = closingParen(text, i + 2)
+      if (i < 0) return -1
+    }
+  }
+  return -1
+}
+
+// quoteSubstitutions wraps each unquoted `$(...)` or backtick span in double quotes, because the
+// tokenizer would split such a span into commands of its own and `git -C $(pwd)` would lose its
+// directory; quoted, it stays one word and is seen as unresolvable. Span ends come from the
+// quote-aware scanners above. A span that never closes is left as written, so the tokenizer
+// still sees whatever follows it.
 function quoteSubstitutions(text) {
   let out = ''
   let quote = null
   for (let i = 0; i < text.length; i++) {
     const c = text[i]
     let end = -1
-    if (quote === null && c === '$' && text[i + 1] === '(') {
-      let depth = 0
-      for (let j = i + 1; j < text.length && end < 0; j++) {
-        if (text[j] === '(') depth++
-        else if (text[j] === ')' && --depth === 0) end = j
-      }
-    } else if (quote === null && c === '`') end = text.indexOf('`', i + 1)
+    if (quote === null && c === '$' && text[i + 1] === '(') end = closingParen(text, i + 2)
+    else if (quote === null && c === '`') end = closingBacktick(text, i + 1)
     if (end > i) {
       out += `"${text.slice(i, end + 1)}"`
       i = end
@@ -58,8 +107,7 @@ function quoteSubstitutions(text) {
   return out
 }
 
-// Heredoc bodies are data, not commands.
-// Heredoc bodies are data, not commands.
+// Heredoc bodies are data, not commands; substitutions are quoted into single words.
 const stripHeredocs = (command) => quoteSubstitutions(extractHeredocs(command).text)
 
 // resolveDir returns the directory a `-C`/`cd` argument names, or null when it cannot be known:
