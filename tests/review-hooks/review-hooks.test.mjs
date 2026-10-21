@@ -187,14 +187,63 @@ describe('capture hook', () => {
     assert.equal(readVerdicts(repo, binding.subject_hash)['review-risk'].approved, true)
   })
 
-  test('a malformed reply touches no record: it is ignored, the pending record stays (F9)', () => {
+  test('a prose reply with one pending record of the same session retries, then clears only that record (S5)', () => {
+    const repo = reviewed()
+    const binding = prepare(repo)
+    const dir = join(repo, '.git', 'construct-review', 'pending')
+    const file = join(dir, `review-risk.${binding.subject_hash}.json`)
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const r = hook(CAPTURE_HOOK, stopInput(repo, 'not json'))
+      assert.equal(r.json.decision, 'block')
+      assert.match(r.json.reason, /review-capture rejected/)
+      assert.equal(JSON.parse(readFileSync(file, 'utf8')).attempts, attempt + 1)
+    }
+    assert.equal(hook(CAPTURE_HOOK, stopInput(repo, 'not json')).stdout, '')
+    assert.equal(existsSync(file), false)
+    assert.deepEqual(readVerdicts(repo, binding.subject_hash), {})
+  })
+
+  test('a prose reply never touches another session\'s pending record (F9)', () => {
+    const repo = reviewed()
+    const binding = prepare(repo)
+    const dir = join(repo, '.git', 'construct-review', 'pending')
+    const file = join(dir, `review-risk.${binding.subject_hash}.json`)
+    const before = readFileSync(file, 'utf8')
+    for (let attempt = 0; attempt < 3; attempt++) assert.equal(hook(CAPTURE_HOOK, { ...stopInput(repo, 'not json'), session_id: 's2' }).stdout, '')
+    assert.equal(readFileSync(file, 'utf8'), before)
+  })
+
+  test('a prose reply retries its own session and leaves a second session\'s record untouched', () => {
+    const repo = reviewed()
+    const mine = prepare(repo)
+    applyFiles(repo, { 'src/c.js': 'export const c = 1\n' })
+    commitAll(repo, 'more')
+    hook(CONTEXT_HOOK, { ...spawnInput(repo, 'Review subject: HEAD~2'), session_id: 's2' })
+    const dir = join(repo, '.git', 'construct-review', 'pending')
+    const other = readdirSync(dir).find((name) => !name.includes(mine.subject_hash))
+    const otherBefore = readFileSync(join(dir, other), 'utf8')
+    for (let attempt = 0; attempt < 2; attempt++) assert.equal(hook(CAPTURE_HOOK, stopInput(repo, 'not json')).json.decision, 'block')
+    assert.equal(hook(CAPTURE_HOOK, stopInput(repo, 'not json')).stdout, '')
+    assert.deepEqual(readdirSync(dir), [other])
+    assert.equal(readFileSync(join(dir, other), 'utf8'), otherBefore)
+  })
+
+  test('a record without session_id is never chosen by the fallback', () => {
     const repo = reviewed()
     const binding = prepare(repo)
     const file = join(repo, '.git', 'construct-review', 'pending', `review-risk.${binding.subject_hash}.json`)
+    const { session_id, ...old } = JSON.parse(readFileSync(file, 'utf8'))
+    writeFileSync(file, `${JSON.stringify(old)}\n`)
     const before = readFileSync(file, 'utf8')
-    for (let attempt = 0; attempt < 3; attempt++) assert.equal(hook(CAPTURE_HOOK, stopInput(repo, 'not json')).stdout, '')
+    assert.equal(hook(CAPTURE_HOOK, stopInput(repo, 'not json')).stdout, '')
     assert.equal(readFileSync(file, 'utf8'), before)
-    assert.deepEqual(readVerdicts(repo, binding.subject_hash), {})
+  })
+
+  test('the pending record stores the hook input session_id', () => {
+    const repo = reviewed()
+    const binding = prepare(repo)
+    const file = join(repo, '.git', 'construct-review', 'pending', `review-risk.${binding.subject_hash}.json`)
+    assert.equal(JSON.parse(readFileSync(file, 'utf8')).session_id, 's1')
   })
 
   test('a malformed reply with two pending subjects leaves both records (F9)', () => {
@@ -246,10 +295,10 @@ describe('capture hook', () => {
     assert.match(r.json.reason, /evidence_class/)
   })
 
-  test('a result for another subject matches no pending record: ignored, nothing recorded (F9)', () => {
+  test('a result for another subject from another session matches no pending record: ignored, nothing recorded (F9)', () => {
     const repo = reviewed()
     const binding = prepare(repo)
-    const r = hook(CAPTURE_HOOK, stopInput(repo, JSON.stringify({ ...result(binding), subject_hash: 'f'.repeat(64) })))
+    const r = hook(CAPTURE_HOOK, { ...stopInput(repo, JSON.stringify({ ...result(binding), subject_hash: 'f'.repeat(64) })), session_id: 's2' })
     assert.equal(r.stdout, '')
     assert.deepEqual(readVerdicts(repo, binding.subject_hash), {})
     assert.ok(existsSync(join(repo, '.git', 'construct-review', 'pending', `review-risk.${binding.subject_hash}.json`)))

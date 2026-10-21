@@ -3,8 +3,9 @@
 // message a background agent sends, read from its transcript), validates it
 // against the pending record, and writes the verdict record. Only a surrounding
 // code fence is removed; the JSON itself is never edited. The record is the one whose
-// subject_hash the reply names; a reply naming none (malformed JSON, an unknown hash) touches no
-// record and is ignored, so it cannot clear another session's record. An invalid reply for a
+// subject_hash the reply names; a reply naming none (malformed JSON, an unknown hash) falls back to
+// the only pending record of the same lens and session_id, and touches nothing when there are zero
+// or several, so it cannot clear another session's record. An invalid reply for a
 // pending subject blocks the stop with the reason, at most MAX_RETRIES times. Errors fail open.
 // Usage: node review-capture.mjs   (hook JSON on stdin)
 import { readFileSync } from 'node:fs'
@@ -56,10 +57,16 @@ function main() {
   try {
     parsed = JSON.parse(unfence(reply))
   } catch {
-    return
+    parsed = null
   }
-  const pending = pendingRecords(root, lens).find((record) => record.subject_hash === parsed?.subject_hash)
-  if (!pending) return
+  const records = pendingRecords(root, lens)
+  let pending = records.find((record) => record.subject_hash === parsed?.subject_hash)
+  if (!pending) {
+    // No hash match (prose, malformed JSON, unknown hash): only this session's one record of the lens can be retried.
+    const own = typeof input.session_id === 'string' ? records.filter((record) => record.session_id === input.session_id) : []
+    if (own.length !== 1) return
+    pending = own[0]
+  }
   const refusal = checkLensResult(parsed, { subjectHash: pending.subject_hash, manifest: pending.manifest })
   if (refusal.code === undefined) {
     writeVerdict(root, { lens, subject_hash: pending.subject_hash, base_tree: pending.base_tree, head_tree: pending.head_tree, approved: refusal.approved, at: Date.now(), result: parsed })

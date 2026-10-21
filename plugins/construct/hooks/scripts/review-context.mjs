@@ -81,7 +81,7 @@ function main() {
     git(root, ['rev-parse', '--verify', '-q', `${base}^{commit}`])
     git(root, ['rev-parse', '--verify', '-q', `${head}^{commit}`])
     const { text, subject, manifest, baseTree, headTree } = buildContext(root, lens, base, head)
-    writePending(root, { lens, subject_hash: subject, base_tree: baseTree, head_tree: headTree, manifest, attempts: 0, at: Date.now() })
+    writePending(root, { lens, subject_hash: subject, base_tree: baseTree, head_tree: headTree, manifest, session_id: input.session_id, attempts: 0, at: Date.now() })
     decide('allow', { permissionDecisionReason: `construct: injected the review context for ${lens}`, updatedInput: { ...toolInput, prompt: text } })
   } catch (error) {
     deny(`${agent} could not be prepared: ${error.message}. Use \`${FORM}\` naming a ref that resolves in this repository, with at least one commit on HEAD.`)
