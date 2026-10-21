@@ -84,6 +84,14 @@
               "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/review-context.mjs"
             ],
             "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/delegation-admission.mjs"
+            ],
+            "timeout": 10
           }
         ]
       }
@@ -96,6 +104,19 @@
             "command": "node",
             "args": [
               "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/subagent-count.mjs",
+              "stop"
+            ],
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/delegation-admission.mjs",
               "stop"
             ],
             "timeout": 10

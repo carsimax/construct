@@ -182,6 +182,17 @@ The contract texts live in `plugins/construct/hooks/contract/`.
 
 After a compaction or a resume, a second `SessionStart` hook (matcher `compact|resume`) re-injects the active feature state. It reads `odd/tasks/*.md` under the project root and, for up to three documents with unfinished tasks (newest first), emits the path, title, branch line, unfinished task rows, and the last `Next step:` from the log, in at most 2,500 characters. It is read-only and prints nothing when no document is active. Task-to-document sync hooks were dropped: native tasks have no link to the document's `T#` rows, so a hook could corrupt the feature document. The orchestrator keeps the document current, and the re-injection tells it where it was.
 
+### Delegation admission
+
+A `PreToolUse` hook on `Agent` (`hooks/scripts/delegation-admission.mjs`) denies a malformed launch, with a reason that names what is missing and the expected form. It runs next to the review-context hook; an admitted launch prints nothing, so the two never conflict. Other agents are untouched.
+
+- **Writers** (`construct:odd-worker`, `construct:jd-fix-agent`) need a `## Allowed edit surfaces` section with at least one entry per line. An entry that is absolute, starts with `~` or a drive letter, contains `..`, or starts with a glob (a bare `*` or `**` included) is denied, as is prose inside the section; a path with whitespace goes in backticks, and repeated sections must agree.
+- **Spec line.** When an unfinished feature document exists (the same rule the compact/resume re-injection uses), a writer prompt also needs a line `Spec: odd/tasks/<feature>.md, T<n>` naming an existing regular file under `odd/tasks/` (a symlink does not count). Without such a document, small work needs no `Spec:` line.
+- **Overlap.** A writer whose surfaces overlap those of a writer still open is denied. A glob entry covers what it matches and everything under it; brackets, extglobs, and nested or unbalanced braces count as overlapping everything. The hook records each admitted writer (its surfaces and a hash of its prompt) under `${CLAUDE_PLUGIN_DATA}/delegation-admission/<session>/` (same fallback as the gates), and a `SubagentStop` hook (`delegation-admission.mjs stop`) removes the record whose prompt hash matches the first user row of `agent_transcript_path`. A record older than one hour counts as a crashed writer and is dropped. Two launches in the same parallel batch can both pass, because the check and the record are not atomic.
+- **Verifier** (`construct:odd-verify`) needs a line `Risk: item N` (N 1-6). `Risk: none` does not admit a verifier.
+
+The hook fails open on unreadable input or any internal error; a well-formed launch that breaks a rule is denied.
+
 ### MCP servers
 
 The plugin ships no MCP servers, so it never duplicates servers you already registered (duplicates would load every tool twice). The agents and the `codegraph` skill expect this user-scope server. Install the CodeGraph CLI, then register the server once:
@@ -382,7 +393,7 @@ The mod draws one thing: a docked **panel** (a `Pane` with id `construct`) laid 
 | `plugins/construct/` | The plugin (manifest name `construct`) |
 | `plugins/construct/agents/` | The 13 role agents |
 | `plugins/construct/skills/` | Delivery and review skills (`branch-pr`, `chained-pr`, `work-unit-commits`, `judgment-day`, `debugging`, `constraint-driven`, ...) |
-| `plugins/construct/hooks/` | `hooks.json`, the mod (`register.js`), its routing helpers, the status modules (`status/`), the panel modules (`panel/`), and the command hooks (`scripts/`: contract, feature state, secret guard, review gate, Risk line gate, subagent count, review context and capture) |
+| `plugins/construct/hooks/` | `hooks.json`, the mod (`register.js`), its routing helpers, the status modules (`status/`), the panel modules (`panel/`), and the command hooks (`scripts/`: contract, feature state, secret guard, review gate, Risk line gate, subagent count, delegation admission, review context and capture) |
 | `plugins/construct/bin/` | Executable scripts put on the `PATH` (`odd-assess`, `odd-review`) |
 | `plugins/construct/lib/assess/` | `odd-assess` modules: git, stats, passive, signals, sinks, content, classify, escalation, output |
 | `plugins/construct/lib/review/` | `odd-review` modules: the review lifecycle, its mode switch, and its store |
