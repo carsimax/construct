@@ -9,11 +9,13 @@ State lives under the git common directory (`odd-review/`), never in the worktre
 | `odd-review mode status` | Read-only: `{mode, source}` where source is clone, global, or default |
 | `odd-review mode disable [--scope global\|clone]` | Turn RDD off (user request only) |
 | `odd-review mode enable [--scope global\|clone]` | Turn RDD on (only when the user asks) |
+| (any change command while RDD is off) | `start`, `capture*`, `correct`, `acknowledge`, `abandon`, `invalidate` refuse with `rdd_disabled`; do not retry, and enable the switch only when the user asks. `status`, `context`, `validate`, `boundary`, `mode` still work |
 | `odd-review boundary` | Last reviewed commit, or the branch point: `{commit, source}` |
 | `odd-review start --base-ref B --committed-only` | Freeze a committed range and open a transaction with the lenses `odd-assess` assigns; prints `lineage`, `target`, per-lens `subject_hash`. A tier with no lenses refuses with `lenses_required` |
 | `odd-review start` | Same for the uncommitted changes (no `--base-ref`) |
 | `odd-review start ... --escalate-item N --escalate-reason TEXT` | Raise the tier to `high` first, as in `odd-assess`, so all four lenses apply; use it instead of `--lenses` when `odd-assess` was escalated |
 | `odd-review start ... --lenses LIST --lenses-reason TEXT` | Explicit lenses, only when the user names them |
+| `odd-review start ... --request-context FILE` | Freeze the request or spec text (at most 32 KiB; refusals `request_context_too_large`, `_empty`, `_unreadable`) with its sha256; `context` shows it to every lens, before the patches. Write the feature document's relevant `S#` block to a scratch file and pass it |
 | `odd-review start --focus LENS` | A `medium` candidate the user asked to review gets that one lens (a `high` one keeps all four); not with `--lenses` |
 | `odd-review context --lineage L --lens LENS` | Binding and frozen evidence for one lens, the refuter, or the validator. The PreToolUse hook runs it when a review agent is launched with the lineage id |
 | `odd-review capture --lineage L --lens LENS --input -` | Store one lens result; reduces when all lenses are in. The SubagentStop hook runs it, and `capture-refuter` and `capture-validation`, with the agent's reply |
@@ -34,9 +36,9 @@ State lives under the git common directory (`odd-review/`), never in the worktre
 | State | Meaning | Action |
 |---|---|---|
 | `collecting` | Lens results pending | Launch each pending lens agent with the lineage id |
-| `refutation_required` | Severe inferential findings | Launch `construct:review-refuter` with the lineage id |
+| `refutation_required` | Severe inferential findings (a `unknown` or `insufficient` severe finding escalates instead). A refuter `inconclusive` goes to correction, not advisory | Launch `construct:review-refuter` with the lineage id |
 | `correction_required` | Severe deterministic or corroborated findings | One correction, commit, `correct` |
-| `validation_required` | Correction registered | Launch `construct:review-validator` with the lineage id |
+| `validation_required` | Correction registered; an `inconclusive` validation may be captured again, up to 3 attempts, the 3rd escalates | Launch `construct:review-validator` with the lineage id |
 | `approved` | No blocking findings | `acknowledge` |
 | `escalated` | Blockers remain after the one correction, a second batch was asked for (`budget_exhausted`), or a lens could not run (`lens_unachievable`) | **Needs your decision** with the findings |
 | `abandoned`, `invalidated` | Closed by the user's decision; no receipt | Nothing; `start` again if a review is still wanted |

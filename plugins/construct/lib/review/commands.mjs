@@ -163,7 +163,7 @@ function assessedLenses(assessment, escalation, focus) {
 
 // start freezes the candidate and opens a transaction in state collecting.
 // Without lenses, it takes them from the assessment (assessedLenses).
-export function start({ root, cwd, baseRef, committedOnly, lenses: requested, lensesReason: requestedReason, escalation = null, focus = null }) {
+export function start({ root, cwd, baseRef, committedOnly, lenses: requested, lensesReason: requestedReason, escalation = null, focus = null, requestContext = null }) {
   let isolation = null
   try {
     let candidate
@@ -208,6 +208,7 @@ export function start({ root, cwd, baseRef, committedOnly, lenses: requested, le
       advisory: [],
       correction: null,
       validation: null,
+      ...(requestContext ? { request_context: requestContext } : {}),
       created_at: now,
       history: [{ state: 'collecting', at: now }],
     }
@@ -248,7 +249,7 @@ export function context({ root, lineage, lens: lensName, maxBytes = DEFAULT_CONT
   }
   const isolation = createIsolation(root)
   try {
-    return buildContext({ root, isolation, lineage, lens, maxBytes, ...served })
+    return buildContext({ root, isolation, lineage, lens, maxBytes, requestContext: transaction.request_context, ...served })
   } finally {
     isolation.cleanup()
   }
