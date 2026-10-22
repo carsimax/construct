@@ -70,9 +70,11 @@ async function main() {
   const visible = mode === 'session' || mode === 'compact'
   let memory
   let normalizedHash
+  let injects
   try {
     const store = await import('./memory-store.mjs')
     normalizedHash = store.normalizedHash
+    injects = store.injects
     memory = store.openMemory(input.cwd || process.cwd())
   } catch (error) {
     if (visible) emit('SessionStart', `Memory: unavailable (${reason(error)}); run construct-memory doctor`)
@@ -100,7 +102,7 @@ async function main() {
       emit('UserPromptSubmit', 'Memory: nothing saved in the last 15 minutes; if you decided, fixed, or learned something worth keeping, save it with `construct-memory save`.')
     } else if (typeof input.last_assistant_message === 'string') {
       for (const item of learnings(input.last_assistant_message)) {
-        if (memory.hasHash(normalizedHash(item))) continue
+        if (injects(item) || memory.hasHash(normalizedHash(item))) continue
         const chars = [...item.replace(/\s+/g, ' ')]
         memory.save({ title: chars.length > 60 ? `${chars.slice(0, 60).join('')}...` : chars.join(''), content: item, type: 'passive', session_id: session })
       }

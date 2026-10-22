@@ -142,6 +142,17 @@ const isBusy = (error) => error?.errcode === 5 || error?.errcode === 6 || /SQLIT
 // A closed span is redacted; an unclosed <private> redacts to the end of the text.
 const stripPrivate = (text) => String(text ?? '').replace(/<private>(?:[\s\S]*?<\/private>|[\s\S]*$)/gi, '[REDACTED]')
 
+// Injection scan: narrow English patterns for text that tries to steer a later session (instruction override,
+// fake role tags, compaction survival, role takeover). shortcut: English only, upgrade when a miss is reported.
+const INJECTION = new RegExp([
+  String.raw`\b(?:ignore|disregard|forget)\s+(?:all\s+)?(?:(?:the|your|any)\s+)?(?:previous|prior|above|earlier)\s+instructions?\b`,
+  String.raw`<\/?system>|<\|im_(?:start|end)\|>|\[\/?INST\]|^\s*#{1,6}\s*system\s*:`,
+  String.raw`\bwhen\s+(?:compacting|summari[sz]ing)\s*,\s*(?:retain|keep|preserve)\b`,
+  String.raw`\byou\s+are\s+now\s+(?:a|an|the|in)\b[^.\n]{0,40}\b(?:assistant|system|admin|administrator|developer|root|unrestricted|jailbroken|mode)\b`,
+].join('|'), 'im')
+export const injects = (text) => INJECTION.test(String(text ?? ''))
+const filterLines = (text) => String(text).split('\n').map((line) => (injects(line) ? '[FILTERED]' : line)).join('\n')
+
 // cutBytes is the longest prefix of text within maxBytes that ends on a character boundary.
 function cutBytes(text, maxBytes) {
   const bytes = Buffer.from(text)
@@ -321,6 +332,7 @@ function makeStore(db, path, now, repoName) {
   function clean(value, name) {
     const text = stripPrivate(value)
     if (text.trim() === '') throw new Error(`${name} is required`)
+    if (injects(text)) throw new Error(`${name} looks like prompt injection (instruction override, role tag, or compaction directive) and was not stored`)
     return text
   }
 
@@ -570,10 +582,10 @@ function makeStore(db, path, now, repoName) {
 
     // context renders the session-start text: recent sessions, prompts, and observations.
     context() {
-      const sessions = all('SELECT s.id, s.started_at, s.summary, (SELECT count(*) FROM observations o WHERE o.session_id = s.id AND o.deleted_at IS NULL) AS n FROM sessions s ORDER BY s.started_at DESC, s.rowid DESC LIMIT 5')
-      const prompts = all('SELECT content, created_at FROM user_prompts ORDER BY id DESC LIMIT 10')
-      const pinned = all('SELECT type, title FROM observations WHERE deleted_at IS NULL AND pinned = 1 ORDER BY created_at DESC, id DESC LIMIT ?', PINNED_MAX)
-      const observations = all('SELECT type, title FROM observations WHERE deleted_at IS NULL AND pinned = 0 ORDER BY updated_at DESC, id DESC LIMIT 20')
+      const sessions = all('SELECT s.id, s.started_at, s.summary, (SELECT count(*) FROM observations o WHERE o.session_id = s.id AND o.deleted_at IS NULL) AS n FROM sessions s ORDER BY s.started_at DESC, s.rowid DESC LIMIT 5').map((s) => (injects(s.summary) ? { ...s, summary: null } : s))
+      const prompts = all('SELECT content, created_at FROM user_prompts ORDER BY id DESC LIMIT 10').filter((p) => !injects(p.content))
+      const pinned = all('SELECT type, title, content FROM observations WHERE deleted_at IS NULL AND pinned = 1 ORDER BY created_at DESC, id DESC LIMIT ?', PINNED_MAX).filter((o) => !injects(o.title) && !injects(o.content))
+      const observations = all('SELECT type, title, content FROM observations WHERE deleted_at IS NULL AND pinned = 0 ORDER BY updated_at DESC, id DESC LIMIT 20').filter((o) => !injects(o.title) && !injects(o.content))
       if (sessions.length + prompts.length + pinned.length + observations.length === 0) return ''
       let out = '## Memory from Previous Sessions\n\n'
       if (sessions.length) {
@@ -608,12 +620,12 @@ function makeStore(db, path, now, repoName) {
       write(() => {
         const at = stamp()
         run('INSERT OR IGNORE INTO sessions (id, started_at) VALUES (?, ?)', id, at)
-        run('UPDATE sessions SET ended_at = ?, summary = ? WHERE id = ?', at, summary == null ? null : stripPrivate(summary), id)
+        run('UPDATE sessions SET ended_at = ?, summary = ? WHERE id = ?', at, summary == null ? null : filterLines(stripPrivate(summary)), id)
       })
     },
 
     addPrompt(sessionId, content) {
-      write(() => run('INSERT INTO user_prompts (session_id, content, created_at) VALUES (?, ?, ?)', sessionId, stripPrivate(content), stamp()))
+      write(() => run('INSERT INTO user_prompts (session_id, content, created_at) VALUES (?, ?, ?)', sessionId, filterLines(stripPrivate(content)), stamp()))
     },
 
     // prompts lists stored prompts, newest first (limit default 20, max 100).
@@ -789,7 +801,7 @@ function makeStore(db, path, now, repoName) {
       const ownPrefix = `cm-${api.dbId}-` // rows exported from this database already live here
       return write(() => {
         for (const s of sessions.filter((r) => projectName(r.project) === chosen)) {
-          const { changes } = run('INSERT OR IGNORE INTO sessions (id, started_at, ended_at, summary) VALUES (?, ?, ?, ?)', s.id, s.started_at, s.ended_at ?? null, s.summary ? stripPrivate(s.summary) : null)
+          const { changes } = run('INSERT OR IGNORE INTO sessions (id, started_at, ended_at, summary) VALUES (?, ?, ?, ?)', s.id, s.started_at, s.ended_at ?? null, s.summary ? filterLines(stripPrivate(s.summary)) : null)
           if (changes) counts.sessions++
           else counts.skipped++
         }
@@ -804,6 +816,10 @@ function makeStore(db, path, now, repoName) {
             continue
           }
           if (one('SELECT 1 AS found FROM observations WHERE import_id = ? UNION SELECT 1 FROM import_tombstones WHERE import_id = ?', importId, importId)) {
+            counts.skipped++
+            continue
+          }
+          if (injects(stripPrivate(o.title)) || injects(stripPrivate(o.content))) {
             counts.skipped++
             continue
           }
@@ -824,7 +840,8 @@ function makeStore(db, path, now, repoName) {
             counts.skipped++
             continue
           }
-          run('INSERT INTO user_prompts (session_id, content, created_at, import_id) VALUES (?, ?, ?, ?)', p.session_id, clean(p.content, 'content'), p.created_at, importId)
+          if (stripPrivate(p.content).trim() === '') clean(p.content, 'content') // throws: content is required
+          run('INSERT INTO user_prompts (session_id, content, created_at, import_id) VALUES (?, ?, ?, ?)', p.session_id, filterLines(stripPrivate(p.content)), p.created_at, importId)
           counts.prompts++
         }
         // A relation's ends are export keys: an imported row's import_id, or this database's own cm-<dbid>-obs-<id>.
