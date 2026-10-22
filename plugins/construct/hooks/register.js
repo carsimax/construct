@@ -20,7 +20,7 @@ import {
   onTurnStep,
   onUnblocked,
 } from './panel/state.js'
-import { checkClaude, checkCodegraph, checkMemory, checkNode, formatReport, MEMORY_PROBE } from './status/doctor.js'
+import { checkClaude, checkCodegraph, checkMemory, checkNode, formatReport, MEMORY_PROBE, memoryDoctorRows } from './status/doctor.js'
 import { activeWork } from './status/tasks.js'
 import { parseGitStatus, parseNumstat, parseRevParse } from './status/data.js'
 
@@ -246,6 +246,16 @@ async function probe(read) {
   }
 }
 
+// stdout of the plugin's own `construct-memory doctor --json`, or null. It exits 1 when a check fails but still
+// prints the list, so the exit code is not read here (runText would drop that output).
+async function memoryDoctor($, cwd) {
+  return probe(async () => {
+    // shortcut: pathname breaks on Windows drive-letter paths (/C:/...), switch to fileURLToPath if Windows is supported
+    const bin = decodeURIComponent(new URL('../bin/construct-memory', import.meta.url).pathname)
+    return (await $.process.run(['node', bin, 'doctor', '--json'], { cwd, timeoutMs: GIT_MS })).stdout
+  })
+}
+
 // /construct doctor (S8): every probe runs in parallel with a 3 s timeout (GIT_MS), so the report comes back
 // well inside the hook budget. The checks themselves are pure, in status/doctor.js.
 async function runDoctor($) {
@@ -258,7 +268,10 @@ async function runDoctor($) {
     probe(() => runText($, ['node', '-e', MEMORY_PROBE], cwd ?? undefined, GIT_MS)),
     probe(() => (root ? $.fs.exists(`${root}/.codegraph`) : null)),
   ])
-  return formatReport([checkClaude(version), checkNode(node), checkMemory(memory), checkCodegraph(codegraph)])
+  const memoryRow = checkMemory(memory)
+  const rows = [checkClaude(version), checkNode(node), memoryRow, checkCodegraph(codegraph)]
+  if (rev?.root && memoryRow.ok) rows.splice(3, 0, ...memoryDoctorRows(await memoryDoctor($, rev.root)))
+  return formatReport(rows)
 }
 
 // /construct opens the pane, /construct close closes it, /construct doctor reports the setup.

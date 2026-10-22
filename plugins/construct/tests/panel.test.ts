@@ -134,11 +134,60 @@ test('/construct doctor reports a healthy setup', { options: { panel_open_on_sta
     if (a[0] === 'git') return ok('/home/me/proj\n.git\n.git\n')
     if (a[1] === '--version') return ok('v22.16.0\n')
     if (a[1] === '-e') return ok('ok\n')
+    if (String(a[1]).endsWith('construct-memory')) return ok('[{"check":"schema","ok":true},{"check":"wal","ok":true}]')
     return ok('usage')
   }
   await start($, on, { run, exists: true, version: '2.1.400' })
   const text = String((await $.command.run({ command: 'construct', args: 'doctor' }))?.text ?? '')
   expect(text).not.toContain('✗')
+  expect(text).toContain('✓ memory: schema')
+  expect(text).toContain('✓ memory: wal')
+})
+
+test('/construct doctor shows a failing memory check even though the command exits 1', { options: { panel_open_on_start: false } }, async ($, on) => {
+  const seen: string[][] = []
+  const run = (a: string[]) => {
+    seen.push(a)
+    if (a[0] === 'git') return ok('/home/me/proj\n.git\n.git\n')
+    if (a[1] === '--version') return ok('v22.16.0\n')
+    if (a[1] === '-e') return ok('ok\n')
+    if (String(a[1]).endsWith('construct-memory')) return { ...ok('[{"check":"wal","ok":false,"detail":"journal mode is delete"}]'), exitCode: 1 }
+    return ok('usage')
+  }
+  await start($, on, { run, exists: true })
+  const text = String((await $.command.run({ command: 'construct', args: 'doctor' }))?.text ?? '')
+  expect(text).toContain('✗ memory: wal — journal mode is delete')
+  expect(seen.some((a) => a[0] === 'node' && a.includes('doctor') && a.includes('--json'))).toBe(true)
+})
+
+for (const mode of ['no-git', 'no-probe']) {
+  test(`/construct doctor skips the memory doctor when ${mode === 'no-git' ? 'outside git' : 'the memory probe failed'}`, { options: { panel_open_on_start: false } }, async ($, on) => {
+    const seen: string[][] = []
+    const run = (a: string[]) => {
+      seen.push(a)
+      if (a[0] === 'git') return mode === 'no-git' ? { ...ok(''), exitCode: 128 } : ok('/home/me/proj\n.git\n.git\n')
+      if (a[1] === '--version') return ok('v22.16.0\n')
+      if (a[1] === '-e') return ok(mode === 'no-git' ? 'ok\n' : 'nope\n')
+      return ok('usage')
+    }
+    await start($, on, { run, exists: true })
+    const text = String((await $.command.run({ command: 'construct', args: 'doctor' }))?.text ?? '')
+    expect(text).not.toContain('memory: ')
+    expect(text).not.toContain('memory doctor')
+    expect(seen.some((a) => a.includes('doctor'))).toBe(false)
+  })
+}
+
+test('/construct doctor adds one failed row when the memory doctor cannot run', { options: { panel_open_on_start: false } }, async ($, on) => {
+  const run = (a: string[]) => {
+    if (a[0] === 'git') return ok('/home/me/proj\n.git\n.git\n')
+    if (a[1] === '--version') return ok('v22.16.0\n')
+    if (a[1] === '-e') return ok('ok\n')
+    return { ...ok(''), exitCode: 2 }
+  }
+  await start($, on, { run, exists: true })
+  const text = String((await $.command.run({ command: 'construct', args: 'doctor' }))?.text ?? '')
+  expect(text).toContain('✗ memory doctor — could not run')
 })
 
 test('the Pane draws the panel for the construct pane id', async ($, on) => {
