@@ -5,13 +5,13 @@ import { parseArgs } from 'node:util'
 
 const USAGE = `usage: construct-memory <command> [options]
 
-  save                              JSON on stdin: title, content, type, topic_key, session_id
+  save                              JSON on stdin: title, content, type, topic_key, session_id; text that looks like prompt injection is rejected
   search <query> [--type T] [--limit N] [--any]
   get <id> [--history]
   context
   update <id>                       JSON on stdin: title, content, type, topic_key, or find + replace
   delete <id> [--hard]              soft delete; --hard erases the observation and its earlier versions for good
-  summary --session <id>            summary on stdin; stores it and ends the session
+  summary --session <id>            summary on stdin; stores it and ends the session (injection-like lines become [FILTERED])
   review list | review done <id>
   prompts [--limit N]               list stored prompts (id, date, preview), newest first
   prompts --search <query> [--limit N]  find stored prompts by text, same lines

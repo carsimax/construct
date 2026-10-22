@@ -210,6 +210,37 @@ export function surfacesOverlap(a, b) {
   return true
 }
 
+// surfaceContains is containment, unlike surfacesOverlap: the surface must match the whole
+// repo-relative path; `**` spans zero or more segments. Both sides are normalized alike.
+// A literal surface (no glob characters) also contains its descendants, like surfacesOverlap.
+export function surfaceContains(surface, path) {
+  const pattern = normalizeEntry(surface)
+  const target = normalizeEntry(path)
+  if (pattern === undefined || target === undefined) return false
+  if (!SPECIAL.test(pattern) && target.startsWith(`${pattern}/`)) return true
+  const match = (ps, ts) => {
+    if (ps.length === 0) return ts.length === 0
+    if (ps[0] === '**') return match(ps.slice(1), ts) || (ts.length > 0 && match(ps, ts.slice(1)))
+    return ts.length > 0 && segmentRegExp(ps[0]).test(ts[0]) && match(ps.slice(1), ts.slice(1))
+  }
+  return match(pattern.split('/'), target.split('/'))
+}
+
+// writerRecord finds the started record of the subagent with this agent_id (undefined if none).
+export function writerRecord(session, agentId) {
+  const dir = recordDir(session)
+  for (const name of readdirSync(dir)) {
+    if (name.startsWith('.')) continue
+    try {
+      const entry = JSON.parse(readFileSync(join(dir, name), 'utf8'))
+      if (entry.agent_id === agentId && Array.isArray(entry.surfaces)) return entry
+    } catch {
+      // unreadable record: ignore it
+    }
+  }
+  return undefined
+}
+
 const recordDir = (session) => join(dataDir(), 'delegation-admission', safeName(session))
 // A record never marked started (SubagentStart) after this long belongs to a declined or failed launch.
 const START_GRACE_MS = 2 * 60 * 1000
@@ -361,7 +392,8 @@ function clear(input) {
 
 // start marks the oldest unstarted record of the agent type inside the grace as started. SubagentStart input
 // carries no prompt, so the match is session plus agent type (shortcut: two same-type
-// launches in flight may swap records, upgrade if the host adds the prompt to the input).
+// launches in flight may swap records, upgrade if the host adds the prompt to the input;
+// surface-guard.mjs trusts this pairing, and Bash writes are not covered by it).
 function start(input) {
   const type = qualify(input.agent_type)
   if (!WRITERS.has(type)) return
@@ -382,7 +414,7 @@ function start(input) {
     if (!oldest) return
     const temporary = join(dir, `.${oldest.name}.${process.pid}.start.tmp`)
     try {
-      writeFileSync(temporary, `${JSON.stringify({ ...oldest.entry, started: true })}\n`)
+      writeFileSync(temporary, `${JSON.stringify({ ...oldest.entry, started: true, agent_id: input.agent_id })}\n`)
       renameSync(temporary, join(dir, oldest.name))
     } catch (error) {
       rmSync(temporary, { force: true })
