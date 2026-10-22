@@ -22,6 +22,7 @@ import {
   onTurnStart,
   onTurnStep,
   phaseOf,
+  shortName,
 } from '../hooks/panel/state.js'
 
 const USAGE = { input_tokens: 10, output_tokens: 5, cache_read_input_tokens: 200, cache_creation_input_tokens: 30, model: 'm' }
@@ -491,4 +492,99 @@ test('a main turn start keeps its start time; a stored turn without one is read 
   const old: any = { ...initialState(), turn: { turnId: 't9' } }
   expect(merge(old).turn).toEqual({ turnId: 't9' })
   expect(onTurnComplete(old, { turnId: 't9', nowMs: 5 }).turn).toBe(null)
+})
+
+// ---- L4 regressions ----------------------------------------------------
+
+test('maskSecrets masks any *_KEY, credential, and provider-style value; plain identifiers stay', () => {
+  for (const [text, secret] of [
+    ['ENCRYPTION_KEY=hunter2 node app.js', 'hunter2'],
+    ['SIGNING_KEY="abc def"', 'abc def'],
+    ['export STRIPE_KEY=rk_live_51Habc', 'rk_live_51Habc'],
+    ['MY_KEY: s3cr3t', 's3cr3t'],
+    ['--client-credential=Pa55word', 'Pa55word'],
+    ['GOOGLE_APPLICATION_CREDENTIALS=/k.json', '/k.json'],
+    ['pk-live-abcdefghijklmn', 'abcdefghijklmn'],
+  ]) {
+    const out = maskSecrets(text)
+    expect(out).toContain('***')
+    expect(out).not.toContain(secret)
+  }
+  const ident = 'abcdefghijklmnopqrstuvwxyzabcdefghijklmn'
+  expect(maskSecrets(`run ${ident}`)).toBe(`run ${ident}`)
+})
+
+const deny = (tool: any, input: any) => onToolCheck(initialState(), { decision: 'deny', tool, input }).gate.lastDenied
+
+test('last-denied detail covers every call field, masks, cuts at 80, and names a missing tool', () => {
+  expect(deny('WebFetch', { url: 'https://u:p@ex.com/a' })).toEqual({ tool: 'WebFetch', detail: 'https://u:***@ex.com/a' })
+  expect(deny('Grep', { pattern: 'x', path: '/src' }).detail).toBe('/src')
+  expect(deny('NotebookEdit', { notebook_path: '/n.ipynb' }).detail).toBe('/n.ipynb')
+  const cut = deny('Bash', { command: 'x'.repeat(100) }).detail
+  expect(cut.length).toBe(80)
+  expect(cut.endsWith('...')).toBe(true)
+  expect(deny(undefined, { command: 'ls' }).tool).toBe('tool')
+})
+
+test('MultiEdit and NotebookEdit are file tools', () => {
+  expect(bucketOf('MultiEdit')).toBe('file')
+  expect(bucketOf('NotebookEdit')).toBe('file')
+})
+
+test('agentsView keeps every running agent, then the most recently ended', () => {
+  let s: any = initialState()
+  const ends = [50, 90, 10, 70, 30, 80]
+  ends.forEach((end, i) => {
+    s = spawn(s, `d${i}`, { nowMs: 100 + i })
+    s = onTurnComplete(s, { agentId: `d${i}`, nowMs: end + 100 })
+  })
+  s = spawn(s, 'r1', { nowMs: 1 })
+  s = spawn(s, 'r2', { nowMs: 2 })
+  const ids = agentsView(s, 1000, 6).cards.map((c: any) => c.id).sort()
+  expect(ids).toEqual(['d1', 'd3', 'd5', 'd0', 'r1', 'r2'].sort())
+})
+
+test('a duplicate spawn id replaces the card; naming falls back and normalizes', () => {
+  let s = spawn(initialState(), 'a1')
+  s = spawn(s, 'a1', { description: 'again' })
+  expect(s.agents.length).toBe(1)
+  expect(s.agents[0].description).toBe('again')
+  expect(agentsView(spawn(initialState(), 'a2', { subagentType: undefined }), 0).cards[0].name).toBe('agent')
+  expect(shortName('my_agent')).toBe('my-agent')
+  expect(shortName('construct:unknown_x')).toBe('unknown-x')
+  expect(shortName({ type: 'construct:worker' })).toBe('worker')
+})
+
+test('a main turn without an id ends on a completion with one; null agent ids and blank effort are main', () => {
+  let s = onTurnStart(initialState(), {})
+  expect(mainBusy(s)).toBe(true)
+  s = onTurnComplete(s, { turnId: 't1' })
+  expect(mainBusy(s)).toBe(false)
+  s = onMainStep(s, { agentId: null, model: 'm', effort: '' })
+  expect(s.main.steps).toBe(1)
+  expect(s.main.effort).toBe(null)
+})
+
+test('damaged nested stored shapes are repaired and no reducer throws', () => {
+  const damaged = {
+    v: SCHEMA_VERSION,
+    agents: [null, { id: 'a1', status: 'running' }],
+    gate: { cells: 'x', counts: {}, verdicts: { rule: 'z' }, buckets: { file: { rule: 1 } }, pending: 'p' },
+    main: { steps: 'x' },
+  }
+  let s: any = merge(damaged)
+  s = onToolCheck(s, { decision: 'ask', tool: 'Bash', callId: 'c1' })
+  s = onToolSettle(s, { callId: 'c1', tool: 'Bash', didRun: true })
+  s = onToolCheck(s, { decision: 'allow', tool: 'Read' })
+  s = onTurnStart(s, { agentId: 'a1' })
+  s = onTurnStep(s, { agentId: 'a1', usage: USAGE })
+  s = onMainStep(s, {})
+  const view = agentsView(s, 5)
+  expect(view.cards.length).toBe(1)
+  expect(Number.isFinite(view.cards[0].elapsedMs)).toBe(true)
+  expect(s.gate.counts.asked).toBe(1)
+  expect(s.gate.verdicts.cleared).toBe(1)
+  expect(s.gate.verdicts.rule).toBe(1)
+  expect(s.agents[0].steps).toBe(1)
+  expect(s.main.steps).toBe(1)
 })

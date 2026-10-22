@@ -41,20 +41,36 @@ export function initialState() {
   }
 }
 
+// A section over its defaults: numeric fields must be numbers, the rest take the stored value when set.
+const fill = (def, v) => {
+  const from = isObj(v) ? v : {}
+  return Object.fromEntries(Object.entries(def).map(([k, d]) => [k, typeof d === 'number' ? (isNum(from[k]) ? from[k] : d) : (from[k] ?? d)]))
+}
+
 // Repairs a stored value: v1 to v3 are read, anything else resets. A section of the wrong type
 // takes its default, so a field dropped from the schema (receipt, log) never comes back.
 export function merge(stored) {
   const base = initialState()
   if (!isObj(stored) || ![1, 2, 3].includes(stored.v)) return base
-  const section = (key) => (isObj(stored[key]) ? { ...base[key], ...stored[key] } : base[key])
+  const g = isObj(stored.gate) ? stored.gate : {}
+  const gate = {
+    ...fill(base.gate, g),
+    cells: Array.isArray(g.cells) ? g.cells : [],
+    counts: fill(base.gate.counts, g.counts),
+    verdicts: fill(base.gate.verdicts, g.verdicts),
+    buckets: Object.fromEntries(Object.keys(base.gate.buckets).map((k) => [k, fill(base.gate.verdicts, g.buckets?.[k])])),
+    lastDenied: isObj(g.lastDenied) ? g.lastDenied : null,
+    pending: isObj(g.pending) ? g.pending : {},
+  }
+  const agents = (Array.isArray(stored.agents) ? stored.agents : []).filter(isObj).map((a) => ({ ...a, steps: isNum(a.steps) ? a.steps : 0, ctx: isNum(a.ctx) ? a.ctx : 0 }))
   return {
     v: SCHEMA_VERSION,
-    agents: Array.isArray(stored.agents) ? stored.agents : base.agents,
-    inline: section('inline'),
-    gate: section('gate'),
+    agents,
+    inline: fill(base.inline, stored.inline),
+    gate,
     turn: isObj(stored.turn) ? stored.turn : null,
     compactions: isNum(stored.compactions) ? stored.compactions : 0,
-    main: section('main'),
+    main: fill(base.main, stored.main),
     blocked: stored.blocked === true,
   }
 }
@@ -67,11 +83,11 @@ const SECRET_RULES = [
   [/\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{8,}/gi, '$1 ***'],
   [/(\b[a-z][a-z0-9+.-]*:\/\/[^\s:@/]+:)[^\s@/]+@/gi, '$1***@'],
   [/(\s-u\s+[^\s:]+:)\S+/g, '$1***'],
-  [/\b([\w-]*(?:token|password|passwd|pwd|secret|api[_-]?key|access[_-]?key|private[_-]?key)[\w-]*)(\s*[=:]\s*)("[^"]*"|'[^']*'|[^\s&"']+)/gi, '$1$2***'],
-  [/\b(?:sk-[A-Za-z0-9_-]{10,}|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_\w{20,}|glpat-[\w-]{20,}|xox[abprs]-[A-Za-z0-9-]{10,}|(?:AKIA|ASIA)[A-Z0-9]{16})/g, '***'],
+  [/\b([\w-]*(?:key|token|secret|password|passwd|pwd|credentials?))(\s*[=:]\s*)("[^"]*"|'[^']*'|[^\s&"']+)/gi, '$1$2***'],
+  [/\b(?:(?:sk|pk|rk)[-_][A-Za-z0-9_-]{10,}|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_\w{20,}|glpat-[\w-]{20,}|xox[abprs]-[A-Za-z0-9-]{10,}|(?:AKIA|ASIA)[A-Z0-9]{16})/g, '***'],
   // an AWS-style secret key: 40 chars of base64 with every character class present
   [/(?<![A-Za-z0-9/+])(?=[A-Za-z0-9/+]*\d)(?=[A-Za-z0-9/+]*[A-Z])(?=[A-Za-z0-9/+]*[a-z])[A-Za-z0-9/+]{40}(?![A-Za-z0-9/+])/g, '***'],
-  [/\b[A-Za-z0-9]{32,}\b/g, '***'],
+  [/\b(?=[A-Za-z0-9]*\d)[A-Za-z0-9]{32,}\b/g, '***'],
 ]
 
 export function maskSecrets(text) {
@@ -132,7 +148,7 @@ export function onAgentSpawn(state, e) {
     endedMs: null,
     status: 'running',
   }
-  const spawned = { ...s, agents: last([...s.agents, agent], MAX_AGENTS) }
+  const spawned = { ...s, agents: last([...s.agents.filter((a) => a.id !== id), agent], MAX_AGENTS) }
   return e.parentAgentId === undefined ? onPermissionMode(spawned, { mode: e.mode }) : spawned
 }
 
@@ -158,14 +174,14 @@ export function onTurnComplete(state, e) {
   if (id) return withAgent(s, id, () => ({ status: 'done', endedMs: isNum(e.nowMs) ? e.nowMs : 0 }))
   const turnId = str(e?.turnId)
   // a different turn id means a stale completion: the open turn stays
-  if (s.turn && turnId && s.turn.turnId !== turnId) return s
+  if (s.turn && turnId && s.turn.turnId && s.turn.turnId !== turnId) return s
   return s.turn ? { ...s, turn: null } : s
 }
 
 export function onMainStep(state, e) {
   const s = open(state)
-  if (e?.agentId !== undefined) return s
-  const effort = e?.effort === undefined || e.effort === null ? null : String(e.effort)
+  if (str(e?.agentId) !== null) return s
+  const effort = e?.effort == null || e.effort === '' ? null : String(e.effort)
   return { ...s, main: { ...s.main, steps: s.main.steps + 1, model: str(e?.model) ?? s.main.model, effort } }
 }
 
@@ -182,7 +198,7 @@ export const onCompact = (state) => {
 
 // ---- gate ----------------------------------------------------------------
 
-const FILE_TOOLS = ['Read', 'Edit', 'Write', 'NotebookEdit', 'Glob', 'Grep']
+const FILE_TOOLS = ['Read', 'Edit', 'MultiEdit', 'Write', 'NotebookEdit', 'Glob', 'Grep']
 const SHELL_TOOLS = ['Bash', 'PowerShell']
 const WRITE_TOOLS = ['Write', 'Edit', 'MultiEdit', 'NotebookEdit']
 
@@ -199,6 +215,7 @@ function shift(gate, bucket, from, to) {
   return { ...gate, verdicts: bump(bump(gate.verdicts, from, -1), to), buckets }
 }
 
+const DETAIL_FIELDS = ['command', 'file_path', 'notebook_path', 'path', 'url', 'pattern']
 const CELL = { allow: 'allowed', ask: 'asked', deny: 'denied' }
 const VERDICT = { allow: 'rule', ask: 'ask', deny: 'deny' }
 
@@ -223,8 +240,9 @@ export function onToolCheck(state, e) {
   }
   if (decision === 'deny') {
     const input = isObj(e.input) ? e.input : {}
-    const detail = maskSecrets(str(input.command) ?? str(input.file_path) ?? '').slice(0, MAX_DETAIL)
-    gate = { ...gate, denied: g.denied + 1, lastDenied: { tool: typeof e.tool === 'string' ? e.tool : '', detail } }
+    const shown = maskSecrets(DETAIL_FIELDS.map((k) => str(input[k])).find((x) => x) ?? '')
+    const detail = shown.length > MAX_DETAIL ? `${shown.slice(0, MAX_DETAIL - 3)}...` : shown
+    gate = { ...gate, denied: g.denied + 1, lastDenied: { tool: str(e.tool) ?? 'tool', detail } }
   }
   if (decision === 'ask') {
     // asks without a call id still need a unique slot; the running total is one
@@ -277,9 +295,7 @@ export const mainBusy = (state) => isObj(state?.turn)
 // or type as is.
 export function shortName(agent) {
   const name = typeof agent === 'string' ? agent : (str(agent?.role) ?? str(agent?.type))
-  if (name === null || name === undefined) return ''
-  const dashed = name.replaceAll('_', '-')
-  return kindOf(dashed) === null ? name : dashed
+  return name ? name.replace(/^construct:/, '').replaceAll('_', '-') : 'agent'
 }
 
 const PHASES = [
@@ -298,12 +314,12 @@ export function phaseOf(state) {
   return PHASES.find(([kind]) => kinds.includes(kind))?.[1] ?? 'working'
 }
 
-// Cards for the agents section: running ones first, then the latest finished, newest start first.
+// Cards for the agents section: running ones first, then the latest finished, finished by most recent end.
 export function agentsView(state, nowMs, max = 3) {
   const agents = isObj(state) && Array.isArray(state.agents) ? state.agents : []
-  const byStart = [...agents].sort((a, b) => b.startedMs - a.startedMs)
-  const running = byStart.filter((a) => a.status === 'running')
-  const cards = [...running, ...byStart.filter((a) => a.status !== 'running')].slice(0, max).map((a) => {
+  const running = agents.filter((a) => a.status === 'running').sort((a, b) => b.startedMs - a.startedMs)
+  const done = agents.filter((a) => a.status !== 'running').sort((a, b) => (b.endedMs ?? 0) - (a.endedMs ?? 0))
+  const cards = [...running, ...done].slice(0, max).map((a) => {
     const end = a.status === 'running' ? nowMs : a.endedMs
     return { ...a, name: shortName(a), elapsedMs: isNum(end) && isNum(a.startedMs) ? Math.max(0, end - a.startedMs) : 0 }
   })
