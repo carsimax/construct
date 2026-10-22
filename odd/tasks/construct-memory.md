@@ -38,7 +38,7 @@ Source: L1-L3, map in L4. Engram references are to commit `258e7a3` of github.co
 | T7 | S11 | Release 4.0.0 | odd-worker, after T6 | 5 | done (install RED 3 → GREEN 80/80; suite 565/565) | `ae4f00e` |
 | T8 | S6 | Fix L14 W1: memory hooks fail open when `node:sqlite` cannot load (dynamic import of the store inside the hook's try); test with a Node that lacks it | odd-worker | 4 | done (hooks RED 1 → GREEN 94/94; CLI RED 1 → GREEN 95/95; suite 567/567) | `84fd604` |
 | T9 | S12 | `prompts` and `prompts delete <id>` in the store and CLI, import tombstones, skill and README lines; tests | odd-worker | 1, 2 | done (RED 7 → GREEN 114/114; suite 572/572) | `426e07a` |
-| T10 | S3 | Fix L18 W3: `endSession` redacts `<private>` in the session summary like every other write path; test | odd-worker | 2 | done (RED 2 → GREEN 102/102; suite 574/574) | see L19 |
+| T10 | S3 | Fix L18 W3: `endSession` redacts `<private>` in the session summary like every other write path; test | odd-worker | 2 | done (RED 2 → GREEN 102/102; suite 574/574) | `2f14315` |
 
 Review lenses before publication (Risk 1, 3, 4, 5): `review-risk`, `review-resilience`, `review-reliability`, run once over the whole branch after T7 so the reviewed tree is the published one.
 
