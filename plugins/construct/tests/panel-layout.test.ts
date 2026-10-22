@@ -804,3 +804,8 @@ test('MEMORY unable-to-open and not-writable reasons are amber, not a git reposi
   }
   expect(find(buildPanel(args({ memory: { off: 'not a git repository' } })), 'not a git repository')?.props.color).toBeUndefined()
 })
+
+test('the GATE card shows the last denial even with no counted checks (T7)', () => {
+  const panel = { ...full(), gate: { ...full().gate, verdicts: { rule: 0, ask: 0, cleared: 0, deny: 0 }, lastDenied: { tool: 'Bash', detail: 'rm -rf x' } } }
+  expect(textOf(buildPanel(args({ panel })))).toContain('✗ Bash: rm -rf x')
+})
