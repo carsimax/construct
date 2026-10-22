@@ -7,14 +7,11 @@ notice is in its LICENSE file and in the header of each adapted file
 (tests/panel-license.test.mjs checks both).
 
 - claude-flightdeck (https://github.com/scasella/claude-flightdeck), Stephen
-  Casella: the status-panel drawing code in hooks/panel/ (draw.js, layout.js,
-  state.js). See LICENSE-flightdeck.
+  Casella: the status-panel drawing code in hooks/panel/ (draw.js and
+  layout.js). See LICENSE-flightdeck.
 - gentle-shell (https://github.com/Gentleman-Programming/gentle-shell), Mario
   Zechner: hooks/scripts/delegation-admission.mjs and
   hooks/scripts/delivery-signals.mjs. See LICENSE-gentle-shell.
-- gentle-agent-state (https://github.com/Gentleman-Programming/gentle-agent-state),
-  Alan Buscaglia: the blocked-state part of hooks/panel/state.js. See
-  LICENSE-gentle-agent-state.
 
 The projects that gave Construct ideas, with no text or code copied, are credited
 in the README.

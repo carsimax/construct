@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs'
 // S10: every file with adapted claude-flightdeck code carries the full MIT notice in its header.
 const dir = new URL('../plugins/construct/hooks/panel/', import.meta.url)
 
-for (const file of ['draw.js', 'layout.js', 'state.js']) {
+for (const file of ['draw.js', 'layout.js']) {
   test(`${file} carries the flightdeck copyright and the MIT permission notice in its header`, () => {
     const head = readFileSync(new URL(file, dir), 'utf8').slice(0, 2500)
     assert.match(head, /Copyright \(c\) 2026 Stephen Casella/)
@@ -19,7 +19,6 @@ for (const file of ['draw.js', 'layout.js', 'state.js']) {
 const plugin = new URL('../plugins/construct/', import.meta.url)
 const PORTS = [
   ['gentle-shell', 'Copyright \\(c\\) 2025 Mario Zechner', ['hooks/scripts/delegation-admission.mjs', 'hooks/scripts/delivery-signals.mjs']],
-  ['gentle-agent-state', 'Copyright \\(c\\) 2026 Alan Buscaglia', ['hooks/panel/state.js']],
 ]
 
 for (const [project, copyright, files] of PORTS) {
@@ -36,3 +35,10 @@ for (const [project, copyright, files] of PORTS) {
     })
   }
 }
+
+// state.js is Construct's own code: no MIT header, no adaptation line.
+test('state.js carries no adapted-code header', () => {
+  const text = readFileSync(new URL('hooks/panel/state.js', plugin), 'utf8')
+  assert.doesNotMatch(text, /Permission is hereby granted/)
+  assert.doesNotMatch(text, /adapted from/i)
+})

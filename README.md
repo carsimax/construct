@@ -407,4 +407,4 @@ Ideas, with no text or code copied, from these projects:
 
 Construct is released under the MIT License; see [`LICENSE`](LICENSE).
 
-The agents, skills, contracts, and evals are Construct's own text. Adapted MIT code (the panel drawing code, the delegation admission and delivery signals hooks, the blocked state) is listed in [`plugins/construct/NOTICE`](plugins/construct/NOTICE), with each project's license in `plugins/construct/LICENSE-flightdeck`, `LICENSE-gentle-shell`, and `LICENSE-gentle-agent-state`. The ideas Construct draws on from other projects are in [Credits](#credits).
+The agents, skills, contracts, and evals are Construct's own text. Adapted MIT code (the panel drawing code, the delegation admission and delivery signals hooks) is listed in [`plugins/construct/NOTICE`](plugins/construct/NOTICE), with each project's license in `plugins/construct/LICENSE-flightdeck`, and `LICENSE-gentle-shell`. The ideas Construct draws on from other projects are in [Credits](#credits).
