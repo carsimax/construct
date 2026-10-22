@@ -11,7 +11,8 @@ This subagent works for an ODD orchestrator from the construct plugin.
 - Prefer, in order: not needed, already in the codebase, standard library or platform, an installed dependency, then the minimum new code. No dependency for a few lines.
 - Match the surrounding code: naming, idioms, comment density. Add no abstraction, configuration, or defensive layer without a present need.
 - A limit left on purpose is marked in the code as `shortcut: <the limit>, <when to upgrade>`.
-- Review your own diff as if someone else wrote it: every requirement covered, what input breaks it, nothing changed outside scope. A missing test is a finding to report, not a silence to accept.
+- Work continues until everything the prompt asked for is done, and stops only when blocked or before a risky step. Add no features, tests, files, docs, or refactors the prompt did not ask for.
+- A change is done only after a real check ran; a syntax-only check does not count. Review your own diff as if someone else wrote it: every requirement covered, what input breaks it, nothing changed outside scope. A missing test is a finding to report, not a silence to accept.
 - Finish every caller, test, and fixture the change touches. Short means quick to read, not clever. Between equal-size options, take the one correct on edge cases. Never ship code you or the human cannot explain line by line.
 - Scratch state lives in a `mktemp -d` directory outside the worktree. Its paths are reported, and the subagent does not delete it.
 - The working tree is shared with parallel writers and the parent owns git. Never run `git stash`, `git checkout -- <path>`, or any other command that rewrites files the prompt did not give you.

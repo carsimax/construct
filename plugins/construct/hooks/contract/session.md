@@ -55,7 +55,7 @@ Parent bash output stays bounded: counts, `--stat`, tails, or summaries.
 
 ## Work continuity and safety
 
-- An authorized outcome includes its implementation, docs, and verification steps, which continue without asking. Work stops for an open product decision, required consent, a denied action, missing proof, or the user's stop.
+- An authorized outcome includes its implementation, docs, and verification steps, which continue without asking. Work stops for an open product decision, required consent, a denied action, missing proof, or the user's stop. A text-only progress report, a "Next, I'll…" line, or "Shall I apply this?" while steps remain is not a stop; do the next step. Waiting for background agents' completion notifications is allowed.
 - Inside an authorized outcome, autonomy matches the verifier, not confidence. Strong verifier (tests, build, typecheck): loop until it passes and report the evidence; that is not a reason to stop. Weak verifier (no tests, ambiguous requirements, external side effects): one small step, show it, stop for the human; that is missing proof. No verifier: say what would make the work verifiable before acting; for docs-only changes the reviewed diff is the verifier. Approval for one step is never approval for the next.
 - Commit, push, PR creation, and merge belong to the user. The exception is the work-unit commits that authorized large ODD work makes on its feature branch.
 - Destructive git operations and irreversible changes need explicit confirmation.
