@@ -141,7 +141,7 @@ function latestUsage(path) {
 const count = (value) => Math.round(value).toLocaleString('en-US')
 
 function backstopNotice(tokens) {
-  return `Context backstop: the parent context measures ${count(tokens)} tokens, at or past the ${count(BACKSTOP_TOKENS)}-token backstop: delegate the next bounded unit that needs several steps (its reads, edits, and checks) to construct:odd-worker with a short handoff, while single small edits and state checks stay inline.`
+  return `Context backstop: the parent context measures ${count(tokens)} tokens, at or past the ${count(BACKSTOP_TOKENS)}-token backstop: delegate the next bounded unit that needs several steps (its reads, edits, and checks) to construct:worker with a short handoff, while single small edits and state checks stay inline.`
 }
 
 function backstopSignal(input) {

@@ -193,13 +193,13 @@ test('/construct doctor adds one failed row when the memory doctor cannot run', 
 
 test('the Pane draws the panel for the construct pane id', async ($, on) => {
   await start($, on)
-  await $.agent.spawn({ subagentType: 'construct:odd-worker', model: 'opus', prompt: 'p', description: 'build it' })
+  await $.agent.spawn({ subagentType: 'construct:worker', model: 'opus', prompt: 'p', description: 'build it' })
   await settle()
   const ui = await pane($)
   await ui.redraw()
   const text = await joined(ui)
   expect(text).toContain('worker')
-  expect(text).not.toContain('odd_worker')
+  expect(text).not.toContain('construct:worker')
 })
 
 test('the AbovePrompt band is not drawn by the plugin', async ($, on) => {
@@ -251,7 +251,7 @@ test('a tool.check query without tool_use_id is not a gate cell', async ($, on) 
 
 test('spawn makes a card and passes the spawn result through', async ($, on) => {
   await start($, on)
-  const r = await $.agent.spawn({ subagentType: 'construct:odd-worker', prompt: 'p', description: 'd' })
+  const r = await $.agent.spawn({ subagentType: 'construct:worker', prompt: 'p', description: 'd' })
   expect(r.agentId).toBe('ag-1')
   expect(r.model).toBe('sonnet')
   await settle()
@@ -261,7 +261,7 @@ test('spawn makes a card and passes the spawn result through', async ($, on) => 
   expect(text).toContain('agents')
   expect(text).toContain('1 running · 1 total')
   expect(text).toContain('worker')
-  expect(text).not.toContain('odd_worker')
+  expect(text).not.toContain('construct:worker')
   expect(text).toContain('Sonnet')
 })
 
@@ -322,8 +322,8 @@ test('a main-thread turn.step shows its request count, model and effort in the m
 
 test('a spawn from main sets the permission mode; a nested spawn does not', async ($, on) => {
   await start($, on)
-  await $.agent.spawn({ subagentType: 'construct:odd-worker', prompt: 'p', description: 'd', permissionMode: 'auto' })
-  await $.agent.spawn({ subagentType: 'construct:odd-worker', prompt: 'p', description: 'd', permissionMode: 'plan', parentAgentId: 'x' })
+  await $.agent.spawn({ subagentType: 'construct:worker', prompt: 'p', description: 'd', permissionMode: 'auto' })
+  await $.agent.spawn({ subagentType: 'construct:worker', prompt: 'p', description: 'd', permissionMode: 'plan', parentAgentId: 'x' })
   await settle()
   const p = await pane($)
   await p.redraw()
@@ -349,7 +349,7 @@ test('a tool.call after an ask settles it as cleared', async ($, on) => {
 
 test('no session log card is drawn', async ($, on) => {
   await start($, on)
-  await $.agent.spawn({ subagentType: 'construct:odd-worker', model: 'opus', prompt: 'p', description: 'build it' })
+  await $.agent.spawn({ subagentType: 'construct:worker', model: 'opus', prompt: 'p', description: 'build it' })
   await settle()
   const p = await pane($)
   await p.redraw()

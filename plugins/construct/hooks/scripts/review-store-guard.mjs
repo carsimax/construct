@@ -34,7 +34,7 @@ function runsReviewHook(command, depth = 0) {
   })
 }
 
-const REASON = 'review-store-guard: the review store (construct-review/ under the git directory) is written only by the review hooks, which only the harness runs. Run the construct:rdd-review skill to record a review; do not write verdicts or pending records yourself.'
+const REASON = 'review-store-guard: the review store (construct-review/ under the git directory) is written only by the review hooks, which only the harness runs. Run the construct:review skill to record a review; do not write verdicts or pending records yourself.'
 
 // real resolves symlinks in the deepest existing ancestor and appends the rest.
 function real(path) {

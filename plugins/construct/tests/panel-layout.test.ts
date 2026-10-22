@@ -38,7 +38,7 @@ function lines(node, out: string[] = []) {
 }
 
 const agent = (o: any = {}) => ({
-  id: 'a1', role: 'odd_worker', type: 'construct:odd-worker', description: '', model: 'sonnet', effort: 'high',
+  id: 'a1', role: 'worker', type: 'construct:worker', description: '', model: 'sonnet', effort: 'high',
   ctx: 42000, steps: 7, startedMs: NOW - 65_000, endedMs: null, status: 'running', ...o,
 })
 
@@ -62,7 +62,7 @@ const buckets = {
 }
 const full = () => ({
   ...initialState(),
-  agents: [agent(), agent({ id: 'a2', role: 'odd_explorer', status: 'done', endedMs: NOW - 15_000, startedMs: NOW - 30_000 })],
+  agents: [agent(), agent({ id: 'a2', role: 'explorer', status: 'done', endedMs: NOW - 15_000, startedMs: NOW - 30_000 })],
   inline: { count: 3, last: '/home/me/proj/plugins/construct/hooks/register.js' },
   gate: { ...initialState().gate, verdicts, buckets, denied: 2, lastDenied: { tool: 'Bash', detail: 'curl -H token=*** x' } },
   // a receipt left in a stored panel by an older version: the panel ignores it
@@ -246,7 +246,7 @@ test('agents are hidden when there are none and cap at six with +N earlier', asy
 // ---- agents card (S1), no last turn (S2), no Client (S3) -----------------------
 
 test('agents card: bordered, titled agents, short names, routed model with effort meter, static elapsed', async () => {
-  const panel = { ...full(), agents: [agent({ model: 'claude-sonnet-5-5' }), agent({ id: 'a2', role: 'odd_explorer', model: 'claude-haiku-4-5', effort: 'low', status: 'done', endedMs: NOW - 15_000, startedMs: NOW - 30_000 })] }
+  const panel = { ...full(), agents: [agent({ model: 'claude-sonnet-5-5' }), agent({ id: 'a2', role: 'explorer', model: 'claude-haiku-4-5', effort: 'low', status: 'done', endedMs: NOW - 15_000, startedMs: NOW - 30_000 })] }
   const tree = buildPanel(args({ panel }))
   const box = (tree.children as any[]).find((c) => c.props?.borderStyle === 'round' && flat(c).startsWith('agents'))
   expect(box).toBeTruthy()
@@ -254,7 +254,7 @@ test('agents card: bordered, titled agents, short names, routed model with effor
   const rows = rowsOf({ panel })
   const squash = (r: string) => r.replace(/\s+/g, ' ')
   expect(rows).toContain('agents 1 running · 2 total')
-  expect(rows.some((r) => r.includes('odd_worker') || r.includes('odd-worker'))).toBe(false)
+  expect(rows.some((r) => r.includes('construct:worker') || r.includes('construct_worker'))).toBe(false)
   expect(rows.map(squash)).toContain('◐ worker Sonnet 5.5 ▮▮▮▯ 1:05')
   expect(rows.map(squash)).toContain('✓ explorer Haiku 4.5 ▮▯▯▯ 0:15')
 })
@@ -464,7 +464,7 @@ test('not blocked: the status is unchanged', async () => {
 })
 
 test('phase: the busy status names the running agents phase, and blocked wins', async () => {
-  const verifying = { ...full(), turn: { turnId: 't' }, agents: [agent(), agent({ id: 'v', role: 'odd_verify' })] }
+  const verifying = { ...full(), turn: { turnId: 't' }, agents: [agent(), agent({ id: 'v', role: 'verifier' })] }
   expect(rowsOf({ panel: verifying })[0]).toBe('Opus 5.5 ● verifying')
   expect(rowsOf({ panel: { ...verifying, blocked: true } })[0]).toBe('Opus 5.5 ◆ blocked')
   expect(rowsOf({ panel: { ...full(), blocked: false } })[0]).toBe('Opus 5.5 ○ idle')

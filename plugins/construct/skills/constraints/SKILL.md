@@ -1,5 +1,5 @@
 ---
-name: constraint-driven
+name: constraints
 description: "Write the repository's quality bar as CONSTRAINTS.md: a Floor that is never weakened, numeric rules each with the command that checks it, and measure-and-hold ratchets. Adapted from agent-skills (MIT). Trigger: no written quality bar, the user asks for constraints, standards, or quality gates, or a change silences checks or skips tests to get to green."
 license: MIT
 metadata:
@@ -18,7 +18,7 @@ Skip one-off scripts, spikes, and throwaway prototypes. The Floor alone still ap
 - Detect before asking. Never ask what a manifest, config, or one test run can answer.
 - Ask at most four questions, one per turn, then stop and wait. Each carries a guess and a default, so "I don't know" is a complete answer.
 - Non-interactive contexts (CI, loops, unattended runs) apply the Floor only, say so, and flag the rest for a human.
-- The parent orchestrates. Writing `CONSTRAINTS.md` or any pointer line into the repository is a write: after the user answers, it goes to one `construct:odd-worker` with the file as its allowed edit surface.
+- The parent orchestrates. Writing `CONSTRAINTS.md` or any pointer line into the repository is a write: after the user answers, it goes to one `construct:worker` with the file as its allowed edit surface.
 - Every numeric rule names the command that checks it. A number without a command is an aspiration: leave it out.
 - Do not hand-roll a checker when the stack has a de facto one; use the project's own tools first.
 - State each threshold with its reason. Never invent a number the user did not choose or the measurement did not give.
@@ -56,7 +56,7 @@ No tool checks the suppression and skipped-test items for you. Read the diff for
    - Q3 Target numbers, or measure and hold. Default: measure and hold.
    - Q4 Slowest tolerable check before work is handed back. Default: about 90 seconds at task end, unlimited in CI.
 3. **Draft** `CONSTRAINTS.md` from [references/constraints-template.md](references/constraints-template.md): Floor, numeric rules with `Checked by` and `Runs at`, measured-not-enforced ratchets, exceptions (owner and expiry).
-4. **Write** it through one `construct:odd-worker` at the repository root, plus one line in the repository's agent instruction file: `Read CONSTRAINTS.md before writing code. Do not weaken it to make a change pass.`
+4. **Write** it through one `construct:worker` at the repository root, plus one line in the repository's agent instruction file: `Read CONSTRAINTS.md before writing code. Do not weaken it to make a change pass.`
 5. **Place checks by cost**: seconds-level checks after an edit, test and coverage on changed lines at task end, everything else in CI. Scope to the diff.
 6. **Guard the bar** in review: compare `CONSTRAINTS.md` against the branch point; look for moved thresholds, easier tests, silenced checkers (including coverage, mutation, and security ignores), unfinished work, and unexplained exceptions.
 7. Check that at least one constraint is external (a scanner, browser measurement, or vulnerability database), not judged only by the project's own tests.
@@ -70,4 +70,4 @@ Return the detected stack in two lines, then one question with its guess and def
 
 - [references/constraints-template.md](references/constraints-template.md): `CONSTRAINTS.md` template, default thresholds with reasons, ratchet rules.
 - `construct:task-size-risk`: the Risk line.
-- `construct:odd-workflow`: test-first and verification loop.
+- `construct:workflow`: test-first and verification loop.

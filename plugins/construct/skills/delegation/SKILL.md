@@ -1,5 +1,5 @@
 ---
-name: odd-delegation
+name: delegation
 description: "When and how an ODD orchestrator delegates to construct agents: mapping, writer, verification, and per-action triggers, allowed edit surfaces, parallel writers, and handoff prompts. Trigger: deciding whether to delegate, launching an explorer, worker, or verifier, or writing a delegation prompt."
 license: MIT
 metadata:
@@ -13,23 +13,23 @@ Load this skill before launching any subagent for ODD work, or when deciding whe
 
 ## Hard Rules
 
-- The parent orchestrates and never writes code. Every write to repository code, tests, or docs goes to `construct:odd-worker`, whatever the size. The parent writes only the feature document, and owns git.
+- The parent orchestrates and never writes code. Every write to repository code, tests, or docs goes to `construct:worker`, whatever the size. The parent writes only the feature document, and owns git.
 - Reads, explanations, planning, and read-only requests stay with the parent unless the mapping trigger holds.
 - A trigger holds only when its condition truly holds. When one holds, delegating is mandatory; writing code inline or continuing inline past a trigger is a routing defect.
 - Never pass these rules to child agents as permission to orchestrate. Children do not delegate.
 - Each role's model and effort come from the plugin configuration. The routing mod applies them, so prompts never choose a model.
 - Never delegate a writer without `## Allowed edit surfaces`: one bare repository-relative path or glob per line, notes under a later heading. Never ask the human to author paths in free text.
-- A writer prompt also carries `Spec: odd/tasks/<feature>.md, T<n>` while a feature document is unfinished; a `construct:odd-verify` prompt carries `Risk: item N (reason)`. The admission hook denies a launch without them.
+- A writer prompt also carries `Spec: odd/tasks/<feature>.md, T<n>` while a feature document is unfinished; a `construct:verifier` prompt carries `Risk: item N (reason)`. The admission hook denies a launch without them.
 
 ## Decision Gates
 
 | Trigger | Condition | Agent |
 |---|---|---|
 | Evidence budget | Decide or verify within one parallel batch (at most 3 calls, about 10k tokens) | none: the parent reads |
-| Mapping | Needs more evidence than one batch, or more than about 5 sequential lookups | `construct:odd-explorer` (one per independent front, up to 3, launched together), then re-evaluate task size |
-| Writer | Any authorized write to repository code, tests, or docs | `construct:odd-worker`, one per unit; disjoint units launched together, dependent units one after another |
-| Verification | A Risk line that names a high-risk item, after the unit's own checks; for a tracked feature with several such units, one verifier at the feature's end over the whole branch instead of one per unit, and a unit alone only when it must ship or be relied on before then | `construct:odd-verify` (one) |
-| Per action | Long suites, builds, installs, broad research | `construct:odd-general` |
+| Mapping | Needs more evidence than one batch, or more than about 5 sequential lookups | `construct:explorer` (one per independent front, up to 3, launched together), then re-evaluate task size |
+| Writer | Any authorized write to repository code, tests, or docs | `construct:worker`, one per unit; disjoint units launched together, dependent units one after another |
+| Verification | A Risk line that names a high-risk item, after the unit's own checks; for a tracked feature with several such units, one verifier at the feature's end over the whole branch instead of one per unit, and a unit alone only when it must ship or be relied on before then | `construct:verifier` (one) |
+| Per action | Long suites, builds, installs, broad research | `construct:general` |
 
 A unit is one independent piece of behavior with its code, tests, and docs together. Never split one behavior into separate test, docs, and code writers. A delivery that depends on another is not independent.
 
@@ -50,7 +50,7 @@ Keep a list of `(role, task fingerprint)` pairs launched this turn, where the fi
 ## Parallel explorers
 
 - An independent front is a separate module, layer, or question whose answer does not depend on another front's answer.
-- Launch one `construct:odd-explorer` per independent front, up to 3, in one message. One front stays one explorer.
+- Launch one `construct:explorer` per independent front, up to 3, in one message. One front stays one explorer.
 - Each prompt names its front and question, and lists the other fronts as out of scope.
 - A front that needs another front's answer runs after it.
 - Distinct fronts are distinct fingerprints, so deduplication does not block them.

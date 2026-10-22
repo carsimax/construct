@@ -5,7 +5,7 @@ import { spawnSync } from 'node:child_process'
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { checkLensResult } from '../plugins/construct/hooks/scripts/review-store.mjs'
-import { ROLES, kindOf, namesOf, qualified, roleKey } from '../plugins/construct/hooks/scripts/roles.mjs'
+import { LEGACY, ROLES, kindOf, namesOf, qualified, roleKey } from '../plugins/construct/hooks/scripts/roles.mjs'
 
 const pluginRoot = new URL('../plugins/construct/', import.meta.url).pathname
 const read = (...p) => readFileSync(join(pluginRoot, ...p), 'utf8')
@@ -24,24 +24,25 @@ test('the registry names exactly the agent files, each with one kind', () => {
   const files = readdirSync(join(pluginRoot, 'agents')).filter((f) => f.endsWith('.md')).map((f) => f.replace(/\.md$/, ''))
   assert.deepEqual([...names].sort(), files.sort())
   assert.ok(names.every((n) => ['reader', 'writer', 'verifier', 'runner', 'judge', 'lens'].includes(ROLES[n])))
-  assert.deepEqual(namesOf('writer'), ['odd-worker', 'jd-fix-agent'])
-  assert.deepEqual(namesOf('judge'), ['jd-judge-a', 'jd-judge-b'])
+  assert.deepEqual(namesOf('writer'), ['worker'])
+  assert.deepEqual(namesOf('judge'), ['judge-a', 'judge-b'])
   assert.deepEqual(namesOf('lens').sort(), ['review-readability', 'review-reliability', 'review-resilience', 'review-risk'])
 })
 
 test('helpers: construct type, role key, kind with or without the prefix', () => {
-  assert.equal(qualified('odd-worker'), 'construct:odd-worker')
-  assert.equal(roleKey('jd-fix-agent'), 'jd_fix_agent')
-  assert.equal(kindOf('construct:odd-verify'), 'verifier')
-  assert.equal(kindOf('odd-verify'), 'verifier')
+  assert.equal(qualified('worker'), 'construct:worker')
+  assert.equal(roleKey('judge-a'), 'judge_a')
+  assert.equal(kindOf('construct:jd-fix-agent'), null)
+  assert.equal(kindOf('construct:verifier'), 'verifier')
+  assert.equal(kindOf('verifier'), 'verifier')
   assert.equal(kindOf('general-purpose'), 'runner')
   assert.equal(kindOf('review-risk'), 'lens')
   assert.equal(kindOf('construct:nope'), null)
   assert.equal(kindOf(undefined), null)
 })
 
-test('plugin.json declares model_ and effort_ options for exactly the registry roles', () => {
-  const keys = names.flatMap((n) => [`model_${roleKey(n)}`, `effort_${roleKey(n)}`])
+test('plugin.json declares model_ and effort_ options for exactly the registry roles and the legacy names', () => {
+  const keys = [...names, ...Object.values(LEGACY)].flatMap((n) => [`model_${roleKey(n)}`, `effort_${roleKey(n)}`])
   assert.deepEqual(Object.keys(manifest.userConfig).filter((k) => /^(model|effort)_/.test(k)).sort(), keys.sort())
 })
 

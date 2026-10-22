@@ -11,7 +11,7 @@ import { makeRepo, scratchDir, write } from '../helpers/repo.mjs'
 const PLUGIN = new URL('../../plugins/construct/', import.meta.url).pathname
 const HOOK = join(PLUGIN, 'hooks/scripts/delegation-admission.mjs')
 const read = (path) => readFileSync(join(PLUGIN, path), 'utf8')
-const HANDOFFS = read('skills/odd-delegation/references/handoffs.md')
+const HANDOFFS = read('skills/delegation/references/handoffs.md')
 
 // The fenced block under a `## <name>` heading of handoffs.md.
 function template(name) {
@@ -34,8 +34,9 @@ describe('handoff templates vs delegation-admission', () => {
   test('worker template is admitted by the hook once placeholders are filled', () => {
     // hook: Spec line (SPEC_LINE, namesFeatureDocument) and surfaces (parseSurfaces).
     const prompt = template('Worker').replace('<feature>', 'feat').replace('<n>', '1')
-    assert.equal(launch('construct:odd-worker', prompt), '')
-    assert.equal(launch('construct:jd-fix-agent', prompt), '')
+    assert.equal(launch('construct:worker', prompt), '')
+    // jd-fix-agent left the writers (S7): the hook no longer gates it
+    assert.equal(launch('construct:jd-fix-agent', 'Do the thing'), '')
   })
 
   test('worker template names the Spec and surfaces forms literally', () => {
@@ -48,12 +49,12 @@ describe('handoff templates vs delegation-admission', () => {
     // hook: RISK_LINE, `Risk: item N` with N 1-6.
     const verifier = template('Verifier')
     assert.match(verifier, /^Risk: item N \(/m)
-    assert.equal(launch('construct:odd-verify', verifier.replace('item N', 'item 3')), '')
-    assert.match(launch('construct:odd-verify', verifier.replace(/^Risk:.*\n/m, '')), /Risk: item N/)
+    assert.equal(launch('construct:verifier', verifier.replace('item N', 'item 3')), '')
+    assert.match(launch('construct:verifier', verifier.replace(/^Risk:.*\n/m, '')), /Risk: item N/)
   })
 
-  test('the odd-delegation skill and the session contract name the forms', () => {
-    const skill = read('skills/odd-delegation/SKILL.md')
+  test('the delegation skill and the session contract name the forms', () => {
+    const skill = read('skills/delegation/SKILL.md')
     const contract = read('hooks/contract/session.md')
     for (const text of [skill, contract]) {
       assert.match(text, /Spec: odd\/tasks\/<f(?:eature)?>\.md, T<n>/)

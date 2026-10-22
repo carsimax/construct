@@ -25,35 +25,34 @@ function stepStub(seen: unknown[]) {
 }
 
 test('roleFor maps construct agents and general-purpose to their config role', async () => {
-  expect(roleFor('construct:odd-worker')).toBe('odd_worker')
+  expect(roleFor('construct:worker')).toBe('worker')
   expect(roleFor('construct:review-risk')).toBe('review_risk')
-  expect(roleFor('construct:jd-fix-agent')).toBe('jd_fix_agent')
-  expect(roleFor('general-purpose')).toBe('odd_general')
+  expect(roleFor('general-purpose')).toBe('general')
   expect(roleFor('Explore')).toBe(null)
   expect(roleFor('engram:something')).toBe(null)
   expect(roleFor(undefined)).toBe(null)
 })
 
 test('modelFor and effortFor read the role options, and effort default means no override', async () => {
-  const options = { model_odd_worker: 'opus', effort_odd_worker: 'high', effort_odd_explorer: 'default' }
-  expect(modelFor('odd_worker', options)).toBe('opus')
-  expect(effortFor('odd_worker', options)).toBe('high')
-  expect(effortFor('odd_explorer', options)).toBe(null)
-  expect(modelFor('odd_verify', options)).toBe(null)
+  const options = { model_worker: 'opus', effort_worker: 'high', effort_explorer: 'default' }
+  expect(modelFor('worker', options)).toBe('opus')
+  expect(effortFor('worker', options)).toBe('high')
+  expect(effortFor('explorer', options)).toBe(null)
+  expect(modelFor('verifier', options)).toBe(null)
   expect(effortFor(null, options)).toBe(null)
 })
 
 test('agent.spawn sends the configured model for a construct agent that names none', async ($, on) => {
   const seen = []
   on('agent.spawn', spawnStub(seen))
-  await $.agent.spawn({ subagentType: 'construct:odd-explorer', prompt: 'map it' })
+  await $.agent.spawn({ subagentType: 'construct:explorer', prompt: 'map it' })
   expect(seen[0].model).toBe('haiku')
 })
 
 test('agent.spawn keeps an explicit model over the configured one', async ($, on) => {
   const seen = []
   on('agent.spawn', spawnStub(seen))
-  await $.agent.spawn({ subagentType: 'construct:odd-explorer', model: 'opus', prompt: 'map it' })
+  await $.agent.spawn({ subagentType: 'construct:explorer', model: 'opus', prompt: 'map it' })
   expect(seen[0].model).toBe('opus')
 })
 
@@ -76,8 +75,8 @@ test('turn.step applies the configured effort to a routed subagent only', async 
   const steps = []
   on('agent.spawn', spawnStub(spawned))
   on('turn.step', stepStub(steps))
-  await $.agent.spawn({ subagentType: 'construct:odd-worker', model: 'sonnet', prompt: 'build' })
-  await runStep($, { turnId: 't1', index: 0, model: 'claude-sonnet', effort: 'low', messageCount: 1, agentId: 'agent-construct:odd-worker' })
+  await $.agent.spawn({ subagentType: 'construct:worker', model: 'sonnet', prompt: 'build' })
+  await runStep($, { turnId: 't1', index: 0, model: 'claude-sonnet', effort: 'low', messageCount: 1, agentId: 'agent-construct:worker' })
   await runStep($, { turnId: 't2', index: 0, model: 'claude-opus', effort: 'high', messageCount: 1 })
   await runStep($, { turnId: 't3', index: 0, model: 'claude-x', effort: 'low', messageCount: 1, agentId: 'unknown-agent' })
   expect(steps[0].effort).toBe('medium')
@@ -90,8 +89,8 @@ test('turn.step keeps the model effort when the role effort is default', async (
   const steps = []
   on('agent.spawn', spawnStub(spawned))
   on('turn.step', stepStub(steps))
-  await $.agent.spawn({ subagentType: 'construct:odd-explorer', model: 'haiku', prompt: 'map' })
-  await runStep($, { turnId: 't1', index: 0, model: 'claude-haiku', effort: 'medium', messageCount: 1, agentId: 'agent-construct:odd-explorer' })
+  await $.agent.spawn({ subagentType: 'construct:explorer', model: 'haiku', prompt: 'map' })
+  await runStep($, { turnId: 't1', index: 0, model: 'claude-haiku', effort: 'medium', messageCount: 1, agentId: 'agent-construct:explorer' })
   expect(steps[0].effort).toBe('medium')
 })
 
@@ -100,9 +99,28 @@ test('the role map keeps the newest 256 subagents and drops the oldest', async (
   on('agent.spawn', ($, e) => ({ model: e.model, agentId: `a${n++}` }))
   const steps = []
   on('turn.step', stepStub(steps))
-  for (let i = 0; i < 257; i++) await $.agent.spawn({ subagentType: 'construct:odd-worker', model: 'sonnet', prompt: 'build' })
+  for (let i = 0; i < 257; i++) await $.agent.spawn({ subagentType: 'construct:worker', model: 'sonnet', prompt: 'build' })
   await runStep($, { turnId: 't0', index: 0, model: 'm', effort: 'low', messageCount: 1, agentId: 'a0' })
   await runStep($, { turnId: 't1', index: 0, model: 'm', effort: 'low', messageCount: 1, agentId: 'a1' })
   await runStep($, { turnId: 't2', index: 0, model: 'm', effort: 'low', messageCount: 1, agentId: 'a256' })
   expect(steps.map((s) => s.effort)).toEqual(['low', 'medium', 'medium'])
+})
+
+test('modelFor and effortFor fall back to the legacy key, and the new key wins when both are set', async () => {
+  expect(modelFor('worker', { model_odd_worker: 'opus' })).toBe('opus')
+  expect(effortFor('worker', { effort_odd_worker: 'high' })).toBe('high')
+  expect(modelFor('worker', { model_worker: 'haiku', model_odd_worker: 'opus' })).toBe('haiku')
+  expect(effortFor('worker', { effort_worker: 'low', effort_odd_worker: 'high' })).toBe('low')
+  expect(effortFor('worker', { effort_worker: 'default', effort_odd_worker: 'high' })).toBe(null)
+  expect(modelFor('worker', { model_worker: '', model_odd_worker: 'opus' })).toBe('opus')
+  expect(effortFor('worker', { effort_worker: '', effort_odd_worker: 'high' })).toBe('high')
+  expect(modelFor('worker', { model_worker: 'inherit', model_odd_worker: 'opus' })).toBe('opus')
+  expect(effortFor('worker', { effort_worker: 'inherit', effort_odd_worker: 'high' })).toBe('high')
+  expect(effortFor('worker', { effort_worker: 'inherit', effort_odd_worker: 'default' })).toBe(null)
+  expect(modelFor('worker', { model_worker: 'sonnet', model_odd_worker: 'opus' })).toBe('sonnet')
+  expect(modelFor('review_risk', { model_review_risk: 'inherit' })).toBe(null)
+  expect(effortFor('review_risk', { effort_review_risk: 'inherit' })).toBe(null)
+  expect(modelFor('review_risk', { model_review_risk: 'haiku' })).toBe('haiku')
+  expect(modelFor('judge_a', { model_jd_judge_a: 'opus' })).toBe('opus')
+  expect(modelFor('review_risk', { model_odd_worker: 'opus' })).toBe(null)
 })

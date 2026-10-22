@@ -1,5 +1,5 @@
 ---
-name: odd-general
+name: general
 description: >
   General ODD delegate for bounded tasks that fit no specialized construct agent: research,
   per-action work such as running a long test suite, a build, or an install, and other

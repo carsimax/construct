@@ -18,7 +18,7 @@ Load this skill when a change migrates or deletes stored data, changes a persist
 - Every phase has a verifier (test, query, or usage check) and a rollback. A migration with no tested down path is not ready.
 - A backfill is reversible or backed up first, runs in bounded batches, and can be re-run safely.
 - Do not deprecate without a working replacement. Do not remove while usage is unproven.
-- The parent plans and reads only; every write goes to `construct:odd-worker`, one phase per unit, test-first.
+- The parent plans and reads only; every write goes to `construct:worker`, one phase per unit, test-first.
 - Ask at most one blocking question (default: advisory deprecation with no hard date).
 
 ## Decision Gates
@@ -37,7 +37,7 @@ Load this skill when a change migrates or deletes stored data, changes a persist
 1. Inventory every touchpoint of the old shape (code, data, config, docs, external consumers) with read-only searches.
 2. Pick the pattern (expand/contract, adapter, flag, strangler) and write the phases with their verifier and rollback (`references/phases.md`). Save the chosen plan with `construct-memory save` under `topic_key` `migration/<name>`.
 3. Write the deprecation notice: status, replacement, removal condition (an observable fact, such as zero usage, or a date), migration steps.
-4. Hand each phase to a worker as its own unit; give risky phases their own commit and an independent `construct:odd-verify`.
+4. Hand each phase to a worker as its own unit; give risky phases their own commit and an independent `construct:verifier`.
 5. Before the contract phase, prove zero remaining use (grep, logs, metrics), then remove code, tests, docs, config, and the notice together.
 
 ## Output Contract

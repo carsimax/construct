@@ -8,9 +8,9 @@ The user asks to stress-test a plan, design, or non-obvious claim ("this is safe
 
 ## Differences from code mode
 
-- The judges are the same blind pair (`construct:jd-judge-a`, `construct:jd-judge-b`), launched in parallel with identical input.
+- The judges are the same blind pair (`construct:judge-a`, `construct:judge-b`), launched in parallel with identical input.
 - Input is ARTIFACT + CONTRACT only. Never pass the CLAIM, the author's reasoning, or the conclusion being tested.
-- No fix actor. `construct:jd-fix-agent` is never launched; the orchestrator revises the artifact itself or asks the user. Nothing is written to the repository.
+- No fix actor. `construct:worker` is never launched; the orchestrator revises the artifact itself or asks the user. Nothing is written to the repository.
 - No cross-model step and no external CLI.
 - The terminal verdict is still `APPROVED | ESCALATED`.
 

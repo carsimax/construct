@@ -1,5 +1,5 @@
 ---
-name: odd-explorer
+name: explorer
 description: >
   Read-only ODD explorer. Use when understanding a module or flow needs more evidence than
   one bounded batch (about 3 calls and 10k tokens) or more than about 5 sequential lookups,

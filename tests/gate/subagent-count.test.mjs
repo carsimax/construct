@@ -26,8 +26,8 @@ const hookEnv = (e) => ({ ...process.env, ...e })
 function count(mode, e, input) {
   return spawnSync('node', [COUNT, mode], { input: JSON.stringify(input), encoding: 'utf8', env: hookEnv(e) })
 }
-const startAgent = (e, id, session = 's1') => count('start', e, { session_id: session, hook_event_name: 'SubagentStart', agent_id: id, agent_type: 'construct:odd-worker' })
-const stopAgent = (e, id, session = 's1') => count('stop', e, { session_id: session, hook_event_name: 'SubagentStop', agent_id: id, agent_type: 'construct:odd-worker' })
+const startAgent = (e, id, session = 's1') => count('start', e, { session_id: session, hook_event_name: 'SubagentStart', agent_id: id, agent_type: 'construct:worker' })
+const stopAgent = (e, id, session = 's1') => count('stop', e, { session_id: session, hook_event_name: 'SubagentStop', agent_id: id, agent_type: 'construct:worker' })
 const agentDir = (e, session = 's1') => join(e.CLAUDE_PLUGIN_DATA, 'subagent-count', session)
 const openIds = (e, session = 's1') => (existsSync(agentDir(e, session)) ? readdirSync(agentDir(e, session)).filter((n) => !n.startsWith('.')) : [])
 

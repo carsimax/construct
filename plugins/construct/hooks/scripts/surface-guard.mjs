@@ -1,7 +1,7 @@
 // Edit-surface guard (PreToolUse on Write, Edit, MultiEdit, NotebookEdit). A construct writer
 // (agent_id present) may only write inside the `## Allowed edit surfaces` recorded at its launch
 // by delegation-admission.mjs; the main thread may only write under odd/tasks/ and sends code to
-// construct:odd-worker. Paths outside the git work tree, a cwd outside a repository, a subagent
+// construct:worker. Paths outside the git work tree, a cwd outside a repository, a subagent
 // with no record, and any internal error pass (fail open, no output).
 // shortcut: the record is paired to its agent by same-type FIFO at SubagentStart, so two
 // same-type launches in flight may swap surfaces; Bash writes (sed -i, redirects) are not covered.
@@ -37,7 +37,7 @@ function main() {
     if (!entry || entry.surfaces.some((surface) => surfaceContains(surface, rel))) return
     deny(`surface-guard: ${rel} is outside your allowed edit surfaces (${entry.surfaces.join(', ')}). Write only inside them, or return needs_interaction naming the path you need.`)
   } else if (!/^odd\/tasks\//.test(rel)) {
-    deny(`surface-guard: the main thread does not write code (${rel}). Delegate it to construct:odd-worker with an Allowed edit surfaces section; only odd/tasks/ is written directly.`)
+    deny(`surface-guard: the main thread does not write code (${rel}). Delegate it to construct:worker with an Allowed edit surfaces section; only odd/tasks/ is written directly.`)
   }
 }
 

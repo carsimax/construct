@@ -107,8 +107,8 @@ A subagent ends its final report with a `## Key Learnings:` section of numbered 
 ## Where memory is used
 
 - Session contract: Explore starts with `construct-memory search`; Close saves decisions, root causes, and conventions, and large work stores the session summary.
-- Subagent contract, `odd-worker`, `odd-general`, `odd-verify`, and `odd-explorer`: reports end with `## Key Learnings:`; the explorer also searches memory before mapping.
-- `odd-workflow` (explore, close, resume) and its `persistence.md`: resume reads the injected context, then searches the feature name.
-- `odd-delegation` and its handoff templates: the parent pastes search hits into an optional `## Memory` section.
-- `debugging`: search the symptom first; save the root cause as `bugfix`. `rdd-review`: a fixed rejection is saved as `bugfix`, a deferred advisory as `decision`.
-- `constraint-driven`: `quality/<rule>`. `migration`: `migration/<name>`.
+- Subagent contract, `worker`, `general`, `verifier`, and `explorer`: reports end with `## Key Learnings:`; the explorer also searches memory before mapping.
+- `workflow` (explore, close, resume) and its `persistence.md`: resume reads the injected context, then searches the feature name.
+- `delegation` and its handoff templates: the parent pastes search hits into an optional `## Memory` section.
+- `debugging`: search the symptom first; save the root cause as `bugfix`. `review`: a fixed rejection is saved as `bugfix`, a deferred advisory as `decision`.
+- `constraints`: `quality/<rule>`. `migration`: `migration/<name>`.

@@ -26,7 +26,7 @@ import {
 
 const USAGE = { input_tokens: 10, output_tokens: 5, cache_read_input_tokens: 200, cache_creation_input_tokens: 30, model: 'm' }
 const spawn = (s: any, id: any, extra: any = {}) =>
-  onAgentSpawn(s, { agentId: id, subagentType: 'construct:odd-worker', description: 'd', model: 'sonnet', effort: 'high', nowMs: 1000, ...extra })
+  onAgentSpawn(s, { agentId: id, subagentType: 'construct:worker', description: 'd', model: 'sonnet', effort: 'high', nowMs: 1000, ...extra })
 
 // ---- init / merge ------------------------------------------------------
 
@@ -59,7 +59,7 @@ test('merge returns defaults on a version change or a malformed value', () => {
 test('spawn adds a running card with the construct role', () => {
   const s = spawn(initialState(), 'a1')
   expect(s.agents).toEqual([
-    { id: 'a1', role: 'odd_worker', type: 'construct:odd-worker', description: 'd', model: 'sonnet', effort: 'high', ctx: 0, steps: 0, startedMs: 1000, endedMs: null, status: 'running' },
+    { id: 'a1', role: 'worker', type: 'construct:worker', description: 'd', model: 'sonnet', effort: 'high', ctx: 0, steps: 0, startedMs: 1000, endedMs: null, status: 'running' },
   ])
 })
 
@@ -464,20 +464,19 @@ test('onBlocked sets and onUnblocked clears the flag, both idempotent and leavin
 const phaseFor = (...types: string[]) => phaseOf(types.reduce((s: any, t, i) => spawn(s, `p${i}`, { subagentType: t }), initialState()))
 
 test('phaseOf maps the running roles to a phase', () => {
-  expect(phaseFor('construct:odd-verify')).toBe('verifying')
+  expect(phaseFor('construct:verifier')).toBe('verifying')
   expect(phaseFor('construct:review-risk')).toBe('reviewing')
-  expect(phaseFor('construct:jd-judge-a')).toBe('reviewing')
-  expect(phaseFor('construct:odd-worker')).toBe('implementing')
-  expect(phaseFor('construct:jd-fix-agent')).toBe('implementing')
-  expect(phaseFor('construct:odd-explorer')).toBe('exploring')
+  expect(phaseFor('construct:judge-a')).toBe('reviewing')
+  expect(phaseFor('construct:worker')).toBe('implementing')
+  expect(phaseFor('construct:explorer')).toBe('exploring')
   expect(phaseFor('general-purpose')).toBe('working')
 })
 
 test('phaseOf picks verifying > reviewing > implementing > exploring > working', () => {
-  expect(phaseFor('general-purpose', 'construct:odd-explorer')).toBe('exploring')
-  expect(phaseFor('construct:odd-explorer', 'construct:odd-worker')).toBe('implementing')
-  expect(phaseFor('construct:odd-worker', 'construct:review-risk')).toBe('reviewing')
-  expect(phaseFor('construct:review-risk', 'construct:odd-verify', 'construct:odd-worker')).toBe('verifying')
+  expect(phaseFor('general-purpose', 'construct:explorer')).toBe('exploring')
+  expect(phaseFor('construct:explorer', 'construct:worker')).toBe('implementing')
+  expect(phaseFor('construct:worker', 'construct:review-risk')).toBe('reviewing')
+  expect(phaseFor('construct:review-risk', 'construct:verifier', 'construct:worker')).toBe('verifying')
 })
 
 test('phaseOf is null with no agents or only done agents, and ignores odd input', () => {

@@ -28,7 +28,7 @@ function hook(command, cwd, e = env(), { input, tool_name = 'Bash' } = {}) {
   return { status: result.status, stdout: result.stdout, stderr: result.stderr, json, decision: json?.hookSpecificOutput?.permissionDecision, reason: json?.hookSpecificOutput?.permissionDecisionReason }
 }
 
-const TABLE = (risk) => `# Feature\n\n## Tasks\n\n| ID | Specs | Task | Route | Risk | Status | Commit |\n|---|---|---|---|---|---|---|\n| T1 | S1 | work | odd-worker | ${risk} | done | \`abc\` |\n\n## Log\n\n- 1 | none | x\n`
+const TABLE = (risk) => `# Feature\n\n## Tasks\n\n| ID | Specs | Task | Route | Risk | Status | Commit |\n|---|---|---|---|---|---|---|\n| T1 | S1 | work | worker | ${risk} | done | \`abc\` |\n\n## Log\n\n- 1 | none | x\n`
 
 // featureRepo: main holds the base commit; feat adds one committed unit whose feature document has the given Risk cell.
 function featureRepo(risk = '2') {
@@ -58,7 +58,7 @@ const denied = (r) => {
   assert.equal(r.decision, 'deny', r.stdout)
   assert.match(r.reason, /publication-gate/)
   assert.match(r.reason, /review-risk/)
-  assert.match(r.reason, /construct:rdd-review/)
+  assert.match(r.reason, /construct:review/)
 }
 const silent = (r) => {
   assert.equal(r.status, 0)

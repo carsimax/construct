@@ -21,7 +21,7 @@ const run = (script, args, input, e, raw) => {
   }
   return { status: r.status, stdout: r.stdout, json }
 }
-const WORKER = 'construct:odd-worker'
+const WORKER = 'construct:worker'
 const prompt = (...paths) => `Do it\n\n## Allowed edit surfaces\n${paths.join('\n')}\n\n## Verification\n- x\n`
 // A launched and started worker with agent_id a1.
 function started(repo, ...paths) {
@@ -110,9 +110,9 @@ describe('surface-guard', () => {
     const repo = makeRepo({ 'src/a.js': 'a\n' })
     isAllowed(write(repo, started(repo, 'src/a.js'), join(repo, 'src/b.js'), { agent_id: 'other' }))
   })
-  test('the main thread writing code is denied pointing at construct:odd-worker', () => {
+  test('the main thread writing code is denied pointing at construct:worker', () => {
     const repo = makeRepo({ 'src/a.js': 'a\n' })
-    isDenied(write(repo, {}, join(repo, 'src/x.js')), /src\/x\.js/, /construct:odd-worker/)
+    isDenied(write(repo, {}, join(repo, 'src/x.js')), /src\/x\.js/, /construct:worker/)
   })
   test('the main thread writing odd/tasks/ is allowed', () => {
     const repo = makeRepo({ 'src/a.js': 'a\n' })

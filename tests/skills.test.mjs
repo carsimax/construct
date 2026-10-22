@@ -12,19 +12,19 @@ const EXPECTED = [
   'chained-pr',
   'cognitive-doc-design',
   'comment-writer',
-  'constraint-driven',
+  'constraints',
   'debugging',
   'go-testing',
   'judgment-day',
   'lossless-prompts',
   'memory',
   'migration',
-  'odd-delegation',
-  'odd-workflow',
-  'rdd-review',
+  'delegation',
+  'workflow',
+  'review',
   'skill-creator',
   'skill-improver',
-  'source-driven',
+  'sources',
   'task-size-risk',
   'work-unit-commits',
 ]
@@ -42,7 +42,7 @@ function filesUnder(dir) {
 }
 
 test('the plugin ships exactly the expected skills', () => {
-  assert.deepEqual(skillDirs().sort(), EXPECTED)
+  assert.deepEqual(skillDirs().sort(), [...EXPECTED].sort())
 })
 
 test('every skill has frontmatter whose name matches its directory and a description', () => {
@@ -79,7 +79,7 @@ test('relative markdown links inside skills resolve to existing files', () => {
 
 test('judgment-day names the plugin-namespaced agents', () => {
   const text = readFileSync(join(skillsRoot, 'judgment-day', 'SKILL.md'), 'utf8')
-  for (const agent of ['jd-judge-a', 'jd-judge-b', 'jd-fix-agent']) {
+  for (const agent of ['judge-a', 'judge-b', 'worker']) {
     assert.match(text, new RegExp(`construct:${agent}`), agent)
     assert.doesNotMatch(text, new RegExp(`\`${agent}\``), `bare ${agent}`)
   }
@@ -91,16 +91,16 @@ test('the MIT notice for the ported material ships with the plugin', () => {
   assert.match(notice, /Copyright \(c\) 2025 Gentleman Programming/)
 })
 
-test('rdd-review quotes the lens mapping of review-lenses.mjs', () => {
-  const text = readFileSync(join(skillsRoot, 'rdd-review', 'SKILL.md'), 'utf8')
+test('review quotes the lens mapping of review-lenses.mjs', () => {
+  const text = readFileSync(join(skillsRoot, 'review', 'SKILL.md'), 'utf8')
   for (const [item, lenses] of Object.entries(LENSES_BY_RISK)) {
     const row = `| ${item} | ${lenses.map((l) => `\`${l}\``).join(', ')} |`
     assert.ok(text.includes(row), `missing mapping row ${row}`)
   }
 })
 
-test('rdd-review names the Review subject form and no longer names the removed CLIs or the switch', () => {
-  const text = filesUnder(join(skillsRoot, 'rdd-review')).map((f) => readFileSync(f, 'utf8')).join('\n')
+test('review names the Review subject form and no longer names the removed CLIs or the switch', () => {
+  const text = filesUnder(join(skillsRoot, 'review')).map((f) => readFileSync(f, 'utf8')).join('\n')
   assert.doesNotMatch(text, /<base>\.\.<head>|consecutive ranges/)
   assert.match(text, /Review subject: <base>`/)
   assert.doesNotMatch(text, /odd-review|odd-assess|review_due|refuter|validator/)
@@ -110,15 +110,15 @@ test('the plugin ships no MCP servers', () => {
   assert.ok(!existsSync(join(pluginRoot, '.mcp.json')))
 })
 
-test('S5: odd-delegation handoff names the verifier and its strength', () => {
-  const t = readFileSync(join(skillsRoot, 'odd-delegation/references/handoffs.md'), 'utf8')
+test('S5: delegation handoff names the verifier and its strength', () => {
+  const t = readFileSync(join(skillsRoot, 'delegation/references/handoffs.md'), 'utf8')
   assert.match(t, /Verifier strength/)
   assert.match(t, /weak/i)
   assert.match(t, /stops after one step/)
 })
 
 test('A2: weak and missing verifiers are distinguished in the worker, handoff, and delegation docs', () => {
-  for (const f of ['odd-delegation/references/handoffs.md', 'odd-delegation/SKILL.md', '../agents/odd-worker.md']) {
+  for (const f of ['delegation/references/handoffs.md', 'delegation/SKILL.md', '../agents/worker.md']) {
     const t = readFileSync(join(skillsRoot, f), 'utf8')
     assert.match(t, /ambiguous requirements or external side effects/, f)
     assert.match(t, /no verifier/i, f)
@@ -128,19 +128,19 @@ test('A2: weak and missing verifiers are distinguished in the worker, handoff, a
   }
 })
 
-test('A3: odd-workflow Close reports without another verification loop and loops only during implementation', () => {
-  const t = readFileSync(join(skillsRoot, 'odd-workflow/SKILL.md'), 'utf8')
+test('A3: workflow Close reports without another verification loop and loops only during implementation', () => {
+  const t = readFileSync(join(skillsRoot, 'workflow/SKILL.md'), 'utf8')
   assert.match(t, /during implementation[^\n]*loop until it passes/i)
   assert.match(t, /\*\*Close\.\*\*[^\n]*reports[^\n]*never starts another verification loop/)
 })
 
-test('S5: odd-workflow Close names skipped or unverified checks', () => {
-  const t = readFileSync(join(skillsRoot, 'odd-workflow/SKILL.md'), 'utf8')
+test('S5: workflow Close names skipped or unverified checks', () => {
+  const t = readFileSync(join(skillsRoot, 'workflow/SKILL.md'), 'utf8')
   assert.match(t, /\*\*Close\.\*\*[^\n]*unverified/)
 })
 
-test('S5: odd-worker reviews its own diff before reporting', () => {
-  const t = readFileSync(join(pluginRoot, 'agents/odd-worker.md'), 'utf8')
+test('S5: worker reviews its own diff before reporting', () => {
+  const t = readFileSync(join(pluginRoot, 'agents/worker.md'), 'utf8')
   assert.match(t, /review your own diff/)
   assert.match(t, /missing test/)
 })

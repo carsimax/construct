@@ -26,7 +26,7 @@ scripts/eval.sh [--case small-delegated]        # behavior evals; spend real usa
 A plugin cannot ship a `CLAUDE.md`, so the ODD rules load in layers:
 
 - **Session contract**: `hooks/scripts/contract.mjs session` emits `hooks/contract/session.md` as `additionalContext` on every `SessionStart`. It must stay under 8,000 characters; see the contract row in [the consistency table](CONTRIBUTING.md#consistency-the-tests-enforce) for the budget.
-- **Subagent contract**: `contract.mjs subagent` emits `hooks/contract/subagent.md` on `SubagentStart`; JSON-only reviewers (`review-*`, `jd-judge-*`) get nothing.
+- **Subagent contract**: `contract.mjs subagent` emits `hooks/contract/subagent.md` on `SubagentStart`; JSON-only reviewers (`review-*`, `judge-*`) get nothing.
 - **Feature state**: `hooks/scripts/feature-state.mjs` re-injects unfinished tasks from `odd/tasks/*.md` after compact/resume (read-only, at most 2,500 characters).
 - **Skills** (`plugins/construct/skills/*/SKILL.md`) hold the full procedures and load on demand; the contract only names them.
 - **Output style**: `output-styles/principal-engineer.md`, forced with `force-for-plugin`.

@@ -26,33 +26,33 @@ describe('memory touchpoints (S19)', () => {
   const MEMORY = /construct-memory/
   const LEARNINGS = /## Key Learnings:/
   const cases = [
-    ['skills/odd-workflow/SKILL.md', MEMORY],
-    ['skills/odd-workflow/SKILL.md', /\*\*Close\.\*\* Save[^\n]*construct-memory save[^\n]*then one report[^\n]*and the Risk line \(last\)\./],
-    ['skills/odd-workflow/references/persistence.md', /construct-memory search/],
-    ['skills/odd-delegation/SKILL.md', MEMORY],
-    ['skills/odd-delegation/references/handoffs.md', /## Memory/],
+    ['skills/workflow/SKILL.md', MEMORY],
+    ['skills/workflow/SKILL.md', /\*\*Close\.\*\* Save[^\n]*construct-memory save[^\n]*then one report[^\n]*and the Risk line \(last\)\./],
+    ['skills/workflow/references/persistence.md', /construct-memory search/],
+    ['skills/delegation/SKILL.md', MEMORY],
+    ['skills/delegation/references/handoffs.md', /## Memory/],
     ['skills/debugging/SKILL.md', /construct-memory search/],
-    ['skills/rdd-review/SKILL.md', MEMORY],
-    ['skills/constraint-driven/SKILL.md', /quality\/<rule>/],
+    ['skills/review/SKILL.md', MEMORY],
+    ['skills/constraints/SKILL.md', /quality\/<rule>/],
     ['skills/migration/SKILL.md', /migration\/<name>/],
     ['skills/memory/SKILL.md', /Where memory is used/],
-    ['agents/odd-explorer.md', /construct-memory search/],
-    ['agents/odd-worker.md', LEARNINGS],
-    ['agents/odd-general.md', LEARNINGS],
-    ['agents/odd-verify.md', LEARNINGS],
+    ['agents/explorer.md', /construct-memory search/],
+    ['agents/worker.md', LEARNINGS],
+    ['agents/general.md', LEARNINGS],
+    ['agents/verifier.md', LEARNINGS],
   ]
   for (const [file, re] of cases) test(`${file} names its memory touchpoint`, () => assert.match(read(file), re))
 
-  test('debugging and rdd-review save a bugfix; rdd-review saves a deferred advisory as a decision', () => {
+  test('debugging and review save a bugfix; review saves a deferred advisory as a decision', () => {
     assert.match(read('skills/debugging/SKILL.md'), /bugfix/)
-    const review = read('skills/rdd-review/SKILL.md')
+    const review = read('skills/review/SKILL.md')
     assert.match(review, /bugfix/)
     assert.match(review, /decision/)
   })
 
   test('the memory skill map lists every touchpoint', () => {
     const skill = read('skills/memory/SKILL.md')
-    for (const name of ['odd-workflow', 'odd-delegation', 'debugging', 'rdd-review', 'constraint-driven', 'migration', 'odd-explorer', 'Key Learnings']) {
+    for (const name of ['workflow', 'delegation', 'debugging', 'review', 'constraints', 'migration', 'explorer', 'Key Learnings']) {
       assert.ok(skill.includes(name), name)
     }
   })
