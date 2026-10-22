@@ -154,7 +154,7 @@ test('main card branch row: first body row, clipped, control-stripped, hidden wi
   expect(at({ git: { ...git, branch: 'a\u001b[31mb' } })).toMatch(/^⎇ a\[31mb · /)
   const long = at({ git: { ...git, branch: 'x'.repeat(100) }, columns: 40 })
   // L13: the branch gives way, the effort and the request count stay
-  expect(long.length).toBeLessThanOrEqual(36)
+  expect(long.length).toBe(36)
   expect(long).toContain('…')
   expect(long).toContain('7 req')
   for (const g of [null, { ...git, branch: '' }, { ...git, branch: undefined }]) expect(at({ git: g }).startsWith('⎇')).toBe(false)
@@ -324,7 +324,7 @@ test('main status: ready when idle, building while a turn runs, waiting on you w
   const turn = { ...initialState(), turn: { turnId: 't' }, agents: [agent({ role: 'explorer', type: 'construct:explorer' })] }
   expect(rowsOf({ panel: turn })[0]).toBe('Claude ● mapping')
   expect(find(buildPanel(args({ panel: { ...turn, blocked: true } })), '◆ waiting on you')?.props.color).toBe('warning')
-  expect(find(buildPanel(args({ panel: initialState() })), '○ ready')?.props.dimColor).toBe(true)
+  expect(find(buildPanel(args({ panel: initialState() })), '○ ready')?.props.color).toBe('inactive')
 })
 
 test('agents card shows the subagent type for an agent with no construct role, and dashes the role', async () => {
@@ -694,16 +694,77 @@ test('L13 main row clips the branch before dropping the mode at 66 columns, and 
   expect(small.split(' · ')[0].replace('⎇ ', '').length).toBeGreaterThanOrEqual(8)
 })
 
-test('L13 colors: gate status, zero denied, odd joints, branch, memory details, ctx tokens, and legend labels are dim again', () => {
+test('L14 colors: GATE status, memory details, and ctx tokens are dim; the zero-denied label is inactive', () => {
   const tree = buildPanel(args({ memory, panel: { ...full(), gate: { ...full().gate, verdicts: { rule: 4, ask: 0, cleared: 16, deny: 0 } } } }))
-  expect(find(tree, '20 checks')?.props.color ?? find(tree, 'all clear')?.props.color).toBe('inactive')
+  expect(find(tree, '20 checks')?.props.dimColor ?? find(tree, 'all clear')?.props.dimColor).toBe(true)
   expect(find(tree, '0 denied')?.props.color).toBe('inactive')
-  expect(find(tree, '4 allowed')?.props.dimColor).toBe(true)
-  expect(find(tree, '━')?.props.color).toBe('subtle')
-  expect(leaves(tree).find((l) => l.text === '○')?.props.color).toBe('subtle')
-  expect(find(tree, 'feat/x')?.props.color).toBe('inactive')
   expect(find(tree, 'last save')?.props.dimColor).toBe(true)
   expect(find(tree, '666k/1.0M')?.props.dimColor).toBe(true)
+})
+
+test('L14 colors main row: glyph dim, branch plain, effort word main, requests and mode dim, meter cells main', () => {
+  const tree = buildPanel(args())
+  expect(leaves(tree).find((l) => l.text === '⎇ ')?.props).toEqual({ dimColor: true })
+  expect(leaves(tree).find((l) => l.text === 'feat/x')?.props).toEqual({})
+  expect(find(tree, ' medium')?.props).toEqual({ color: 'claude' })
+  expect(find(tree, '7 req')?.props).toEqual({ dimColor: true })
+  expect(leaves(tree).find((l) => l.text === 'auto')?.props).toEqual({ dimColor: true })
+  expect(find(tree, '▮▮')?.props.color).toBe('claude')
+  expect(find(tree, '▯▯')?.props.color).toBe('claude')
+  const none = buildPanel(args({ panel: { ...full(), main: { ...full().main, effort: 'bogus' } } }))
+  expect(find(none, '▯▯▯▯')?.props.color).toBe('claude')
+})
+
+test('L14 colors agents card: status dim, clocks inactive, running empty meter cells in the agent color', () => {
+  const tree = buildPanel(args())
+  expect(find(tree, '1 at work · 2')?.props).toEqual({ dimColor: true })
+  const clocks = leaves(tree).filter((l) => /^ \d+:\d\d$/.test(l.text))
+  expect(clocks.length).toBe(2)
+  for (const l of clocks) expect(l.props).toEqual({ color: 'inactive' })
+  const rows = (tree.children as any[]).find((c) => flat(c).startsWith('agents')).children.slice(1)
+  const run = leaves(rows.find((r) => flat(r).includes('building')))
+  expect(run.find((l) => l.text === '▮▮▮')?.props.color).toBe('suggestion')
+  expect(run.find((l) => l.text === '▯')?.props.color).toBe('suggestion')
+})
+
+test('L14 colors limits row: the percents are dim', () => {
+  const tree = buildPanel(args())
+  expect(find(tree, ' 13%')?.props).toEqual({ dimColor: true })
+  expect(leaves(tree).filter((l) => /^ \d+%$/.test(l.text)).every((l) => l.props.dimColor === true)).toBe(true)
+})
+
+test('L14 colors ODD card: joints between done checkpoints in the ODD color, later ones and a leading ellipsis dim', () => {
+  const tree = buildPanel(args())
+  const joints = leaves(tree).filter((l) => l.text === '━')
+  expect(joints.map((l) => l.props)).toEqual([{ color: 'merged' }, { color: 'merged' }, { dimColor: true }, { dimColor: true }])
+  expect(leaves(tree).find((l) => l.text === '○')?.props).toEqual({ dimColor: true })
+  const many = { ...odd, tasks: Array.from({ length: 40 }, (_, i) => ({ id: `T${i}`, done: false })) }
+  expect(find(buildPanel(args({ odd: many })), '…━')?.props).toEqual({ dimColor: true })
+})
+
+test('L14 colors GATE legend: allowed and cleared dim, pending amber, a non-zero denied warn', () => {
+  const panel = { ...full(), gate: { ...full().gate, verdicts: { rule: 4, ask: 1, cleared: 16, deny: 2 } } }
+  const tree = buildPanel(args({ panel }))
+  expect(find(tree, '4 allowed')?.props).toEqual({ dimColor: true })
+  expect(find(tree, '16 classifier')?.props).toEqual({ dimColor: true })
+  expect(find(tree, '1 pending')?.props).toEqual({ color: 'warning' })
+  expect(find(tree, '2 denied')?.props).toEqual({ color: 'error' })
+  expect(find(tree, '1 waiting on you')?.props.color).toBe('warning')
+})
+
+test('L14 colors changes card: +N more is subtle', () => {
+  const many = Array.from({ length: 30 }, (_, i) => ({ path: `src/f${i}.js`, added: 30 - i, removed: 0 }))
+  expect(find(buildPanel(args({ rows: undefined, changes: many })), '+21 more')?.props).toEqual({ color: 'subtle' })
+})
+
+test('L14 agent rows at 40 columns pad a short done verb instead of clipping it with an ellipsis', () => {
+  const run = agent({ id: 'r', role: 'review_reliability', type: 'construct:review-reliability', startedMs: NOW - 360_000_000 })
+  const done = agent({ id: 'd', role: 'explorer', type: 'construct:explorer', status: 'done', endedMs: NOW, startedMs: NOW - 65_000 })
+  const rows = agentRows(rowsOf({ panel: { ...full(), agents: [run, done] }, columns: 40 }))
+  expect(rows.length).toBe(2)
+  const mapped = rows.find((r) => r.startsWith('⌕'))!
+  expect(mapped).toContain('mapped')
+  expect(mapped).not.toContain('…')
 })
 
 test('L13 row budget: body rows 0, negative, or unknown let the changes card take up to 10 rows', () => {

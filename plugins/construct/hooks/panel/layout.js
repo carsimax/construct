@@ -91,9 +91,9 @@ function gaugeSegs(pct, cells) {
   return [...(g.on ? [seg(g.on, { color: on })] : []), ...(g.off ? [seg(g.off, { color: PALETTE.faint })] : [])]
 }
 
-function meterSegs(effort, on = PALETTE.main) {
+function meterSegs(effort, on = PALETTE.main, off = PALETTE.faint) {
   const m = effortMeter(effort)
-  return [...(m.on ? [seg(m.on, { color: on })] : []), seg(m.off, { color: PALETTE.faint })]
+  return [...(m.on ? [seg(m.on, { color: on })] : []), seg(m.off, { color: off })]
 }
 
 // ---- main card ---------------------------------------------------------------
@@ -103,7 +103,7 @@ const PHASE_VERB = { implementing: 'building', exploring: 'mapping' }
 
 function mainStatus(panel) {
   if (panel.blocked) return { text: '◆ waiting on you', color: PALETTE.amber }
-  if (!mainBusy(panel)) return { text: '○ ready', dim: true }
+  if (!mainBusy(panel)) return { text: '○ ready', color: PALETTE.dim }
   const phase = phaseOf(panel)
   return `● ${phase ? (PHASE_VERB[phase] ?? phase) : 'busy'}`
 }
@@ -113,9 +113,9 @@ function branchRow({ panel, git, effort }, max) {
   const word = typeof effort === 'string' && effort ? effort : '—'
   const mode = typeof panel.main?.mode === 'string' && panel.main.mode ? panel.main.mode : ''
   const join = (parts) => parts.flatMap((p, i) => (i ? [sep(), ...p] : p))
-  const tail = [[...meterSegs(effort), seg(` ${word}`)], [seg(`${count(panel.main?.steps)} req`)]]
+  const tail = [[...meterSegs(effort, PALETTE.main, PALETTE.main), seg(` ${word}`, { color: PALETTE.main })], [seg(`${count(panel.main?.steps)} req`, { dim: true })]]
   const build = (b, withMode) =>
-    join([...(b ? [[seg('⎇ ', { color: PALETTE.dim }), seg(b, { color: PALETTE.dim })]] : []), ...tail, ...(withMode && mode ? [[seg(mode)]] : [])])
+    join([...(b ? [[seg('⎇ ', { dim: true }), seg(b)]] : []), ...tail, ...(withMode && mode ? [[seg(mode, { dim: true })]] : [])])
   // the branch gives way first (keeping 8 characters), then the mode; effort and requests stay
   const room = (withMode) => max - width(build('', withMode)) - (branch ? 2 + SEP.length : 0)
   const fit = (withMode) => {
@@ -141,7 +141,7 @@ function limitsRow(usage, nowMs, max) {
     const l = limits.find((x) => x?.kind === kind)
     if (!isNum(l?.percentUsed)) return []
     const left = fmtResetIn(l.resetsAt, nowMs)
-    return [[seg(`${label} `, { dim: true }), ...gaugeSegs(l.percentUsed, 5), seg(` ${Math.round(l.percentUsed)}%`), ...(left ? [seg(` ↻${left}`, { dim: true })] : [])]]
+    return [[seg(`${label} `, { dim: true }), ...gaugeSegs(l.percentUsed, 5), seg(` ${Math.round(l.percentUsed)}%`, { dim: true }), ...(left ? [seg(` ↻${left}`, { dim: true })] : [])]]
   })
   return parts.length ? row(parts.flatMap((p, i) => (i ? [seg('   '), ...p] : p)), max) : null
 }
@@ -161,11 +161,12 @@ function mainCard({ panel, usage, model, effort, git, nowMs }, w) {
 // One glyph per task joined by `━`; too many keep the latest behind a leading `…`.
 function checkpoints(tasks, max) {
   const open = tasks.findIndex((t) => !t.done)
-  const glyphs = tasks.map((t, i) => (t.done ? seg('●', { color: PALETTE.odd }) : i === open ? seg('◆', { color: PALETTE.odd, bold: true }) : seg('○', { color: PALETTE.faint })))
+  const glyphs = tasks.map((t, i) => (t.done ? seg('●', { color: PALETTE.odd }) : i === open ? seg('◆', { color: PALETTE.odd, bold: true }) : seg('○', { dim: true })))
   const fits = Math.floor((max + 1) / 2)
   const shown = glyphs.length <= fits ? glyphs : glyphs.slice(-Math.floor((max - 1) / 2))
-  const joined = shown.flatMap((g, i) => (i ? [seg('━', { color: PALETTE.faint }), g] : [g]))
-  return shown === glyphs ? joined : [seg('…━', { color: PALETTE.faint }), ...joined]
+  const joint = (g, i) => seg('━', shown[i - 1].t === '●' && g.t === '●' ? { color: PALETTE.odd } : { dim: true })
+  const joined = shown.flatMap((g, i) => (i ? [joint(g, i), g] : [g]))
+  return shown === glyphs ? joined : [seg('…━', { dim: true }), ...joined]
 }
 
 function oddCard(odd, w) {
@@ -188,7 +189,7 @@ const sumOf = (o) => Object.values(o ?? {}).reduce((n, v) => n + count(v), 0)
 
 function gateStatus({ ask, deny }, total) {
   if (ask > 0) return { text: `${ask} waiting on you`, color: PALETTE.amber }
-  return { text: deny === 0 ? 'all clear' : `${total} checks`, color: PALETTE.dim }
+  return { text: deny === 0 ? 'all clear' : `${total} checks`, dim: true }
 }
 
 function gateBody(panel, v, inner) {
@@ -202,7 +203,7 @@ function gateBody(panel, v, inner) {
   const counts = [v.rule, v.cleared, v.ask, v.deny]
   const colors = [PALETTE.gate, PALETTE.cleared, PALETTE.amber, PALETTE.warn]
   const bar = stackBar(counts, inner).flatMap((n, i) => (n ? [seg('█'.repeat(n), { color: colors[i] })] : []))
-  const legend = items.flatMap(([glyph, label, color], i) => [...(i ? [seg('  ')] : []), seg(`${glyph} `, { color }), seg(label, color === PALETTE.dim ? { color } : { dim: true })])
+  const legend = items.flatMap(([glyph, label, color], i) => [...(i ? [seg('  ')] : []), seg(`${glyph} `, { color }), seg(label, [PALETTE.amber, PALETTE.warn, PALETTE.dim].includes(color) ? { color } : { dim: true })])
   const buckets = [['f', 'file'], ['s', 'shell'], ['o', 'other']].flatMap(([key, name], i) => {
     const n = sumOf(panel.gate?.buckets?.[name])
     return [...(i ? [seg('  ')] : []), seg(`${key}: ${name} ${n}`, n === 0 ? { dim: true } : {})]
@@ -291,22 +292,24 @@ function agentsCard(panel, nowMs, w) {
     const live = a.status === 'running'
     const tone = live ? { color: PALETTE.agent } : { dim: true }
     // the clock stays; name and verb are clipped with `…` when even they do not fit
-    const left = clip([seg(cut(a.name, MAX_NAME).padEnd(nameW), tone), seg(' '), seg(verb.padEnd(verbW), tone)], inner - 2 - clockW)
+    const room = inner - 2 - clockW - nameW - 1
+    const cells = verb.length <= room ? Math.min(verbW, room) : verbW // pad, never clip, a verb that fits
+    const left = clip([seg(cut(a.name, MAX_NAME).padEnd(nameW), tone), seg(' '), seg(verb.padEnd(cells), tone)], inner - 2 - clockW)
     return row(
       [
         seg(glyph, live ? tone : { color: PALETTE.gate }),
         seg(' '),
         ...left,
         ...(showModel ? [seg(' '), seg(model.padEnd(modelW), { dim: true })] : []),
-        ...(showMeter ? [seg(' '), ...meterSegs(a.effort, live ? PALETTE.agent : PALETTE.dim)] : []),
-        seg(` ${clock(a.elapsedMs)}`, { dim: true }),
+        ...(showMeter ? [seg(' '), ...meterSegs(a.effort, live ? PALETTE.agent : PALETTE.dim, live ? PALETTE.agent : PALETTE.faint)] : []),
+        seg(` ${clock(a.elapsedMs)}`, { color: PALETTE.dim }),
       ],
       inner,
     )
   })
   if (rest > 0) body.unshift(row([seg(`+${rest} earlier`, { color: PALETTE.faint })], inner))
   const total = cards.length + rest
-  const status = running > 0 ? `${running} at work · ${total}` : `all done · ${total}`
+  const status = { text: running > 0 ? `${running} at work · ${total}` : `all done · ${total}`, dim: true }
   return card({ title: 'agents', status, color: PALETTE.agent, children: body, width: w })
 }
 
@@ -348,7 +351,7 @@ function changesCard({ git, changes }, budget, w) {
   const sorted = [...files].sort((a, b) => lines(b) - lines(a))
   const fit = sorted.length <= budget ? sorted : sorted.slice(0, Math.max(0, budget - 1))
   const body = budget === 0 ? [] : fit.map((f) => changeRow(f, inner))
-  if (budget > 0 && fit.length < sorted.length) body.push(dimRow(`+${sorted.length - fit.length} more`, inner))
+  if (budget > 0 && fit.length < sorted.length) body.push(dimRow(`+${sorted.length - fit.length} more`, inner, PALETTE.faint))
   return card({ title, status: status || undefined, color: PALETTE.git, children: body, width: w })
 }
 
