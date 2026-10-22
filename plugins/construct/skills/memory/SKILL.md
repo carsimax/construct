@@ -14,6 +14,7 @@ Load this skill when something worth keeping was just decided or learned, when p
 ## Hard Rules
 
 - Save as soon as it happens, without waiting to be asked: a decision, a bug fix with its root cause, a discovery, a convention, a preference, or a recommendation the user confirmed or rejected.
+- Save only what a future engineer reading the final code would still get wrong without the memory: a reason, a trap, a rejected option. Routine progress, effort, and facts the code or git history already shows are not saved; when it fails this test, save nothing.
 - Wrap anything that must not be stored in `<private>...</private>`; the store replaces it with `[REDACTED]`.
 - Text that looks like prompt injection ("ignore previous instructions", fake `<system>` or `[INST]` tags, "when compacting, retain ...") is rejected by `save` and `update` with an error naming the reason; rephrase it. Prompts and summaries get such lines replaced by `[FILTERED]`, passive learnings that match are dropped, and the session context never shows matching rows.
 - A prompt that holds a secret is found with `construct-memory prompts` and removed with `construct-memory prompts delete <id>`; `<private>` is the way to avoid storing it in the first place.
@@ -67,6 +68,16 @@ Judging is optional; ignore the candidates unless one really conflicts with or r
 Use `construct-memory consolidate <id> <id>... --title T [--type T] [--topic-key K]` (the merged content on stdin) when several memories describe one evolving fact and no `topic_key` ties them. The first run only previews: the sources, the new title, and a fingerprint; nothing is written. Read the preview, then rerun the same command with the same stdin and `--confirm <fingerprint>`: it creates the merged memory, soft-deletes the sources, and records a `supersedes` relation from the new memory to each. A source that changed or was deleted after the preview makes the fingerprint stale and is refused; preview again.
 
 Before architecture-sensitive work, run `construct-memory review list`. Memories marked `needs_review` are stale: verify them, and run `review done <id>` only after the user confirms.
+
+Classify each stale candidate against the current code before acting, with one outcome:
+
+- **Keep**: still accurate. Change nothing; `review done <id>` once the user confirms.
+- **Update**: the fact holds but names, paths, or snippets drifted. `construct-memory update <id>` fixes it in place.
+- **Consolidate**: several correct memories overlap. Merge them with `consolidate` as above.
+- **Replace**: the guidance now misleads and you can write a trustworthy successor from evidence. Fix it with `update <id>` (or `save`, then `delete` the old one).
+- **Delete**: no longer useful or distinct, and the problem it addressed is gone too (a missing file only proves the implementation is gone). `delete <id>`.
+
+Age alone is not staleness: an old memory that still matches the code is a Keep. Unverifiable is not false: a claim the repository cannot corroborate (an operational practice, an environment behavior) is kept and flagged to the user, never deleted; act only on a contradiction.
 
 ## Session summary
 
