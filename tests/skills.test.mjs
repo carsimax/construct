@@ -10,7 +10,6 @@ const skillsRoot = join(pluginRoot, 'skills')
 const EXPECTED = [
   'branch-pr',
   'chained-pr',
-  'codegraph',
   'cognitive-doc-design',
   'comment-writer',
   'constraint-driven',
@@ -107,17 +106,8 @@ test('rdd-review names the Review subject form and no longer names the removed C
   assert.doesNotMatch(text, /odd-review|odd-assess|review_due|refuter|validator/)
 })
 
-test('the codegraph skill uses the upstream CLI and the user-scope MCP tool, never a plugin MCP server', () => {
-  const text = readFileSync(join(skillsRoot, 'codegraph', 'SKILL.md'), 'utf8')
-  assert.match(text, /codegraph init/)
-  assert.match(text, /codegraph sync/)
-  assert.match(text, /mcp__codegraph__codegraph_explore/)
-  assert.match(text, /claude mcp add-json --scope user codegraph/)
-  assert.match(text, /"alwaysLoad":true/)
-  assert.match(text, /mcp__codegraph__\*/)
-  assert.doesNotMatch(text, /Run `codegraph init <project-root>` once/)
-  assert.doesNotMatch(text, /mcp__plugin_construct_codegraph/)
-  assert.ok(!existsSync(join(pluginRoot, '.mcp.json')), 'option A: the plugin ships no MCP servers')
+test('the plugin ships no MCP servers', () => {
+  assert.ok(!existsSync(join(pluginRoot, '.mcp.json')))
 })
 
 test('S5: odd-delegation handoff names the verifier and its strength', () => {

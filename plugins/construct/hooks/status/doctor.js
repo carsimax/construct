@@ -45,11 +45,6 @@ export function checkMemory(out) {
   }
 }
 
-// `present` is whether `<root>/.codegraph` exists; null when the root or the probe is unknown.
-export function checkCodegraph(present) {
-  return { ok: present === true, label: 'CodeGraph index (.codegraph/) at the project root', hint: 'run `codegraph init -i` in the project root' }
-}
-
 // `out` is the stdout of `construct-memory doctor --json` ([{ check, ok, detail }]), or null when the command
 // could not run. Anything that is not a non-empty list of checks is one failed row, never a throw.
 export function memoryDoctorRows(out) {

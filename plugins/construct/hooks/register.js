@@ -21,7 +21,7 @@ import {
   onUnblocked,
 } from './panel/state.js'
 import { parseMemoryStats } from './status/memory.js'
-import { checkClaude, checkCodegraph, checkMemory, checkNode, formatReport, MEMORY_PROBE, memoryDoctorRows } from './status/doctor.js'
+import { checkClaude, checkMemory, checkNode, formatReport, MEMORY_PROBE, memoryDoctorRows } from './status/doctor.js'
 import { activeWork } from './status/tasks.js'
 import { parseGitStatus, parseNumstat, parseRevParse } from './status/data.js'
 
@@ -272,15 +272,13 @@ async function memoryStats($, cwd) {
 async function runDoctor($) {
   const cwd = await probe(() => $.session.cwd())
   const rev = parseRevParse(await probe(() => runText($, ['git', 'rev-parse', '--show-toplevel'], cwd ?? undefined, GIT_MS)))
-  const root = rev?.root ?? cwd
-  const [version, node, memory, codegraph] = await Promise.all([
+  const [version, node, memory] = await Promise.all([
     probe(async () => (await $.session.version()).version),
     probe(() => runText($, ['node', '--version'], cwd ?? undefined, GIT_MS)),
     probe(() => runText($, ['node', '-e', MEMORY_PROBE], cwd ?? undefined, GIT_MS)),
-    probe(() => (root ? $.fs.exists(`${root}/.codegraph`) : null)),
   ])
   const memoryRow = checkMemory(memory)
-  const rows = [checkClaude(version), checkNode(node), memoryRow, checkCodegraph(codegraph)]
+  const rows = [checkClaude(version), checkNode(node), memoryRow]
   if (rev?.root && memoryRow.ok) rows.splice(3, 0, ...memoryDoctorRows(await memoryDoctor($, rev.root)))
   return formatReport(rows)
 }

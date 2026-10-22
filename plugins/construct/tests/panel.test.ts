@@ -117,7 +117,7 @@ test('/construct doctor returns a report even when every process fails', { optio
   expect(text).toContain('✗ Node')
   expect(text).not.toContain('engram')
   expect(text).toContain('✗ Memory (node:sqlite with FTS5 trigram)')
-  expect(text).toContain('✗ CodeGraph index')
+  expect(text).not.toContain('CodeGraph')
   expect(await isUp($)).toBe(false)
 })
 

@@ -54,10 +54,7 @@ test('userConfig declares model and effort options whose defaults match each age
   // The panel's switch is a key that is not a model or effort option
   assert.equal(cfg.panel_open_on_start?.type, 'boolean')
   assert.equal(cfg.panel_open_on_start?.default, true)
-  // The CodeGraph auto-index switch is the other non-model/effort key (S5)
-  assert.equal(cfg.codegraph_auto_index?.type, 'boolean')
-  assert.equal(cfg.codegraph_auto_index?.default, false)
-  assert.equal(Object.keys(cfg).length, Object.keys(S6).length * 2 + 2)
+  assert.equal(Object.keys(cfg).length, Object.keys(S6).length * 2 + 1)
 })
 
 test('no plugin agent references gentle-ai or any engram tool', () => {

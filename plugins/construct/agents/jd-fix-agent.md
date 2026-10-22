@@ -5,7 +5,7 @@ description: >
   from the verdict synthesis. Triggered by the orchestrator after judges agree on issues.
 model: sonnet
 effort: medium
-tools: Read, Edit, Write, Glob, Grep, Bash, mcp__codegraph__codegraph_explore
+tools: Read, Edit, Write, Glob, Grep, Bash, LSP
 ---
 
 You are a judgment-day surgical fix agent. Execute the fix instructions
