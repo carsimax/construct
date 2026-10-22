@@ -45,8 +45,9 @@ async function memoryHints(root, manifest) {
     const tail = 'ODD_REVIEW_MEMORY_HINTS_END\n'
     let items = ''
     for (const row of rows) {
-      const item = `- [${row.type} #${row.id}] ${row.title}\n${row.content.replace(/^/gm, '  ')}\n`
-      if (Buffer.byteLength(head + items + item + tail) > MAX_HINT_BYTES) break
+      const defuse = (text) => text.replace(/ODD_REVIEW_/g, 'ODD-REVIEW-') // no protocol marker survives, even mid-line
+      const item = `- [${row.type} #${row.id}] ${defuse(row.title).replace(/\s+/g, ' ')}\n${defuse(row.content).replace(/^/gm, '  ')}\n`
+      if (Buffer.byteLength(head + items + item + tail) > MAX_HINT_BYTES) continue
       items += item
     }
     return items ? head + items + tail : ''
