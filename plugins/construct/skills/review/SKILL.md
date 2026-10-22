@@ -9,7 +9,7 @@ metadata:
 
 ## When
 
-Run this when a unit whose Risk names an item is committed and ready, when `publication-gate` denied `git push`, `gh pr create`, or `gh release create`, or when the user asks for a review. A unit with Risk `none` is not reviewed unless the user asks. For a dual or adversarial review of a concrete target, or a check of a plan or claim, see [dual review](references/dual-review.md); it replaces the lens review for that target, never both.
+Run this when a unit whose Risk names an item is committed and ready, when `publication-gate` blocked a `git push`, `gh pr create`, or `gh release create`, and also whenever the user requests one. A unit with Risk `none` is not reviewed unless the user asks. For a dual or adversarial review of a concrete target, or a check of a plan or claim, see [dual review](references/dual-review.md); it replaces the lens review for that target, never both.
 
 ## Which lenses
 

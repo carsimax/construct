@@ -9,9 +9,9 @@ A migration changes something other code or stored data depends on. Old and new 
 
 ## Rules
 
-- Never change a column, field, format, or public name in place. Add the new shape beside the old one.
-- Additive steps first. The destructive step comes last, alone, in its own unit, after nothing references the old shape.
-- Every phase has a verifier and a rollback that was actually run. A down path that was only written means the phase is not ready.
+- Never alter a column, field, format, or public name in place. Add the new shape beside the old one.
+- Start with additive steps. The destructive step goes last, by itself, in its own unit, once nothing references the old shape.
+- Each phase carries a verifier and a rollback that was really executed. A down path that was only written means the phase is not ready.
 - Backfills are reversible or backed up, run in bounded batches, and are safe to run twice.
 - Deprecate only with a working replacement. Remove only when usage is proven zero (search results, logs, or metrics; say which).
 - Internal consumers migrate in the same plan. External or unknown consumers get an advisory deprecation. If the down path cannot be proven, removal stops.

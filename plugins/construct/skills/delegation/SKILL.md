@@ -27,7 +27,7 @@ Every write to repository code, tests, or docs goes to `construct:worker`; reads
 delegation-admission denies a `construct:worker` launch that lacks:
 
 - The exact heading `## Allowed edit surfaces`, then one bare repository-relative path or narrow glob per line, nothing else. No `.`, root, absolute path, `..`, leading glob, or notes; prose goes under the next heading.
-- While a feature document is unfinished: `Spec: odd/tasks/<feature>.md, T<n>` naming an existing regular file (not a symlink) under `odd/tasks/`.
+- While a feature document is unfinished: `Spec: odd/tasks/<feature>.md, T<n>` pointing at a real file, not a symlink, under `odd/tasks/`.
 - Surfaces disjoint from every writer still open. An entry it cannot interpret counts as overlap. A shared file has one owner; run writers in sequence or `isolation: worktree` when files overlap.
 
 surface-guard then denies writes outside those entries. A worker given no list returns `needs_interaction` with candidate paths; the parent offers approve or decline, and paths change only on a human instruction. Writers run no repo-wide formatters, generators, or installs, and other-repository work goes in a fresh worktree.
@@ -40,7 +40,7 @@ Test-first: a runnable deterministic test and a clear expected outcome mean RED,
 
 ## Verification
 
-- Verifier strength is stated in each handoff. A weak verifier has ambiguous requirements or external side effects: the worker stops after one step and reports. With no verifier it says what would make the work verifiable; for docs-only units the reviewed diff is the verifier.
+- Verifier strength is stated in each handoff. A weak verifier has ambiguous requirements or external side effects: the worker stops after one step and reports. When there is no verifier it names what would make the work verifiable. In docs-only units the reviewed diff is the verifier.
 - Formatters run before verification, afterwards only check-only commands. A byte change reruns the affected checks. Unavailable, partial, or declined proof is never a pass.
 - A docs-only change gets a parent structural readback; executable, operational, or unknown content gets the verifier when Risk-named.
 - One `construct:verifier` per delivery slice (PR), before publication, covering every Risk-named unit in it, after their own checks. delegation-admission denies a verifier prompt without `Risk: item N` (N from 1 to 6; `Risk: none` does not admit). It also carries the whole feature document, baseline, candidate, probe forms, and a scratch directory.
@@ -51,7 +51,7 @@ A verifier or review round allows one correction batch and one recheck. A second
 
 ## Relaying a blocking question
 
-When a subagent or tool returns a question, menu, consent request, or approve or decline choice:
+When a subagent or tool hands back a question, a menu, a consent request, or an approve/decline choice:
 
 1. Pass the whole envelope: reason, every question in order, headers, labels, descriptions, selection mode, answer domain. Never summarize, reorder, merge, or split.
 2. Use AskUserQuestion when the envelope fits; otherwise a plain-text envelope with the answer syntax, then stop. Never choose, default, or launch dependent work while the answer is pending.

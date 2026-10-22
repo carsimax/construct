@@ -128,6 +128,8 @@ describe('verifier', () => {
     denied(launch(plain(), env(), VERIFY, 'Risk: items\nVerify'), /Risk: item N/)
     denied(launch(plain(), env(), VERIFY, 'Risk: items 2, 7\nVerify'), /Risk: item N/)
     denied(launch(plain(), env(), VERIFY, 'Risk: item 2,\nVerify'), /Risk: item N/)
+    denied(launch(plain(), env(), VERIFY, 'Risk: items 2,\nVerify'), /Risk: item N/)
+    denied(launch(plain(), env(), VERIFY, 'Risk: items 2, 5, 7\nVerify'), /Risk: item N/)
     denied(launch(plain(), env(), VERIFY, 'the Risk: item 3 is here'), /Risk: item N/)
   })
   test('with Risk: item 1-6 is allowed, also as a list item', () => {
@@ -139,7 +141,7 @@ describe('verifier', () => {
   test('admission and the Risk-line gate accept and reject the same samples (none aside)', () => {
     const source = readFileSync(join(PLUGIN, 'hooks/scripts/risk-line.mjs'), 'utf8')
     const gate = new RegExp(source.match(/^const RISK_LINE = \/(.*)\/m$/m)[1].replace('none|', ''), 'm')
-    for (const [sample, ok] of [['Risk: item 3', true], ['- Risk: items 2, 5 (why)', true], ['Risk: items 2, 7', false], ['Risk: item 2,', false], ['Risk: item 7', false], ['Risk: item 2, item 3', false], ['Risk: none', false]]) {
+    for (const [sample, ok] of [['Risk: item 3', true], ['- Risk: items 2, 5 (why)', true], ['Risk: items 2, 7', false], ['Risk: item 2,', false], ['Risk: items 2,', false], ['Risk: items 2, 5, 7', false], ['Risk: item 7', false], ['Risk: item 2, item 3', false], ['Risk: none', false]]) {
       assert.equal(gate.test(sample), ok, sample)
       const r = launch(plain(), env(), VERIFY, sample)
       if (ok) allowed(r)

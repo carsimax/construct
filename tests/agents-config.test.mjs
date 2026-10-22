@@ -70,6 +70,13 @@ test('userConfig declares new model and effort options defaulting to inherit, an
   assert.equal(Object.keys(cfg).length, (Object.keys(S6).length + Object.keys(LEGACY).length) * 2 + 1)
 })
 
+test('no non-deprecated userConfig title names a methodology (ODD, RDD, JD)', () => {
+  for (const [key, opt] of Object.entries(manifest.userConfig)) {
+    if (/deprecated/.test(opt.title)) continue
+    assert.doesNotMatch(opt.title, /\b(ODD|RDD|JD)\b/, key)
+  }
+})
+
 test('no plugin agent references gentle-ai or any engram tool', () => {
   for (const file of agentFiles) {
     const text = readFileSync(join(pluginRoot, 'agents', file), 'utf8')

@@ -1,6 +1,7 @@
 // PostToolUse hook: delivery signals (S7, gentle-parity). Port of gentle-shell
 // lib/commit-slice-signal.ts and lib/context-backstop.ts. Notices only: the hook never blocks,
 // fails open (no output, exit 0), and writes nothing but a one-line marker per session.
+// adapted from gentle-shell (https://github.com/Gentleman-Programming/gentle-shell), MIT, Copyright (c) 2025 Mario Zechner, see LICENSE-gentle-shell
 //   (a) Commit slice: after a successful `git commit` (main thread or subagent) on a branch
 //       other than the default branch, the branch's authored changed lines against the default
 //       branch (merge base to HEAD, lock files, minified and generated files excluded) and, past

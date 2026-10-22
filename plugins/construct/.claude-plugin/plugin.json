@@ -18,7 +18,7 @@
   "userConfig": {
     "model_explorer": {
       "type": "string",
-      "title": "ODD Explorer model",
+      "title": "Explorer model",
       "description": "Model the explorer agent runs on; \"inherit\" = use the deprecated model_odd_explorer setting if any, else the agent's own frontmatter",
       "options": [
         "inherit",
@@ -43,7 +43,7 @@
     },
     "effort_explorer": {
       "type": "string",
-      "title": "ODD Explorer effort",
+      "title": "Explorer effort",
       "description": "Effort level for the explorer agent; default keeps the model's own level; \"inherit\" = use the deprecated effort_odd_explorer setting if any, else the agent's own frontmatter",
       "options": [
         "inherit",
@@ -72,7 +72,7 @@
     },
     "model_worker": {
       "type": "string",
-      "title": "ODD Worker model",
+      "title": "Worker model",
       "description": "Model the worker agent runs on; \"inherit\" = use the deprecated model_odd_worker setting if any, else the agent's own frontmatter",
       "options": [
         "inherit",
@@ -97,7 +97,7 @@
     },
     "effort_worker": {
       "type": "string",
-      "title": "ODD Worker effort",
+      "title": "Worker effort",
       "description": "Effort level for the worker agent; default keeps the model's own level; \"inherit\" = use the deprecated effort_odd_worker setting if any, else the agent's own frontmatter",
       "options": [
         "inherit",
@@ -126,7 +126,7 @@
     },
     "model_verifier": {
       "type": "string",
-      "title": "ODD Verify model",
+      "title": "Verifier model",
       "description": "Model the verifier agent runs on; \"inherit\" = use the deprecated model_odd_verify setting if any, else the agent's own frontmatter",
       "options": [
         "inherit",
@@ -151,7 +151,7 @@
     },
     "effort_verifier": {
       "type": "string",
-      "title": "ODD Verify effort",
+      "title": "Verifier effort",
       "description": "Effort level for the verifier agent; default keeps the model's own level; \"inherit\" = use the deprecated effort_odd_verify setting if any, else the agent's own frontmatter",
       "options": [
         "inherit",
@@ -180,7 +180,7 @@
     },
     "model_judge_a": {
       "type": "string",
-      "title": "JD Judge A model",
+      "title": "Judge A model",
       "description": "Model the judge-a agent runs on; \"inherit\" = use the deprecated model_jd_judge_a setting if any, else the agent's own frontmatter",
       "options": [
         "inherit",
@@ -205,7 +205,7 @@
     },
     "effort_judge_a": {
       "type": "string",
-      "title": "JD Judge A effort",
+      "title": "Judge A effort",
       "description": "Effort level for the judge-a agent; default keeps the model's own level; \"inherit\" = use the deprecated effort_jd_judge_a setting if any, else the agent's own frontmatter",
       "options": [
         "inherit",
@@ -234,7 +234,7 @@
     },
     "model_judge_b": {
       "type": "string",
-      "title": "JD Judge B model",
+      "title": "Judge B model",
       "description": "Model the judge-b agent runs on; \"inherit\" = use the deprecated model_jd_judge_b setting if any, else the agent's own frontmatter",
       "options": [
         "inherit",
@@ -259,7 +259,7 @@
     },
     "effort_judge_b": {
       "type": "string",
-      "title": "JD Judge B effort",
+      "title": "Judge B effort",
       "description": "Effort level for the judge-b agent; default keeps the model's own level; \"inherit\" = use the deprecated effort_jd_judge_b setting if any, else the agent's own frontmatter",
       "options": [
         "inherit",
@@ -288,7 +288,7 @@
     },
     "model_review_risk": {
       "type": "string",
-      "title": "RDD Risk model",
+      "title": "Review risk model",
       "description": "Model the review-risk agent runs on; \"inherit\" = use the agent's own frontmatter",
       "options": [
         "inherit",
@@ -301,7 +301,7 @@
     },
     "effort_review_risk": {
       "type": "string",
-      "title": "RDD Risk effort",
+      "title": "Review risk effort",
       "description": "Effort level for the review-risk agent; default keeps the model's own level; \"inherit\" = use the agent's own frontmatter",
       "options": [
         "inherit",
@@ -316,7 +316,7 @@
     },
     "model_review_readability": {
       "type": "string",
-      "title": "RDD Readability model",
+      "title": "Review readability model",
       "description": "Model the review-readability agent runs on; \"inherit\" = use the agent's own frontmatter",
       "options": [
         "inherit",
@@ -329,7 +329,7 @@
     },
     "effort_review_readability": {
       "type": "string",
-      "title": "RDD Readability effort",
+      "title": "Review readability effort",
       "description": "Effort level for the review-readability agent; default keeps the model's own level; \"inherit\" = use the agent's own frontmatter",
       "options": [
         "inherit",
@@ -344,7 +344,7 @@
     },
     "model_review_reliability": {
       "type": "string",
-      "title": "RDD Reliability model",
+      "title": "Review reliability model",
       "description": "Model the review-reliability agent runs on; \"inherit\" = use the agent's own frontmatter",
       "options": [
         "inherit",
@@ -357,7 +357,7 @@
     },
     "effort_review_reliability": {
       "type": "string",
-      "title": "RDD Reliability effort",
+      "title": "Review reliability effort",
       "description": "Effort level for the review-reliability agent; default keeps the model's own level; \"inherit\" = use the agent's own frontmatter",
       "options": [
         "inherit",
@@ -372,7 +372,7 @@
     },
     "model_review_resilience": {
       "type": "string",
-      "title": "RDD Resilience model",
+      "title": "Review resilience model",
       "description": "Model the review-resilience agent runs on; \"inherit\" = use the agent's own frontmatter",
       "options": [
         "inherit",
@@ -385,7 +385,7 @@
     },
     "effort_review_resilience": {
       "type": "string",
-      "title": "RDD Resilience effort",
+      "title": "Review resilience effort",
       "description": "Effort level for the review-resilience agent; default keeps the model's own level; \"inherit\" = use the agent's own frontmatter",
       "options": [
         "inherit",
@@ -400,7 +400,7 @@
     },
     "model_general": {
       "type": "string",
-      "title": "General delegation model",
+      "title": "General model",
       "description": "Model the general agent runs on; \"inherit\" = use the deprecated model_odd_general setting if any, else the agent's own frontmatter",
       "options": [
         "inherit",
@@ -425,7 +425,7 @@
     },
     "effort_general": {
       "type": "string",
-      "title": "General delegation effort",
+      "title": "General effort",
       "description": "Effort level for the general agent; default keeps the model's own level; \"inherit\" = use the deprecated effort_odd_general setting if any, else the agent's own frontmatter",
       "options": [
         "inherit",

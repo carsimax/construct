@@ -2,7 +2,7 @@
 
 Fill every `<placeholder>`; drop an optional section when empty. Each role has its own `##` heading and fenced template; tests/admission/templates.test.mjs sends them through delegation-admission.
 
-Verifier strength: strong (a deterministic command with a clear expected outcome), weak (ambiguous requirements or external side effects: the agent stops after one step and reports), or none. With no verifier the agent says what would make the work verifiable; for docs-only units the reviewed diff is the verifier.
+Verifier strength: strong (a deterministic command with a clear expected outcome), weak (ambiguous requirements or external side effects: the agent stops after one step and reports), or none. When there is no verifier the agent names what would make the work verifiable. In docs-only units the reviewed diff is the verifier.
 
 ## Worker
 

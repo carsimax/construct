@@ -222,6 +222,7 @@ export function mainBusy(state) {
 // Port of gentle-agent-state scripts/hook-adapter.sh, from mod events only (the classic hooks never
 // reach the mod, L12): a real tool.check ask is the permission prompt, and a tool.call on a tool that
 // asks the person stays open while it waits. A settled tool.call, turn.start or turn.complete clears it.
+// adapted from gentle-agent-state (https://github.com/Gentleman-Programming/gentle-agent-state), MIT, Copyright (c) 2026 Alan Buscaglia, see LICENSE-gentle-agent-state
 
 const BLOCKING_TOOLS = ['AskUserQuestion', 'ExitPlanMode']
 
@@ -318,7 +319,7 @@ export function agentsView(state, nowMs, max = 3) {
 // construct role keeps its subagent type.
 export function shortName(a) {
   const raw = String(a.role ?? a.type ?? 'agent')
-  const name = raw.replace(/^construct:/, '').replace(/^odd[_-]/, '').replaceAll('_', '-')
+  const name = raw.replace(/^construct:/, '').replaceAll('_', '-')
   return name === '' ? 'agent' : name
 }
 
@@ -329,12 +330,10 @@ const PHASES = [
   ['implementing', ['writer']],
   ['exploring', ['reader']],
 ]
-// shortName drops the `odd-` prefix, so a name is looked up as is and then with it.
-const kindOfShort = (n) => kindOf(n) ?? kindOf(`odd-${n}`)
 export function phaseOf(state) {
   const agents = isObj(state) && Array.isArray(state.agents) ? state.agents.filter((a) => isObj(a) && a.status === 'running') : []
   if (agents.length === 0) return null
-  const kinds = agents.map((a) => kindOfShort(shortName(a)))
+  const kinds = agents.map((a) => kindOf(shortName(a)))
   return PHASES.find(([, wanted]) => kinds.some((k) => wanted.includes(k)))?.[0] ?? 'working'
 }
 

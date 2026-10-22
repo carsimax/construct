@@ -17,9 +17,9 @@ This session runs Organic Driven Development (ODD) from the construct plugin, on
 
 Small: one bounded exploration batch (about 3 calls, 10k tokens), no high-risk item, resumable from the request plus the diff. Large when the resume test fails; counts never decide.
 
-Six high-risk items: 1 data loss or irreversible changes (migrations, deletes); 2 security (auth, secrets, untrusted input); 3 consumed contracts (public API, schemas, formats, shared code other behavior uses); 4 concurrency; 5 delivery or environment (installers, CI, release, config); 6 anything no test would catch.
+Six high-risk items: 1 data loss or irreversible changes (migrations, deletes); 2 security (auth, secrets, untrusted input); 3 consumed contracts (public API, schemas, formats, code shared with other behavior); 4 concurrency; 5 delivery or environment (installers, CI, release, config); 6 anything no test would catch.
 
-Before `Risk: none`, check whether the diff touches shared code other behavior uses; if so, item 3. Every code change closes with `Risk: item N (reason)`, `Risk: items 2, 5 (reason)`, or `Risk: none`, last line. The Risk-line gate blocks the stop once when paths outside `odd/tasks/` changed and the reply has none, or when the diff adds skipped, focused, or stub tests (hook).
+Writing `Risk: none` requires first asking whether the diff touches code that other behavior shares; if it does, that is item 3. Every code change closes with `Risk: item N (reason)`, `Risk: items 2, 5 (reason)`, or `Risk: none`, last line. The Risk-line gate blocks the stop once when paths outside `odd/tasks/` changed and the reply has none, or when the diff adds skipped, focused, or stub tests (hook).
 
 ## Delegation
 

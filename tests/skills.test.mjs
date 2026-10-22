@@ -75,10 +75,23 @@ test('review (dual review) names the plugin-namespaced agents', () => {
   }
 })
 
-test('the MIT notice for the ported material ships with the plugin', () => {
+test('NOTICE lists the adapted code and carries no license text', () => {
   const notice = readFileSync(join(pluginRoot, 'NOTICE'), 'utf8')
-  assert.match(notice, /MIT License/)
-  assert.match(notice, /Copyright \(c\) 2025 Gentleman Programming/)
+  assert.doesNotMatch(notice, /Permission is hereby granted/)
+  assert.ok(notice.trimEnd().split('\n').length < 30, 'NOTICE stays under 30 lines')
+  for (const project of ['flightdeck', 'gentle-shell', 'gentle-agent-state']) {
+    assert.match(notice, new RegExp(`LICENSE-${project}`))
+    const license = join(pluginRoot, `LICENSE-${project}`)
+    assert.ok(existsSync(license))
+    assert.match(readFileSync(license, 'utf8'), /Permission is hereby granted/)
+  }
+  assert.doesNotMatch(notice, /agent-skills|BMAD|engram/)
+})
+
+test('README credits the ideas-only projects', () => {
+  const readme = readFileSync(join(pluginRoot, '..', '..', 'README.md'), 'utf8')
+  const credits = readme.slice(readme.indexOf('## Credits'), readme.indexOf('## License'))
+  for (const p of ['gentle-ai', 'agent-skills', 'engram', 'BMAD-METHOD', 'get-shit-done', 'gstack', 'compound-engineering-plugin', 'spec-kit', 'ECC']) assert.match(credits, new RegExp(p))
 })
 
 test('review quotes the lens mapping of review-lenses.mjs', () => {
@@ -133,4 +146,9 @@ test('S5: worker reviews its own diff before reporting', () => {
   const t = readFileSync(join(pluginRoot, 'agents/worker.md'), 'utf8')
   assert.match(t, /review your own diff/)
   assert.match(t, /missing test/)
+})
+
+test('testing.md verifier-weakening list names skipped tests, deleted assertions, suppressed errors, widened types, and committed credentials', () => {
+  const t = readFileSync(join(skillsRoot, 'workflow/references/testing.md'), 'utf8')
+  assert.match(t, /Never: skip a test, delete an assertion, suppress an error, widen a type, or commit a real credential or a fixture holding one/i)
 })

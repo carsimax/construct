@@ -17,6 +17,7 @@
 // error, or a lock that cannot be taken.
 // Ported from gentle-shell lib/bounded-writer-admission.ts, lib/verifier-admission.ts
 // and lib/writer-surfaces.ts; the Spec rule is adapted (see S2 of odd/tasks/gentle-parity.md).
+// adapted from gentle-shell (https://github.com/Gentleman-Programming/gentle-shell), MIT, Copyright (c) 2025 Mario Zechner, see LICENSE-gentle-shell
 // Usage: node delegation-admission.mjs [stop]   (hook JSON on stdin)
 import { createHash } from 'node:crypto'
 import { lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
