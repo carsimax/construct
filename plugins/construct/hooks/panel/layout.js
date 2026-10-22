@@ -141,7 +141,7 @@ function limitsRow(usage, nowMs, max) {
     const l = limits.find((x) => x?.kind === kind)
     if (!isNum(l?.percentUsed)) return []
     const left = fmtResetIn(l.resetsAt, nowMs)
-    return [[seg(`${label} `, { dim: true }), ...gaugeSegs(l.percentUsed, 5), seg(` ${Math.round(l.percentUsed)}%`, { dim: true }), ...(left ? [seg(` ↻${left}`, { dim: true })] : [])]]
+    return [[seg(`${label} `, { dim: true }), ...gaugeSegs(l.percentUsed, 5), seg(` ${Math.round(l.percentUsed)}%`), ...(left ? [seg(` ↻${left}`, { dim: true })] : [])]]
   })
   return parts.length ? row(parts.flatMap((p, i) => (i ? [seg('   '), ...p] : p)), max) : null
 }
@@ -164,7 +164,7 @@ function checkpoints(tasks, max) {
   const glyphs = tasks.map((t, i) => (t.done ? seg('●', { color: PALETTE.odd }) : i === open ? seg('◆', { color: PALETTE.odd, bold: true }) : seg('○', { dim: true })))
   const fits = Math.floor((max + 1) / 2)
   const shown = glyphs.length <= fits ? glyphs : glyphs.slice(-Math.floor((max - 1) / 2))
-  const joint = (g, i) => seg('━', shown[i - 1].t === '●' && g.t === '●' ? { color: PALETTE.odd } : { dim: true })
+  const joint = (g, i) => seg('━', { color: PALETTE.faint })
   const joined = shown.flatMap((g, i) => (i ? [joint(g, i), g] : [g]))
   return shown === glyphs ? joined : [seg('…━', { dim: true }), ...joined]
 }

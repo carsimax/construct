@@ -727,16 +727,22 @@ test('L14 colors agents card: status dim, clocks inactive, running empty meter c
   expect(run.find((l) => l.text === '▯')?.props.color).toBe('suggestion')
 })
 
-test('L14 colors limits row: the percents are dim', () => {
+test('L14 colors limits row: the percents are plain', () => {
   const tree = buildPanel(args())
-  expect(find(tree, ' 13%')?.props).toEqual({ dimColor: true })
-  expect(leaves(tree).filter((l) => /^ \d+%$/.test(l.text)).every((l) => l.props.dimColor === true)).toBe(true)
+  const pcts = leaves(tree).filter((l) => /^ \d+%$/.test(l.text) && /^( 4| 13)%$/.test(l.text))
+  expect(pcts.length).toBe(2)
+  for (const l of pcts) {
+    expect(l.props.dimColor).toBeUndefined()
+    expect(l.props.color).toBeUndefined()
+  }
 })
 
-test('L14 colors ODD card: joints between done checkpoints in the ODD color, later ones and a leading ellipsis dim', () => {
+test('L14 colors ODD card: done and current glyphs in the ODD color, every joint subtle, later glyphs and a leading ellipsis dim', () => {
   const tree = buildPanel(args())
   const joints = leaves(tree).filter((l) => l.text === '━')
-  expect(joints.map((l) => l.props)).toEqual([{ color: 'merged' }, { color: 'merged' }, { dimColor: true }, { dimColor: true }])
+  expect(joints.map((l) => l.props)).toEqual(Array(4).fill({ color: 'subtle' }))
+  expect(leaves(tree).filter((l) => l.text === '●').every((l) => l.props.color === 'merged')).toBe(true)
+  expect(leaves(tree).find((l) => l.text === '◆')?.props.color).toBe('merged')
   expect(leaves(tree).find((l) => l.text === '○')?.props).toEqual({ dimColor: true })
   const many = { ...odd, tasks: Array.from({ length: 40 }, (_, i) => ({ id: `T${i}`, done: false })) }
   expect(find(buildPanel(args({ odd: many })), '…━')?.props).toEqual({ dimColor: true })
