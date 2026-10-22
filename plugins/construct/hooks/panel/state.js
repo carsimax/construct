@@ -57,6 +57,7 @@
 //   gate.buckets { file, shell, other }  each { rule, ask, cleared, deny }
 
 import { roleFor } from '../routing.js'
+import { kindOf } from '../scripts/roles.mjs'
 import { isNum } from '../status/format.js'
 
 export const SCHEMA_VERSION = 3
@@ -323,16 +324,18 @@ export function shortName(a) {
 
 // The ODD phase the running agents imply (S5); null with none running. The most advanced phase wins.
 const PHASES = [
-  ['verifying', (n) => n === 'verify'],
-  ['reviewing', (n) => n !== 'jd-fix-agent' && (n.startsWith('review-') || n.startsWith('jd-'))],
-  ['implementing', (n) => n === 'worker' || n === 'jd-fix-agent'],
-  ['exploring', (n) => n === 'explorer'],
+  ['verifying', ['verifier']],
+  ['reviewing', ['lens', 'judge']],
+  ['implementing', ['writer']],
+  ['exploring', ['reader']],
 ]
+// shortName drops the `odd-` prefix, so a name is looked up as is and then with it.
+const kindOfShort = (n) => kindOf(n) ?? kindOf(`odd-${n}`)
 export function phaseOf(state) {
   const agents = isObj(state) && Array.isArray(state.agents) ? state.agents.filter((a) => isObj(a) && a.status === 'running') : []
   if (agents.length === 0) return null
-  const names = agents.map(shortName)
-  return PHASES.find(([, is]) => names.some(is))?.[0] ?? 'working'
+  const kinds = agents.map((a) => kindOfShort(shortName(a)))
+  return PHASES.find(([, wanted]) => kinds.some((k) => wanted.includes(k)))?.[0] ?? 'working'
 }
 
 // ---- tools: inline writes (S3) -------------------------------------------

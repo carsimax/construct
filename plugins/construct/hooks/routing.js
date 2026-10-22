@@ -2,17 +2,14 @@
 // A role is the agent name with dashes turned into underscores, and its
 // userConfig options are model_<role> and effort_<role>.
 
-const PLUGIN_PREFIX = 'construct:'
-
-// Built-in subagent types that follow an construct role
-const BUILTIN_ROLES = { 'general-purpose': 'odd_general' }
+import { BUILTINS, PREFIX as PLUGIN_PREFIX, roleKey } from './scripts/roles.mjs'
 
 export function roleFor(subagentType) {
   if (typeof subagentType !== 'string') return null
   if (subagentType.startsWith(PLUGIN_PREFIX)) {
-    return subagentType.slice(PLUGIN_PREFIX.length).replaceAll('-', '_')
+    return roleKey(subagentType.slice(PLUGIN_PREFIX.length))
   }
-  return BUILTIN_ROLES[subagentType] ?? null
+  return Object.hasOwn(BUILTINS, subagentType) ? roleKey(BUILTINS[subagentType]) : null
 }
 
 export function modelFor(role, options) {

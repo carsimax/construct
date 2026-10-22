@@ -23,10 +23,11 @@ import { lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSy
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { activeDocuments, projectRoot } from './feature-state.mjs'
+import { namesOf, qualified } from './roles.mjs'
 import { dataDir, readInput, safeName, SUBAGENT_MAX_IDLE_MS } from './hook-io.mjs'
 
-export const WRITERS = new Set(['construct:odd-worker', 'construct:jd-fix-agent'])
-const VERIFIER = 'construct:odd-verify'
+export const WRITERS = new Set(namesOf('writer').map(qualified))
+const VERIFIER = qualified(namesOf('verifier')[0])
 
 const HEADING = /^## Allowed edit surfaces[ \t]*$/gim
 const MD_HEADING = /^ {0,3}#{1,6} /
