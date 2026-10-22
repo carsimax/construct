@@ -6,6 +6,10 @@ Apply this to every ODD behavior change that has a relevant runnable determinist
 2. Implement until GREEN.
 3. Refactor while the tests stay green.
 
+## Test value bar
+
+A test earns its place only when it would fail on a real regression of the behavior it names, checks behavior through the public interface instead of implementation, and is not already covered by an existing test (extend that one instead). These do not count as tests: assertions on source text, success or no-throw checks, snapshot-only checks, checks that a mock was called, and tests that mock away the integration they claim to cover. A test that breaks under a behavior-preserving refactor asserts implementation; move it to the owning boundary.
+
 ## Discover the stack first
 
 The cycle is universal; the commands are not. Before the first test, find how this repository tests and use its commands for every RED, GREEN, and verification step:
