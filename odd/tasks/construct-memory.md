@@ -37,7 +37,7 @@ Source: L1-L3, map in L4. Engram references are to commit `258e7a3` of github.co
 | T6 | S10 | Contract, `memory` skill, ODD skills, output style, README, CONTRIBUTING, CLAUDE.md, NOTICE | odd-worker, after T5 | 3 | done (RED skills EXPECTED → GREEN 96/96; suite 565/565) | `d6d3468` |
 | T7 | S11 | Release 4.0.0 | odd-worker, after T6 | 5 | done (install RED 3 → GREEN 80/80; suite 565/565) | `ae4f00e` |
 | T8 | S6 | Fix L14 W1: memory hooks fail open when `node:sqlite` cannot load (dynamic import of the store inside the hook's try); test with a Node that lacks it | odd-worker | 4 | done (hooks RED 1 → GREEN 94/94; CLI RED 1 → GREEN 95/95; suite 567/567) | `84fd604` |
-| T9 | S12 | `prompts` and `prompts delete <id>` in the store and CLI, import tombstones, skill and README lines; tests | odd-worker | 1, 2 | done (RED 7 → GREEN 114/114; suite 572/572) | see L17 |
+| T9 | S12 | `prompts` and `prompts delete <id>` in the store and CLI, import tombstones, skill and README lines; tests | odd-worker | 1, 2 | done (RED 7 → GREEN 114/114; suite 572/572) | `426e07a` |
 
 Review lenses before publication (Risk 1, 3, 4, 5): `review-risk`, `review-resilience`, `review-reliability`, run once over the whole branch after T7 so the reviewed tree is the published one.
 
