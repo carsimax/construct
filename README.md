@@ -1,7 +1,7 @@
 # Construct
 
 [![Claude Code](https://img.shields.io/badge/Claude_Code-2.1.304%2B-blue)](#requirements)
-[![Plugin version](https://img.shields.io/badge/version-5.1.0-informational)](plugins/construct/.claude-plugin/plugin.json)
+[![Plugin version](https://img.shields.io/badge/version-5.2.0-informational)](plugins/construct/.claude-plugin/plugin.json)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 Construct is a Claude Code plugin that makes every request follow Organic Driven Development (ODD): authorize, explore, size, track, implement test-first, and close with evidence and a Risk line.
@@ -30,7 +30,7 @@ Construct is a Claude Code plugin that makes every request follow Organic Driven
 ### One command
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v5.1.0/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v5.2.0/install.sh | bash
 ```
 
 The installer checks the requirements above and stops before changing anything if one is missing, or if `~/.claude` or `~/.claude/settings.json` is not writable, or if `settings.json` is a directory. Then it runs the manual steps below for you:
@@ -48,7 +48,7 @@ If engram or codegraph is installed, the installer says Construct no longer need
 Pass options after `bash -s --`, for example `curl -fsSL <url> | bash -s -- --no-mcp`. To read the script before running it:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v5.1.0/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v5.2.0/install.sh -o install.sh
 less install.sh
 bash install.sh
 ```
@@ -64,7 +64,7 @@ The manual steps the installer runs, for when you want to run them yourself:
    claude plugin install construct@construct
    ```
 
-   The installer (`install.sh`) pins this marketplace to the release tag (`carsimax/construct#v5.1.0`); the command above follows the default branch.
+   The installer (`install.sh`) pins this marketplace to the release tag (`carsimax/construct#v5.2.0`); the command above follows the default branch.
 
 2. Optional: inside Claude Code, in `/config`, set each role's model and effort (rows such as `ODD Worker model`).
 
@@ -287,13 +287,20 @@ Setup, checks, and pull request rules are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Status
 
-Current version: 5.1.0 (`plugins/construct/.claude-plugin/plugin.json`); a minor release with no breaking change. Releases are tagged `vX.Y.Z`.
+Current version: 5.2.0 (`plugins/construct/.claude-plugin/plugin.json`); a minor release with no breaking change, but one behavior change you will notice: the main thread now writes only under `odd/tasks/`. Releases are tagged `vX.Y.Z`.
 
-Changes in 5.1.0:
+Changes in 5.2.0:
 
-- The status panel draws on the terminal's own background instead of pure black.
-- Panel text uses `weight: 'semibold'` instead of the deprecated `Text` `bold` prop (Claude Code 2.1.299+).
-- The session and subagent contracts carry the Claude 5.5 prompting guidance: named early stops; finish what was asked, with no unasked extras; a real check for runnable changes, where a syntax-only check does not count.
+- Behavior change: `surface-guard` keeps writers inside their allowed edit surfaces, and the main thread writes only under `odd/tasks/`; code changes go through a delegated worker.
+- `command-guard` denies git verifier bypasses (`--no-verify`, `core.hooksPath`, abbreviations included) and asks before destructive commands.
+- The Risk-line gate also blocks skipped, focused, or stub test markers.
+- Memory rejects, drops, or filters prompt-injection text.
+- Sharper evidence rules for the reliability lens, the verifier, and workers; memory gets a durable bar and a stale classification.
+- The feature document gains `Baseline:` and optional Given/When/Then.
+- Spec and task coverage warnings, and converge at close; a nudge after 5 failures of one tool in 10 minutes.
+- Review lenses get past-learning hints, and `construct-memory review stale` lists stale entries.
+
+5.1.0 moved the status panel to the terminal's own background, switched panel text to `weight: 'semibold'`, and added the Claude 5.5 prompting guidance to the session and subagent contracts.
 
 5.0.1 fixed the publication gate's handling of backticks and `$(...)` inside single quotes.
 
