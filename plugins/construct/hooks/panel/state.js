@@ -83,12 +83,14 @@ const SECRET_RULES = [
   [/\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]+/gi, '$1 ***'],
   [/(\b[a-z][a-z0-9+.-]*:\/\/[^\s:@/]+:)[^\s@/]+@/gi, '$1***@'],
   [/(\s-u\s+[^\s:]+:)\S+/g, '$1***'],
-  // NAME=value, NAME: value, --name=value where the name holds a secret word anywhere; found nested after `=` or `-D` too
-  [/([\w.-]*(?:key|secret|password|passwd|pwd|token|credential)[\w.-]*\s*[=:]\s*)("[^"]*"|'[^']*'|[^\s&?"']+)/gi, '$1***'],
+  // NAME=value, NAME: value, --name=value where the name holds a secret word anywhere; found nested after `=` or `-D` too.
+  // The name is capped at 32 chars each side so a long word run cannot rescan quadratically.
+  [/([\w.-]{0,32}(?:key|secret|password|passwd|pwd|token|credential)[\w.-]{0,32}\s*[=:]\s*)("[^"]*"|'[^']*'|[^\s&"']+)/gi, '$1***'],
   [/(?:(?:sk|pk|rk)[-_][A-Za-z0-9_-]{10,}|(?:npm|whsec)_[A-Za-z0-9]{16,}|SG\.[\w.-]{16,}|gh[pousr]_[A-Za-z0-9]{16,}|github_pat_\w{20,}|glpat-[\w-]{20,}|xox[abprs]-[A-Za-z0-9-]{10,}|(?:AKIA|ASIA)[A-Z0-9]{16})/g, '***'],
   // an AWS-style secret key: 40 chars of base64 with every character class present
   [/(?<![A-Za-z0-9/+])(?=[A-Za-z0-9/+]*\d)(?=[A-Za-z0-9/+]*[A-Z])(?=[A-Za-z0-9/+]*[a-z])[A-Za-z0-9/+]{40}(?![A-Za-z0-9/+])/g, '***'],
-  [/\b(?=[A-Za-z0-9]*\d)[A-Za-z0-9]{32,}\b/g, '***'],
+  // 32+ chars of base64/base64url with a digit (API keys, JWT parts, UUIDs); the lookbehind keeps the scan linear
+  [/(?<![A-Za-z0-9+_-])(?=[A-Za-z0-9+_-]*\d)[A-Za-z0-9+_-]{32,}={0,2}/g, '***'],
 ]
 
 export function maskSecrets(text) {
@@ -120,6 +122,8 @@ function resolve(path, cwd) {
 export function isOutsideTasks(path, cwd) {
   if (typeof path !== 'string' || path === '') return false
   const parts = resolve(path, cwd)
+  // with no cwd, an `odd/tasks` segment pair anywhere in the path counts as inside tasks
+  if (typeof cwd !== 'string') return !parts.some((p, i) => p === 'odd' && parts[i + 1] === 'tasks')
   const tasks = resolve('odd/tasks', cwd)
   return !tasks.every((p, i) => parts[i] === p)
 }
@@ -208,11 +212,11 @@ export function bucketOf(tool) {
   return SHELL_TOOLS.includes(tool) ? 'shell' : 'other'
 }
 
-const bump = (counts, key, by = 1) => ({ ...counts, [key]: counts[key] + by })
+const bump = (counts, key, by = 1) => ({ ...counts, [key]: Math.max(0, counts[key] + by) })
 
 // Moves one verdict from `from` to `to`, in the totals and in the tool's bucket.
 function shift(gate, bucket, from, to) {
-  const buckets = { ...gate.buckets, [bucket]: bump(bump(gate.buckets[bucket], from, -1), to) }
+  const buckets = gate.buckets[bucket] ? { ...gate.buckets, [bucket]: bump(bump(gate.buckets[bucket], from, -1), to) } : gate.buckets
   return { ...gate, verdicts: bump(bump(gate.verdicts, from, -1), to), buckets }
 }
 
@@ -317,7 +321,7 @@ export function phaseOf(state) {
 
 // Cards for the agents section: running ones first, then the latest finished, finished by most recent end.
 export function agentsView(state, nowMs, max = 3) {
-  const agents = isObj(state) && Array.isArray(state.agents) ? state.agents : []
+  const agents = (isObj(state) && Array.isArray(state.agents) ? state.agents : []).filter(isObj)
   const running = agents.filter((a) => a.status === 'running').sort((a, b) => b.startedMs - a.startedMs)
   const done = agents.filter((a) => a.status !== 'running').sort((a, b) => (b.endedMs ?? 0) - (a.endedMs ?? 0))
   const cards = [...running, ...done].slice(0, max).map((a) => {

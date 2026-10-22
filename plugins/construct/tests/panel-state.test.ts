@@ -257,7 +257,7 @@ test('maskSecrets masks secret words mid-name, short auth tokens, provider token
   }
   // L7: the broad rule masks any name holding a secret word, so these are masked now
   for (const input of ['MAX_TOKENS=4096', 'max_tokens: 1024', 'keys=3', 'tokenizer=bpe']) expect(maskSecrets(input)).toContain('***')
-  for (const plain of ['git commit -m "fix token parsing"', '123e4567-e89b-12d3-a456-426614174000']) {
+  for (const plain of ['git commit -m "fix token parsing"']) {
     expect(maskSecrets(plain)).toBe(plain)
   }
 })
@@ -285,7 +285,7 @@ test('maskSecrets masks joined secret words, nested pairs, and 16-char provider 
     expect(out).toContain('***')
     expect(out).not.toContain(secret)
   }
-  for (const plain of ['npm_config_cache=/x', 'git commit -m "fix parsing"', 'ls -la /src', '123e4567-e89b-12d3-a456-426614174000', 'https://example.com/a?b=1']) {
+  for (const plain of ['npm_config_cache=/x', 'git commit -m "fix parsing"', 'ls -la /src', 'https://example.com/a?b=1']) {
     expect(maskSecrets(plain)).toBe(plain)
   }
 })
@@ -649,4 +649,41 @@ test('damaged nested stored shapes are repaired and no reducer throws', () => {
   expect(s.gate.verdicts.rule).toBe(1)
   expect(s.agents[0].steps).toBe(1)
   expect(s.main.steps).toBe(1)
+})
+
+test('maskSecrets masks long API keys, JWT signatures, a `?` inside a value, and base64 padding; UUIDs too (L9)', () => {
+  for (const [text, secret] of [
+    ['deploy --auth AIzaSyD-9tSrke72PouQMnMX-a7eZSW0jkFMBWY', 'AIzaSyD'],
+    ['eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk', 'dBjftJeZ4CVP'],
+    ['DB_PASSWORD=p?ss123 ./run', 'ss123'],
+    ['echo QWxhZGRpbjpvcGVuIHNlc2FtZTEyMzQ1Njc4OTBhYmNkZWY1Mg==', 'QWxhZGRpbjpv'],
+    ['id 123e4567-e89b-12d3-a456-426614174000', '123e4567'],
+  ]) {
+    const out = maskSecrets(text)
+    expect(out).toContain('***')
+    expect(out).not.toContain(secret)
+  }
+  expect(maskSecrets('echo QWxhZGRpbjpvcGVuIHNlc2FtZTEyMzQ1Njc4OTBhYmNkZWY1Mg==')).toBe('echo ***')
+  expect(maskSecrets('https://x.io?password=hunter2')).toBe('https://x.io?password=***')
+})
+
+test('maskSecrets stays fast on a long run of word characters (L9)', () => {
+  for (const text of ['a'.repeat(200000), 'a'.repeat(100000) + 'key' + 'a'.repeat(100000), 'key'.repeat(30000)]) {
+    const t = performance.now()
+    maskSecrets(text)
+    expect(performance.now() - t).toBeLessThan(200)
+  }
+})
+
+test('damaged state: counts stay at or above 0, an unknown pending bucket and odd agents do not throw (L9)', () => {
+  const s0: any = merge({ v: 3, gate: { pending: { c1: 'file', c2: 'weird' } } })
+  const s1 = onToolSettle(s0, { callId: 'c1', tool: 'Read', didRun: true })
+  for (const v of Object.values(s1.gate.verdicts)) expect(v as number).toBeGreaterThanOrEqual(0)
+  for (const b of Object.values(s1.gate.buckets) as any[]) for (const v of Object.values(b)) expect(v as number).toBeGreaterThanOrEqual(0)
+  expect(() => onToolSettle(s0, { callId: 'c2', tool: 'Read', didRun: false })).not.toThrow()
+  const view = agentsView({ agents: [null, 7, { id: 'a', status: 'running', startedMs: 1 }] }, 5)
+  expect(view.cards.length).toBe(1)
+  expect(view.rest).toBe(0)
+  expect(isOutsideTasks('/proj/odd/tasks/x.md', undefined)).toBe(false)
+  expect(isOutsideTasks('/proj/src/a.js', undefined)).toBe(true)
 })
