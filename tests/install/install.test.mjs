@@ -114,7 +114,7 @@ test('a clean machine gets every tool, in order, and the Construct settings', ()
   const run = install(box)
   assert.equal(run.status, 0, run.stderr)
   assert.deepEqual(run.calls.filter((c) => !/--version|list/.test(c)), [
-    'claude plugin marketplace add carsimax/construct#v5.0.1',
+    'claude plugin marketplace add carsimax/construct#v5.1.0',
     'claude plugin install construct@construct',
   ])
   assert.ok(!run.calls.some((c) => /context7/.test(c)), 'context7 is never registered')
@@ -479,13 +479,13 @@ test('an installed construct at another version warns and names the update comma
   writeFileSync(join(box.state, 'plugins'), PLUGIN_LIST('2.1.0'))
   const run = install(box)
   assert.equal(run.status, 0, run.stderr)
-  assert.match(run.stderr, /construct@construct 2\.1\.0 is installed.*5\.0\.1.*claude plugin update construct@construct/)
+  assert.match(run.stderr, /construct@construct 2\.1\.0 is installed.*5\.1\.0.*claude plugin update construct@construct/)
   assert.match(run.stdout, /Warnings:/)
   assert.ok(!run.calls.some((c) => /^claude plugin (install|update)/.test(c)), 'the install is never modified')
 })
 
 test('an installed construct at this version, a newer one, or with no readable version, gets the plain skip', () => {
-  for (const version of ['5.0.1', '5.1.0', '']) {
+  for (const version of ['5.1.0', '5.2.0', '']) {
     const box = sandbox()
     writeFileSync(join(box.state, 'plugins'), PLUGIN_LIST(version))
     const run = install(box)
@@ -496,12 +496,12 @@ test('an installed construct at this version, a newer one, or with no readable v
 })
 
 test('a marketplace pinned to another ref warns; the same ref skips quietly', () => {
-  for (const [ref, warns] of [['v5.0.0', true], ['v5.0.1', false]]) {
+  for (const [ref, warns] of [['v5.0.1', true], ['v5.1.0', false]]) {
     const box = sandbox()
     writeFileSync(join(box.state, 'marketplaces'), `  ❯ construct\n    Source: GitHub (carsimax/construct#${ref})\n`)
     const run = install(box)
     assert.equal(run.status, 0, run.stderr)
-    assert.equal(/pinned to v5\.0\.0, not v5\.0\.1/.test(run.stderr), warns)
+    assert.equal(/pinned to v5\.0\.1, not v5\.1\.0/.test(run.stderr), warns)
   }
 })
 
