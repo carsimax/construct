@@ -18,8 +18,9 @@ cat > auth.js <<'JS'
 import { timingSafeEqual } from 'node:crypto'
 
 export function tokenMatches(given, expected) {
-  const a = Buffer.from(String(given))
-  const b = Buffer.from(String(expected))
+  if (typeof given !== 'string' || typeof expected !== 'string') return false
+  const a = Buffer.from(given)
+  const b = Buffer.from(expected)
   return a.length === b.length && timingSafeEqual(a, b)
 }
 JS
@@ -32,6 +33,8 @@ test('tokenMatches accepts only an equal token', () => {
   assert.equal(tokenMatches('abc', 'abc'), true)
   assert.equal(tokenMatches('abc', 'abd'), false)
   assert.equal(tokenMatches('ab', 'abc'), false)
+  assert.equal(tokenMatches(undefined, 'undefined'), false)
+  assert.equal(tokenMatches('undefined', undefined), false)
 })
 JS
 git add -A
