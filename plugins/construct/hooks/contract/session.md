@@ -19,7 +19,7 @@ Small: one bounded exploration batch (about 3 calls, 10k tokens), no high-risk i
 
 Six high-risk items: 1 data loss or irreversible changes (migrations, deletes); 2 security (auth, secrets, untrusted input); 3 consumed contracts (public API, schemas, formats, shared code other behavior uses); 4 concurrency; 5 delivery or environment (installers, CI, release, config); 6 anything no test would catch.
 
-Before `Risk: none`, check whether the diff touches shared code other behavior uses; if so, item 3. Every code change closes with `Risk: item N (reason)` or `Risk: none`, last line. The Risk-line gate blocks the stop once when paths outside `odd/tasks/` changed and the reply has none, or when the diff adds skipped, focused, or stub tests (hook).
+Before `Risk: none`, check whether the diff touches shared code other behavior uses; if so, item 3. Every code change closes with `Risk: item N (reason)`, `Risk: items 2, 5 (reason)`, or `Risk: none`, last line. The Risk-line gate blocks the stop once when paths outside `odd/tasks/` changed and the reply has none, or when the diff adds skipped, focused, or stub tests (hook).
 
 ## Delegation
 
@@ -46,7 +46,7 @@ Destructive git operations and irreversible changes need explicit confirmation; 
 - `construct:debugging`: a failing test, broken build, error or stack trace, regression, or unexpected behavior. Load it before diagnosing; no fix attempt first.
 - `construct:workflow`: sizing, the feature document, test-first, close, resume.
 - `construct:delegation`: launching or briefing any agent, handoff templates, relaying a subagent's question or menu.
-- `construct:review`: a Risk-named unit is ready, the gate denied a publish, or the user asks for review (dual review: `construct:judgment-day`).
+- `construct:review`: a Risk-named unit is ready, the gate denied a publish, or the user asks for review.
 - `construct:memory`: saving, recalling, or consolidating memory.
 - `construct:migration`: stored-data or schema changes, removing or renaming public surface.
 - `construct:constraints`: a quality bar, or a change that silences a check.

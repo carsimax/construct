@@ -24,9 +24,9 @@ const MARKERS = [
 ]
 const TODO = /^\s*(?:\/\/|#|\/\*|\*|--)\s*TODO\b/
 // Optional list marker (-, *, +, 1., 1)) and emphasis around the label and the
-// value, then `none` or `item 1-6` that ends the line or is followed by
+// value, then `none`, `item 1-6`, or `items 2, 5` that ends the line or is followed by
 // whitespace or `(`; the space after the colon is optional.
-const RISK_LINE = /^[ \t]*(?:(?:[-*+]|\d+[.)])[ \t]+)?[*_`]*Risk[*_`]*:[*_`]*[ \t]*[*_`]*(?:none|item [1-6])[*_`]*(?=$|\s|\()/m
+const RISK_LINE = /^[ \t]*(?:(?:[-*+]|\d+[.)])[ \t]+)?[*_`]*Risk[*_`]*:[*_`]*[ \t]*[*_`]*(?:none|items? [1-6](?:,[ \t]*[1-6])*)[*_`]*(?=$|\s|\()/m
 
 const recordFile = (session) => {
   const dir = join(dataDir(), 'risk-line')
@@ -145,7 +145,7 @@ async function main() {
   if (riskMissing) {
     reasons.push(
       `Risk line missing: this turn changed ${list(paths)}. ` +
-        'End the final message with one line, `Risk: item N (reason)` for a high-risk item 1-6, or `Risk: none`.',
+        'End the final message with one line, `Risk: item N (reason)` (or `Risk: items 2, 5 (reason)`) for high-risk items 1-6, or `Risk: none`.',
     )
   }
   if (hits.length > 0) {

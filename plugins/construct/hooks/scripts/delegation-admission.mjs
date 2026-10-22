@@ -5,7 +5,7 @@
 //     odd/tasks/<f>.md, T<n>` line naming an existing regular file when an
 //     unfinished feature document exists, and surfaces that do not overlap those
 //     of a writer still open;
-//   - construct:verifier needs a `Risk: item N` line (N 1-6).
+//   - construct:verifier needs a `Risk: item N` or `Risk: items 2, 5` line (1-6, the whole list valid).
 // Other agents pass untouched, and an admitted launch prints nothing, so it never
 // conflicts with review-context.mjs (the hooks run in parallel; deny wins).
 // `stop` (SubagentStop) clears the stopped writer's record: it hashes the first
@@ -34,14 +34,15 @@ const MD_HEADING = /^ {0,3}#{1,6} /
 const LIST_MARKER = /^(?:[-*+]|\d+[.)]) +/
 const CONTROL = /\p{Cc}|\p{Zl}|\p{Zp}/u
 const SPEC_LINE = /^[ \t]*(?:[-*+][ \t]+)?Spec:[ \t]*`?(odd\/tasks\/[^\s,`()]+\.md)`?[^\n]*?\bT\d+\b/gm
-const RISK_LINE = /^[ \t]*(?:[-*+][ \t]+)?Risk:[ \t]*item[ \t]+[1-6](?!\d)/m
+// The Risk-line gate's grammar (risk-line.mjs) without `none`: the whole list must be valid; a test keeps both in step.
+const RISK_LINE = /^[ \t]*(?:(?:[-*+]|\d+[.)])[ \t]+)?[*_`]*Risk[*_`]*:[*_`]*[ \t]*[*_`]*items? [1-6](?:,[ \t]*[1-6])*[*_`]*(?=$|\s|\()/m
 
 const SURFACES_FORM =
   'Add the exact heading `## Allowed edit surfaces` with narrow repository-relative paths or globs, one per line (for example `src/parser.js`), wrapping a path with whitespace in backticks; put prose under the next heading.'
 const SPEC_FORM =
   'An unfinished feature document exists, so add a line `Spec: odd/tasks/<feature>.md, T<n>` (and the S# it covers) naming an existing regular file (not a symlink) under odd/tasks/.'
 const RISK_FORM =
-  'Add a line `Risk: item N` (N from 1 to 6, the Task Size high-risk list), for example `Risk: item 3 (shared parser)`. `Risk: none` does not admit a verifier: run the checks inline instead.'
+  'Add a line `Risk: item N` (N from 1 to 6, the Task Size high-risk list), for example `Risk: item 3 (shared parser)` or `Risk: items 2, 5 (why)`. `Risk: none` does not admit a verifier: run the checks inline instead.'
 
 const deny = (reason) =>
   process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: reason } })}\n`)

@@ -127,6 +127,24 @@ test('the lens report text names every key and enum value the validator enforces
   }
 })
 
+test('the judge reply text names the envelope keys and every enum value the lens validator enforces (V54)', () => {
+  for (const judge of namesOf('judge')) {
+    const text = read('agents', `${judge}.md`)
+    for (const word of ['findings', 'evidence', 'location', 'severity', 'claim', 'evidence_class', 'causal_disposition', 'proof_refs',
+      'BLOCKER', 'CRITICAL', 'WARNING', 'SUGGESTION', 'deterministic', 'inferential', 'insufficient',
+      'introduced', 'behavior-activated', 'worsened', 'pre-existing', 'base-only', 'unknown']) {
+      assert.ok(text.includes(word), `${judge} lacks ${word}`)
+    }
+  }
+})
+
+test('the worker output section names every status and heading (C83)', () => {
+  const out = read('agents', 'worker.md').split(/^## Output/m)[1].toLowerCase()
+  for (const word of ['done', 'partial', 'needs_interaction', 'specs covered', 'changes', 'verification', 'scratch paths', 'open issues']) {
+    assert.ok(out.includes(word), `worker output lacks ${word}`)
+  }
+})
+
 test('the subagent contract is injected for non-JSON roles within budget; JSON-only kinds get nothing (V48)', () => {
   const run = (type) =>
     spawnSync('node', [join(pluginRoot, 'hooks/scripts/contract.mjs'), 'subagent'], { input: JSON.stringify({ agent_type: type }), encoding: 'utf8', env: { ...process.env, CLAUDE_PLUGIN_ROOT: pluginRoot } }).stdout

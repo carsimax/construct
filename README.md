@@ -195,7 +195,7 @@ Four skills adapted from [addyosmani/agent-skills](https://github.com/addyosmani
 
 Existing components gained matching material:
 
-- `judgment-day` has a decision mode for a plan, design, or claim before implementation. Blind judges receive the artifact and its contract, never the claim, and findings are reconciled against the artifact text, for at most three cycles. Code-review mode is unchanged.
+- `construct:review` (dual review, `references/dual-review.md`) has a decision mode for a plan, design, or claim before implementation. Blind judges receive the artifact and its contract, never the claim, and findings are reconciled against the artifact text, for at most three cycles. Code-review mode is unchanged.
 - `construct:verifier` applies a standing Definition of Done (correctness, quality, integration, documentation, ship-readiness) to every `S#`, and reports a line it cannot verify as `not verified`.
 - `construct:review-risk` carries a security checklist category list; the full checklist is `skills/review/references/security-checklist.md`. The agent has no tools, so the review-context hook embeds that file in the review-risk context between `ODD_REVIEW_CHECKLIST_BEGIN` and `ODD_REVIEW_CHECKLIST_END`, before `ODD_REVIEW_CONTEXT_END`, and counts it against the context budget. The agent applies the categories as triage over the supplied patches.
 - `workflow`'s testing reference tells the worker to discover the repository's own test stack first and states the Floor as "never weaken the verifier" examples.
@@ -271,7 +271,7 @@ The mod draws one thing: a docked **panel** (a `Pane` with id `construct`) laid 
 | `install.sh` | One-command installer (see [One command](#one-command)) |
 | `plugins/construct/` | The plugin (manifest name `construct`) |
 | `plugins/construct/agents/` | The 11 role agents |
-| `plugins/construct/skills/` | Delivery and review skills (`branch-pr`, `chained-pr`, `work-unit-commits`, `judgment-day`, `debugging`, `constraints`, ...) |
+| `plugins/construct/skills/` | Delivery and review skills (`branch-pr`, `chained-pr`, `work-unit-commits`, `review`, `debugging`, `constraints`, ...) |
 | `plugins/construct/hooks/` | `hooks.json`, the mod (`register.js`), its routing helpers, the status modules (`status/`), the panel modules (`panel/`), and the command hooks (`scripts/`: contract, feature state, the `shell-words` tokenizer, delivery signals, publication gate, review store guard, command and surface guards, Risk line gate, subagent count, delegation admission, review context and capture, and the memory store `memory-store.mjs` with its hooks `memory-hooks.mjs`) |
 | `plugins/construct/bin/construct-memory` | The memory command line (on the Bash tool's PATH) |
 | `plugins/construct/hooks/contract/` | Session and subagent contract texts injected by hooks |

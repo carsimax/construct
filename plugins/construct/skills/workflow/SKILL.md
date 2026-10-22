@@ -42,7 +42,7 @@ High risk means a mistake is hard to detect, hard to undo, or reaches beyond the
 
 Before `Risk: none`, check whether the diff touches shared code other behavior uses; if so, that is item 3.
 
-Every code change closes with `Risk: item N (reason)` (one such line per item) or `Risk: none`. The Risk-line hook blocks a reply once when paths outside `odd/tasks/` changed and no Risk line exists, or when the diff adds skipped, focused, or stub test markers. The admission hook reads the same line before it admits a verifier. In the Tasks table, the Risk cell holds the item numbers (`2, 5`, `2-3`) or `none`; the publication gate reads them to require lenses.
+Every code change closes with `Risk: item N (reason)`, `Risk: items 2, 5 (reason)` for several items, or `Risk: none`. The Risk-line hook blocks a reply once when paths outside `odd/tasks/` changed and no Risk line exists, or when the diff adds skipped, focused, or stub test markers. The admission hook reads the same line before it admits a verifier. In the Tasks table, the Risk cell holds the item numbers (`2, 5`, `2-3`) or `none`; the publication gate reads them to require lenses.
 
 ## Autonomy
 
