@@ -143,12 +143,11 @@ const isBusy = (error) => error?.errcode === 5 || error?.errcode === 6 || /SQLIT
 const stripPrivate = (text) => String(text ?? '').replace(/<private>(?:[\s\S]*?<\/private>|[\s\S]*$)/gi, '[REDACTED]')
 
 // Injection scan: narrow English patterns for text that tries to steer a later session (instruction override,
-// fake role tags, compaction survival, role takeover). shortcut: English only, upgrade when a miss is reported.
+// fake role tags, compaction survival). shortcut: English only, upgrade when a miss is reported.
 const INJECTION = new RegExp([
-  String.raw`\b(?:ignore|disregard|forget)\s+(?:all\s+)?(?:(?:the|your|any)\s+)?(?:previous|prior|above|earlier)\s+instructions?\b`,
-  String.raw`<\/?system>|<\|im_(?:start|end)\|>|\[\/?INST\]|^\s*#{1,6}\s*system\s*:`,
+  String.raw`\b(?:ignore|disregard|forget)\s+(?:all\s+)?(?:(?:the|your|any)\s+)?(?:(?:previous|prior|above|earlier)\s+instructions?|instructions?\s+above)\b`,
+  String.raw`<\/?system>|<\|im_(?:start|end)\|>|\[\/?INST\]`,
   String.raw`\bwhen\s+(?:compacting|summari[sz]ing)\s*,\s*(?:retain|keep|preserve)\b`,
-  String.raw`\byou\s+are\s+now\s+(?:a|an|the|in)\b[^.\n]{0,40}\b(?:assistant|system|admin|administrator|developer|root|unrestricted|jailbroken|mode)\b`,
 ].join('|'), 'im')
 export const injects = (text) => INJECTION.test(String(text ?? ''))
 const filterLines = (text) => String(text).split('\n').map((line) => (injects(line) ? '[FILTERED]' : line)).join('\n')
