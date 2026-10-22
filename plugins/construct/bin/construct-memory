@@ -14,9 +14,14 @@ const USAGE = `usage: construct-memory <command> [options]
   summary --session <id>            summary on stdin; stores it and ends the session
   review list | review done <id>
   prompts [--limit N]               list stored prompts (id, date, preview), newest first
+  prompts --search <query> [--limit N]  find stored prompts by text, same lines
   prompts delete <id>               remove one stored prompt for good
   import <file> [--project <name>]  load one project of an engram export JSON file (versions 0.1.0, 0.2.0)
   export [file]                     write live observations, sessions, and prompts as JSON (stdout, or a new file) for backup or another clone
+  suggest-topic-key                 JSON on stdin: type, title, content; prints a topic key such as bug/fix-login, writes nothing
+  timeline <id> [--before N] [--after N]  the observations around one in its session (default 5 and 5), the focus marked with >
+  pin <id> | unpin <id>             pinned observations always load in the session context and rank higher in search
+  stats                             counts of observations, sessions, prompts, and the database size
   help`
 
 class UsageError extends Error {}
@@ -50,6 +55,7 @@ const oneLine = (text) => String(text).replace(/\s+/g, ' ').trim()
 function hit(row) {
   const parts = [`#${row.id}`, `[${row.type}]`, oneLine(row.title)]
   if (row.topic_key) parts.push(`(${row.topic_key})`)
+  if (row.pinned) parts.push('pinned')
   if (row.needs_review) parts.push('needs_review')
   return `${parts.join(' ')} - ${oneLine(row.preview)}${row.truncated ? '...' : ''}`
 }
@@ -74,9 +80,9 @@ async function main(argv) {
   const { values, positionals } = parseArgs({
     args: rest,
     allowPositionals: true,
-    options: { type: { type: 'string' }, limit: { type: 'string' }, any: { type: 'boolean' }, history: { type: 'boolean' }, hard: { type: 'boolean' }, session: { type: 'string' }, project: { type: 'string' } },
+    options: { type: { type: 'string' }, limit: { type: 'string' }, any: { type: 'boolean' }, history: { type: 'boolean' }, before: { type: 'string' }, after: { type: 'string' }, search: { type: 'string' }, hard: { type: 'boolean' }, session: { type: 'string' }, project: { type: 'string' } },
   })
-  const known = ['save', 'search', 'get', 'context', 'update', 'delete', 'summary', 'review', 'import', 'prompts', 'export']
+  const known = ['save', 'search', 'get', 'context', 'update', 'delete', 'summary', 'review', 'import', 'prompts', 'export', 'suggest-topic-key', 'timeline', 'pin', 'unpin', 'stats']
   if (!known.includes(command)) fail(`unknown command: ${command} (run construct-memory help)`)
   if (command === 'review' && !['list', 'done'].includes(positionals[0])) fail('review needs list or done <id>')
 
@@ -164,8 +170,46 @@ async function main(argv) {
           if (!store.deletePrompt(id)) fail(`prompt #${id} not found`)
           return `deleted prompt #${id}\n`
         }
-        const rows = store.prompts({ limit: values.limit })
+        if (values.search !== undefined && !values.search.trim()) fail('prompts --search needs a query')
+        const rows = store.prompts({ limit: values.limit, search: values.search })
+        if (values.search !== undefined && !rows.length) return 'no prompts found\n'
         return rows.length ? `${rows.map((r) => `#${r.id} ${r.created_at} ${[...oneLine(r.content)].slice(0, 120).join('')}`).join('\n')}\n` : 'no prompts stored\n'
+      }
+      case 'suggest-topic-key': {
+        const input = stdinJson()
+        for (const k of ['type', 'title', 'content']) if (input[k] !== undefined && typeof input[k] !== 'string') fail(`${k} must be a string`)
+        if (!(input.title ?? '').trim() && !(input.content ?? '').trim()) fail('title or content is required')
+        return `${store.suggestTopicKey(input)}\n`
+      }
+      case 'timeline': {
+        const id = idArg(positionals[0])
+        const t = store.timeline(id, { before: values.before, after: values.after })
+        if (!t) fail(`observation #${id} not found`)
+        const line = (mark, row) => `${mark} ${hit(row)}`
+        return `${[
+          `session ${t.session_id ?? '(none)'}: ${t.total} observations`,
+          ...t.before.map((r) => line(' ', r)),
+          line('>', t.focus),
+          ...t.after.map((r) => line(' ', r)),
+        ].join('\n')}\n`
+      }
+      case 'pin':
+      case 'unpin': {
+        const id = idArg(positionals[0])
+        if (!store.pin(id, command === 'pin')) fail(`observation #${id} not found`)
+        return `${command}ned #${id}\n`
+      }
+      case 'stats': {
+        const s = store.stats()
+        return `${[
+          `observations: ${s.observations}`,
+          `soft-deleted observations: ${s.deleted}`,
+          `needing review: ${s.needing_review}`,
+          `pinned observations: ${s.pinned}`,
+          `sessions: ${s.sessions}`,
+          `prompts: ${s.prompts}`,
+          `database size: ${s.bytes} bytes`,
+        ].join('\n')}\n`
       }
       case 'review': {
         if (positionals[0] === 'list') {

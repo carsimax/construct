@@ -28,6 +28,11 @@ const PREVIEW_CHARS = 300
 const CONTEXT_MAX_BYTES = 16384
 const CONTEXT_MARKER = '\n[truncated]\n'
 const BUSY_RETRIES = 5
+const PINNED_MAX = 20
+const PINNED_BOOST = 0.1
+const TIMELINE_DEFAULT = 5
+const PROMPTS_DEFAULT = 20
+const PROMPTS_MAX = 100
 // Initial review prompts in months per type, not deadlines; other types have none.
 const REVIEW_MONTHS = { decision: 6, policy: 12, preference: 3, config: 3, discovery: 6, pattern: 6, architecture: 12, bugfix: 12 }
 
@@ -47,7 +52,8 @@ CREATE TABLE IF NOT EXISTS observations (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   deleted_at TEXT,
-  import_id TEXT
+  import_id TEXT,
+  pinned INTEGER NOT NULL DEFAULT 0
 );
 CREATE UNIQUE INDEX IF NOT EXISTS observations_import ON observations(import_id) WHERE import_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS observations_topic ON observations(topic_key) WHERE deleted_at IS NULL;
@@ -149,6 +155,56 @@ const isoTime = (text) => {
 }
 const EXPORT_VERSIONS = ['0.1.0', '0.2.0']
 const projectName = (name) => String(name ?? '').trim().toLowerCase()
+const SEARCH_COLUMNS = 'o.id, o.type, o.title, o.topic_key, o.pinned, o.created_at, o.updated_at, o.review_after, substr(o.content, 1, 300) AS preview, length(o.content) > 300 AS truncated'
+const queryTerms = (text) => String(text ?? '').trim().split(/\s+/).map((t) => t.replace(/^"+|"+$/g, '')).filter(Boolean)
+const hasShortTerm = (terms) => terms.some((t) => [...t].length < 3)
+const ftsQuoted = (terms, any) => terms.map((t) => `"${t.replaceAll('"', '""')}"`).join(any ? ' OR ' : ' AND ')
+const likePattern = (term) => `%${term.replace(/[\\%_]/g, '\\$&')}%`
+
+// suggestTopicKey ports engram's SuggestTopicKey: a family from the type (or, for an untyped note, from
+// keywords in the text) plus a slug of the title (else the first 8 words of the content), as `family/slug`.
+const TOPIC_FAMILIES = [
+  ['architecture', ['architecture', 'design', 'adr', 'refactor']],
+  ['bug', ['bug', 'bugfix', 'fix', 'incident', 'hotfix']],
+  ['decision', ['decision']],
+  ['pattern', ['pattern', 'convention', 'guideline']],
+  ['config', ['config', 'setup', 'infra', 'infrastructure', 'ci']],
+  ['discovery', ['discovery', 'investigation', 'root_cause', 'root-cause']],
+  ['learning', ['learning', 'learn']],
+  ['session', ['session_summary']],
+]
+const FAMILY_KEYWORDS = [
+  ['bug', ['bug', 'fix', 'panic', 'error', 'crash', 'regression', 'incident', 'hotfix']],
+  ['architecture', ['architecture', 'design', 'adr', 'boundary', 'hexagonal', 'refactor']],
+  ['decision', ['decision', 'tradeoff', 'chose', 'choose', 'decide']],
+  ['pattern', ['pattern', 'convention', 'naming', 'guideline']],
+  ['config', ['config', 'setup', 'environment', 'env', 'docker', 'pipeline']],
+  ['discovery', ['discovery', 'investigate', 'investigation', 'found', 'root cause']],
+  ['learning', ['learned', 'learning']],
+]
+const topicSegment = (text) => cutBytes(String(text).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().split(' ').filter(Boolean).join('-'), 100)
+
+export function suggestTopicKey({ type = '', title = '', content = '' } = {}) {
+  const t = String(type).trim().toLowerCase()
+  const text = `${title} ${content}`.toLowerCase()
+  let family = TOPIC_FAMILIES.find(([, types]) => types.includes(t))?.[0]
+  family ??= FAMILY_KEYWORDS.find(([, words]) => words.some((w) => text.includes(w)))?.[0]
+  family ??= t !== '' && t !== 'manual' ? topicSegment(t) : 'topic'
+  let source = stripPrivate(title)
+  let segment = topicSegment(source)
+  if (segment === '') {
+    source = stripPrivate(content).split(/\s+/).filter(Boolean).slice(0, 8).join(' ')
+    segment = topicSegment(source)
+  }
+  if (segment.startsWith(`${family}-`)) segment = segment.slice(family.length + 1)
+  if (segment === '' || segment === family) segment = 'general'
+  // A non-ASCII source loses characters in the slug, so a hash suffix keeps different sources apart.
+  if (/[^\x00-\x7f]/.test(source)) {
+    const suffix = `-u-${createHash('sha256').update(source).digest('hex').slice(0, 12)}`
+    segment = cutBytes(segment, Math.min(100, 120 - family.length - 1) - suffix.length) + suffix
+  }
+  return `${family}/${segment}`
+}
 const reviewAfter = (type, from) => (type in REVIEW_MONTHS ? addMonths(from, REVIEW_MONTHS[type]) : null)
 
 // openMemory returns the store of the repository containing cwd, or null outside one.
@@ -329,10 +385,10 @@ function makeStore(db, path, now, repoName) {
     search(query, { type, limit = SEARCH_DEFAULT, any = false } = {}) {
       const max = Math.min(SEARCH_MAX, Math.max(1, Math.trunc(Number(limit)) || SEARCH_DEFAULT))
       const text = String(query ?? '').trim()
-      const terms = text.split(/\s+/).map((t) => t.replace(/^"+|"+$/g, '')).filter(Boolean)
+      const terms = queryTerms(text)
       const typeSql = type ? ' AND o.type = ?' : ''
       const typeArgs = type ? [type] : []
-      const columns = "o.id, o.type, o.title, o.topic_key, o.created_at, o.updated_at, o.review_after, substr(o.content, 1, 300) AS preview, length(o.content) > 300 AS truncated"
+      const columns = SEARCH_COLUMNS
       let rows = []
       if (text.includes('/')) {
         rows = all(`SELECT ${columns} FROM observations o WHERE o.deleted_at IS NULL AND o.topic_key IN (?, ?)${typeSql} ORDER BY o.id DESC`, text, normalizeTopicKey(text), ...typeArgs)
@@ -340,26 +396,27 @@ function makeStore(db, path, now, repoName) {
       if (terms.length > 0 && rows.length < max) {
         const seen = new Set(rows.map((r) => r.id))
         let found
-        if (terms.some((t) => [...t].length < 3)) {
+        if (hasShortTerm(terms)) {
           const group = "(o.title LIKE ? ESCAPE '\\' OR o.content LIKE ? ESCAPE '\\' OR o.type LIKE ? ESCAPE '\\' OR o.topic_key LIKE ? ESCAPE '\\')"
-          const patterns = terms.flatMap((t) => Array(4).fill(`%${t.replace(/[\\%_]/g, '\\$&')}%`))
+          const patterns = terms.flatMap((t) => Array(4).fill(likePattern(t)))
           found = all(`SELECT ${columns} FROM observations o WHERE o.deleted_at IS NULL AND (${terms.map(() => group).join(any ? ' OR ' : ' AND ')})${typeSql} ORDER BY o.updated_at DESC, o.id DESC LIMIT ?`, ...patterns, ...typeArgs, SEARCH_MAX)
         } else {
-          const match = terms.map((t) => `"${t.replaceAll('"', '""')}"`).join(any ? ' OR ' : ' AND ')
-          const rank = `bm25(observations_fts, 5.0, 1.0, 0.0, 3.0) * (1.0 + 0.06 * (1.0 / (1.0 + MAX(0.0, julianday(?) - julianday(o.last_seen_at)) / 30.0)) + 0.04 * ((o.revision_count + o.duplicate_count) / (o.revision_count + o.duplicate_count + 4.0)))`
+          const match = ftsQuoted(terms, any)
+          const rank = `bm25(observations_fts, 5.0, 1.0, 0.0, 3.0) * (1.0 + ${PINNED_BOOST} * o.pinned + 0.06 * (1.0 / (1.0 + MAX(0.0, julianday(?) - julianday(o.last_seen_at)) / 30.0)) + 0.04 * ((o.revision_count + o.duplicate_count) / (o.revision_count + o.duplicate_count + 4.0)))`
           found = all(`SELECT ${columns} FROM observations_fts f JOIN observations o ON o.id = f.rowid WHERE observations_fts MATCH ? AND o.deleted_at IS NULL${typeSql} ORDER BY ${rank} ASC, o.id ASC LIMIT ?`, match, ...typeArgs, stamp(), SEARCH_MAX)
         }
         rows = rows.concat(found.filter((r) => !seen.has(r.id)))
       }
-      return rows.slice(0, max).map(({ review_after, truncated, ...rest }) => present({ ...rest, truncated: Boolean(truncated), review_after }))
+      return rows.slice(0, max).map(({ review_after, truncated, pinned, ...rest }) => present({ ...rest, pinned: Boolean(pinned), truncated: Boolean(truncated), review_after }))
     },
 
     // context renders the session-start text: recent sessions, prompts, and observations.
     context() {
       const sessions = all('SELECT s.id, s.started_at, s.summary, (SELECT count(*) FROM observations o WHERE o.session_id = s.id AND o.deleted_at IS NULL) AS n FROM sessions s ORDER BY s.started_at DESC, s.rowid DESC LIMIT 5')
       const prompts = all('SELECT content, created_at FROM user_prompts ORDER BY id DESC LIMIT 10')
-      const observations = all('SELECT type, title FROM observations WHERE deleted_at IS NULL ORDER BY updated_at DESC, id DESC LIMIT 20')
-      if (sessions.length + prompts.length + observations.length === 0) return ''
+      const pinned = all('SELECT type, title FROM observations WHERE deleted_at IS NULL AND pinned = 1 ORDER BY created_at DESC, id DESC LIMIT ?', PINNED_MAX)
+      const observations = all('SELECT type, title FROM observations WHERE deleted_at IS NULL AND pinned = 0 ORDER BY updated_at DESC, id DESC LIMIT 20')
+      if (sessions.length + prompts.length + pinned.length + observations.length === 0) return ''
       let out = '## Memory from Previous Sessions\n\n'
       if (sessions.length) {
         out += '### Recent Sessions\n'
@@ -369,6 +426,11 @@ function makeStore(db, path, now, repoName) {
       if (prompts.length) {
         out += '### Recent User Prompts\n'
         for (const p of prompts) out += `- ${p.created_at}: ${flat(p.content, 200)}\n`
+        out += '\n'
+      }
+      if (pinned.length) {
+        out += '### Pinned\n'
+        for (const o of pinned) out += `- [${o.type}] **${flat(o.title, Infinity)}**\n`
         out += '\n'
       }
       if (observations.length) {
@@ -397,9 +459,14 @@ function makeStore(db, path, now, repoName) {
     },
 
     // prompts lists stored prompts, newest first (limit default 20, max 100).
-    prompts({ limit } = {}) {
-      const n = Math.min(100, Math.max(1, Math.floor(Number(limit)) || 20))
-      return all('SELECT id, session_id, created_at, content FROM user_prompts ORDER BY id DESC LIMIT ?', n)
+    // With search, only prompts matching every term: trigram FTS (terms quoted), or an escaped LIKE scan when a term is under 3 characters.
+    prompts({ limit, search } = {}) {
+      const n = Math.min(PROMPTS_MAX, Math.max(1, Math.floor(Number(limit)) || PROMPTS_DEFAULT))
+      const terms = queryTerms(search)
+      if (search !== undefined && terms.length === 0) throw new Error('a search query is required')
+      if (terms.length === 0) return all('SELECT id, session_id, created_at, content FROM user_prompts ORDER BY id DESC LIMIT ?', n)
+      if (hasShortTerm(terms)) return all(`SELECT id, session_id, created_at, content FROM user_prompts WHERE ${terms.map(() => "content LIKE ? ESCAPE '\\'").join(' AND ')} ORDER BY id DESC LIMIT ?`, ...terms.map(likePattern), n)
+      return all('SELECT p.id, p.session_id, p.created_at, p.content FROM prompts_fts f JOIN user_prompts p ON p.id = f.rowid WHERE prompts_fts MATCH ? ORDER BY bm25(prompts_fts), p.id DESC LIMIT ?', ftsQuoted(terms, false), n)
     },
 
     // deletePrompt hard-deletes one prompt (the trigger drops its FTS entry); an imported one leaves a
@@ -412,6 +479,43 @@ function makeStore(db, path, now, repoName) {
         run('DELETE FROM user_prompts WHERE id = ?', id)
         return true
       })
+    },
+
+    suggestTopicKey,
+
+    // pin and unpin set the pinned flag of a live observation; false for an unknown or deleted id.
+    pin: (id, pinned = true) => write(() => run('UPDATE observations SET pinned = ? WHERE id = ? AND deleted_at IS NULL', pinned ? 1 : 0, id).changes > 0),
+
+    // timeline returns the live observation `id` with up to `before` older and `after` newer live
+    // observations of its session (both oldest first), or null for an unknown or deleted id. Observations
+    // saved without a session count as one session of their own, as engram's manual saves do.
+    timeline(id, { before, after } = {}) {
+      const side = (n) => (Math.trunc(Number(n)) > 0 ? Math.trunc(Number(n)) : TIMELINE_DEFAULT)
+      const focus = one(`SELECT ${SEARCH_COLUMNS}, o.session_id FROM observations o WHERE o.id = ? AND o.deleted_at IS NULL`, id)
+      if (!focus) return null
+      const neighbours = (cmp, order, n) => all(`SELECT ${SEARCH_COLUMNS} FROM observations o WHERE o.session_id IS ? AND o.id ${cmp} ? AND o.deleted_at IS NULL ORDER BY o.id ${order} LIMIT ?`, focus.session_id, id, n)
+      const shape = ({ review_after, truncated, pinned, ...rest }) => present({ ...rest, pinned: Boolean(pinned), truncated: Boolean(truncated), review_after })
+      return {
+        session_id: focus.session_id,
+        total: one('SELECT count(*) AS n FROM observations WHERE session_id IS ? AND deleted_at IS NULL', focus.session_id).n,
+        before: neighbours('<', 'DESC', side(before)).reverse().map(shape),
+        focus: shape(focus),
+        after: neighbours('>', 'ASC', side(after)).map(shape),
+      }
+    },
+
+    // stats counts what the store holds; size is the database's pages in bytes.
+    stats() {
+      const n = (sql, ...args) => one(sql, ...args).n
+      return {
+        observations: n('SELECT count(*) AS n FROM observations WHERE deleted_at IS NULL'),
+        deleted: n('SELECT count(*) AS n FROM observations WHERE deleted_at IS NOT NULL'),
+        needing_review: n('SELECT count(*) AS n FROM observations WHERE deleted_at IS NULL AND review_after IS NOT NULL AND review_after <= ?', stamp()),
+        pinned: n('SELECT count(*) AS n FROM observations WHERE deleted_at IS NULL AND pinned = 1'),
+        sessions: n('SELECT count(*) AS n FROM sessions'),
+        prompts: n('SELECT count(*) AS n FROM user_prompts'),
+        bytes: n('SELECT page_count * page_size AS n FROM pragma_page_count, pragma_page_size'),
+      }
     },
 
     // needingReview lists live observations whose review_after has passed, oldest first.
@@ -482,8 +586,8 @@ function makeStore(db, path, now, repoName) {
           const title = clean(o.title, 'title')
           const body = capContent(clean(o.content, 'content'))
           const type = o.type || 'manual'
-          run('INSERT INTO observations (session_id, type, title, content, topic_key, normalized_hash, revision_count, duplicate_count, last_seen_at, review_after, created_at, updated_at, import_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            o.session_id || null, type, title, body, normalizeTopicKey(o.topic_key) || null, normalizedHash(body), o.revision_count ?? 0, o.duplicate_count ?? 0, o.last_seen_at || o.updated_at || o.created_at, reviewAfter(type, isoTime(o.created_at)), o.created_at, o.updated_at || o.created_at, importId)
+          run('INSERT INTO observations (session_id, type, title, content, topic_key, normalized_hash, revision_count, duplicate_count, last_seen_at, review_after, created_at, updated_at, import_id, pinned) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            o.session_id || null, type, title, body, normalizeTopicKey(o.topic_key) || null, normalizedHash(body), o.revision_count ?? 0, o.duplicate_count ?? 0, o.last_seen_at || o.updated_at || o.created_at, reviewAfter(type, isoTime(o.created_at)), o.created_at, o.updated_at || o.created_at, importId, o.pinned === true || o.pinned === 1 ? 1 : 0)
           counts.observations++
         }
         for (const p of prompts.filter((r) => projectOf(r) === chosen)) {
@@ -512,7 +616,7 @@ function makeStore(db, path, now, repoName) {
         version: '0.2.0',
         exported_at: stamp(),
         sessions: all('SELECT id, started_at, ended_at, summary FROM sessions ORDER BY id').map((s) => ({ ...s, project })),
-        observations: all('SELECT id, import_id, session_id, type, title, content, topic_key, revision_count, duplicate_count, last_seen_at, created_at, updated_at FROM observations WHERE deleted_at IS NULL ORDER BY id').map(({ import_id, ...o }) => ({ ...o, sync_id: import_id ?? `cm-${api.dbId}-obs-${o.id}`, project, scope: 'project' })),
+        observations: all('SELECT id, import_id, session_id, type, title, content, topic_key, revision_count, duplicate_count, last_seen_at, created_at, updated_at, pinned FROM observations WHERE deleted_at IS NULL ORDER BY id').map(({ import_id, pinned, ...o }) => ({ ...o, pinned: pinned === 1, sync_id: import_id ?? `cm-${api.dbId}-obs-${o.id}`, project, scope: 'project' })),
         prompts: all('SELECT id, import_id, session_id, content, created_at FROM user_prompts ORDER BY id').map(({ import_id, ...p }) => ({ ...p, sync_id: import_id ?? `cm-${api.dbId}-prompt-${p.id}`, project })),
       }
     },

@@ -83,7 +83,7 @@ describe('schema (S2)', () => {
     const columns = raw(store, 'PRAGMA table_info(observations)').map((r) => r.name)
     assert.deepEqual(columns, [
       'id', 'session_id', 'type', 'title', 'content', 'topic_key', 'normalized_hash', 'revision_count',
-      'duplicate_count', 'last_seen_at', 'review_after', 'created_at', 'updated_at', 'deleted_at', 'import_id',
+      'duplicate_count', 'last_seen_at', 'review_after', 'created_at', 'updated_at', 'deleted_at', 'import_id', 'pinned',
     ])
     assert.deepEqual(raw(store, 'PRAGMA table_info(import_tombstones)').map((r) => r.name), ['import_id', 'deleted_at'])
     assert.deepEqual(raw(store, 'SELECT key FROM meta').map((r) => r.key), ['db_id'])
