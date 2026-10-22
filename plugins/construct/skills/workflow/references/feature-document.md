@@ -29,5 +29,5 @@ Objective: <one sentence>. Branch: <branch>. Baseline: <commit>. Delivery strate
 - Tasks have stable IDs linked to `S#`. The hook needs the `ID`, `Task`, `Status`, and `Specs` columns, and warns when a spec has no task or a task names an unknown spec. A Status whose first word is `done` or `dropped` is finished; anything else is unfinished.
 - Risk cell: item numbers 1-6 (ranges allowed) or `none`; any other text makes the gate deny.
 - Log: L1 is the verbatim request; later corrections are verbatim with a date; progress notes stay brief. Keep a line `Next step: <action>` near the end; the hook shows it.
-- A requirement change appends a verbatim Log entry, rewrites only the affected `S#`, and reopens only its task. Findings never expand scope.
+- A requirement change appends a verbatim Log entry, rewrites just the `S#` it touches, and reopens just its task. Findings never expand scope.
 - Record the baseline commit in the header before the first change; the verifier's baseline comes from it.

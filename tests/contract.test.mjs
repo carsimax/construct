@@ -109,18 +109,18 @@ test('SubagentStart gives worker agents the subagent contract', () => {
 test('SubagentStart carries the S2 engineering rules for writers', () => {
   const text = context('subagent', { hook_event_name: 'SubagentStart', agent_type: 'construct:worker' }).additionalContext
   assert.match(text, /never weaken a verifier/i)
-  assert.match(text, /suppress an error, widen a type, skip a test, or delete an assertion/)
+  assert.match(text, /Silencing an error, widening a type, skipping a test, or dropping an assertion/)
   assert.match(text, /root cause/i)
   assert.match(text, /reproduce a bug before/i)
-  assert.match(text, /not needed.*already in the codebase.*standard library or platform.*installed dependency.*minimum new code/s)
-  assert.match(text, /no dependency for a few lines/i)
-  assert.match(text, /match the surrounding code/i)
+  assert.match(text, /skip it.*reuse what the codebase has.*standard library or platform.*installed dependency.*minimal new code/s)
+  assert.match(text, /never add a dependency for a few lines/i)
+  assert.match(text, /match the code around you/i)
   assert.ok(text.includes('`shortcut: <the limit>, <when to upgrade>`'))
   assert.match(text, /review your own diff as if someone else wrote it/i)
   assert.match(text, /missing test is a finding/i)
   assert.match(text, /finish every caller, test, and fixture/i)
-  assert.match(text, /short means quick to read/i)
-  assert.match(text, /equal.size options.*correct on edge cases/i)
+  assert.match(text, /brevity means easy to read/i)
+  assert.match(text, /two options are the same size.*handling edge cases correctly/i)
   assert.match(text, /never ship code .*explain.*line by line/i)
   assert.ok(text.length <= 3000, `length ${text.length}`)
 })
@@ -185,11 +185,11 @@ test('the contracts never mention codegraph and the subagent contract names LSP'
 
 test('S4: the subagent contract finishes the asked work, adds nothing unasked, and rejects a syntax-only check', () => {
   const text = context('subagent', { hook_event_name: 'SubagentStart', agent_type: 'construct:worker' }).additionalContext
-  assert.match(text, /a syntax-only check does not count/)
-  assert.match(text, /can be run, built, or type-checked/)
-  assert.match(text, /If none can run, say which and why/)
-  assert.match(text, /until everything the prompt asked for is done/i)
-  assert.match(text, /no features, tests, files, docs, or refactors the prompt did not ask for/i)
+  assert.match(text, /a syntax-only check is not enough/)
+  assert.match(text, /runnable, buildable, or type-checkable/)
+  assert.match(text, /If no check can run, state which and why/)
+  assert.match(text, /until the prompt's whole request is done/i)
+  assert.match(text, /nothing the prompt did not request: no features, tests, files, docs, or refactors/i)
 })
 
 test('S5: the session contract names the text-only progress report as an early stop', () => {

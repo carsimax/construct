@@ -8,7 +8,7 @@ Fill every `Checked by` with a command that exists in the repository or that the
 ## Floor (never weakened)
 
 - No new suppression markers: `@ts-ignore`, `eslint-disable`, `# noqa`, `# type: ignore`, `//nolint`.
-- No skipped, focused, or deleted tests without a reason in the commit.
+- Tests are never skipped, focused, or deleted without a reason in the commit.
 - No stub bodies that throw "not implemented", and no empty `catch`.
 - No credentials or keys in the repository.
 - This file is not weakened by the change it checks.

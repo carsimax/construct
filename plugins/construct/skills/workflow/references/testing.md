@@ -15,6 +15,6 @@ Test-first when a runnable, deterministic test and a clear expected outcome exis
 
 ## Runner
 
-Find the repository's own runner before the first test (scripts, Makefile, CONTRIBUTING, CI); never assume `npm test`. Run the focused command while iterating and the full suite once at close. Report each as `<command>: <observed result>`.
+Find the repository's own runner before the first test (scripts, Makefile, CONTRIBUTING, CI); never assume `npm test`. Iterate with the focused command, then run the full suite once at close. Report each as `<command>: <observed result>`.
 
 The Risk-line hook blocks a reply that adds skipped, focused, or stub test markers (`.skip`, `.only`, `xit`, `NotImplementedError`, a `TODO` comment).

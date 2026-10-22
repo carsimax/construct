@@ -40,8 +40,8 @@ report new problems back instead. Report each fix as `file:line`, with what chan
 
 Run every `## Verification` command in the foreground; report `<command>: <observed result>`. A failing required command not under `## Known environmental failures` makes the status `partial`. One correction
 attempt per failing check, a second only if it still fails after a real fix, then stop; never loop.
-When the verifier is weak (ambiguous requirements or external side effects), stop after one step and
-report. With no verifier, say what would make it verifiable; for docs-only units the reviewed diff is the verifier.
+A weak verifier (ambiguous requirements or external side effects) allows one step, then stop and report.
+When there is no verifier, state what would make it verifiable. In docs-only units the reviewed diff is the verifier.
 
 No commit unless told. Before returning run `git status --short`; report leftovers, never delete them.
 
