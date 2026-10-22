@@ -43,5 +43,6 @@ Objective: <one line>. Branch: <feature branch>. Baseline: <commit before the fi
   - Later user corrections are appended verbatim with their date.
   - Analysis, the rationale for accepted changes, verification evidence, progress, and the next step are appended briefly.
 - **Changes.** An accepted requirement change appends its verbatim Log entry, rewrites only the affected `S#`, and reopens only its task. Preserve valid completed work. Findings alone never expand scope. Business scope changes need user authorization.
+- **Close gaps.** A gap found when comparing the code with the specs at close is appended as a new task row with its `S#`. Existing rows are never rewritten or deleted.
 - **Baseline.** Record the commit before the first change in the header, and fix it if it is missing. The verifier's `Baseline commit` comes from it.
 - **Handoffs.** Workers read the document until `## Log` before editing, and report which `S#` they covered.

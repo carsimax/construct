@@ -360,6 +360,16 @@ test('a narrow pane keeps one column at 40 columns and long text does not widen 
 const DOC = (rows: string[]) =>
   ['# f', '', '## Tasks', '', '| ID | Specs | Task | Status |', '|---|---|---|---|', ...rows, '', '## Log'].join('\n')
 
+test('activeWork counts a status whose first word is done or dropped as finished', async () => {
+  const text = DOC(['| T1 | S1 | a | done (RED 4 fail; GREEN 24/24) |', '| T2 | S1 | b | Done. |', '| T3 | S1 | c | dropped — reason |', '| T4 | S1 | d | undone |'])
+  expect(activeWork([{ name: 'f.md', mtimeMs: 1, text }])).toEqual({
+    feature: 'f',
+    open: 1,
+    task: { id: 'T4', title: 'd' },
+    tasks: [{ id: 'T1', done: true }, { id: 'T2', done: true }, { id: 'T3', done: true }, { id: 'T4', done: false }],
+  })
+})
+
 test('activeWork adds the first unfinished task id and title', async () => {
   const text = DOC(['| T1 | S1 | first | done |', '| T2 | S1 | second one | in progress |', '| T3 | S2 | third | pending |'])
   expect(activeWork([{ name: 'f.md', mtimeMs: 1, text }])).toEqual({

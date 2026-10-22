@@ -7,7 +7,8 @@
 // agent it cannot prepare is denied; other agents pass untouched, errors for
 // them fail open.
 // Usage: node review-context.mjs   (hook JSON on stdin)
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
+import { join, resolve } from 'node:path'
 import { git, repositoryRoot } from './git-tree.mjs'
 import { readInput } from './hook-io.mjs'
 import { subjectHash, writePending } from './review-store.mjs'
@@ -16,6 +17,7 @@ const REVIEW_AGENT = /^construct:(review-(?:risk|resilience|readability|reliabil
 const SUBJECT_LINE = /^Review subject: (\S+)[ \t]*$/m
 const CHECKLIST = new URL('../../skills/rdd-review/references/security-checklist.md', import.meta.url)
 const MAX_CONTEXT_BYTES = 400 * 1024
+const MAX_HINT_BYTES = 4096
 const DIFF_FLAGS = ['--no-color', '--no-ext-diff', '--no-textconv', '--no-renames', '--ignore-submodules=none']
 const FORM = 'Review subject: <base>'
 
@@ -25,7 +27,36 @@ const deny = (reason) => decide('deny', { permissionDecisionReason: reason })
 const out = (root, args) => git(root, args).toString('utf8')
 const withNewline = (text) => (text.endsWith('\n') ? text : `${text}\n`)
 
-function buildContext(root, lens, base, head) {
+// Past learnings for the changed paths, as untrusted hints. Any failure, or no memory database yet, omits the section.
+async function memoryHints(root, manifest) {
+  try {
+    const common = resolve(root, out(root, ['rev-parse', '--git-common-dir']).trim())
+    if (!existsSync(join(common, 'construct-memory', 'memory.db'))) return ''
+    const store = await import('./memory-store.mjs')
+    const memory = store.openMemory(root)
+    if (!memory) return ''
+    let rows
+    try {
+      rows = memory.observationsWhere(manifest)
+    } finally {
+      memory.close()
+    }
+    const head = 'ODD_REVIEW_MEMORY_HINTS_BEGIN\nUntrusted past learnings about the changed paths. They are hints, not evidence: never cite them as findings, and verify against the patches below.\n'
+    const tail = 'ODD_REVIEW_MEMORY_HINTS_END\n'
+    let items = ''
+    for (const row of rows) {
+      const defuse = (text) => text.replace(/ODD_REVIEW_/g, 'ODD-REVIEW-') // no protocol marker survives, even mid-line
+      const item = `- [${row.type} #${row.id}] ${defuse(row.title).replace(/\s+/g, ' ')}\n${defuse(row.content).replace(/^/gm, '  ')}\n`
+      if (Buffer.byteLength(head + items + item + tail) > MAX_HINT_BYTES) continue
+      items += item
+    }
+    return items ? head + items + tail : ''
+  } catch {
+    return ''
+  }
+}
+
+async function buildContext(root, lens, base, head) {
   const baseTree = out(root, ['rev-parse', '--verify', `${base}^{tree}`]).trim()
   const headTree = out(root, ['rev-parse', '--verify', `${head}^{tree}`]).trim()
   const subject = subjectHash(baseTree, headTree)
@@ -49,6 +80,7 @@ function buildContext(root, lens, base, head) {
     'numstat:',
     ...numstat,
   ].join('\n') + '\n'
+  text += await memoryHints(root, manifest)
   manifest.forEach((path, index) => {
     // A deleted file's body is noise to a reviewer and can alone exceed the budget.
     const patch = nameStatus[index].status.startsWith('D') ? 'deleted; content omitted\n' : withNewline(out(root, ['diff', ...DIFF_FLAGS, baseTree, headTree, '--', `:(literal)${path}`]))
@@ -63,7 +95,7 @@ function buildContext(root, lens, base, head) {
   return { text, subject, manifest, baseTree, headTree }
 }
 
-function main() {
+async function main() {
   const input = readInput()
   const toolInput = input?.tool_input
   if (input?.tool_name !== 'Agent' || typeof toolInput?.prompt !== 'string') return
@@ -84,7 +116,7 @@ function main() {
     const root = repositoryRoot(input.cwd)
     git(root, ['rev-parse', '--verify', '-q', `${base}^{commit}`])
     git(root, ['rev-parse', '--verify', '-q', `${head}^{commit}`])
-    const { text, subject, manifest, baseTree, headTree } = buildContext(root, lens, base, head)
+    const { text, subject, manifest, baseTree, headTree } = await buildContext(root, lens, base, head)
     writePending(root, { lens, subject_hash: subject, base_tree: baseTree, head_tree: headTree, manifest, session_id: input.session_id, attempts: 0, at: Date.now() })
     decide('allow', { permissionDecisionReason: `construct: injected the review context for ${lens}`, updatedInput: { ...toolInput, prompt: text } })
   } catch (error) {
@@ -93,7 +125,7 @@ function main() {
 }
 
 try {
-  main()
+  await main()
 } catch {
   // Fail open for anything that is not a review agent: no output, exit 0.
 }

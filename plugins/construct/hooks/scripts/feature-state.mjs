@@ -11,6 +11,8 @@ const MAX_TOTAL = 2500
 const MAX_CELL = 160
 const MAX_LINE = 200
 const FINISHED = new Set(['done', 'dropped'])
+// A Status cell is finished when its first word is done or dropped (`done (evidence)`, `Done.`).
+const isFinished = (cell) => FINISHED.has(cell.toLowerCase().match(/^[a-z]+/)?.[0] ?? '')
 
 const clip = (text, max) => (text.length > max ? `${text.slice(0, max - 1)}…` : text)
 
@@ -26,7 +28,8 @@ function splitRow(line) {
     .map((cell) => cell.replace(/\\\|/g, '|').trim())
 }
 
-// Returns the unfinished rows of the `## Tasks` table, or null when the table is missing or malformed.
+// Returns { rows, taskSpecs } for the `## Tasks` table (rows: unfinished only; taskSpecs: every row's
+// [id, Specs cell], or null without a `Specs` column), or null when the table is missing or malformed.
 function unfinishedRows(lines) {
   const start = lines.findIndex((l) => /^##\s+Tasks\s*$/.test(l))
   if (start < 0) return null
@@ -42,30 +45,70 @@ function unfinishedRows(lines) {
   const task = header.indexOf('task')
   if (status < 0 || id < 0 || task < 0) return null
   if (!/^\|?\s*:?-{3,}/.test(lines[i + 1] ?? '')) return null
+  const specs = header.indexOf('specs')
   const rows = []
+  const taskSpecs = specs < 0 ? null : []
   for (i += 2; i < lines.length && lines[i].trim().startsWith('|'); i++) {
     const cells = splitRow(lines[i])
     if (cells.length < header.length) return null
     // An unescaped `|` in the task cell shifts the columns: join the surplus back into it.
     if (cells.length > header.length) cells.splice(task, cells.length - header.length + 1, cells.slice(task, task + cells.length - header.length + 1).join('|'))
-    if (!FINISHED.has(cells[status].toLowerCase())) rows.push(`${clip(cells[id], MAX_CELL)} — ${clip(cells[task], MAX_CELL)}`)
+    taskSpecs?.push([cells[id], cells[specs] ?? ''])
+    if (!isFinished(cells[status])) rows.push(`${clip(cells[id], MAX_CELL)} — ${clip(cells[task], MAX_CELL)}`)
   }
-  return rows
+  return { rows, taskSpecs }
+}
+
+// Spec ids named in a cell: `S1`, `S3, S4`, `S3-S4`, `S3–S4`.
+function specIds(cell) {
+  const ids = new Set()
+  for (const [, a, b] of cell.matchAll(/S(\d+)\s*[-–]\s*S?(\d+)/g)) for (let n = +a; n <= Math.min(+b, +a + 99); n++) ids.add(n)
+  for (const [, n] of cell.replace(/S\d+\s*[-–]\s*S?\d+/g, '').matchAll(/S(\d+)/g)) ids.add(+n)
+  return ids
+}
+
+// One warning line, or undefined when the document has no `## Specs` or `Specs` column or is fully covered.
+function coverageWarning(lines, taskSpecs) {
+  const at = lines.findIndex((l) => /^##\s+Specs\s*$/.test(l))
+  if (at < 0 || !taskSpecs) return undefined
+  const end = lines.findIndex((l, n) => n > at && /^##\s/.test(l))
+  const defined = new Set(lines.slice(at + 1, end < 0 ? undefined : end).flatMap((l) => (/^- \*\*S(\d+)/.exec(l) ?? []).slice(1).map(Number)))
+  const used = new Set()
+  const unknown = []
+  for (const [id, cell] of taskSpecs) {
+    const bad = [...specIds(cell)].filter((n) => (used.add(n), !defined.has(n)))
+    if (bad.length) unknown.push(`${id} names ${bad.map((n) => `S${n}`).join(', ')}`)
+  }
+  const orphans = [...defined].filter((n) => !used.has(n)).map((n) => `S${n}`)
+  const parts = [orphans.length && `no task for ${orphans.join(', ')}`, ...(unknown.length ? [`unknown spec: ${unknown.join('; ')}`] : [])].filter(Boolean)
+  return parts.length ? clip(`Coverage: ${parts.join('; ')}`, MAX_LINE) : undefined
+}
+
+// `Branch: x` inside the header line (before the first `##`), reduced to `Branch: x`.
+function headerBranch(lines) {
+  const end = lines.findIndex((l) => /^##\s/.test(l))
+  for (const l of end < 0 ? lines : lines.slice(0, end)) {
+    const m = /\bBranch:\s*`?([^\s`]+?)`?\.?(?:\s|$)/.exec(l)
+    if (m) return `Branch: ${m[1]}`
+  }
+  return undefined
 }
 
 function parseDoc(root, path) {
   const text = readFileSync(join(root, path), 'utf8')
   const lines = text.split(/\r?\n/)
-  const rows = unfinishedRows(lines)
-  if (!rows || rows.length === 0) return null
+  const table = unfinishedRows(lines)
+  if (!table || table.rows.length === 0) return null
+  const { rows, taskSpecs } = table
   const logAt = lines.findIndex((l) => /^##\s+Log\s*$/.test(l))
   const next = logAt < 0 ? undefined : lines.slice(logAt + 1).reverse().find((l) => l.includes('Next step:'))
   const title = lines.find((l) => l.startsWith('# '))
-  const branch = lines.find((l) => /^(Tracker branch|Branch):/.test(l))
+  const branch = lines.find((l) => /^(Tracker branch|Branch):/.test(l)) ?? headerBranch(lines)
+  const warning = coverageWarning(lines, taskSpecs)
   return {
     path,
     feature: basename(path, '.md'),
-    head: [path, title && clip(title.trim(), MAX_LINE), branch && clip(branch.trim(), MAX_LINE)].filter(Boolean),
+    head: [path, title && clip(title.trim(), MAX_LINE), branch && clip(branch.trim(), MAX_LINE), warning].filter(Boolean),
     rows,
     next: next && clip(next.trim().replace(/^[-*]\s+/, ''), MAX_LINE),
   }

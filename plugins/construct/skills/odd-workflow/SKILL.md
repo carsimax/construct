@@ -48,7 +48,7 @@ Load this skill for any request that may change code or docs, for planning a fea
    - Update help text and docs with any changed command, option, or message.
    - After each task, update the document.
    - Commit the work unit and record its commit in `## Tasks`.
-7. **Close.** Save decisions, root causes, and conventions learned with `construct-memory save` (large work: `construct-memory summary`), then one report: the verified outcome, every failed, skipped, or unverified check, the next step, and the Risk line (last). The Close reports and never starts another verification loop. Partial or missing proof becomes one **Needs your decision** result.
+7. **Close.** Save decisions, root causes, and conventions learned with `construct-memory save` (large work: `construct-memory summary`), then one report: the verified outcome, every failed, skipped, or unverified check, the next step, and the Risk line (last). For a tracked feature, converge before the report: compare the code with every `S#` (reuse the verifier's per-`S#` verdict when one ran) and append each gap as a new `T#` row with its `S#`, never rewriting or deleting existing rows; the feature-state injection warns about specs without tasks. A gap found at close reopens the work instead of closing it. Converge is a comparison, not a verification run: the Close reports and never starts another verification loop. Partial or missing proof becomes one **Needs your decision** result.
 
 To resume an interrupted feature, read the injected memory context, run `construct-memory search <feature>`, then follow references/persistence.md.
 

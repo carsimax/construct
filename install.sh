@@ -157,7 +157,7 @@ const OLD_THEME = 'custom:construct:construct'
 // One rule per non-destructive construct-memory command; delete, prompts delete, consolidate, import, export, and review done keep asking.
 // Rule syntax (code.claude.com/docs/en/permissions, Bash): a trailing ` *` matches the bare command and any arguments; a rule without it matches only that exact command.
 const ALLOW = [
-  ...['search', 'get', 'context', 'timeline', 'stats', 'doctor', 'suggest-topic-key', 'save', 'update', 'summary', 'review list', 'prompts --search', 'prompts --limit', 'pin', 'unpin', 'judge', 'judge-many', 'compare', 'help'].map((c) => `Bash(construct-memory ${c} *)`),
+  ...['search', 'get', 'context', 'timeline', 'stats', 'doctor', 'suggest-topic-key', 'save', 'update', 'summary', 'review list', 'review stale', 'prompts --search', 'prompts --limit', 'pin', 'unpin', 'judge', 'judge-many', 'compare', 'help'].map((c) => `Bash(construct-memory ${c} *)`),
   'Bash(construct-memory prompts)',
 ]
 

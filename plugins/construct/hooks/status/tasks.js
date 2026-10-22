@@ -12,6 +12,9 @@ function splitRow(line) {
     .map((cell) => cell.replace(/\\\|/g, '|').trim())
 }
 
+// Finished when the first word is done or dropped (`done (evidence)`, `Done.`).
+const isFinished = (cell) => FINISHED.has(cell.toLowerCase().match(/^[a-z]+/)?.[0] ?? '')
+
 // { open, first } of the Tasks table: the unfinished row count and the first
 // unfinished row's { id, title } (null when none), or null when the table is
 // missing or malformed.
@@ -40,8 +43,8 @@ function scanTasks(markdown) {
     // An unescaped `|` in the task cell shifts the columns: join the surplus cells into it.
     const extra = cells.length - header.length
     if (extra > 0) cells.splice(titleCol, extra + 1, cells.slice(titleCol, titleCol + extra + 1).join('|'))
-    tasks.push({ id: cells[idCol], done: FINISHED.has(cells[status].toLowerCase()) })
-    if (!FINISHED.has(cells[status].toLowerCase())) {
+    tasks.push({ id: cells[idCol], done: isFinished(cells[status]) })
+    if (!isFinished(cells[status])) {
       open++
       first ??= { id: cells[idCol], title: cells[titleCol] }
     }
