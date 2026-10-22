@@ -22,6 +22,7 @@ import {
   onTurnStart,
   onTurnStep,
   phaseOf,
+  shortName,
 } from '../hooks/panel/state.js'
 
 const USAGE = { input_tokens: 10, output_tokens: 5, cache_read_input_tokens: 200, cache_creation_input_tokens: 30, model: 'm' }
@@ -225,6 +226,68 @@ test('maskSecrets masks credential-like values and keeps plain text', () => {
   expect(maskSecrets('x ' + 'a1b2c3d4'.repeat(6) + ' y')).toBe('x *** y')
   expect(maskSecrets('git status --short')).toBe('git status --short')
   expect(maskSecrets(undefined as any)).toBe('')
+})
+
+test('maskSecrets masks secret words mid-name, short auth tokens, provider tokens and quoted mysql passwords', () => {
+  const secrets: [string, string][] = [
+    ['curl -H "Authorization: Bearer abc123" u', 'abc123'],
+    ['Authorization: Bearer x', 'Bearer x'],
+    ['Authorization: Basic dXNlcjpw', 'dXNlcjpw'],
+    ['SECRET_KEY_BASE=abc', 'abc'],
+    ['DB_PASSWORD_PROD=pw1', 'pw1'],
+    ['GITHUB_TOKEN_RW=abc', 'abc'],
+    ['TOKEN_VALUE=abc', 'abc'],
+    ['APP_SECRET_V2=abc', 'abc'],
+    ['client_secret_id=abc', 'abc'],
+    ['SECRET_ACCESS=abc', 'abc'],
+    ['API_KEY_ID=abc', 'abc'],
+    ['KEY_FILE=/k.pem', '/k.pem'],
+    ['echo npm_Ab3dEf6hIj9kLm2nOp5qRs8tUv1wXy4zAb3dEf > ~/.npmrc', 'Ab3dEf6hIj9k'],
+    ['//registry.npmjs.org/:_authToken=npm_Ab3dEf6hIj9kLm2nOp5qRs8t', 'Ab3dEf6hIj9k'],
+    ['whsec_abcdefghijklmnop1234', 'abcdefghijklmnop'],
+    ['SG.abcdefghijklmnop.qrstuvwx', 'qrstuvwx'],
+    ['xoxb-1234-5678-abcdefghijkl', 'abcdefghijkl'],
+    ['glpat-abcdefghijklmnop1234', 'abcdefghijklmnop'],
+    ['mysql -p"S3 cret" db', 'cret'],
+  ]
+  for (const [input, secret] of secrets) {
+    const out = maskSecrets(input)
+    expect(out).toContain('***')
+    expect(out).not.toContain(secret)
+  }
+  // L7: the broad rule masks any name holding a secret word, so these are masked now
+  for (const input of ['MAX_TOKENS=4096', 'max_tokens: 1024', 'keys=3', 'tokenizer=bpe']) expect(maskSecrets(input)).toContain('***')
+  for (const plain of ['git commit -m "fix token parsing"']) {
+    expect(maskSecrets(plain)).toBe(plain)
+  }
+})
+
+test('maskSecrets masks joined secret words, nested pairs, and 16-char provider tokens; plain text stays (L7)', () => {
+  expect(maskSecrets('PGPASSWORD=s3cret psql -h db')).toBe('PGPASSWORD=*** psql -h db')
+  for (const [input, secret] of [
+    ['export PGPASSWORD=s3cret', 's3cret'],
+    ['dbPassword=pw', 'pw'],
+    ['adminPassword: pw', ' pw'],
+    ['KEYSTOREPASSWORD=x', '=x'],
+    ['SECRETS=abc', 'abc'],
+    ['keypass=x', '=x'],
+    ['APICREDENTIALS=x', '=x'],
+    ['helm install x --set postgresql.auth.postgresPassword=abc', 'abc'],
+    ['-Djavax.net.ssl.keyStorePassword=abc', 'abc'],
+    ['kubectl create secret generic s --from-literal=password=abc', 'abc'],
+    ['--from-literal=api-key=abc', 'abc'],
+    ['-Dpassword=abc', 'abc'],
+    ['ghp_abcdefghijklmnop', 'abcdefghijklmnop'],
+    ['gho_abcdefghijklmnop', 'abcdefghijklmnop'],
+    ['ghs_abcdefghijklmnop', 'abcdefghijklmnop'],
+  ] as [string, string][]) {
+    const out = maskSecrets(input)
+    expect(out).toContain('***')
+    expect(out).not.toContain(secret)
+  }
+  for (const plain of ['npm_config_cache=/x', 'git commit -m "fix parsing"', 'ls -la /src', 'https://example.com/a?b=1']) {
+    expect(maskSecrets(plain)).toBe(plain)
+  }
 })
 
 test('maskSecrets masks Basic auth, URL userinfo, CLI passwords, cloud keys and glpat tokens', () => {
@@ -491,4 +554,136 @@ test('a main turn start keeps its start time; a stored turn without one is read 
   const old: any = { ...initialState(), turn: { turnId: 't9' } }
   expect(merge(old).turn).toEqual({ turnId: 't9' })
   expect(onTurnComplete(old, { turnId: 't9', nowMs: 5 }).turn).toBe(null)
+})
+
+// ---- L4 regressions ----------------------------------------------------
+
+test('maskSecrets masks any *_KEY, credential, and provider-style value; plain identifiers stay', () => {
+  for (const [text, secret] of [
+    ['ENCRYPTION_KEY=hunter2 node app.js', 'hunter2'],
+    ['SIGNING_KEY="abc def"', 'abc def'],
+    ['export STRIPE_KEY=rk_live_51Habc', 'rk_live_51Habc'],
+    ['MY_KEY: s3cr3t', 's3cr3t'],
+    ['--client-credential=Pa55word', 'Pa55word'],
+    ['GOOGLE_APPLICATION_CREDENTIALS=/k.json', '/k.json'],
+    ['pk-live-abcdefghijklmn', 'abcdefghijklmn'],
+  ]) {
+    const out = maskSecrets(text)
+    expect(out).toContain('***')
+    expect(out).not.toContain(secret)
+  }
+  const ident = 'abcdefghijklmnopqrstuvwxyzabcdefghijklmn'
+  expect(maskSecrets(`run ${ident}`)).toBe(`run ${ident}`)
+})
+
+const deny = (tool: any, input: any) => onToolCheck(initialState(), { decision: 'deny', tool, input }).gate.lastDenied
+
+test('last-denied detail covers every call field, masks, cuts at 80, and names a missing tool', () => {
+  expect(deny('WebFetch', { url: 'https://u:p@ex.com/a' })).toEqual({ tool: 'WebFetch', detail: 'https://u:***@ex.com/a' })
+  expect(deny('Grep', { pattern: 'x', path: '/src' }).detail).toBe('/src')
+  expect(deny('NotebookEdit', { notebook_path: '/n.ipynb' }).detail).toBe('/n.ipynb')
+  const cut = deny('Bash', { command: 'x'.repeat(100) }).detail
+  expect(cut.length).toBe(80)
+  expect(cut.endsWith('...')).toBe(true)
+  expect(deny(undefined, { command: 'ls' }).tool).toBe('tool')
+})
+
+test('MultiEdit and NotebookEdit are file tools', () => {
+  expect(bucketOf('MultiEdit')).toBe('file')
+  expect(bucketOf('NotebookEdit')).toBe('file')
+})
+
+test('agentsView keeps every running agent, then the most recently ended', () => {
+  let s: any = initialState()
+  const ends = [50, 90, 10, 70, 30, 80]
+  ends.forEach((end, i) => {
+    s = spawn(s, `d${i}`, { nowMs: 100 + i })
+    s = onTurnComplete(s, { agentId: `d${i}`, nowMs: end + 100 })
+  })
+  s = spawn(s, 'r1', { nowMs: 1 })
+  s = spawn(s, 'r2', { nowMs: 2 })
+  const ids = agentsView(s, 1000, 6).cards.map((c: any) => c.id).sort()
+  expect(ids).toEqual(['d1', 'd3', 'd5', 'd0', 'r1', 'r2'].sort())
+})
+
+test('a duplicate spawn id replaces the card; naming falls back and normalizes', () => {
+  let s = spawn(initialState(), 'a1')
+  s = spawn(s, 'a1', { description: 'again' })
+  expect(s.agents.length).toBe(1)
+  expect(s.agents[0].description).toBe('again')
+  expect(agentsView(spawn(initialState(), 'a2', { subagentType: undefined }), 0).cards[0].name).toBe('agent')
+  expect(shortName('my_agent')).toBe('my-agent')
+  expect(shortName('construct:unknown_x')).toBe('unknown-x')
+  expect(shortName({ type: 'construct:worker' })).toBe('worker')
+})
+
+test('a main turn without an id ends on a completion with one; null agent ids and blank effort are main', () => {
+  let s = onTurnStart(initialState(), {})
+  expect(mainBusy(s)).toBe(true)
+  s = onTurnComplete(s, { turnId: 't1' })
+  expect(mainBusy(s)).toBe(false)
+  s = onMainStep(s, { agentId: null, model: 'm', effort: '' })
+  expect(s.main.steps).toBe(1)
+  expect(s.main.effort).toBe(null)
+})
+
+test('damaged nested stored shapes are repaired and no reducer throws', () => {
+  const damaged = {
+    v: SCHEMA_VERSION,
+    agents: [null, { id: 'a1', status: 'running' }],
+    gate: { cells: 'x', counts: {}, verdicts: { rule: 'z' }, buckets: { file: { rule: 1 } }, pending: 'p' },
+    main: { steps: 'x' },
+  }
+  let s: any = merge(damaged)
+  s = onToolCheck(s, { decision: 'ask', tool: 'Bash', callId: 'c1' })
+  s = onToolSettle(s, { callId: 'c1', tool: 'Bash', didRun: true })
+  s = onToolCheck(s, { decision: 'allow', tool: 'Read' })
+  s = onTurnStart(s, { agentId: 'a1' })
+  s = onTurnStep(s, { agentId: 'a1', usage: USAGE })
+  s = onMainStep(s, {})
+  const view = agentsView(s, 5)
+  expect(view.cards.length).toBe(1)
+  expect(Number.isFinite(view.cards[0].elapsedMs)).toBe(true)
+  expect(s.gate.counts.asked).toBe(1)
+  expect(s.gate.verdicts.cleared).toBe(1)
+  expect(s.gate.verdicts.rule).toBe(1)
+  expect(s.agents[0].steps).toBe(1)
+  expect(s.main.steps).toBe(1)
+})
+
+test('maskSecrets masks long API keys, JWT signatures, a `?` inside a value, and base64 padding; UUIDs too (L9)', () => {
+  for (const [text, secret] of [
+    ['deploy --auth AIzaSyD-9tSrke72PouQMnMX-a7eZSW0jkFMBWY', 'AIzaSyD'],
+    ['eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk', 'dBjftJeZ4CVP'],
+    ['DB_PASSWORD=p?ss123 ./run', 'ss123'],
+    ['echo QWxhZGRpbjpvcGVuIHNlc2FtZTEyMzQ1Njc4OTBhYmNkZWY1Mg==', 'QWxhZGRpbjpv'],
+    ['id 123e4567-e89b-12d3-a456-426614174000', '123e4567'],
+  ]) {
+    const out = maskSecrets(text)
+    expect(out).toContain('***')
+    expect(out).not.toContain(secret)
+  }
+  expect(maskSecrets('echo QWxhZGRpbjpvcGVuIHNlc2FtZTEyMzQ1Njc4OTBhYmNkZWY1Mg==')).toBe('echo ***')
+  expect(maskSecrets('https://x.io?password=hunter2')).toBe('https://x.io?password=***')
+})
+
+test('maskSecrets stays fast on a long run of word characters (L9)', () => {
+  for (const text of ['a'.repeat(200000), 'a'.repeat(100000) + 'key' + 'a'.repeat(100000), 'key'.repeat(30000)]) {
+    const t = performance.now()
+    maskSecrets(text)
+    expect(performance.now() - t).toBeLessThan(200)
+  }
+})
+
+test('damaged state: counts stay at or above 0, an unknown pending bucket and odd agents do not throw (L9)', () => {
+  const s0: any = merge({ v: 3, gate: { pending: { c1: 'file', c2: 'weird' } } })
+  const s1 = onToolSettle(s0, { callId: 'c1', tool: 'Read', didRun: true })
+  for (const v of Object.values(s1.gate.verdicts)) expect(v as number).toBeGreaterThanOrEqual(0)
+  for (const b of Object.values(s1.gate.buckets) as any[]) for (const v of Object.values(b)) expect(v as number).toBeGreaterThanOrEqual(0)
+  expect(() => onToolSettle(s0, { callId: 'c2', tool: 'Read', didRun: false })).not.toThrow()
+  const view = agentsView({ agents: [null, 7, { id: 'a', status: 'running', startedMs: 1 }] }, 5)
+  expect(view.cards.length).toBe(1)
+  expect(view.rest).toBe(0)
+  expect(isOutsideTasks('/proj/odd/tasks/x.md', undefined)).toBe(false)
+  expect(isOutsideTasks('/proj/src/a.js', undefined)).toBe(true)
 })

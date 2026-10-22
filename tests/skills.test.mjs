@@ -79,12 +79,14 @@ test('NOTICE lists the adapted code and carries no license text', () => {
   const notice = readFileSync(join(pluginRoot, 'NOTICE'), 'utf8')
   assert.doesNotMatch(notice, /Permission is hereby granted/)
   assert.ok(notice.trimEnd().split('\n').length < 30, 'NOTICE stays under 30 lines')
-  for (const project of ['flightdeck', 'gentle-shell', 'gentle-agent-state']) {
+  for (const project of ['flightdeck', 'gentle-shell']) {
     assert.match(notice, new RegExp(`LICENSE-${project}`))
     const license = join(pluginRoot, `LICENSE-${project}`)
     assert.ok(existsSync(license))
     assert.match(readFileSync(license, 'utf8'), /Permission is hereby granted/)
   }
+  assert.doesNotMatch(notice, /gentle-agent-state/)
+  assert.ok(!existsSync(join(pluginRoot, 'LICENSE-gentle-agent-state')))
   assert.doesNotMatch(notice, /agent-skills|BMAD|engram/)
 })
 
