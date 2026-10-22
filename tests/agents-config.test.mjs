@@ -72,3 +72,11 @@ test('odd-explorer keeps Bash so it can run construct-memory search, and the man
   const market = JSON.parse(readFileSync(new URL('../.claude-plugin/marketplace.json', import.meta.url), 'utf8'))
   assert.equal(market.allowCrossMarketplaceDependenciesOn, undefined)
 })
+
+test('S2: explorer and judge agents list LSP, and no agent lists a codegraph tool', () => {
+  const tools = (file) => readFileSync(join(pluginRoot, 'agents', file), 'utf8').split('---')[1].match(/^tools: (.*)$/m)?.[1] ?? ''
+  for (const agent of ['odd-explorer', 'jd-judge-a', 'jd-judge-b', 'jd-fix-agent']) {
+    assert.match(tools(`${agent}.md`), /\bLSP\b/, `${agent} lists LSP`)
+  }
+  for (const file of agentFiles) assert.doesNotMatch(tools(file), /mcp__codegraph/, `${file} lists no codegraph tool`)
+})

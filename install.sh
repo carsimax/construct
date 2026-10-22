@@ -265,11 +265,12 @@ summary() {
 
 main() {
   FORCE=0
+  NO_MCP=0
   BACKUP=""
   local arg
   for arg in "$@"; do
     case "$arg" in
-      --no-mcp) ;; # deprecated no-op, kept so old install commands still work
+      --no-mcp) NO_MCP=1 ;; # deprecated no-op, kept so old install commands still work
       --force) FORCE=1 ;;
       -h | --help)
         usage
@@ -284,6 +285,9 @@ main() {
   done
   if [ "$FORCE" = 1 ]; then
     warn "--force is deprecated and has no effect; the installer no longer sets a theme"
+  fi
+  if [ "$NO_MCP" = 1 ]; then
+    warn "--no-mcp is deprecated and has no effect; the installer no longer adds an MCP server"
   fi
   preflight
   note_engram

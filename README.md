@@ -42,7 +42,7 @@ If engram or codegraph is installed, the installer says Construct no longer need
 
 | Option | Meaning |
 |---|---|
-| `--no-mcp` | Deprecated: has no effect. It is accepted so earlier install commands keep working, and will be removed in a later release |
+| `--no-mcp` | Deprecated: has no effect and prints a warning. It is accepted so earlier install commands keep working, and will be removed in a later release |
 | `--force` | Deprecated: has no effect and prints a warning. It is accepted for now so scripted installs keep working, and will be removed in a later release |
 
 Pass options after `bash -s --`, for example `curl -fsSL <url> | bash -s -- --no-mcp`. To read the script before running it:

@@ -259,7 +259,9 @@ test('--no-mcp is accepted, deprecated, and changes nothing', () => {
   const again = install(sandbox(), ['--no-mcp'])
   assert.equal(again.status, 0, again.stderr)
   assert.deepEqual(again.calls, plain.calls)
-  assert.equal(again.stdout.replace(/^.*Backup.*$/m, ''), plain.stdout.replace(/^.*Backup.*$/m, ''))
+  assert.equal(again.stderr.match(/--no-mcp is deprecated and has no effect/g)?.length, 1)
+  assert.match(again.stdout, /Warnings:[\s\S]*--no-mcp is deprecated/)
+  assert.doesNotMatch(plain.stdout + plain.stderr, /--no-mcp/)
   assert.match(install(box, ['--help']).stdout, /--no-mcp\s+Deprecated/)
 })
 
