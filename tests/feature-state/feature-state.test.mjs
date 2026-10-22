@@ -80,6 +80,21 @@ test('dropped counts as finished', () => {
   assert.equal(run(repo).stdout, '')
 })
 
+test('a status whose first word is done or dropped counts as finished', () => {
+  const repo = makeRepo()
+  write(repo, 'odd/tasks/a.md', doc({ rows: [['T1', 'x', 'done (RED 4 fail; GREEN 24/24)'], ['T2', 'y', 'Done.'], ['T3', 'z', 'dropped — reason']] }))
+  assert.equal(run(repo).stdout, '')
+})
+
+test('undone and other first words stay unfinished', () => {
+  const repo = makeRepo()
+  write(repo, 'odd/tasks/a.md', doc({ rows: [['T1', 'x', 'done (ok)'], ['T2', 'open one', 'undone'], ['T3', 'y', 'pending, done soon']] }))
+  const text = context(run(repo))
+  assert.match(text, /open one/)
+  assert.match(text, /T3/)
+  assert.doesNotMatch(text, /T1 —/)
+})
+
 test('statuses compare case-insensitively', () => {
   const repo = makeRepo()
   write(repo, 'odd/tasks/a.md', doc({ rows: [['T1', 'x', 'DONE'], ['T2', 'y', 'Dropped']] }))

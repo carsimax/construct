@@ -11,6 +11,8 @@ const MAX_TOTAL = 2500
 const MAX_CELL = 160
 const MAX_LINE = 200
 const FINISHED = new Set(['done', 'dropped'])
+// A Status cell is finished when its first word is done or dropped (`done (evidence)`, `Done.`).
+const isFinished = (cell) => FINISHED.has(cell.toLowerCase().match(/^[a-z]+/)?.[0] ?? '')
 
 const clip = (text, max) => (text.length > max ? `${text.slice(0, max - 1)}…` : text)
 
@@ -52,7 +54,7 @@ function unfinishedRows(lines) {
     // An unescaped `|` in the task cell shifts the columns: join the surplus back into it.
     if (cells.length > header.length) cells.splice(task, cells.length - header.length + 1, cells.slice(task, task + cells.length - header.length + 1).join('|'))
     taskSpecs?.push([cells[id], cells[specs] ?? ''])
-    if (!FINISHED.has(cells[status].toLowerCase())) rows.push(`${clip(cells[id], MAX_CELL)} — ${clip(cells[task], MAX_CELL)}`)
+    if (!isFinished(cells[status])) rows.push(`${clip(cells[id], MAX_CELL)} — ${clip(cells[task], MAX_CELL)}`)
   }
   return { rows, taskSpecs }
 }
