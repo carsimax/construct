@@ -18,6 +18,7 @@ const EXPECTED = [
   'go-testing',
   'judgment-day',
   'lossless-prompts',
+  'memory',
   'migration',
   'odd-delegation',
   'odd-workflow',

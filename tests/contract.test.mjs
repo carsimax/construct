@@ -64,6 +64,8 @@ test('the session contract carries the ODD protocol, task size, risk line, and d
     'construct:odd-delegation',
     'construct:task-size-risk',
     'construct:lossless-prompts',
+    'construct:memory',
+    'construct-memory',
     'construct:rdd-review',
     'Review subject:',
     'review is mandatory',

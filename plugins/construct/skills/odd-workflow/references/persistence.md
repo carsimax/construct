@@ -16,7 +16,7 @@ Never infer active work from the newest global memory.
 
 ## Memory lifecycle
 
-When engram exposes `mem_review`, list the project's memories before architecture-sensitive work.
+Run `construct-memory review list` before architecture-sensitive work.
 
 - Treat `needs_review` memories as stale context: verify them against current evidence before relying on them.
 - Never mark memories reviewed without explicit user confirmation.
