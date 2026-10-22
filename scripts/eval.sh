@@ -15,12 +15,13 @@ rm -rf "$plugin_copy/evals/results"
 
 cd "$plugin_copy"
 status=0
+# A * in a Bash rule matches any text, spaces and quotes included (https://code.claude.com/docs/en/permissions#wildcard-patterns), so this covers node "<root>/bin/construct-memory" with or without quotes.
 claude plugin eval . \
   --scaffold \
   --trust-plugin \
   --runs 1 \
   --model sonnet \
-  --allow-tools Write Edit "Bash(npm test*)" "Bash(node --test*)" "Bash(git status*)" "Bash(git diff*)" "Bash(git log*)" "Bash(construct-memory *)" \
+  --allow-tools Write Edit "Bash(npm test*)" "Bash(node --test*)" "Bash(git status*)" "Bash(git diff*)" "Bash(git log*)" "Bash(construct-memory *)" "Bash(node *construct-memory *)" \
   "$@" || status=$?
 
 echo "Plugin copy and results: $plugin_copy (remove it when done)"

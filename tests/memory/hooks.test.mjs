@@ -10,6 +10,8 @@ import { makeRepo, scratchDir } from '../helpers/repo.mjs'
 
 const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..', '..')
 const SCRIPT = join(ROOT, 'plugins/construct/hooks/scripts/memory-hooks.mjs')
+const BIN = join(ROOT, 'plugins/construct/bin/construct-memory')
+const LINE = `Memory: construct-memory (session sess-1); \`construct-memory help\` lists commands. If construct-memory is not found, run node "${BIN}" instead.`
 const { openMemory } = await import(join(ROOT, 'plugins/construct/hooks/scripts/memory-store.mjs'))
 
 function setup() {
@@ -47,15 +49,21 @@ test('session: registers the session, emits context and the CLI line', () => {
   assert.equal(r.json.hookSpecificOutput.hookEventName, 'SessionStart')
   const text = ctxOf(r)
   assert.match(text, /\[decision\] \*\*Use WAL\*\*/)
-  assert.ok(text.includes('Memory: construct-memory (session sess-1); `construct-memory help` lists commands.'))
+  assert.ok(text.includes(LINE))
   assert.doesNotMatch(text, /engram/i)
   assert.deepEqual(rows(c, 'SELECT id FROM sessions').map((x) => x.id), [SID])
+})
+
+test('session: the absolute fallback names an existing file', () => {
+  const c = setup()
+  const m = ctxOf(hook(c, 'session', { session_id: SID })).match(/run node "([^"]+)" instead\./)
+  assert.ok(m && existsSync(m[1]))
 })
 
 test('session: an empty store still names the session and the CLI', () => {
   const c = setup()
   const r = hook(c, 'session', { session_id: SID })
-  assert.ok(ctxOf(r).endsWith('\nMemory: construct-memory (session sess-1); `construct-memory help` lists commands.'))
+  assert.ok(ctxOf(r).endsWith('\n' + LINE))
 })
 
 test('compact: adds the recovery instruction', () => {
@@ -63,7 +71,7 @@ test('compact: adds the recovery instruction', () => {
   const r = hook(c, 'compact', { session_id: SID, hook_event_name: 'SessionStart', source: 'compact' })
   assert.equal(r.json.hookSpecificOutput.hookEventName, 'SessionStart')
   const text = ctxOf(r)
-  assert.ok(text.includes('\nMemory: construct-memory (session sess-1); `construct-memory help` lists commands.\n\nContext was compacted.'))
+  assert.ok(text.includes('\n' + LINE + '\n\nContext was compacted.'))
   assert.match(text, /Context was compacted\. Before anything else, save the compacted summary above with `construct-memory summary --session sess-1`, then continue with the task\./)
 })
 

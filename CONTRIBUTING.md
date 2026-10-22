@@ -47,6 +47,8 @@ scripts/eval.sh --case small-delegated   # one case
 
 `scripts/eval.sh` runs each case in an isolated `claude -p` session. It may grant only the commands the eval cases need.
 
+Two sandbox limits shape the cases: npm scripts only start there with `script-shell=/bin/sh` in a project `.npmrc`, which every fixture writes, and the plugin `bin/` and `CLAUDE_PLUGIN_ROOT` are not available to the agent's Bash, so the SessionStart memory line also names the absolute `node "<plugin root>/bin/construct-memory"` form, which `scripts/eval.sh` allows.
+
 ## Consistency the tests enforce
 
 Many tests cross-check text against code, so a change in one place usually needs the matching change elsewhere.
