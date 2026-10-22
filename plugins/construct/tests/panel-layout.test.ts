@@ -512,6 +512,22 @@ test('agent rows at 40 columns are truncating Text rows inside a card of the car
   for (const r of rows) expect(r.props.wrap).toBe('truncate')
 })
 
+test('agent rows at 40 columns keep the clock; the model column goes first (S7, L12)', async () => {
+  const mk = (id: string, role: string, type: string, model: string) => agent({ id, role, type, model, effort: 'max', startedMs: NOW - 90_000 })
+  const panel = {
+    ...full(),
+    agents: [mk('1', 'review_risk', 'construct:review-risk', 'claude-opus-5-5'), mk('2', 'verifier', 'construct:verifier', 'claude-haiku-4-5')],
+  }
+  const rows = rowsOf({ panel, columns: 40 }).filter((r) => /^[◎⊨] /.test(r))
+  expect(rows.length).toBe(2)
+  for (const r of rows) {
+    expect(r).toContain('1:30')
+    expect(r).not.toMatch(/Opus|Haiku/)
+  }
+  // with room the model stays
+  expect(rowsOf({ panel, columns: 66 }).filter((r) => /^[◎⊨] .*(Opus 5.5|Haiku 4.5)/.test(r)).length).toBe(2)
+})
+
 // ---- S8b blocked indicator ----------------------------------------------------
 
 test('blocked: the main card status reads waiting on you in place of busy or ready, with no extra row', async () => {

@@ -276,6 +276,9 @@ function agentsCard(panel, nowMs, w) {
   })
   const pad = (key, cap = Infinity) => Math.min(cap, Math.max(...looks.map((l) => (key === 'name' ? l.a.name : l[key]).length)))
   const [nameW, verbW, modelW] = [pad('name', MAX_NAME), pad('verb'), pad('model')]
+  // glyph, name, verb, model, meter and clock with their spaces; the model column goes first when the row does not fit
+  const clockW = Math.max(...shown.map((a) => clock(a.elapsedMs).length))
+  const showModel = 2 + nameW + 1 + verbW + 1 + modelW + 1 + 4 + 1 + clockW <= inner
   const body = looks.map(({ a, glyph, verb, model }) => {
     const live = a.status === 'running'
     const tone = live ? { color: PALETTE.agent } : { dim: true }
@@ -287,8 +290,7 @@ function agentsCard(panel, nowMs, w) {
         seg(' '),
         seg(verb.padEnd(verbW), tone),
         seg(' '),
-        seg(model.padEnd(modelW), { dim: true }),
-        seg(' '),
+        ...(showModel ? [seg(model.padEnd(modelW), { dim: true }), seg(' ')] : []),
         ...meterSegs(a.effort, live ? PALETTE.agent : PALETTE.dim),
         seg(` ${clock(a.elapsedMs)}`, { dim: true }),
       ],

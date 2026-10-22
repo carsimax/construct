@@ -75,7 +75,8 @@ export function merge(stored) {
   }
 }
 
-const open = (s) => (isObj(s) && s.v === SCHEMA_VERSION ? s : merge(s))
+// merge is idempotent on a sound value, so every reducer repairs nested damage in a v3 value too
+const open = merge
 
 // ---- secrets and paths ---------------------------------------------------
 
@@ -84,8 +85,8 @@ const SECRET_RULES = [
   [/(\b[a-z][a-z0-9+.-]*:\/\/[^\s:@/]+:)[^\s@/]+@/gi, '$1***@'],
   [/(\s-u\s+[^\s:]+:)\S+/g, '$1***'],
   // NAME=value, NAME: value, --name=value where the name holds a secret word anywhere; found nested after `=` or `-D` too.
-  // The name is capped at 32 chars each side so a long word run cannot rescan quadratically.
-  [/([\w.-]{0,32}(?:key|secret|password|passwd|pwd|token|credential)[\w.-]{0,32}\s*[=:]\s*)("[^"]*"|'[^']*'|[^\s&"']+)/gi, '$1***'],
+  // The name is a whole run of word characters (the lookbehind starts one scan per run) and the lookahead finds the word, so no rescans.
+  [/((?<![\w.-])(?=[\w.-]*(?:key|secret|password|passwd|pwd|token|credential))[\w.-]*\s*[=:]\s*)("[^"]*"|'[^']*'|[^\s&"']+)/gi, '$1***'],
   [/(?:(?:sk|pk|rk)[-_][A-Za-z0-9_-]{10,}|(?:npm|whsec)_[A-Za-z0-9]{16,}|SG\.[\w.-]{16,}|gh[pousr]_[A-Za-z0-9]{16,}|github_pat_\w{20,}|glpat-[\w-]{20,}|xox[abprs]-[A-Za-z0-9-]{10,}|(?:AKIA|ASIA)[A-Z0-9]{16})/g, '***'],
   // an AWS-style secret key: 40 chars of base64 with every character class present
   [/(?<![A-Za-z0-9/+])(?=[A-Za-z0-9/+]*\d)(?=[A-Za-z0-9/+]*[A-Z])(?=[A-Za-z0-9/+]*[a-z])[A-Za-z0-9/+]{40}(?![A-Za-z0-9/+])/g, '***'],
