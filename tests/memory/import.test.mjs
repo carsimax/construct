@@ -248,9 +248,9 @@ describe('deleted imported prompts (S12)', () => {
       store.addPrompt('typed', 'typed by hand')
       const [typed, imported] = store.prompts()
       assert.equal(store.deletePrompt(typed.id), true)
-      assert.equal(rows(store, 'SELECT count(*) AS n FROM prompt_tombstones')[0].n, 0)
+      assert.equal(rows(store, 'SELECT count(*) AS n FROM import_tombstones')[0].n, 0)
       assert.equal(store.deletePrompt(imported.id), true)
-      const tomb = rows(store, 'SELECT import_id, deleted_at FROM prompt_tombstones')
+      const tomb = rows(store, 'SELECT import_id, deleted_at FROM import_tombstones')
       assert.equal(tomb.length, 1)
       assert.match(tomb[0].import_id, /^(prompt:alpha:|[^:]+)/)
       assert.match(tomb[0].deleted_at, /^\d{4}-\d\d-\d\dT/)
@@ -275,10 +275,10 @@ describe('hard-deleted imported observations (S13)', () => {
       store.importExport(data(), { project: 'alpha' })
       const typed = store.save({ title: 'Typed', content: 'typed by hand', type: 'discovery' }).id
       assert.equal(store.remove(typed, { hard: true }), true)
-      assert.equal(rows(store, 'SELECT count(*) AS n FROM prompt_tombstones')[0].n, 0)
+      assert.equal(rows(store, 'SELECT count(*) AS n FROM import_tombstones')[0].n, 0)
       const imported = rows(store, 'SELECT id, import_id FROM observations WHERE import_id IS NOT NULL')[0]
       assert.equal(store.remove(imported.id, { hard: true }), true)
-      assert.deepEqual(rows(store, 'SELECT import_id FROM prompt_tombstones').map((r) => r.import_id), [imported.import_id])
+      assert.deepEqual(rows(store, 'SELECT import_id FROM import_tombstones').map((r) => r.import_id), [imported.import_id])
       assert.deepEqual(store.importExport(data(), { project: 'alpha' }), { observations: 0, sessions: 0, prompts: 0, skipped: 7, deleted: 1 })
       assert.equal(rows(store, 'SELECT count(*) AS n FROM observations WHERE import_id IS NOT NULL')[0].n, 2)
     }))
@@ -288,6 +288,6 @@ describe('hard-deleted imported observations (S13)', () => {
       store.importExport(data(), { project: 'alpha' })
       const { id } = rows(store, 'SELECT id FROM observations WHERE import_id IS NOT NULL')[0]
       assert.equal(store.remove(id), true)
-      assert.equal(rows(store, 'SELECT count(*) AS n FROM prompt_tombstones')[0].n, 0)
+      assert.equal(rows(store, 'SELECT count(*) AS n FROM import_tombstones')[0].n, 0)
     }))
 })

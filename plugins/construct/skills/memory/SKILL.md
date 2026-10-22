@@ -62,3 +62,5 @@ A subagent ends its final report with a `## Key Learnings:` section of numbered 
 ## Import
 
 `construct-memory import <file> --project <name>` loads one project of a file written by `engram export`. It is idempotent, so running it again inserts nothing new.
+
+`construct-memory export [file]` writes this repository's live memory as JSON (stdout, or a new file) for backup or to move it to another clone or machine; load it there with `import <file> --project <repository directory name>`.

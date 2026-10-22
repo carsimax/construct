@@ -3,7 +3,7 @@
 // Imported by the construct-memory CLI and the memory hooks; it prints nothing itself.
 import { createHash } from 'node:crypto'
 import { mkdirSync } from 'node:fs'
-import { isAbsolute, join } from 'node:path'
+import { basename, dirname, join, resolve } from 'node:path'
 import { git } from './git-tree.mjs'
 
 // The module loads node:sqlite with its ExperimentalWarning (Node 22) swallowed: a hook or the
@@ -77,7 +77,7 @@ CREATE TABLE IF NOT EXISTS user_prompts (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS prompts_import ON user_prompts(import_id) WHERE import_id IS NOT NULL;
 -- Import keys of erased prompts and observations (keys differ by their prompt:/obs: prefix).
-CREATE TABLE IF NOT EXISTS prompt_tombstones (
+CREATE TABLE IF NOT EXISTS import_tombstones (
   import_id TEXT PRIMARY KEY,
   deleted_at TEXT NOT NULL
 );
@@ -150,9 +150,12 @@ const reviewAfter = (type, from) => (type in REVIEW_MONTHS ? addMonths(from, REV
 // `now` is the clock (tests move it). A database written by a newer schema throws.
 export function openMemory(cwd, { now = () => new Date() } = {}) {
   let dir
+  let repoName
   try {
     const common = git(cwd, ['rev-parse', '--git-common-dir']).toString('utf8').trim()
-    dir = join(isAbsolute(common) ? common : join(cwd, common), 'construct-memory')
+    const commonDir = resolve(cwd, common)
+    repoName = basename(dirname(commonDir))
+    dir = join(commonDir, 'construct-memory')
   } catch {
     return null
   }
@@ -160,7 +163,7 @@ export function openMemory(cwd, { now = () => new Date() } = {}) {
   const path = join(dir, 'memory.db')
   const db = new DatabaseSync(path)
   db.exec('PRAGMA busy_timeout = 5000')
-  const store = makeStore(db, path, now)
+  const store = makeStore(db, path, now, repoName)
   try {
     store.init()
   } catch (error) {
@@ -170,7 +173,7 @@ export function openMemory(cwd, { now = () => new Date() } = {}) {
   return store
 }
 
-function makeStore(db, path, now) {
+function makeStore(db, path, now, repoName) {
   const stamp = () => now().toISOString()
 
   // retry runs fn, retrying up to BUSY_RETRIES times with 10-200 ms backoff while SQLite reports busy.
@@ -297,7 +300,7 @@ function makeStore(db, path, now) {
         return write(() => {
           const row = one('SELECT import_id FROM observations WHERE id = ?', id)
           if (!row) return false
-          if (row.import_id) run('INSERT OR IGNORE INTO prompt_tombstones (import_id, deleted_at) VALUES (?, ?)', row.import_id, stamp())
+          if (row.import_id) run('INSERT OR IGNORE INTO import_tombstones (import_id, deleted_at) VALUES (?, ?)', row.import_id, stamp())
           run('DELETE FROM observation_versions WHERE observation_id = ?', id)
           run('DELETE FROM observations WHERE id = ?', id)
           return true
@@ -397,7 +400,7 @@ function makeStore(db, path, now) {
       return write(() => {
         const row = one('SELECT import_id FROM user_prompts WHERE id = ?', id)
         if (!row) return false
-        if (row.import_id) run('INSERT OR IGNORE INTO prompt_tombstones (import_id, deleted_at) VALUES (?, ?)', row.import_id, stamp())
+        if (row.import_id) run('INSERT OR IGNORE INTO import_tombstones (import_id, deleted_at) VALUES (?, ?)', row.import_id, stamp())
         run('DELETE FROM user_prompts WHERE id = ?', id)
         return true
       })
@@ -459,7 +462,7 @@ function makeStore(db, path, now) {
             continue
           }
           const importId = idOf('obs', o)
-          if (one('SELECT 1 AS found FROM observations WHERE import_id = ? UNION SELECT 1 FROM prompt_tombstones WHERE import_id = ?', importId, importId)) {
+          if (one('SELECT 1 AS found FROM observations WHERE import_id = ? UNION SELECT 1 FROM import_tombstones WHERE import_id = ?', importId, importId)) {
             counts.skipped++
             continue
           }
@@ -472,7 +475,7 @@ function makeStore(db, path, now) {
         }
         for (const p of prompts.filter((r) => projectOf(r) === chosen)) {
           const importId = idOf('prompt', p)
-          if (one('SELECT 1 AS found FROM user_prompts WHERE import_id = ? UNION SELECT 1 FROM prompt_tombstones WHERE import_id = ?', importId, importId)) {
+          if (one('SELECT 1 AS found FROM user_prompts WHERE import_id = ? UNION SELECT 1 FROM import_tombstones WHERE import_id = ?', importId, importId)) {
             counts.skipped++
             continue
           }
@@ -481,6 +484,22 @@ function makeStore(db, path, now) {
         }
         return counts
       })
+    },
+
+    // exportData returns every live observation, session, and prompt in the shape importExport reads,
+    // under one project named after the repository directory. A row that came from an import keeps its
+    // import key as sync_id; the others get cm-obs-<id> / cm-prompt-<id>.
+    // shortcut: those keys are only unique within one database, so merging exports of two clones that
+    // each saved their own rows would skip some; upgrade to a content-derived key if that is needed.
+    exportData() {
+      const project = repoName
+      return {
+        version: '0.2.0',
+        exported_at: stamp(),
+        sessions: all('SELECT id, started_at, ended_at, summary FROM sessions ORDER BY id').map((s) => ({ ...s, project })),
+        observations: all('SELECT id, import_id, session_id, type, title, content, topic_key, revision_count, duplicate_count, last_seen_at, created_at, updated_at FROM observations WHERE deleted_at IS NULL ORDER BY id').map(({ import_id, ...o }) => ({ ...o, sync_id: import_id ?? `cm-obs-${o.id}`, project, scope: 'project' })),
+        prompts: all('SELECT id, import_id, session_id, content, created_at FROM user_prompts ORDER BY id').map(({ import_id, ...p }) => ({ ...p, sync_id: import_id ?? `cm-prompt-${p.id}`, project })),
+      }
     },
 
     close: () => db.close(),

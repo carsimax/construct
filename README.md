@@ -185,11 +185,12 @@ The installer no longer registers context7. An earlier registration can be remov
 
 Memory is per repository: one SQLite database at `<git common dir>/construct-memory/memory.db`, shared by every worktree of the clone and never committed. It needs Node 22.16 or later and is off outside a git repository. There is no MCP server; Claude uses the `construct-memory` command (on the Bash tool's PATH) and the `construct:memory` skill.
 
-- **Commands.** `save`, `search`, `get`, `context`, `update`, `delete`, `summary --session <id>`, `review list|done <id>`, and `import <file>`. `construct-memory help` lists the flags.
+- **Commands.** `save`, `search`, `get`, `context`, `update`, `delete`, `summary --session <id>`, `review list|done <id>`, `import <file>`, and `export [file]`. `construct-memory help` lists the flags.
 - **Hooks.** At session start the recent memory is injected (after a compaction, with an instruction to save a summary first). Each prompt is stored, a subagent's `## Key Learnings:` section is captured as memories, and a one-line reminder appears after 15 minutes without a save. `<private>...</private>` text is never stored.
 - **Erasing a memory.** `construct-memory delete <id>` hides it; `delete <id> --hard` erases it and its earlier versions for good, and an imported one is not re-imported.
 - **Stored prompts.** `construct-memory prompts [--limit N]` lists them with their ids and `construct-memory prompts delete <id>` removes one for good; `<private>` keeps text out in the first place.
 - **Import from engram.** Run `engram export` once, then `construct-memory import <file> --project <name>` (`--project` is required when the file holds several). Re-running it inserts nothing new, and it never reads `~/.engram`.
+- **Export.** `construct-memory export [file]` writes live observations, sessions, and prompts as JSON, to stdout or a new file, so you can back them up or move them to another clone with `import <file> --project <repository directory name>`.
 - **Uninstalling `engram@engram` is optional.** Construct no longer uses it.
 
 ### Quality and recovery skills
