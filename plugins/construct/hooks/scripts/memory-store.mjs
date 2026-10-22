@@ -579,6 +579,16 @@ function makeStore(db, path, now, repoName) {
       })
     },
 
+    // observationsWhere: live bugfix and decision observations whose `Where:` line names a path equal to
+    // one of `paths` or a directory holding one; injection-looking rows are dropped, newest first.
+    // shortcut: scans every live bugfix/decision row instead of an FTS pre-filter, fine for one repository's notes, add the trigram pre-filter if it grows large.
+    observationsWhere(paths) {
+      const hit = (named) => paths.some((p) => p === named || p.startsWith(`${named.replace(/\/+$/, '')}/`))
+      const named = (content) => (content.match(/^[ \t]*Where:(.*)$/gm) ?? []).flatMap((line) => line.replace(/^[ \t]*Where:/, '').split(/[\s,;]+/)).map((t) => t.replace(/^[`'"(]+|[`'")]+$|\.+$/g, '')).filter(Boolean)
+      return all("SELECT id, type, title, content FROM observations WHERE deleted_at IS NULL AND type IN ('bugfix', 'decision') AND content LIKE '%Where:%' ORDER BY updated_at DESC, id DESC")
+        .filter((o) => !injects(o.title) && !injects(o.content) && named(o.content).some(hit))
+    },
+
     // context renders the session-start text: recent sessions, prompts, and observations.
     context() {
       const sessions = all('SELECT s.id, s.started_at, s.summary, (SELECT count(*) FROM observations o WHERE o.session_id = s.id AND o.deleted_at IS NULL) AS n FROM sessions s ORDER BY s.started_at DESC, s.rowid DESC LIMIT 5').map((s) => (injects(s.summary) ? { ...s, summary: null } : s))
