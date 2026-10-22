@@ -4,7 +4,6 @@
   "owner": {
     "name": "Maximiliano Carsi"
   },
-  "allowCrossMarketplaceDependenciesOn": ["engram"],
   "plugins": [
     {
       "name": "construct",

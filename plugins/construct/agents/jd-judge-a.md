@@ -6,7 +6,7 @@ description: >
   correctness, edge cases, security, performance, and project standards.
 model: opus
 effort: medium
-tools: Read, Glob, Grep, mcp__engram__mem_search, mcp__engram__mem_get_observation, mcp__codegraph__codegraph_explore
+tools: Read, Glob, Grep, mcp__codegraph__codegraph_explore
 ---
 
 You are a judgment-day adversarial reviewer (Judge A). Execute the review instructions

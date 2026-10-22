@@ -25,10 +25,6 @@ case "$1 $2" in
   "mcp add") [ -n "$STUB_MCP_FAIL" ] && { echo "mcp add failed" >&2; exit 1; }; echo "$5" >> "$STUB_STATE/mcps"; exit 0 ;;
 esac
 exit 0`,
-  engram: `
-if [ "$1 $2" = "setup claude-code" ]; then echo engram >> "$STUB_STATE/mcps"; echo "  ❯ engram@engram" >> "$STUB_STATE/plugins"; fi`,
-  brew: `
-if [ "$1" = "install" ]; then cp "$STUB_STATE/engram-stub" "$(dirname "$0")/engram"; chmod +x "$(dirname "$0")/engram"; fi`,
   npm: `
 if [ -n "$STUB_NPM_FAIL" ]; then echo "npm error code EACCES" >&2; exit 243; fi
 if [ "$1 $2" = "install -g" ]; then cp "$STUB_STATE/codegraph-stub" "$(dirname "$0")/codegraph"; chmod +x "$(dirname "$0")/codegraph"; fi`,
@@ -38,7 +34,7 @@ if [ "$1 $2" = "install -g" ]; then cp "$STUB_STATE/codegraph-stub" "$(dirname "
 // piped script would swallow the rest of it.
 const stub = (name, body) => `#!/bin/bash\necho "${name} $*" >> "$STUB_LOG"\n${body}\ncat >/dev/null\n`
 
-function sandbox({ engram = true, node = true, brew = true } = {}) {
+function sandbox({ engram = false, node = true } = {}) {
   const root = scratchDir('construct-install-')
   const bin = join(root, 'bin')
   const state = join(root, 'state')
@@ -50,11 +46,16 @@ function sandbox({ engram = true, node = true, brew = true } = {}) {
   }
   put(bin, 'claude', stub('claude', STUBS.claude))
   put(bin, 'npm', stub('npm', STUBS.npm))
-  if (brew) put(bin, 'brew', stub('brew', STUBS.brew))
-  put(state, 'engram-stub', stub('engram', STUBS.engram))
   put(state, 'codegraph-stub', stub('codegraph', ''))
-  if (engram) put(bin, 'engram', stub('engram', STUBS.engram))
-  if (node) symlinkSync(process.execPath, join(bin, 'node'))
+  if (engram) put(bin, 'engram', stub('engram', ''))
+  // Not logged: settings_tool calls node too. STUB_NODE_VERSION fakes `node -p`; STUB_NODE_NOSQLITE fails `node -e` (the probe).
+  if (node) {
+    put(bin, 'node', `#!/bin/bash
+if [ "$1" = "-p" ] && [ -n "$STUB_NODE_VERSION" ]; then echo "$STUB_NODE_VERSION"; exit 0; fi
+if [ "$1" = "-e" ] && [ -n "$STUB_NODE_NOSQLITE" ]; then echo "ERR_NO_FTS5" >&2; exit 1; fi
+exec "${process.execPath}" "$@"
+`)
+  }
   return { root, bin, state, home, log: join(root, 'calls.log') }
 }
 
@@ -83,21 +84,18 @@ const writeSettings = (box, value) => {
 const backups = (box) => readdirSync(join(box.home, '.claude')).filter((f) => f.startsWith('settings.json.bak-'))
 
 test('a clean machine gets every tool, in order, and the Construct settings', () => {
-  const box = sandbox({ engram: false })
+  const box = sandbox()
   const run = install(box)
   assert.equal(run.status, 0, run.stderr)
   assert.deepEqual(run.calls.filter((c) => !/--version|list|mcp get/.test(c)), [
-    'brew install gentleman-programming/tap/engram',
-    'engram setup claude-code',
-    'claude plugin marketplace add Gentleman-Programming/engram',
-    'claude plugin marketplace add carsimax/construct#v3.0.0',
+    'claude plugin marketplace add carsimax/construct#v4.0.0',
     'claude plugin install construct@construct',
     'npm install -g @colbymchenry/codegraph@1.6.2',
     'claude mcp add --scope user codegraph -- codegraph serve --mcp',
   ])
   assert.ok(!run.calls.some((c) => /context7/.test(c)), 'context7 is never registered')
   assert.deepEqual(readSettings(box), {
-    permissions: { allow: ['mcp__engram', 'mcp__plugin_engram_engram'] },
+    permissions: { allow: ['Bash(construct-memory *)'] },
   })
   assert.ok(!('theme' in readSettings(box)), 'a clean machine never gets a theme')
   assert.deepEqual(backups(box), [], 'no backup when there was no file')
@@ -116,7 +114,7 @@ test('existing settings are merged, never overwritten, and backed up first', () 
   assert.equal(run.status, 0, run.stderr)
   assert.deepEqual(readSettings(box), {
     ...before,
-    permissions: { allow: ['Bash(ls *)', 'mcp__engram', 'mcp__plugin_engram_engram'], deny: ['Bash(rm *)'] },
+    permissions: { allow: ['Bash(ls *)', 'mcp__engram', 'Bash(construct-memory *)'], deny: ['Bash(rm *)'] },
   })
   const [backup] = backups(box)
   assert.ok(backup, 'a backup exists')
@@ -135,7 +133,7 @@ test('a symlinked settings.json stays a link and its target gets the merge', () 
   assert.ok(lstatSync(settingsPath(box)).isSymbolicLink(), 'still a symlink')
   assert.equal(JSON.parse(readFileSync(target, 'utf8')).theme, undefined)
   assert.equal(JSON.parse(readFileSync(target, 'utf8')).model, 'opus')
-  assert.deepEqual(JSON.parse(readFileSync(target, 'utf8')).permissions.allow, ['mcp__engram', 'mcp__plugin_engram_engram'])
+  assert.deepEqual(JSON.parse(readFileSync(target, 'utf8')).permissions.allow, ['Bash(construct-memory *)'])
 })
 
 test('the merge keeps the file mode of settings.json', () => {
@@ -161,7 +159,7 @@ test('a failed MCP registration warns and still merges the settings and prints t
   const run = install(box, [], { STUB_MCP_FAIL: '1' })
   assert.equal(run.status, 0, run.stderr)
   assert.match(run.stderr, /for the codegraph MCP server failed/)
-  assert.deepEqual(readSettings(box).permissions.allow, ['mcp__engram', 'mcp__plugin_engram_engram'])
+  assert.deepEqual(readSettings(box).permissions.allow, ['Bash(construct-memory *)'])
   assert.match(run.stdout, /codegraph CLI/)
 })
 
@@ -229,12 +227,12 @@ test('the help text marks --force deprecated and no longer mentions replacing a 
 })
 
 test('a second run changes nothing and installs nothing', () => {
-  const box = sandbox({ engram: false })
+  const box = sandbox()
   assert.equal(install(box).status, 0)
   const settings = readFileSync(settingsPath(box), 'utf8')
   const second = install(box)
   assert.equal(second.status, 0, second.stderr)
-  const writes = second.calls.filter((c) => /^(brew install|npm install|engram setup|claude plugin (install|marketplace add)|claude mcp add)/.test(c))
+  const writes = second.calls.filter((c) => /^(brew|npm install|engram|claude plugin (install|marketplace add)|claude mcp add)/.test(c))
   assert.deepEqual(writes, [])
   assert.equal(readFileSync(settingsPath(box), 'utf8'), settings)
   assert.deepEqual(backups(box), [])
@@ -243,11 +241,10 @@ test('a second run changes nothing and installs nothing', () => {
 
 test('a marketplace whose name only starts with the repository is not counted as added', () => {
   const box = sandbox()
-  writeFileSync(join(box.state, 'marketplaces'), '    Source: GitHub (carsimax/construct-foo)\n    Source: GitHub (Gentleman-Programming/engram)\n')
+  writeFileSync(join(box.state, 'marketplaces'), '    Source: GitHub (carsimax/construct-foo)\n')
   const run = install(box)
   assert.equal(run.status, 0, run.stderr)
   assert.ok(run.calls.some((c) => /^claude plugin marketplace add carsimax\/construct#/.test(c)), 'construct marketplace is added')
-  assert.equal(run.calls.some((c) => /marketplace add Gentleman-Programming\/engram/.test(c)), false, 'the exact match is skipped')
 })
 
 test('--no-mcp leaves the codegraph MCP server and CLI alone', () => {
@@ -262,7 +259,9 @@ test('preflight stops before any change when a requirement is missing or too old
   for (const [label, box, env, pattern] of [
     ['old claude', sandbox(), { STUB_CLAUDE_VERSION: '2.1.200' }, /2\.1\.304/],
     ['no node', sandbox({ node: false }), {}, /node/i],
-    ['no brew without engram', sandbox({ engram: false, brew: false }), {}, /brew/i],
+    ['old node', sandbox(), { STUB_NODE_VERSION: '22.15.9' }, /22\.16/],
+    ['old node, lower minor', sandbox(), { STUB_NODE_VERSION: '22.9.0' }, /22\.16/],
+    ['node 23 without fts5', sandbox(), { STUB_NODE_VERSION: '23.11.0', STUB_NODE_NOSQLITE: '1' }, /node:sqlite.*FTS5.*22\.16/],
   ]) {
     const run = install(box, [], env)
     assert.notEqual(run.status, 0, label)
@@ -291,7 +290,7 @@ test('an unknown option is rejected before any change', () => {
   assert.deepEqual(run.calls, [])
 })
 
-test('the installer never grants anything beyond the engram MCP servers', () => {
+test('the installer never grants anything beyond the construct-memory CLI', () => {
   const text = readFileSync(INSTALLER, 'utf8')
   assert.doesNotMatch(text, /skipDangerousModePermissionPrompt|bypassPermissions|defaultMode/)
   assert.match(text.trimEnd().split('\n').at(-1), /^main "\$@"$/, 'main runs on the last line')
@@ -300,7 +299,7 @@ test('the installer never grants anything beyond the engram MCP servers', () => 
 const NOTHING_INSTALLED = (run) => run.calls.filter((c) => /install|marketplace add|mcp add|setup/.test(c))
 
 test('a read-only ~/.claude stops the preflight with one clear message and no change', { skip: process.getuid?.() === 0 }, () => {
-  const box = sandbox({ engram: false })
+  const box = sandbox()
   const dir = join(box.home, '.claude')
   mkdirSync(dir)
   chmodSync(dir, 0o555)
@@ -317,7 +316,7 @@ test('a read-only ~/.claude stops the preflight with one clear message and no ch
 })
 
 test('a read-only settings.json stops the preflight with one clear message and no change', { skip: process.getuid?.() === 0 }, () => {
-  const box = sandbox({ engram: false })
+  const box = sandbox()
   writeSettings(box, { model: 'opus' })
   chmodSync(settingsPath(box), 0o444)
   const run = install(box)
@@ -337,14 +336,14 @@ test('an empty or whitespace-only settings.json is treated as an empty object', 
     const run = install(box)
     assert.equal(run.status, 0, run.stderr)
     assert.deepEqual(readSettings(box), {
-      permissions: { allow: ['mcp__engram', 'mcp__plugin_engram_engram'] },
+      permissions: { allow: ['Bash(construct-memory *)'] },
     })
     assert.equal(statSync(settingsPath(box)).mode & 0o777, 0o600)
   }
 })
 
 test('a settings.json that is a directory stops the preflight with one clear message and no change', () => {
-  const box = sandbox({ engram: false })
+  const box = sandbox()
   mkdirSync(settingsPath(box), { recursive: true })
   const run = install(box)
   assert.notEqual(run.status, 0)
@@ -369,7 +368,7 @@ test('a dangling-symlink settings.json stays a link and its target is created wi
 const CLEAN = /at .*\.js|node:|Error:|ELOOP|ENOTDIR|EISDIR/
 
 test('a symlink-loop settings.json stops the preflight with one clean message and no change', () => {
-  const box = sandbox({ engram: false })
+  const box = sandbox()
   mkdirSync(join(box.home, '.claude'))
   symlinkSync(join(box.home, '.claude', 'b.json'), settingsPath(box))
   symlinkSync(settingsPath(box), join(box.home, '.claude', 'b.json'))
@@ -382,7 +381,7 @@ test('a symlink-loop settings.json stops the preflight with one clean message an
 })
 
 test('a self-referencing settings.json symlink stops the preflight cleanly', () => {
-  const box = sandbox({ engram: false })
+  const box = sandbox()
   mkdirSync(join(box.home, '.claude'))
   symlinkSync(settingsPath(box), settingsPath(box))
   const run = install(box)
@@ -393,7 +392,7 @@ test('a self-referencing settings.json symlink stops the preflight cleanly', () 
 })
 
 test('a regular file at ~/.claude stops the preflight with an accurate one-line message', () => {
-  const box = sandbox({ engram: false })
+  const box = sandbox()
   writeFileSync(join(box.home, '.claude'), 'x')
   const run = install(box)
   assert.notEqual(run.status, 0)
@@ -405,7 +404,7 @@ test('a regular file at ~/.claude stops the preflight with an accurate one-line 
 })
 
 test('a dangling settings.json link through a regular file stops the preflight cleanly', () => {
-  const box = sandbox({ engram: false })
+  const box = sandbox()
   mkdirSync(join(box.home, '.claude'))
   writeFileSync(join(box.root, 'plain'), 'x')
   symlinkSync(join(box.root, 'plain', 'settings.json'), settingsPath(box))
@@ -417,7 +416,7 @@ test('a dangling settings.json link through a regular file stops the preflight c
 })
 
 test('a settings.json symlink to a directory gets the clean directory refusal', () => {
-  const box = sandbox({ engram: false })
+  const box = sandbox()
   mkdirSync(join(box.home, '.claude'))
   mkdirSync(join(box.root, 'dir'))
   symlinkSync(join(box.root, 'dir'), settingsPath(box))
@@ -441,7 +440,7 @@ test('settings.local.json is never touched, even with the old theme in it', () =
 
 test('--force with another theme leaves settings.json unchanged and makes no backup', () => {
   const box = sandbox()
-  const before = JSON.stringify({ theme: 'dark', permissions: { allow: ['mcp__engram', 'mcp__plugin_engram_engram'] } }, null, 2)
+  const before = JSON.stringify({ theme: 'dark', permissions: { allow: ['Bash(construct-memory *)'] } }, null, 2)
   writeSettings(box, before)
   const run = install(box, ['--force'])
   assert.equal(run.status, 0, run.stderr)
@@ -449,20 +448,20 @@ test('--force with another theme leaves settings.json unchanged and makes no bac
   assert.deepEqual(backups(box), [])
 })
 
-const PLUGIN_LIST = (version) => `Installed plugins:\n\n  ❯ engram@engram\n    Version: 1.0.0\n\n  ❯ construct@construct\n${version ? `    Version: ${version}\n` : ''}    Scope: user\n`
+const PLUGIN_LIST = (version) => `Installed plugins:\n\n  ❯ construct@construct\n${version ? `    Version: ${version}\n` : ''}    Scope: user\n`
 
 test('an installed construct at another version warns and names the update command, and changes nothing', () => {
   const box = sandbox()
   writeFileSync(join(box.state, 'plugins'), PLUGIN_LIST('2.1.0'))
   const run = install(box)
   assert.equal(run.status, 0, run.stderr)
-  assert.match(run.stderr, /construct@construct 2\.1\.0 is installed.*3\.0\.0.*claude plugin update construct@construct/)
+  assert.match(run.stderr, /construct@construct 2\.1\.0 is installed.*4\.0\.0.*claude plugin update construct@construct/)
   assert.match(run.stdout, /Warnings:/)
   assert.ok(!run.calls.some((c) => /^claude plugin (install|update)/.test(c)), 'the install is never modified')
 })
 
 test('an installed construct at this version, a newer one, or with no readable version, gets the plain skip', () => {
-  for (const version of ['3.0.0', '3.1.0', '']) {
+  for (const version of ['4.0.0', '4.1.0', '']) {
     const box = sandbox()
     writeFileSync(join(box.state, 'plugins'), PLUGIN_LIST(version))
     const run = install(box)
@@ -473,12 +472,12 @@ test('an installed construct at this version, a newer one, or with no readable v
 })
 
 test('a marketplace pinned to another ref warns; the same ref skips quietly', () => {
-  for (const [ref, warns] of [['v2.1.0', true], ['v3.0.0', false]]) {
+  for (const [ref, warns] of [['v3.0.0', true], ['v4.0.0', false]]) {
     const box = sandbox()
     writeFileSync(join(box.state, 'marketplaces'), `  ❯ construct\n    Source: GitHub (carsimax/construct#${ref})\n`)
     const run = install(box)
     assert.equal(run.status, 0, run.stderr)
-    assert.equal(/pinned to v2\.1\.0, not v3\.0\.0/.test(run.stderr), warns)
+    assert.equal(/pinned to v3\.0\.0, not v4\.0\.0/.test(run.stderr), warns)
   }
 })
 
@@ -487,4 +486,56 @@ test('CONSTRUCT_REF and the header URL carry the plugin.json version', () => {
   const text = readFileSync(INSTALLER, 'utf8')
   assert.equal(/^CONSTRUCT_REF=(\S+)/m.exec(text)?.[1], `v${version}`)
   assert.match(text, new RegExp(`raw\\.githubusercontent\\.com/carsimax/construct/v${version.replace(/\./g, '\\.')}/install\\.sh`))
+})
+
+test('node 22.16 passes the check, a newer minor than the installed major.minor compares numerically', () => {
+  for (const version of ['22.16.0', '22.22.1', '24.0.0']) {
+    const run = install(sandbox(), [], { STUB_NODE_VERSION: version })
+    assert.equal(run.status, 0, `${version}: ${run.stderr}`)
+  }
+})
+
+test('the node:sqlite FTS5 probe fails with one clear line and nothing is installed', () => {
+  const box = sandbox()
+  const run = install(box, [], { STUB_NODE_NOSQLITE: '1' })
+  assert.notEqual(run.status, 0)
+  const lines = run.stderr.split('\n').filter((l) => /construct-install:/.test(l))
+  assert.deepEqual(lines, [`construct-install: Node.js ${process.versions.node} has no node:sqlite with FTS5 trigram, which Construct memory needs; use Node.js 22.16 or later (Node.js 23 is not supported)`])
+  assert.doesNotMatch(run.stderr, /ERR_NO_FTS5/)
+  assert.deepEqual(run.calls.filter((c) => !/--version/.test(c)), [])
+  assert.equal(existsSync(settingsPath(box)), false)
+})
+
+test('the probe in install.sh is the doctor probe', () => {
+  const sh = readFileSync(INSTALLER, 'utf8')
+  const doctor = readFileSync(new URL('../../plugins/construct/hooks/status/doctor.js', import.meta.url), 'utf8')
+  const sql = (t) => /CREATE VIRTUAL TABLE t USING fts5\(x, tokenize='trigram'\)/.exec(t)?.[0]
+  assert.ok(sql(doctor) && sql(sh), 'both create the same trigram table')
+})
+
+test('engram is never installed, set up, uninstalled, or given permission rules; one line says it is not needed', () => {
+  const box = sandbox({ engram: true })
+  const before = { permissions: { allow: ['mcp__engram', 'mcp__plugin_engram_engram'] } }
+  writeSettings(box, before)
+  const run = install(box)
+  assert.equal(run.status, 0, run.stderr)
+  assert.deepEqual(run.calls.filter((c) => /engram|brew/i.test(c)), [])
+  assert.equal(run.stdout.split('\n').filter((l) => /no longer needs? engram|engram.*no longer/i.test(l)).length, 1)
+  assert.deepEqual(readSettings(box).permissions.allow, ['mcp__engram', 'mcp__plugin_engram_engram', 'Bash(construct-memory *)'], 'the user keeps their rules')
+})
+
+test('without engram nothing about it is printed, and no engram rule or marketplace is added', () => {
+  const box = sandbox()
+  const run = install(box)
+  assert.equal(run.status, 0, run.stderr)
+  assert.doesNotMatch(run.stdout + run.stderr, /engram/i)
+  assert.doesNotMatch(readFileSync(settingsPath(box), 'utf8'), /engram/)
+  assert.equal(run.calls.some((c) => /marketplace add/.test(c) && !/carsimax\/construct/.test(c)), false)
+})
+
+test('the construct-memory rule is merged once; a second run keeps it a single entry', () => {
+  const box = sandbox()
+  assert.equal(install(box).status, 0)
+  assert.equal(install(box).status, 0)
+  assert.deepEqual(readSettings(box).permissions.allow, ['Bash(construct-memory *)'])
 })

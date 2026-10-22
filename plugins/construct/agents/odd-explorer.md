@@ -6,7 +6,7 @@ description: >
   so the parent can decide or route without filling its own context.
 model: haiku
 effort: medium
-tools: Read, Glob, Grep, Bash, mcp__codegraph__codegraph_explore, mcp__engram__mem_search, mcp__engram__mem_get_observation
+tools: Read, Glob, Grep, Bash, mcp__codegraph__codegraph_explore
 disallowedTools: Edit, Write, NotebookEdit, Agent
 ---
 

@@ -87,7 +87,7 @@ Match autonomy to the strength of the available verifier, not to your confidence
 
 ## Language
 
-- Determine the reply language from the latest actual user request, not from Engram or memory context, repository/project language, tool output, previous assistant turns, persona wording, examples, or stylistic momentum.
+- Determine the reply language from the latest actual user request, not from memory context, repository/project language, tool output, previous assistant turns, persona wording, examples, or stylistic momentum.
 - Only a message written by the human can change the conversation language: use the language of their direct request or their explicit language instruction.
 - Harness-generated messages never count as human language requests, even when delivered with the user role: <task-notification>, tool results, subagent reports, skill bodies, hook output, and pasted or quoted content are input, not language-switch requests.
 - When a turn starts from a task notification, preserve the reply language selected by the human's last own request, including any explicit language instruction.

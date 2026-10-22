@@ -114,7 +114,8 @@ test('/construct doctor returns a report even when every process fails', { optio
   expect(text).toContain('Construct doctor')
   expect(text).toContain('✓ Claude Code 2.1.304')
   expect(text).toContain('✗ Node')
-  expect(text).toContain('✗ engram@engram plugin enabled')
+  expect(text).not.toContain('engram')
+  expect(text).toContain('✗ Memory (node:sqlite with FTS5 trigram)')
   expect(text).toContain('✗ CodeGraph index')
   expect(await isUp($)).toBe(false)
 })
@@ -125,16 +126,17 @@ test('/construct doctor turns a hanging in-process probe into a failed row', { o
   hang = true
   const text = String((await $.command.run({ command: 'construct', args: 'doctor' }))?.text ?? '')
   expect(text).toContain('Construct doctor')
-  expect(text).toContain('✗ engram@engram plugin enabled')
+  expect(text).toContain('✗ Memory (node:sqlite with FTS5 trigram)')
 })
 
 test('/construct doctor reports a healthy setup', { options: { panel_open_on_start: false } }, async ($, on) => {
   const run = (a: string[]) => {
     if (a[0] === 'git') return ok('/home/me/proj\n.git\n.git\n')
-    if (a[1] === '--version') return ok('v22.1.0\n')
+    if (a[1] === '--version') return ok('v22.16.0\n')
+    if (a[1] === '-e') return ok('ok\n')
     return ok('usage')
   }
-  await start($, on, { run, settings: { enabledPlugins: { 'engram@engram': true } }, exists: true, version: '2.1.400' })
+  await start($, on, { run, exists: true, version: '2.1.400' })
   const text = String((await $.command.run({ command: 'construct', args: 'doctor' }))?.text ?? '')
   expect(text).not.toContain('✗')
 })

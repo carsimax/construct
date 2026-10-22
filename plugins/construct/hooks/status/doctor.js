@@ -3,7 +3,7 @@
 // the probes.
 
 export const MIN_CLAUDE = '2.1.304'
-export const MIN_NODE = 20
+export const MIN_NODE = '22.16'
 
 // The first x.y.z in the text as numbers, or null.
 function triple(text) {
@@ -24,18 +24,25 @@ export function checkClaude(version) {
   return { ok, label, hint: `update Claude Code to ${MIN_CLAUDE} or later (claude update)` }
 }
 
-// `node --version` output, for example `v20.11.0`.
+// `node --version` output, for example `v22.16.0`.
 export function checkNode(text) {
   const have = triple(text)
   const label = `Node ${have ? have.join('.') : 'version unknown'} (needs >= ${MIN_NODE})`
-  return { ok: have !== null && have[0] >= MIN_NODE, label, hint: `install Node ${MIN_NODE} or later; the hooks need it` }
+  return { ok: have !== null && atLeast(have, triple(`${MIN_NODE}.0`)), label, hint: `install Node ${MIN_NODE} or later; the hooks need it` }
 }
 
-// `enabledPlugins` from the merged settings ($.settings.read({ key })): an in-process read of the settings the
-// engine already holds, so it costs no process, unlike `claude plugin list`, and it spans every settings source.
-export function checkEngram(enabledPlugins) {
-  const on = enabledPlugins != null && typeof enabledPlugins === 'object' && enabledPlugins['engram@engram'] === true
-  return { ok: on, label: 'engram@engram plugin enabled', hint: 'run: claude plugin install engram@engram' }
+// Run through `node -e`: prints `ok` when node:sqlite loads and has the FTS5 trigram tokenizer. Node 22.13-22.15 and
+// 23.x load it without fts5, so a version check alone is not enough. install.sh carries the same probe.
+export const MEMORY_PROBE =
+  "const { DatabaseSync } = require('node:sqlite'); new DatabaseSync(':memory:').exec(\"CREATE VIRTUAL TABLE t USING fts5(x, tokenize='trigram')\"); console.log('ok')"
+
+// `out` is the stdout of `node -e MEMORY_PROBE`, or null when it failed or timed out.
+export function checkMemory(out) {
+  return {
+    ok: String(out ?? '').trim() === 'ok',
+    label: 'Memory (node:sqlite with FTS5 trigram)',
+    hint: `use Node 22.16+; node:sqlite with the FTS5 trigram tokenizer must load`,
+  }
 }
 
 // `present` is whether `<root>/.codegraph` exists; null when the root or the probe is unknown.

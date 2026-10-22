@@ -1,4 +1,4 @@
-// The shared git helpers of the risk-line and mirror-drift hooks.
+// The shared git helpers of the risk-line hook.
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync, readFileSync } from 'node:fs'

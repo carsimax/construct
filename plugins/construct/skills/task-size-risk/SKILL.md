@@ -43,7 +43,7 @@ Count "unclear" as high only when a bounded look cannot tell whether items 1–5
 | Result | Consequence |
 |---|---|
 | Small | One `construct:odd-worker` writes it, observing RED and the focused test; the parent runs the suite once. No feature document or verifier |
-| Large | Feature document and engram mirror, plus work-unit commits (`construct:odd-workflow`); one worker per unit |
+| Large | Feature document, plus work-unit commits (`construct:odd-workflow`); one worker per unit |
 | Risk line names an item | One independent `construct:odd-verify` after the change's own checks; give the unit its own commit |
 | `Risk: none` | The change's own focused test and suite are enough |
 

@@ -1,7 +1,7 @@
 # Construct
 
 [![Claude Code](https://img.shields.io/badge/Claude_Code-2.1.304%2B-blue)](#requirements)
-[![Plugin version](https://img.shields.io/badge/version-3.0.0-informational)](plugins/construct/.claude-plugin/plugin.json)
+[![Plugin version](https://img.shields.io/badge/version-4.0.0-informational)](plugins/construct/.claude-plugin/plugin.json)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 Construct is a Claude Code plugin that makes every request follow Organic Driven Development (ODD): authorize, explore, size, track, implement test-first, and close with evidence and a Risk line.
@@ -15,33 +15,31 @@ Construct is a Claude Code plugin that makes every request follow Organic Driven
 - **Status panel.** A docked panel with the model, context, plan limits, active feature, permission gate, agents, and changes. Open it with `/construct`.
 - **Output style.** The `Principal Engineer` output style.
 
-Memory comes from the separate `engram@engram` plugin, which Construct depends on.
+- **Memory.** A per-repository memory built in (`construct-memory`), with no extra plugin, server, or binary. See [Memory](#memory).
 
 ## Requirements
 
 | Requirement | Why |
 |---|---|
 | Claude Code 2.1.304 or later, signed in | The panel is a mod, and the panel needs 2.1.304. Tested on 2.1.304 |
-| Node.js 20 or later, with npm | The plugin's scripts and hooks. Claude Code's native install does not bundle Node.js |
+| Node.js 22.16 or later (Node 23 is not supported), with npm | The plugin's scripts and hooks, and the memory's `node:sqlite` with FTS5. Claude Code's native install does not bundle Node.js |
 | `git` on the PATH | The review and publication hooks read the repository |
-| Homebrew (macOS or Linux) | Installs the engram binary |
 
 ## Install
 
 ### One command
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v3.0.0/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v4.0.0/install.sh | bash
 ```
 
 The installer checks the requirements above and stops before changing anything if one is missing, or if `~/.claude` or `~/.claude/settings.json` is not writable, or if `settings.json` is a directory. Then it runs the manual steps below for you:
 
-- Installs the engram binary through Homebrew when it is missing, and runs `engram setup claude-code`.
-- Adds the engram and construct marketplaces and installs `construct@construct`.
+- Adds the construct marketplace and installs `construct@construct`.
 - Installs the CodeGraph CLI and registers the codegraph MCP server. If `npm install -g` fails, it warns, skips the server, and continues.
-- Merges into `~/.claude/settings.json`: the `permissions.allow` rules `mcp__engram` and `mcp__plugin_engram_engram`, and removes a `theme` of `custom:construct:construct` left by earlier versions (any other theme is left alone). An empty `settings.json` counts as `{}`. Other keys stay as they are, a symlinked file (even a dangling one, whose target is then created) is written through to its target with its mode kept, and the previous file is saved as `settings.json.bak-<timestamp>`.
+- Merges into `~/.claude/settings.json`: the `permissions.allow` rule `Bash(construct-memory *)`, and removes a `theme` of `custom:construct:construct` left by earlier versions (any other theme is left alone). An empty `settings.json` counts as `{}`. Other keys stay as they are, a symlinked file (even a dangling one, whose target is then created) is written through to its target with its mode kept, and the previous file is saved as `settings.json.bak-<timestamp>`.
 
-Every step is skipped when it is already done, so running the installer again changes nothing. It never changes other permissions or your permission mode. The output style needs no setting: the plugin forces `Principal Engineer`, and an `outputStyle` you already have stays in the file but has no effect while construct is enabled.
+If engram is installed, the installer says Construct no longer needs it and removes nothing. Every step is skipped when it is already done, so running the installer again changes nothing. It never changes other permissions or your permission mode. The output style needs no setting: the plugin forces `Principal Engineer`, and an `outputStyle` you already have stays in the file but has no effect while construct is enabled.
 
 | Option | Meaning |
 |---|---|
@@ -51,7 +49,7 @@ Every step is skipped when it is already done, so running the installer again ch
 Pass options after `bash -s --`, for example `curl -fsSL <url> | bash -s -- --no-mcp`. To read the script before running it:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v3.0.0/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v4.0.0/install.sh -o install.sh
 less install.sh
 bash install.sh
 ```
@@ -60,35 +58,20 @@ bash install.sh
 
 The manual steps the installer runs, for when you want to run them yourself:
 
-1. Install the engram binary and register its MCP server:
-
-   ```bash
-   brew install gentleman-programming/tap/engram
-   engram setup claude-code
-   ```
-
-2. Make sure the engram marketplace is added. `engram setup claude-code` normally adds it and installs the engram plugin; running the command again is harmless. Construct declares `engram@engram` as a dependency, and the dependency resolves only from a marketplace you have already added:
-
-   ```bash
-   claude plugin marketplace add Gentleman-Programming/engram
-   ```
-
-3. Add this marketplace and install the plugin:
+1. Add this marketplace and install the plugin:
 
    ```bash
    claude plugin marketplace add carsimax/construct
    claude plugin install construct@construct
    ```
 
-   The installer (`install.sh`) pins this marketplace to the release tag (`carsimax/construct#v3.0.0`); the command above follows the default branch. A failed `claude mcp add` in the installer warns and the install continues.
+   The installer (`install.sh`) pins this marketplace to the release tag (`carsimax/construct#v4.0.0`); the command above follows the default branch. A failed `claude mcp add` in the installer warns and the install continues.
 
-   The install output ends with `(+ 1 dependency: engram)` when engram was not installed yet.
+2. Optional: install the CodeGraph CLI and register the codegraph MCP server (see [MCP servers](#mcp-servers)).
 
-4. Optional: install the CodeGraph CLI and register the codegraph MCP server (see [MCP servers](#mcp-servers)).
+3. Optional: inside Claude Code, in `/config`, set each role's model and effort (rows such as `ODD Worker model`).
 
-5. Optional: inside Claude Code, in `/config`, set each role's model and effort (rows such as `ODD Worker model`).
-
-6. Check that it works. Open a session in any git repository:
+4. Check that it works. Open a session in any git repository:
 
    - Ask "what does your Construct contract say about Risk lines?". The answer quotes the `Risk: item N` rule.
    - `/agents` lists the `construct:` agents, such as `construct:odd-worker` and `construct:review-risk`.
@@ -106,11 +89,11 @@ Open Claude Code in a git repository and make a request. Construct applies the s
 
 Commit, push, pull request, and merge stay your decisions. A change whose task in the feature document has a Risk column naming a high-risk item is reviewed before it can be published; see [Mandatory review](#mandatory-review-and-the-publication-gate). There is no switch to turn the review off.
 
-To confirm the install works, see step 6 of [Manual install](#manual-install).
+To confirm the install works, see step 4 of [Manual install](#manual-install).
 
 ## Update
 
-Construct and engram update through Claude Code's plugin commands. Running `install.sh` again does not update them: it skips every step that is already done.
+Construct updates through Claude Code's plugin commands. Running `install.sh` again does not update them: it skips every step that is already done.
 
 ```bash
 claude plugin marketplace update construct     # fetch the latest catalog from carsimax/construct
@@ -118,13 +101,6 @@ claude plugin update construct@construct       # install the new version
 ```
 
 Restart Claude Code afterwards; a plugin update applies to new sessions. `claude plugin list` shows the installed version.
-
-To update engram as well, upgrade the binary and rerun its setup, which also updates the `engram@engram` plugin:
-
-```bash
-brew upgrade engram
-engram setup claude-code
-```
 
 ## Configuration
 
@@ -203,9 +179,19 @@ claude mcp add-json --scope user codegraph '{"type":"stdio","command":"codegraph
 
 `alwaysLoad: true` keeps `codegraph_explore` loaded from the first prompt instead of deferred behind tool search (`claude mcp add` has no flag for it, hence `add-json`). To skip permission prompts, add `"mcp__codegraph__*"` to `permissions.allow` in `~/.claude/settings.json`. Indexing stays your decision: agents never run `codegraph init`, so run `codegraph init` in each project you want indexed, or opt in to automatic indexing with the plugin option `codegraph_auto_index` (boolean, default `false`). When it is on and a session starts in a git root with no `.codegraph/` and `codegraph` on the PATH, the SessionStart hook launches `codegraph init --yes <root>` detached in the background on a fresh startup only (it never waits), says the launch was requested and may still fail, and tells the agent to use file tools until `codegraph status` reports the index complete; on resume, clear, or compact it never relaunches and gives the manual notice, noting an earlier automatic init may have failed; with the CLI missing, the notice says so. An optional `codegraph.json` at the repo root tunes the index (`exclude`, `include`, `deprioritize`). The MCP server auto-syncs on file changes and exposes only `codegraph_explore`.
 
-Engram's MCP server comes from `engram setup claude-code` (see [Manual install](#manual-install)).
-
 The installer no longer registers context7. An earlier registration can be removed with `claude mcp remove --scope user context7`.
+
+### Memory
+
+Memory is per repository: one SQLite database at `<git common dir>/construct-memory/memory.db`, shared by every worktree of the clone and never committed. It needs Node 22.16 or later and is off outside a git repository. There is no MCP server; Claude uses the `construct-memory` command (on the Bash tool's PATH) and the `construct:memory` skill.
+
+- **Commands.** `save`, `search`, `get`, `context`, `update`, `delete`, `summary --session <id>`, `review list|done <id>`, `import <file>`, and `export [file]`. `construct-memory help` lists the flags.
+- **Hooks.** At session start the recent memory is injected (after a compaction, with an instruction to save a summary first). Each prompt is stored, a subagent's `## Key Learnings:` section is captured as memories, and a one-line reminder appears after 15 minutes without a save. `<private>...</private>` text is never stored.
+- **Erasing a memory.** `construct-memory delete <id>` hides it; `delete <id> --hard` erases it and its earlier versions for good, and an imported one is not re-imported.
+- **Stored prompts.** `construct-memory prompts [--limit N]` lists them with their ids and `construct-memory prompts delete <id>` removes one for good; `<private>` keeps text out in the first place.
+- **Import from engram.** Run `engram export` once, then `construct-memory import <file> --project <name>` (`--project` is required when the file holds several). Re-running it inserts nothing new, and it never reads `~/.engram`.
+- **Export.** `construct-memory export [file]` writes live observations, sessions, and prompts as JSON, to stdout or a new file, so you can back them up or move them to another clone with `import <file> --project <repository directory name>`.
+- **Uninstalling `engram@engram` is optional.** Construct no longer uses it.
 
 ### Quality and recovery skills
 
@@ -263,15 +249,11 @@ Two deterministic checks that used to be prompt-only (ports of gentle-shell's `c
 
 Both `PostToolUse` signals fail open (no output, exit 0).
 
-### Mirror drift gate
-
-The ODD feature documents (`odd/tasks/<f>.md`) are mirrored into engram so a later session can resume them. No hook enforced that; `hooks/scripts/mirror-drift.mjs` does, on `Stop`. It reuses the Risk line gate's per-turn record (`mark` on `UserPromptSubmit`): when an `odd/tasks/<f>.md` was added or changed since the turn began and the transcript, since the last real user prompt (a prompt row, not a tool result), holds no engram `mem_save` call (`mcp__engram__mem_save` or `mcp__plugin_engram_engram__mem_save`) whose `topic_key` is exactly `odd/<f>/tasks`, it blocks the stop once per turn. The reason names each unsaved document and its topic key; a document that was saved is not named. It stays silent while a subagent of the session is open (the first `Stop` after the agents finish runs the check), on `stop_hook_active`, with no mark record, and for changes outside `odd/tasks/*.md`. It reads only the last 512 KB of `transcript_path`; a turn longer than that has no prompt boundary in view and the gate stays silent. It fails open (no output, exit 0) on any error.
-
 ### Construct panel (mod)
 
 The mod draws one thing: a docked **panel** (a `Pane` with id `construct`) laid out as [claude-flightdeck](https://github.com/scasella/claude-flightdeck) cards and adapted to the ODD flow: one column at any width, no header or legend, `round` bordered cards, the bold title on the left and the status on the right. The band above the prompt is not drawn. It needs Claude Code 2.1.304 or later and does not appear in `claude -p` runs, which draw no interface.
 
-**Commands and opening.** `/construct` opens the panel, `/construct close` closes it, and `/construct doctor` prints a setup report instead: one line per check, `✓ label` or `✗ label — hint`, for Claude Code 2.1.304 or later, Node 20 or later, the `engram@engram` plugin enabled (read from the merged `enabledPlugins` setting), a CodeGraph index (`.codegraph/`) at the project root. The checks run in parallel with a 3 s timeout each, and a failed check shows as `✗` and never throws. The panel opens at every session start; to turn that off, set the plugin option `panel_open_on_start` (boolean, default `true`) to `false`.
+**Commands and opening.** `/construct` opens the panel, `/construct close` closes it, and `/construct doctor` prints a setup report instead: one line per check, `✓ label` or `✗ label — hint`, for Claude Code 2.1.304 or later, Node 22.16 or later, memory (`node:sqlite` with FTS5 trigram), a CodeGraph index (`.codegraph/`) at the project root. The checks run in parallel with a 3 s timeout each, and a failed check shows as `✗` and never throws. The panel opens at every session start; to turn that off, set the plugin option `panel_open_on_start` (boolean, default `true`) to `false`.
 
 **Width.** The panel asks for 66 columns when it opens (`columns: 66` on `ui.open`). That is a request, not a guarantee: a width you drag or keep wins, and the layout reads the real width (never below 40). Rows that do not fit are clipped, and the changes card keeps only the file rows that fit the pane height.
 
@@ -293,12 +275,13 @@ The mod draws one thing: a docked **panel** (a `Pane` with id `construct`) laid 
 
 | Path | Contents |
 |---|---|
-| `.claude-plugin/marketplace.json` | Local marketplace `construct`; allows the cross-marketplace `engram` dependency |
+| `.claude-plugin/marketplace.json` | Local marketplace `construct` |
 | `install.sh` | One-command installer (see [One command](#one-command)) |
 | `plugins/construct/` | The plugin (manifest name `construct`) |
 | `plugins/construct/agents/` | The 11 role agents |
 | `plugins/construct/skills/` | Delivery and review skills (`branch-pr`, `chained-pr`, `work-unit-commits`, `judgment-day`, `debugging`, `constraint-driven`, ...) |
-| `plugins/construct/hooks/` | `hooks.json`, the mod (`register.js`), its routing helpers, the status modules (`status/`), the panel modules (`panel/`), and the command hooks (`scripts/`: contract, feature state, the `shell-words` tokenizer, delivery signals, publication gate, review store guard, Risk line gate, mirror drift gate, subagent count, delegation admission, review context and capture) |
+| `plugins/construct/hooks/` | `hooks.json`, the mod (`register.js`), its routing helpers, the status modules (`status/`), the panel modules (`panel/`), and the command hooks (`scripts/`: contract, feature state, the `shell-words` tokenizer, delivery signals, publication gate, review store guard, Risk line gate, subagent count, delegation admission, review context and capture, and the memory store `memory-store.mjs` with its hooks `memory-hooks.mjs`) |
+| `plugins/construct/bin/construct-memory` | The memory command line (on the Bash tool's PATH) |
 | `plugins/construct/hooks/contract/` | Session and subagent contract texts injected by hooks |
 | `plugins/construct/evals/` | Behavior eval cases run by `claude plugin eval` |
 | `plugins/construct/tests/` | Mod tests run by `claude plugin test` |
@@ -311,7 +294,18 @@ Setup, checks, and pull request rules are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Status
 
-Current version: 3.0.0 (`plugins/construct/.claude-plugin/plugin.json`); review is now a mandatory phase for high-risk work, enforced by hooks, and the deterministic review and assessment CLIs are gone. Breaking. Releases are tagged `vX.Y.Z`.
+Current version: 4.0.0 (`plugins/construct/.claude-plugin/plugin.json`); memory now lives in the repository through `construct-memory`, and the engram dependency is gone. Breaking. Releases are tagged `vX.Y.Z`.
+
+Upgrading from 3.0.0:
+
+- Breaking: the `engram@engram` dependency is removed, and the engram MCP tools (`mcp__engram__*`) are gone from every agent.
+- Breaking: Node 22.16 or later is required, and Node 23 is not supported.
+- Breaking: the feature-document mirror and the `mirror-drift` hook are removed.
+- New: `construct-memory` keeps per-repository memory, with hooks that load session context, capture prompts, and record passive learnings, and the `construct:memory` skill describes how to use it.
+- Migrate: run `engram export`, then `construct-memory import <file> --project <name>`. Uninstalling `engram@engram` is optional.
+- The installer no longer adds `mcp__engram*` permission rules and leaves existing ones alone.
+
+3.0.0 was a breaking release that made review a mandatory phase for high-risk work, enforced by hooks, and removed the deterministic review and assessment CLIs.
 
 Upgrading from 2.1.0:
 
@@ -346,4 +340,4 @@ Upgrading from 1.1.0:
 
 Construct is released under the MIT License; see [`LICENSE`](LICENSE).
 
-Part of the agents and skills are adapted from MIT-licensed material (Gentle AI and agent-skills); see [`plugins/construct/NOTICE`](plugins/construct/NOTICE).
+Part of the agents and skills are adapted from MIT-licensed material (Gentle AI, agent-skills, and engram); see [`plugins/construct/NOTICE`](plugins/construct/NOTICE).

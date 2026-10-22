@@ -15,13 +15,13 @@ const MAX_PATHS = 3
 // whitespace or `(`; the space after the colon is optional.
 const RISK_LINE = /^[ \t]*(?:(?:[-*+]|\d+[.)])[ \t]+)?[*_`]*Risk[*_`]*:[*_`]*[ \t]*[*_`]*(?:none|item [1-6])[*_`]*(?=$|\s|\()/m
 
-export const recordFile = (session) => {
+const recordFile = (session) => {
   const dir = join(dataDir(), 'risk-line')
   return { dir, file: join(dir, `${safeName(session)}.json`) }
 }
 
 // readRecord returns the turn's record or null when none exists; a corrupt file throws (fail open).
-export function readRecord(file) {
+function readRecord(file) {
   let text
   try {
     text = readFileSync(file, 'utf8')
@@ -103,7 +103,7 @@ async function main() {
   process.stdout.write(`${JSON.stringify({ decision: 'block', reason })}\n`)
 }
 
-// Run only as a script; mirror-drift.mjs imports the record helpers above.
+// Run only as a script.
 if (process.argv[1] && fileURLToPath(import.meta.url) === realpathSync(process.argv[1])) {
   try {
     await main()

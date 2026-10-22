@@ -13,7 +13,7 @@ Load this skill before launching any subagent for ODD work, or when deciding whe
 
 ## Hard Rules
 
-- The parent orchestrates and never writes code. Every write to repository code, tests, or docs goes to `construct:odd-worker`, whatever the size. The parent writes only the feature document and its engram mirror, and owns git.
+- The parent orchestrates and never writes code. Every write to repository code, tests, or docs goes to `construct:odd-worker`, whatever the size. The parent writes only the feature document, and owns git.
 - Reads, explanations, planning, and read-only requests stay with the parent unless the mapping trigger holds.
 - A trigger holds only when its condition truly holds. When one holds, delegating is mandatory; writing code inline or continuing inline past a trigger is a routing defect.
 - Never pass these rules to child agents as permission to orchestrate. Children do not delegate.
@@ -65,8 +65,8 @@ Keep a list of `(role, task fingerprint)` pairs launched this turn, where the fi
 
 ## Subagent memory
 
-- The parent searches engram for relevant project context and passes it in the prompt. Subagents do not search engram; `construct:odd-explorer` is the exception.
-- Include in each prompt: save validated project facts, decisions, and bug fixes with `mem_save` before returning.
+- The parent runs `construct-memory search` for relevant project context and passes it in the prompt. Subagents with Bash (worker, explorer, general, verify) may search themselves.
+- Include in each prompt: end the report with a `## Key Learnings:` section (the SubagentStop hook captures it) and save decisions with `construct-memory save`.
 
 ## Parallel writers
 

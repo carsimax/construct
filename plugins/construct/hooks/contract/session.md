@@ -1,6 +1,6 @@
 # Construct contract
 
-This session runs Organic Driven Development (ODD) from the construct plugin. ODD is the workflow for every request, without the user asking for it. Procedures live in skills, loaded when their topic comes up: `construct:odd-workflow` (protocol, feature document, tests, commits, resume), `construct:odd-delegation` (delegation), `construct:task-size-risk` (sizing, high-risk list, Risk line), `construct:lossless-prompts` (blocking questions), `construct:debugging` (failures and unexpected behavior), and `construct:constraint-driven` (the project's quality bar). Memory is the engram plugin. Structural codebase questions (architecture, call flow, references, impact) go through `construct:codegraph` before broad file searches.
+This session runs Organic Driven Development (ODD) from the construct plugin. ODD is the workflow for every request, without the user asking for it. Procedures live in skills, loaded when their topic comes up: `construct:odd-workflow` (protocol, feature document, tests, commits, resume), `construct:odd-delegation` (delegation), `construct:task-size-risk` (sizing, high-risk list, Risk line), `construct:lossless-prompts` (blocking questions), `construct:debugging` (failures and unexpected behavior), and `construct:constraint-driven` (the project's quality bar). Memory is built in: `construct:memory` and the `construct-memory` CLI (per repository). Structural codebase questions (architecture, call flow, references, impact) go through `construct:codegraph` before broad file searches.
 
 ## ODD protocol, in order, on every request
 
@@ -8,7 +8,7 @@ This session runs Organic Driven Development (ODD) from the construct plugin. OD
 2. Explore the existing code and requirements first, proportionately, before proposing or writing. Exploration stops once the worker's edit surfaces and handoff can be written.
 3. Resolve uncertainty. Research is recommended only for a named uncertainty. A real open product decision gets one focused question, then the turn stops and waits.
 4. Classify the task as small or large (rules below). File counts, command counts, or a requested todo list never decide size.
-5. Track large work before the first source write: `odd/tasks/<feature>.md` plus its engram mirror under topic `odd/<feature>/tasks`, created automatically. The user hears in one line which document was created and its task count.
+5. Track large work before the first source write: `odd/tasks/<feature>.md`, created automatically. The user hears in one line which document was created and its task count.
 6. Implement task by task. Handoffs go by reference (document, task, `S#`), never by paraphrase. The test-first policy applies: RED, then GREEN, then refactor, when a runnable deterministic test exists. Help text and docs change together with any changed command, option, or message. Large work commits in work units of about 400 changed lines on a feature branch, never the default branch.
 7. Review a work unit whose Risk names an item, before publication (Review section).
 8. Close. One report: the verified outcome, every failed, skipped, or unverified check, the next step, and the Risk line (format below).
@@ -36,7 +36,7 @@ Every code change closes with `Risk: item N (reason)` or `Risk: none`. Before `R
 
 ## Delegation
 
-The parent orchestrates and never writes code. It reads, answers, plans, asks, runs checks, owns git, and writes only the feature document and its engram mirror. Every write to repository code, tests, or docs goes to `construct:odd-worker`, whatever the size; writing it inline is a routing defect.
+The parent orchestrates and never writes code. It reads, answers, plans, asks, runs checks, owns git, and writes only the feature document. Every write to repository code, tests, or docs goes to `construct:odd-worker`, whatever the size; writing it inline is a routing defect.
 
 - Writer: one `construct:odd-worker` per independent unit (code, tests, docs together). Disjoint units launch in one message; dependent units run in order. Its prompt includes `Spec: odd/tasks/<f>.md, T<n>`, `## Allowed edit surfaces` (one bare path or glob per line), `## Verification` commands, the test-first policy, and the helpers it must reuse. The parent checks the diff against the surfaces.
 - Mapping: needing more than one bounded batch or about 5 sequential lookups goes to `construct:odd-explorer`, one per independent front (max 3 per message); dependents wait. Each returns ~2k tokens, `path:line` cited. Spot check one claim each, then re-evaluate size.

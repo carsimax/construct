@@ -1,5 +1,5 @@
 import { expect, test } from 'claude-code/testing'
-import { checkClaude, checkCodegraph, checkEngram, checkNode, formatReport } from '../hooks/status/doctor.js'
+import { checkClaude, checkCodegraph, checkMemory, checkNode, formatReport } from '../hooks/status/doctor.js'
 
 // Pure checks behind /construct doctor (S8).
 
@@ -20,19 +20,25 @@ test('Claude Code with no output or junk fails with a hint', () => {
   }
 })
 
-test('Node needs 20 or later', () => {
-  expect(checkNode('v19.9.0').ok).toBe(false)
-  expect(checkNode('v20.0.0').ok).toBe(true)
-  expect(checkNode('v22.1.0\n').ok).toBe(true)
+test('Node needs 22.16 or later', () => {
+  expect(checkNode('v22.15.9').ok).toBe(false)
+  expect(checkNode('v22.9.0').ok).toBe(false)
+  expect(checkNode('v22.16.0').ok).toBe(true)
+  expect(checkNode('v22.22.1\n').ok).toBe(true)
+  expect(checkNode('v24.0.0').ok).toBe(true)
+  expect(checkNode('v20.11.0').ok).toBe(false)
   expect(checkNode(null).ok).toBe(false)
+  expect(checkNode('v22.1.0').label).toContain('22.16')
 })
 
-test('engram must be enabled', () => {
-  expect(checkEngram({ 'engram@engram': true }).ok).toBe(true)
-  expect(checkEngram({ 'engram@engram': false }).ok).toBe(false)
-  expect(checkEngram({ 'other@x': true }).ok).toBe(false)
-  expect(checkEngram(undefined).ok).toBe(false)
-  expect(checkEngram(null).ok).toBe(false)
+test('memory needs node:sqlite with FTS5 trigram, probed through node', () => {
+  expect(checkMemory('ok\n').ok).toBe(true)
+  for (const out of [null, '', 'nope']) {
+    const row = checkMemory(out)
+    expect(row.ok).toBe(false)
+    expect(row.hint).toContain('Node 22.16+')
+    expect(row.hint).not.toContain('23')
+  }
 })
 
 test('the CodeGraph index must exist', () => {

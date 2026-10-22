@@ -1,0 +1,191 @@
+#!/usr/bin/env node
+// construct-memory: the command line over the per-repository memory store (S5 of odd/tasks/construct-memory.md).
+import { readFileSync, writeFileSync } from 'node:fs'
+import { parseArgs } from 'node:util'
+
+const USAGE = `usage: construct-memory <command> [options]
+
+  save                              JSON on stdin: title, content, type, topic_key, session_id
+  search <query> [--type T] [--limit N] [--any]
+  get <id> [--history]
+  context
+  update <id>                       JSON on stdin: title, content, type, topic_key, or find + replace
+  delete <id> [--hard]              soft delete; --hard erases the observation and its earlier versions for good
+  summary --session <id>            summary on stdin; stores it and ends the session
+  review list | review done <id>
+  prompts [--limit N]               list stored prompts (id, date, preview), newest first
+  prompts delete <id>               remove one stored prompt for good
+  import <file> [--project <name>]  load one project of an engram export JSON file (versions 0.1.0, 0.2.0)
+  export [file]                     write live observations, sessions, and prompts as JSON (stdout, or a new file) for backup or another clone
+  help`
+
+class UsageError extends Error {}
+const fail = (message) => {
+  throw new UsageError(message)
+}
+
+function stdinJson() {
+  let value
+  try {
+    value = JSON.parse(readFileSync(0, 'utf8'))
+  } catch {
+    fail('invalid JSON on stdin')
+  }
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) fail('stdin must be a JSON object')
+  return value
+}
+
+function idArg(text) {
+  if (!/^\d+$/.test(text ?? '')) fail('an observation id (a number) is required')
+  return Number(text)
+}
+
+function promptId(text) {
+  if (!/^\d+$/.test(text ?? '')) fail('a prompt id (a number) is required')
+  return Number(text)
+}
+
+const oneLine = (text) => String(text).replace(/\s+/g, ' ').trim()
+
+function hit(row) {
+  const parts = [`#${row.id}`, `[${row.type}]`, oneLine(row.title)]
+  if (row.topic_key) parts.push(`(${row.topic_key})`)
+  if (row.needs_review) parts.push('needs_review')
+  return `${parts.join(' ')} - ${oneLine(row.preview)}${row.truncated ? '...' : ''}`
+}
+
+function show(row) {
+  let out = `#${row.id} [${row.type}] ${oneLine(row.title)}\n`
+  if (row.topic_key) out += `topic_key: ${row.topic_key}\n`
+  out += `created: ${row.created_at}  updated: ${row.updated_at}  revisions: ${row.revision_count}  duplicates: ${row.duplicate_count}\n`
+  if (row.session_id) out += `session: ${row.session_id}\n`
+  if (row.needs_review) out += 'needs_review: yes\n'
+  out += `\n${row.content}\n`
+  if (row.versions) {
+    out += `\n## history (${row.versions.length} earlier versions)\n`
+    for (const v of row.versions) out += `\n--- version ${v.id} (${v.created_at}) [${v.type}] ${oneLine(v.title)}\n${v.content}\n`
+  }
+  return out
+}
+
+async function main(argv) {
+  const [command, ...rest] = argv
+  if (command === undefined || command === 'help' || command === '--help' || command === '-h') return `${USAGE}\n`
+  const { values, positionals } = parseArgs({
+    args: rest,
+    allowPositionals: true,
+    options: { type: { type: 'string' }, limit: { type: 'string' }, any: { type: 'boolean' }, history: { type: 'boolean' }, hard: { type: 'boolean' }, session: { type: 'string' }, project: { type: 'string' } },
+  })
+  const known = ['save', 'search', 'get', 'context', 'update', 'delete', 'summary', 'review', 'import', 'prompts', 'export']
+  if (!known.includes(command)) fail(`unknown command: ${command} (run construct-memory help)`)
+  if (command === 'review' && !['list', 'done'].includes(positionals[0])) fail('review needs list or done <id>')
+
+  if (command === 'prompts' && positionals.length && positionals[0] !== 'delete') fail('prompts needs nothing, or delete <id>')
+  if (command === 'import' && !positionals[0]) fail('import needs a file: construct-memory import <file> [--project <name>]')
+
+  // Loaded here, not at the top: the store needs node:sqlite, and help and usage errors must work without it.
+  let openMemory
+  try {
+    ;({ openMemory } = await import('../hooks/scripts/memory-store.mjs'))
+  } catch {
+    fail('memory needs node:sqlite with FTS5 (Node.js 22.16 or later; Node 23 is not supported)')
+  }
+  const store = openMemory(process.cwd())
+  if (!store) fail('memory is off: not inside a git repository')
+  try {
+    switch (command) {
+      case 'save': {
+        const { id, action } = store.save(stdinJson())
+        return `saved #${id} (${action})\n`
+      }
+      case 'search': {
+        const query = positionals.join(' ')
+        if (!query.trim()) fail('search needs a query')
+        const rows = store.search(query, { type: values.type, limit: values.limit, any: values.any })
+        return rows.length ? `${rows.map(hit).join('\n')}\n` : 'no memories found\n'
+      }
+      case 'get': {
+        const id = idArg(positionals[0])
+        const row = store.get(id, { history: values.history })
+        if (!row) fail(`observation #${id} not found`)
+        return show(row)
+      }
+      case 'context':
+        return store.context()
+      case 'update': {
+        const id = idArg(positionals[0])
+        const result = store.update(id, stdinJson())
+        if (!result) fail(`observation #${id} not found`)
+        return `${result.action} #${id}\n`
+      }
+      case 'delete': {
+        const id = idArg(positionals[0])
+        if (!store.remove(id, { hard: values.hard })) fail(`observation #${id} not found`)
+        return `${values.hard ? 'erased' : 'deleted'} #${id}\n`
+      }
+      case 'summary': {
+        if (!values.session) fail('summary needs --session <id>')
+        const summary = readFileSync(0, 'utf8')
+        if (!summary.trim()) fail('summary content is required on stdin')
+        store.endSession(values.session, summary)
+        return `summary saved, session ${values.session} ended\n`
+      }
+      case 'import': {
+        let text
+        try {
+          text = readFileSync(positionals[0], 'utf8')
+        } catch (error) {
+          fail(`cannot read ${positionals[0]}: ${error.code ?? error.message}`)
+        }
+        let data
+        try {
+          data = JSON.parse(text)
+        } catch {
+          fail(`${positionals[0]} is not valid JSON`)
+        }
+        const n = store.importExport(data, { project: values.project })
+        return `imported ${n.observations} observations, ${n.sessions} sessions, ${n.prompts} prompts; skipped ${n.skipped} already imported, ${n.deleted} deleted\n`
+      }
+      case 'export': {
+        const data = store.exportData()
+        const json = `${JSON.stringify(data, null, 2)}\n`
+        const file = positionals[0]
+        if (!file) return json
+        try {
+          writeFileSync(file, json, { flag: 'wx' })
+        } catch (error) {
+          fail(error.code === 'EEXIST' ? `${file} already exists; choose a new file` : `cannot write ${file}: ${error.code ?? error.message}`)
+        }
+        return `exported ${data.observations.length} observations, ${data.sessions.length} sessions, ${data.prompts.length} prompts to ${file}\n`
+      }
+      case 'prompts': {
+        if (positionals[0] === 'delete') {
+          const id = promptId(positionals[1])
+          if (!store.deletePrompt(id)) fail(`prompt #${id} not found`)
+          return `deleted prompt #${id}\n`
+        }
+        const rows = store.prompts({ limit: values.limit })
+        return rows.length ? `${rows.map((r) => `#${r.id} ${r.created_at} ${[...oneLine(r.content)].slice(0, 120).join('')}`).join('\n')}\n` : 'no prompts stored\n'
+      }
+      case 'review': {
+        if (positionals[0] === 'list') {
+          const rows = store.needingReview()
+          return rows.length ? `${rows.map(hit).join('\n')}\n` : 'nothing to review\n'
+        }
+        const id = idArg(positionals[1])
+        if (!store.markReviewed(id)) fail(`observation #${id} not found`)
+        return `reviewed #${id}\n`
+      }
+    }
+  } finally {
+    store.close()
+  }
+}
+
+try {
+  process.stdout.write(await main(process.argv.slice(2)))
+} catch (error) {
+  // parseArgs errors (unknown option) and store errors (missing title, newer schema) all end here.
+  process.stderr.write(`construct-memory: ${oneLine(error.message)}\n`)
+  process.exitCode = 1
+}

@@ -60,10 +60,18 @@ test('userConfig declares model and effort options whose defaults match each age
   assert.equal(Object.keys(cfg).length, Object.keys(S6).length * 2 + 2)
 })
 
-test('no plugin agent references gentle-ai or a non-existent engram tool prefix', () => {
+test('no plugin agent references gentle-ai or any engram tool', () => {
   for (const file of agentFiles) {
     const text = readFileSync(join(pluginRoot, 'agents', file), 'utf8')
     assert.doesNotMatch(text, /gentle[-_ ]?ai/i, file)
-    assert.doesNotMatch(text, /mcp__plugin_engram_engram__/, file)
+    assert.doesNotMatch(text, /mcp__(plugin_engram_)?engram/, file)
   }
+})
+
+test('odd-explorer keeps Bash so it can run construct-memory search, and the manifests have no engram dependency', () => {
+  const tools = readFileSync(join(pluginRoot, 'agents', 'odd-explorer.md'), 'utf8').match(/^tools:(.*)$/m)[1]
+  assert.match(tools, /\bBash\b/)
+  assert.equal(manifest.dependencies, undefined)
+  const market = JSON.parse(readFileSync(new URL('../.claude-plugin/marketplace.json', import.meta.url), 'utf8'))
+  assert.equal(market.allowCrossMarketplaceDependenciesOn, undefined)
 })

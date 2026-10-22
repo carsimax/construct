@@ -48,7 +48,8 @@ test('one active document lists path, title, branch, unfinished rows, and the la
   assert.doesNotMatch(text, /First thing/)
   assert.match(text, /Next step: do T2 now/)
   assert.doesNotMatch(text, /Next step: old/)
-  assert.ok(text.trimEnd().endsWith('Read the full document before continuing; the engram mirror is under topic `odd/alpha/tasks`.'))
+  assert.ok(text.trimEnd().endsWith('Read the full document before continuing.'))
+  assert.doesNotMatch(text, /mirror|engram/)
 })
 
 test('runs on a Node without require(esm) detection (S18)', () => {
@@ -112,7 +113,7 @@ test('additionalContext stays within 2500 characters and keeps every header', ()
   const text = context(run(repo))
   assert.ok(text.length <= 2500, `length ${text.length}`)
   for (const n of ['p', 'q', 'r']) assert.match(text, new RegExp(`odd/tasks/${n}\\.md`))
-  assert.match(text, /under topic `odd\/[pqr]\/tasks`/)
+  assert.match(text, /Read the full document before continuing\./)
   assert.match(text, /Read the full document before continuing/)
 })
 
