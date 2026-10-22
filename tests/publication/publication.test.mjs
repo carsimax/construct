@@ -149,6 +149,9 @@ describe('other commands are untouched', () => {
     'git push -n origin feat',
     'git push --delete origin old',
     'git push origin :old',
+    "printf '%s' 'a `git push origin vX` b'",
+    `printf '%s' '{"content":"see \`git push origin vX.Y.Z\`"}' | construct-memory save`,
+    "echo '$(git push origin vX)'",
     'ls',
     '',
   ]
@@ -309,6 +312,11 @@ describe('shell wrappers are unwrapped by shell-words', () => {
     'env --split-string="git push origin feat"',
     'env -S"git push origin feat"',
     'echo `git push origin feat`',
+    'echo "`git push origin feat`"',
+    'echo $(git push origin feat)',
+    'echo "$(git push origin feat)"',
+    "eval 'git push origin feat'",
+    "bash -c 'git push origin feat'",
   ]
   for (const command of cases) test(`denies: ${command}`, () => denied(hook(command, repo)))
 })
