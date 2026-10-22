@@ -8,7 +8,7 @@
 // Upgrade both if the host adds the prompt to SubagentStart or real use shows bypasses.
 // Usage: node surface-guard.mjs   (hook JSON on stdin)
 import { realpathSync } from 'node:fs'
-import { dirname, join, relative, resolve } from 'node:path'
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { surfaceContains, writerRecord } from './delegation-admission.mjs'
 import { repositoryRoot } from './git-tree.mjs'
 import { readInput } from './hook-io.mjs'
@@ -16,7 +16,7 @@ import { readInput } from './hook-io.mjs'
 // real resolves symlinks in the deepest existing ancestor and appends the rest.
 function real(path) {
   try {
-    return realpathSync(path)
+    return realpathSync.native(path)
   } catch {
     return join(real(dirname(path)), path.slice(dirname(path).length))
   }
@@ -31,7 +31,7 @@ function main() {
   if (typeof path !== 'string' || path === '') return
   const root = real(repositoryRoot(input.cwd))
   const rel = relative(root, real(resolve(input.cwd, path)))
-  if (rel === '' || rel.startsWith('..') || rel.startsWith('/')) return
+  if (rel === '' || rel === '..' || rel.startsWith('../') || isAbsolute(rel)) return
   if (typeof input.agent_id === 'string' && input.agent_id !== '') {
     const entry = writerRecord(input.session_id, input.agent_id)
     if (!entry || entry.surfaces.some((surface) => surfaceContains(surface, rel))) return

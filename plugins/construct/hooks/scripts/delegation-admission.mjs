@@ -212,10 +212,12 @@ export function surfacesOverlap(a, b) {
 
 // surfaceContains is containment, unlike surfacesOverlap: the surface must match the whole
 // repo-relative path; `**` spans zero or more segments. Both sides are normalized alike.
+// A literal surface (no glob characters) also contains its descendants, like surfacesOverlap.
 export function surfaceContains(surface, path) {
   const pattern = normalizeEntry(surface)
   const target = normalizeEntry(path)
   if (pattern === undefined || target === undefined) return false
+  if (!SPECIAL.test(pattern) && target.startsWith(`${pattern}/`)) return true
   const match = (ps, ts) => {
     if (ps.length === 0) return ts.length === 0
     if (ps[0] === '**') return match(ps.slice(1), ts) || (ts.length > 0 && match(ps, ts.slice(1)))

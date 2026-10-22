@@ -1,7 +1,7 @@
 // Surface guard (S4): start stores agent_id, the containment matcher, and the write guard hook.
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { readdirSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, realpathSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, test } from 'node:test'
 import { makeRepo, scratchDir } from '../helpers/repo.mjs'
@@ -55,7 +55,11 @@ describe('start stores agent_id', () => {
 describe('surfaceContains', () => {
   const cases = [
     ['src/a.js', 'src/a.js', true],
-    ['src/a.js', 'src/a.js/x', false],
+    ['src/a.js', 'src/a.js/x', true],
+    ['tests/guard/', 'tests/guard/new.test.mjs', true],
+    ['tests/guard', 'tests/guard/new.test.mjs', true],
+    ['tests/guard', 'tests/guardx/a.js', false],
+    ['tests/*', 'tests/guard/a.js', false],
     ['src/a.js', 'src/b.js', false],
     ['src/*.js', 'src/a.js', true],
     ['src/*.js', 'src/d/a.js', false],
@@ -83,6 +87,24 @@ describe('surface-guard', () => {
     const repo = makeRepo({ 'src/a.js': 'a\n' })
     const r = run(GUARD, [], { session_id: 's1', cwd: repo, agent_id: 'a1', tool_name: 'NotebookEdit', tool_input: { notebook_path: 'n.ipynb' } }, started(repo, 'src/a.js'))
     isDenied(r, /n\.ipynb/)
+  })
+  for (const surface of ['src/dir/', 'src/dir']) {
+    test(`a directory surface ${surface} allows a new file inside and denies a sibling`, () => {
+      const repo = makeRepo({ 'src/dir/a.js': 'a\n' })
+      const e = started(repo, surface)
+      isAllowed(write(repo, e, join(repo, 'src/dir/new.js'), { agent_id: 'a1' }))
+      isDenied(write(repo, e, join(repo, 'src/dirx/a.js'), { agent_id: 'a1' }), /src\/dirx\/a\.js/)
+    })
+  }
+  test('a ..hidden file at the root is inside the repository', () => {
+    const repo = makeRepo({ 'src/a.js': 'a\n' })
+    isDenied(write(repo, {}, join(repo, '..hidden')), /\.\.hidden/)
+  })
+  test('a case-variant path to the repository root is still inside it', (t) => {
+    const repo = realpathSync.native(makeRepo({ 'src/a.js': 'a\n' }))
+    const flipped = repo.replace(/[a-z]+/i, (m) => m.toUpperCase() === m ? m.toLowerCase() : m.toUpperCase())
+    if (!existsSync(flipped)) return t.skip('case-sensitive filesystem')
+    isDenied(write(flipped, {}, join(flipped, 'src/x.js')), /src\/x\.js/)
   })
   test('an unknown agent_id is allowed', () => {
     const repo = makeRepo({ 'src/a.js': 'a\n' })
