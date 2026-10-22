@@ -216,3 +216,61 @@ test('an unescaped pipe in the task cell does not shift the status column', () =
   assert.match(text, /T2 — plain/)
   assert.doesNotMatch(text, /T1/)
 })
+
+function specDoc({ header = 'Objective: x. Branch: feat/y. Baseline: abc.', specs = ['S1', 'S2'], tasks = [['T1', 'S1'], ['T2', 'S2']], extra = '' } = {}) {
+  const sp = specs.map((s) => `- **${s} — Spec.** text`).join('\n')
+  const rows = tasks.map(([id, s]) => `| ${id} | ${s} | task ${id} | inline | none | pending | — |`).join('\n')
+  return `# F\n\n${header}\n\n## Specs\n\n${sp}\n\n## Tasks\n\n| ID | Specs | Task | Route | Risk | Status | Commit |\n|---|---|---|---|---|---|---|\n${rows}${extra}\n\n## Log\n`
+}
+
+const coverage = (text) => text.split('\n').filter((l) => /^Coverage:/.test(l))
+
+test('S1: a Branch inside the template header line is found, value only', () => {
+  const repo = makeRepo()
+  write(repo, 'odd/tasks/a.md', specDoc())
+  const text = context(run(repo))
+  assert.match(text, /^Branch: feat\/y$/m)
+  assert.doesNotMatch(text, /Baseline/)
+})
+
+test('S1: a spec with no task is warned', () => {
+  const repo = makeRepo()
+  write(repo, 'odd/tasks/a.md', specDoc({ specs: ['S1', 'S2', 'S3'] }))
+  const [line, ...rest] = coverage(context(run(repo)))
+  assert.equal(rest.length, 0)
+  assert.match(line, /S3/)
+  assert.doesNotMatch(line, /S1|S2/)
+})
+
+test('S1: a task naming an unknown spec is warned', () => {
+  const repo = makeRepo()
+  write(repo, 'odd/tasks/a.md', specDoc({ tasks: [['T1', 'S1, S2'], ['T2', 'S9']] }))
+  const [line] = coverage(context(run(repo)))
+  assert.match(line, /T2/)
+  assert.match(line, /S9/)
+  assert.doesNotMatch(line, /T1/)
+})
+
+test('S1: ranges S3-S4 (hyphen and en dash) cover both ends', () => {
+  const repo = makeRepo()
+  write(repo, 'odd/tasks/a.md', specDoc({ specs: ['S1', 'S2', 'S3', 'S4'], tasks: [['T1', 'S1-S2'], ['T2', 'S3–S4']] }))
+  assert.deepEqual(coverage(context(run(repo))), [])
+})
+
+test('S1: no warning when fully covered, nor without Specs section or column', () => {
+  const repo = makeRepo()
+  write(repo, 'odd/tasks/a.md', specDoc())
+  write(repo, 'odd/tasks/b.md', specDoc().replace('## Specs', '## Notes'))
+  write(repo, 'odd/tasks/c.md', specDoc().replace('| Specs |', '| Spec ref |'))
+  assert.deepEqual(coverage(context(run(repo))), [])
+})
+
+test('S1: the warning survives when rows are truncated by the budget', () => {
+  const repo = makeRepo()
+  const many = Array.from({ length: 60 }, (_, i) => [`T${i + 1}`, 'S1'])
+  write(repo, 'odd/tasks/a.md', specDoc({ specs: ['S1', 'S2'], tasks: many }).replace(/task (T\d+)/g, `$1 ${'x'.repeat(100)}`))
+  const text = context(run(repo))
+  assert.match(text, /\(\+\d+ more unfinished\)/)
+  assert.match(coverage(text)[0], /S2/)
+  assert.ok(text.length <= 2500)
+})
