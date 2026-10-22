@@ -1,10 +1,8 @@
 #!/bin/bash
-# Construct installer: sets up the Construct plugin, the optional
-# codegraph MCP server, and merges the Construct settings into
-# ~/.claude/settings.json. Safe to run again; a second run changes nothing.
+# Construct installer: sets up the Construct plugin and merges the Construct
+# settings into ~/.claude/settings.json. Safe to run again; a second run changes nothing.
 #
 #   curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v4.0.1/install.sh | bash
-#   curl -fsSL .../install.sh | bash -s -- --no-mcp
 #
 # Runs under the macOS system bash (3.2): no associative arrays, no ${x,,}.
 set -euo pipefail
@@ -14,7 +12,6 @@ MIN_NODE=22.16
 CONSTRUCT_REPO=carsimax/construct
 CONSTRUCT_REF=v4.0.1 # the release this script belongs to; keep in step with the URL above
 CONSTRUCT_PLUGIN=construct@construct
-CODEGRAPH_PACKAGE=@colbymchenry/codegraph@1.6.2
 
 INSTALLED=""
 SKIPPED=""
@@ -24,7 +21,7 @@ usage() {
   cat <<'EOF'
 Usage: install.sh [--no-mcp] [--force]
 
-  --no-mcp  Skip the codegraph CLI and the codegraph MCP server.
+  --no-mcp  Deprecated: has no effect and will be removed in a later release.
   --force   Deprecated: has no effect and will be removed in a later release.
 EOF
 }
@@ -96,15 +93,19 @@ preflight() {
     fail "$HOME/.claude/settings.json cannot be read because a component of its path is not a directory, or its link loops, so nothing was installed; fix the path and run the installer again"
   fi
   [ "$rc" = 0 ] || fail "nothing was installed"
-  if [ "$WITH_MCP" = 1 ] && ! has codegraph; then
-    has npm || fail "npm is required to install the codegraph CLI (or pass --no-mcp)"
-  fi
 }
 
 # Construct keeps its own memory; an existing engram is left alone, never removed.
 note_engram() {
   if has engram; then
     say "engram is installed, but Construct no longer needs it; nothing was removed"
+  fi
+}
+
+# Construct no longer uses CodeGraph; an existing CLI or MCP server is left alone, never removed.
+note_codegraph() {
+  if has codegraph; then
+    say "codegraph is installed, but Construct no longer needs it; nothing was removed. To drop its MCP server: claude mcp remove --scope user codegraph"
   fi
 }
 
@@ -141,42 +142,6 @@ install_plugin() {
     run claude plugin install "$CONSTRUCT_PLUGIN"
     installed "$CONSTRUCT_PLUGIN"
   fi
-}
-
-# add_mcp NAME COMMAND...: registers a user-scope MCP server unless it exists.
-add_mcp() {
-  local name=$1
-  shift
-  if run claude mcp get "$name" >/dev/null 2>&1; then
-    skipped "MCP server $name (already registered)"
-  else
-    say "Registering the $name MCP server"
-    # Optional, like the npm step: a failure must not stop the settings merge.
-    if ! run claude mcp add --scope user "$name" -- "$@"; then
-      warn "claude mcp add for the $name MCP server failed; register it later with: claude mcp add --scope user $name -- $*"
-      return
-    fi
-    installed "MCP server $name"
-  fi
-}
-
-setup_mcp() {
-  if [ "$WITH_MCP" = 0 ]; then
-    skipped "codegraph MCP server (--no-mcp)"
-    return
-  fi
-  if has codegraph; then
-    skipped "codegraph CLI (already installed)"
-  else
-    say "Installing the codegraph CLI"
-    # Optional: a failure here must not stop the settings merge that follows.
-    if ! run npm install -g "$CODEGRAPH_PACKAGE"; then
-      warn "npm install -g $CODEGRAPH_PACKAGE failed, so the codegraph MCP server was skipped; fix npm's global prefix and rerun, or rerun with --no-mcp"
-      return
-    fi
-    installed "codegraph CLI"
-  fi
-  add_mcp codegraph codegraph serve --mcp
 }
 
 # settings_tool MODE: "check" only validates ~/.claude/settings.json; "merge"
@@ -299,13 +264,12 @@ summary() {
 }
 
 main() {
-  WITH_MCP=1
   FORCE=0
   BACKUP=""
   local arg
   for arg in "$@"; do
     case "$arg" in
-      --no-mcp) WITH_MCP=0 ;;
+      --no-mcp) ;; # deprecated no-op, kept so old install commands still work
       --force) FORCE=1 ;;
       -h | --help)
         usage
@@ -323,9 +287,9 @@ main() {
   fi
   preflight
   note_engram
+  note_codegraph
   add_marketplace "$CONSTRUCT_REPO" "$CONSTRUCT_REF"
   install_plugin
-  setup_mcp
   merge_settings
   summary
 }

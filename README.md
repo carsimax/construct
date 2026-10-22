@@ -22,7 +22,7 @@ Construct is a Claude Code plugin that makes every request follow Organic Driven
 | Requirement | Why |
 |---|---|
 | Claude Code 2.1.304 or later, signed in | The panel is a mod, and the panel needs 2.1.304. Tested on 2.1.304 |
-| Node.js 22.16 or later (Node 23 is not supported), with npm | The plugin's scripts and hooks, and the memory's `node:sqlite` with FTS5. Claude Code's native install does not bundle Node.js |
+| Node.js 22.16 or later (Node 23 is not supported) | The plugin's scripts and hooks, and the memory's `node:sqlite` with FTS5. Claude Code's native install does not bundle Node.js |
 | `git` on the PATH | The review and publication hooks read the repository |
 
 ## Install
@@ -36,14 +36,13 @@ curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v4.0.1/install.s
 The installer checks the requirements above and stops before changing anything if one is missing, or if `~/.claude` or `~/.claude/settings.json` is not writable, or if `settings.json` is a directory. Then it runs the manual steps below for you:
 
 - Adds the construct marketplace and installs `construct@construct`.
-- Installs the CodeGraph CLI and registers the codegraph MCP server. If `npm install -g` fails, it warns, skips the server, and continues.
 - Merges into `~/.claude/settings.json`: one `permissions.allow` rule per non-destructive `construct-memory` command (`search`, `get`, `context`, `timeline`, `stats`, `doctor`, `suggest-topic-key`, `save`, `update`, `summary`, `review list`, `prompts`, `prompts --limit`, `prompts --search`, `pin`, `unpin`, `judge`, `judge-many`, `compare`, `help`; `delete`, `prompts delete`, `consolidate`, `import`, `export`, and `review done` still ask), and removes a `theme` of `custom:construct:construct` left by earlier versions (any other theme is left alone). Destructive commands run only in their exact form: any extra option or word is refused, which keeps the pre-approved prefixes from reaching them. An empty `settings.json` counts as `{}`. Other keys stay as they are, a symlinked file (even a dangling one, whose target is then created) is written through to its target with its mode kept, and the previous file is saved as `settings.json.bak-<timestamp>`.
 
-If engram is installed, the installer says Construct no longer needs it and removes nothing. Every step is skipped when it is already done, so running the installer again changes nothing. It never changes other permissions or your permission mode. The output style needs no setting: the plugin forces `Principal Engineer`, and an `outputStyle` you already have stays in the file but has no effect while construct is enabled.
+If engram or codegraph is installed, the installer says Construct no longer needs it and removes nothing. Every step is skipped when it is already done, so running the installer again changes nothing. It never changes other permissions or your permission mode. The output style needs no setting: the plugin forces `Principal Engineer`, and an `outputStyle` you already have stays in the file but has no effect while construct is enabled.
 
 | Option | Meaning |
 |---|---|
-| `--no-mcp` | Skip the CodeGraph CLI and the codegraph MCP server |
+| `--no-mcp` | Deprecated: has no effect. It is accepted so earlier install commands keep working, and will be removed in a later release |
 | `--force` | Deprecated: has no effect and prints a warning. It is accepted for now so scripted installs keep working, and will be removed in a later release |
 
 Pass options after `bash -s --`, for example `curl -fsSL <url> | bash -s -- --no-mcp`. To read the script before running it:
@@ -65,13 +64,11 @@ The manual steps the installer runs, for when you want to run them yourself:
    claude plugin install construct@construct
    ```
 
-   The installer (`install.sh`) pins this marketplace to the release tag (`carsimax/construct#v4.0.1`); the command above follows the default branch. A failed `claude mcp add` in the installer warns and the install continues.
+   The installer (`install.sh`) pins this marketplace to the release tag (`carsimax/construct#v4.0.1`); the command above follows the default branch.
 
-2. Optional: install the CodeGraph CLI and register the codegraph MCP server (see [MCP servers](#mcp-servers)).
+2. Optional: inside Claude Code, in `/config`, set each role's model and effort (rows such as `ODD Worker model`).
 
-3. Optional: inside Claude Code, in `/config`, set each role's model and effort (rows such as `ODD Worker model`).
-
-4. Check that it works. Open a session in any git repository:
+3. Check that it works. Open a session in any git repository:
 
    - Ask "what does your Construct contract say about Risk lines?". The answer quotes the `Risk: item N` rule.
    - `/agents` lists the `construct:` agents, such as `construct:odd-worker` and `construct:review-risk`.
@@ -110,7 +107,6 @@ Options are plugin settings, edited in `/config`:
 |---|---|
 | Model and effort per role | See the routing table below |
 | `panel_open_on_start` (boolean, default `true`) | Open the panel at every session start |
-| `codegraph_auto_index` (boolean, default `false`) | Index a git root with CodeGraph at session start (see [MCP servers](#mcp-servers)) |
 
 ### Agents and model routing
 
@@ -170,16 +166,9 @@ The hook fails open on unreadable input or any internal error; a well-formed lau
 
 ### MCP servers
 
-The plugin ships no MCP servers, so it never duplicates servers you already registered (duplicates would load every tool twice). The agents and the `codegraph` skill expect this user-scope server. Install the CodeGraph CLI, then register the server once:
+Construct needs no MCP server and ships none. Structural questions (architecture, call flow, references, impact) use the native `LSP` tool when a language server is available, and Grep, Glob, and Read otherwise.
 
-```bash
-npm install -g @colbymchenry/codegraph
-claude mcp add-json --scope user codegraph '{"type":"stdio","command":"codegraph","args":["serve","--mcp"],"alwaysLoad":true}'
-```
-
-`alwaysLoad: true` keeps `codegraph_explore` loaded from the first prompt instead of deferred behind tool search (`claude mcp add` has no flag for it, hence `add-json`). To skip permission prompts, add `"mcp__codegraph__*"` to `permissions.allow` in `~/.claude/settings.json`. Indexing stays your decision: agents never run `codegraph init`, so run `codegraph init` in each project you want indexed, or opt in to automatic indexing with the plugin option `codegraph_auto_index` (boolean, default `false`). When it is on and a session starts in a git root with no `.codegraph/` and `codegraph` on the PATH, the SessionStart hook launches `codegraph init --yes <root>` detached in the background on a fresh startup only (it never waits), says the launch was requested and may still fail, and tells the agent to use file tools until `codegraph status` reports the index complete; on resume, clear, or compact it never relaunches and gives the manual notice, noting an earlier automatic init may have failed; with the CLI missing, the notice says so. An optional `codegraph.json` at the repo root tunes the index (`exclude`, `include`, `deprioritize`). The MCP server auto-syncs on file changes and exposes only `codegraph_explore`.
-
-The installer no longer registers context7. An earlier registration can be removed with `claude mcp remove --scope user context7`.
+The installer no longer registers context7 or codegraph. Earlier registrations can be removed with `claude mcp remove --scope user context7` and `claude mcp remove --scope user codegraph` (the codegraph CLI itself, if you installed it with npm, is `npm uninstall -g @colbymchenry/codegraph`).
 
 ### Memory
 
@@ -254,7 +243,7 @@ Both `PostToolUse` signals fail open (no output, exit 0).
 
 The mod draws one thing: a docked **panel** (a `Pane` with id `construct`) laid out as [claude-flightdeck](https://github.com/scasella/claude-flightdeck) cards and adapted to the ODD flow: one column at any width, no header or legend, `round` bordered cards, the bold title on the left and the status on the right. The band above the prompt is not drawn. It needs Claude Code 2.1.304 or later and does not appear in `claude -p` runs, which draw no interface.
 
-**Commands and opening.** `/construct` opens the panel, `/construct close` closes it, and `/construct doctor` prints a setup report instead: one line per check, `✓ label` or `✗ label — hint`, for Claude Code 2.1.304 or later, Node 22.16 or later, memory (`node:sqlite` with FTS5 trigram), a CodeGraph index (`.codegraph/`) at the project root. The checks run in parallel with a 3 s timeout each, and a failed check shows as `✗` and never throws. The panel opens at every session start; to turn that off, set the plugin option `panel_open_on_start` (boolean, default `true`) to `false`.
+**Commands and opening.** `/construct` opens the panel, `/construct close` closes it, and `/construct doctor` prints a setup report instead: one line per check, `✓ label` or `✗ label — hint`, for Claude Code 2.1.304 or later, Node 22.16 or later, memory (`node:sqlite` with FTS5 trigram). The checks run in parallel with a 3 s timeout each, and a failed check shows as `✗` and never throws. The panel opens at every session start; to turn that off, set the plugin option `panel_open_on_start` (boolean, default `true`) to `false`.
 
 **Width.** The panel asks for 66 columns when it opens (`columns: 66` on `ui.open`). That is a request, not a guarantee: a width you drag or keep wins, and the layout reads the real width (never below 40). Rows that do not fit are clipped, and the changes card keeps only the file rows that fit the pane height.
 

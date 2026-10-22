@@ -57,7 +57,7 @@ Many tests cross-check text against code, so a change in one place usually needs
 |---|---|
 | An agent (add or remove) | The S6 table in `tests/agents-config.test.mjs`, the `userConfig` options in `plugins/construct/.claude-plugin/plugin.json`, and the agent table in `README.md` |
 | A skill (add or remove) | `EXPECTED` in `tests/skills.test.mjs`; relative links inside skills must resolve |
-| A contract text | Every construct component it names must exist. The injected session text, including the CodeGraph notice, stays at or under 8,000 characters (`tests/contract.test.mjs` checks every notice variant with long project paths). `hooks/contract/session.md` is near 7,300 characters injected, so measure with `node plugins/construct/hooks/scripts/contract.mjs session </dev/null | wc -c` and rewrite text in place instead of appending |
+| A contract text | Every construct component it names must exist. The injected session text stays at or under 8,000 characters (`tests/contract.test.mjs`). `hooks/contract/session.md` is near 7,300 characters injected, so measure with `node plugins/construct/hooks/scripts/contract.mjs session </dev/null | wc -c` and rewrite text in place instead of appending |
 | A command, option, or message | Its help text and `README.md`, together (the `construct-memory` commands: `plugins/construct/bin/construct-memory`, its README Memory section, and `skills/memory/SKILL.md`) |
 | The lens mapping (`LENSES_BY_RISK` in `hooks/scripts/review-lenses.mjs`) | The table in `skills/rdd-review/SKILL.md`; `tests/skills.test.mjs` compares them |
 | A hook | Register it in exec form (`command: "node"`, `args: [...]`); tests check this |

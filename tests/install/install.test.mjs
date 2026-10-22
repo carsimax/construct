@@ -53,20 +53,15 @@ esac
 case "$1 $2" in
   "plugin list") cat "$STUB_STATE/plugins" 2>/dev/null; exit 0 ;;
   "plugin install") echo "  ❯ $3" >> "$STUB_STATE/plugins"; exit 0 ;;
-  "mcp get") grep -qx "$3" "$STUB_STATE/mcps" 2>/dev/null; exit $? ;;
-  "mcp add") [ -n "$STUB_MCP_FAIL" ] && { echo "mcp add failed" >&2; exit 1; }; echo "$5" >> "$STUB_STATE/mcps"; exit 0 ;;
 esac
 exit 0`,
-  npm: `
-if [ -n "$STUB_NPM_FAIL" ]; then echo "npm error code EACCES" >&2; exit 243; fi
-if [ "$1 $2" = "install -g" ]; then cp "$STUB_STATE/codegraph-stub" "$(dirname "$0")/codegraph"; chmod +x "$(dirname "$0")/codegraph"; fi`,
 }
 
 // Each stub logs its call and then drains stdin, so a call that inherits the
 // piped script would swallow the rest of it.
 const stub = (name, body) => `#!/bin/bash\necho "${name} $*" >> "$STUB_LOG"\n${body}\ncat >/dev/null\n`
 
-function sandbox({ engram = false, node = true } = {}) {
+function sandbox({ engram = false, codegraph = false, node = true } = {}) {
   const root = scratchDir('construct-install-')
   const bin = join(root, 'bin')
   const state = join(root, 'state')
@@ -77,9 +72,8 @@ function sandbox({ engram = false, node = true } = {}) {
     chmodSync(join(dir, name), 0o755)
   }
   put(bin, 'claude', stub('claude', STUBS.claude))
-  put(bin, 'npm', stub('npm', STUBS.npm))
-  put(state, 'codegraph-stub', stub('codegraph', ''))
   if (engram) put(bin, 'engram', stub('engram', ''))
+  if (codegraph) put(bin, 'codegraph', stub('codegraph', ''))
   // Not logged: settings_tool calls node too. STUB_NODE_VERSION fakes `node -p`; STUB_NODE_NOSQLITE fails `node -e` (the probe).
   if (node) {
     put(bin, 'node', `#!/bin/bash
@@ -119,11 +113,9 @@ test('a clean machine gets every tool, in order, and the Construct settings', ()
   const box = sandbox()
   const run = install(box)
   assert.equal(run.status, 0, run.stderr)
-  assert.deepEqual(run.calls.filter((c) => !/--version|list|mcp get/.test(c)), [
+  assert.deepEqual(run.calls.filter((c) => !/--version|list/.test(c)), [
     'claude plugin marketplace add carsimax/construct#v4.0.1',
     'claude plugin install construct@construct',
-    'npm install -g @colbymchenry/codegraph@1.6.2',
-    'claude mcp add --scope user codegraph -- codegraph serve --mcp',
   ])
   assert.ok(!run.calls.some((c) => /context7/.test(c)), 'context7 is never registered')
   assert.deepEqual(readSettings(box), {
@@ -175,24 +167,6 @@ test('the merge keeps the file mode of settings.json', () => {
   const run = install(box)
   assert.equal(run.status, 0, run.stderr)
   assert.equal(statSync(settingsPath(box)).mode & 0o777, 0o600)
-})
-
-test('a failed codegraph install warns and still merges the settings', () => {
-  const box = sandbox()
-  const run = install(box, [], { STUB_NPM_FAIL: '1' })
-  assert.equal(run.status, 0, run.stderr)
-  assert.match(run.stderr, /codegraph.*--no-mcp/)
-  assert.deepEqual(run.calls.filter((c) => /^claude mcp add --scope user codegraph/.test(c)), [])
-  assert.equal(readSettings(box).theme, undefined)
-})
-
-test('a failed MCP registration warns and still merges the settings and prints the summary', () => {
-  const box = sandbox()
-  const run = install(box, [], { STUB_MCP_FAIL: '1' })
-  assert.equal(run.status, 0, run.stderr)
-  assert.match(run.stderr, /for the codegraph MCP server failed/)
-  assert.deepEqual(readSettings(box).permissions.allow, MEMORY_RULES)
-  assert.match(run.stdout, /codegraph CLI/)
 })
 
 test('MIN_CLAUDE and MIN_NODE match the doctor minimums', () => {
@@ -264,7 +238,7 @@ test('a second run changes nothing and installs nothing', () => {
   const settings = readFileSync(settingsPath(box), 'utf8')
   const second = install(box)
   assert.equal(second.status, 0, second.stderr)
-  const writes = second.calls.filter((c) => /^(brew|npm install|engram|claude plugin (install|marketplace add)|claude mcp add)/.test(c))
+  const writes = second.calls.filter((c) => /^(brew|npm|engram|codegraph|claude (plugin (install|marketplace add)|mcp))/.test(c))
   assert.deepEqual(writes, [])
   assert.equal(readFileSync(settingsPath(box), 'utf8'), settings)
   assert.deepEqual(backups(box), [])
@@ -279,12 +253,28 @@ test('a marketplace whose name only starts with the repository is not counted as
   assert.ok(run.calls.some((c) => /^claude plugin marketplace add carsimax\/construct#/.test(c)), 'construct marketplace is added')
 })
 
-test('--no-mcp leaves the codegraph MCP server and CLI alone', () => {
+test('--no-mcp is accepted, deprecated, and changes nothing', () => {
   const box = sandbox()
-  const run = install(box, ['--no-mcp'])
+  const plain = install(box)
+  const again = install(sandbox(), ['--no-mcp'])
+  assert.equal(again.status, 0, again.stderr)
+  assert.deepEqual(again.calls, plain.calls)
+  assert.equal(again.stdout.replace(/^.*Backup.*$/m, ''), plain.stdout.replace(/^.*Backup.*$/m, ''))
+  assert.match(install(box, ['--help']).stdout, /--no-mcp\s+Deprecated/)
+})
+
+test('an existing codegraph is left alone: one line says it is not needed, and no npm or mcp command runs', () => {
+  const box = sandbox({ codegraph: true })
+  const run = install(box)
   assert.equal(run.status, 0, run.stderr)
-  assert.match(run.stdout, /codegraph MCP server \(--no-mcp\)/)
-  assert.deepEqual(run.calls.filter((c) => /^(npm|claude mcp)/.test(c)), [])
+  assert.equal(run.stdout.split('\n').filter((l) => /codegraph.*no longer needs it/i.test(l) || /Construct no longer needs codegraph/i.test(l)).length, 1)
+  assert.match(run.stdout, /claude mcp remove --scope user codegraph/)
+  assert.deepEqual(run.calls.filter((c) => /^(npm|codegraph|claude mcp)/.test(c)), [])
+})
+
+test('without codegraph nothing about it is printed', () => {
+  const run = install(sandbox())
+  assert.doesNotMatch(run.stdout + run.stderr, /codegraph/i)
 })
 
 test('preflight stops before any change when a requirement is missing or too old', () => {
