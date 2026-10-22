@@ -20,6 +20,7 @@ import {
   onTurnStep,
   onUnblocked,
 } from './panel/state.js'
+import { parseMemoryStats } from './status/memory.js'
 import { checkClaude, checkCodegraph, checkMemory, checkNode, formatReport, MEMORY_PROBE, memoryDoctorRows } from './status/doctor.js'
 import { activeWork } from './status/tasks.js'
 import { parseGitStatus, parseNumstat, parseRevParse } from './status/data.js'
@@ -132,7 +133,7 @@ async function readDocs($, root) {
 // Gathers everything the panel caches. Each source fails on its own: a gap leaves its segment out.
 async function collect($) {
   // The plugin forces its output style, which overrides settings.outputStyle
-  const data = { git: null, changes: [], root: null, odd: null }
+  const data = { git: null, changes: [], root: null, odd: null, memory: null }
   let cwd
   try {
     cwd = await $.session.cwd()
@@ -152,6 +153,8 @@ async function collect($) {
   if (root) {
     data.odd = activeWork(await readDocs($, root))
   }
+  // Only inside a git repository (the CLI would fail anyway); a gap leaves the card out.
+  data.memory = rev?.root ? await memoryStats($, rev.root) : { off: 'not a git repository' }
   return data
 }
 
@@ -216,6 +219,7 @@ async function drawPane($, e, next) {
     git: data?.git ?? null,
     changes: data?.changes ?? [],
     odd: data?.odd ?? null,
+    memory: data?.memory ?? null,
     nowMs: live.nowMs,
     columns: e.props?.bodyColumns,
     rows: e.props?.scroll?.bodyRows,
@@ -249,11 +253,18 @@ async function probe(read) {
 // stdout of the plugin's own `construct-memory doctor --json`, or null. It exits 1 when a check fails but still
 // prints the list, so the exit code is not read here (runText would drop that output).
 async function memoryDoctor($, cwd) {
-  return probe(async () => {
-    // shortcut: pathname breaks on Windows drive-letter paths (/C:/...), switch to fileURLToPath if Windows is supported
-    const bin = decodeURIComponent(new URL('../bin/construct-memory', import.meta.url).pathname)
-    return (await $.process.run(['node', bin, 'doctor', '--json'], { cwd, timeoutMs: GIT_MS })).stdout
-  })
+  return probe(async () => (await $.process.run(['node', memoryBin(), 'doctor', '--json'], { cwd, timeoutMs: GIT_MS })).stdout)
+}
+
+// shortcut: pathname breaks on Windows drive-letter paths (/C:/...), switch to fileURLToPath if Windows is supported
+const memoryBin = () => decodeURIComponent(new URL('../bin/construct-memory', import.meta.url).pathname)
+
+// The memory card's data (S20): `construct-memory stats --json` for this session. The exit code and stderr
+// are read (not runText) to tell memory being off from a failed run; null leaves the card out.
+async function memoryStats($, cwd) {
+  const session = await probe(async () => $.session.id())
+  const argv = ['node', memoryBin(), 'stats', '--json', ...(session ? ['--session', session] : [])]
+  return parseMemoryStats(await probe(() => $.process.run(argv, { cwd, timeoutMs: GIT_MS })))
 }
 
 // /construct doctor (S8): every probe runs in parallel with a 3 s timeout (GIT_MS), so the report comes back

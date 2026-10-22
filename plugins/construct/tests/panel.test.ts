@@ -25,6 +25,7 @@ function world($, on, o: any = {}) {
   on('session.usage', () => value({ startedAt: 0, context: { window: 200000, tokens: 66000, percent: 33 }, rateLimits: o.rateLimits ?? [], cost: { usd: o.cost ?? 1 } }))
   on('session.model', () => value('claude-opus-4'))
   on('session.cwd', () => value('/home/me/proj'))
+  on('session.id', () => value('sess-1'))
   on('settings.read', () => (o.hang?.() ? new Promise(() => {}) : value(o.settings ?? {})))
   on('env.get', () => value('/home/me'))
   on('fs.exists', () => value(o.exists ?? false))
@@ -521,4 +522,40 @@ test('the blocked-state wiring passes tool.check and tool.call results through u
   expect((await $.tool.check(CALL)).decision).toBe('ask')
   const r = await $.tool.call({ tool: 'AskUserQuestion' })
   expect(r.text).toBe('ok')
+})
+
+// ---- MEMORY card (S20) ----
+
+const STATS = JSON.stringify({ observations: 7, deleted: 0, needing_review: 1, pinned: 2, sessions: 1, prompts: 0, bytes: 1, pending_relations: 3, last_save_at: new Date(NOW - 120_000).toISOString(), session_saves: 4 })
+const memoryRun = (reply: (a: string[]) => any) => (a: string[]) => (String(a[1]).endsWith('construct-memory') && a[2] === 'stats' ? reply(a) : a[0] === 'git' && a.includes('rev-parse') ? ok('/home/me/proj\n.git\n.git\n') : { ...ok(''), exitCode: 1 })
+
+test('the memory card shows the stats read from construct-memory with the session id', async ($, on) => {
+  const argvs: string[][] = []
+  await start($, on, { run: memoryRun((a) => (argvs.push(a), ok(STATS))) })
+  const p = await pane($)
+  await p.redraw()
+  const text = await joined(p)
+  expect(argvs[0].slice(2)).toEqual(['stats', '--json', '--session', 'sess-1'])
+  expect(text).toContain('7 memories')
+  expect(text).toContain('1 to review')
+  expect(text).toContain('2 pinned')
+  expect(text).toContain('3 pending')
+  expect(text).toContain('last save 2m ago')
+  expect(text).toContain('+4 this session')
+})
+
+test('a failing memory run leaves the card out', async ($, on) => {
+  await start($, on, { run: memoryRun(() => ({ ...ok(''), exitCode: 1, stderr: 'boom' })) })
+  const p = await pane($)
+  await p.redraw()
+  expect(await joined(p)).not.toContain('MEMORY')
+})
+
+test('a missing node:sqlite shows why memory is off', async ($, on) => {
+  await start($, on, { run: memoryRun(() => ({ ...ok(''), exitCode: 1, stderr: 'construct-memory: memory needs node:sqlite with FTS5' })) })
+  const p = await pane($)
+  await p.redraw()
+  const text = await joined(p)
+  expect(text).toContain('MEMORY')
+  expect(text).toContain('memory unavailable (Node 22.16+)')
 })

@@ -648,9 +648,12 @@ function makeStore(db, path, now, repoName) {
     },
 
     // stats counts what the store holds; size is the database's pages in bytes.
-    stats() {
+    stats({ session } = {}) {
       const n = (sql, ...args) => one(sql, ...args).n
       return {
+        ...(session === undefined ? {} : { session_saves: n('SELECT count(*) AS n FROM observations WHERE deleted_at IS NULL AND session_id = ?', String(session)) }),
+        pending_relations: n("SELECT count(*) AS n FROM memory_relations WHERE status = 'pending'"),
+        last_save_at: one('SELECT max(updated_at) AS t FROM observations WHERE deleted_at IS NULL').t ?? null,
         observations: n('SELECT count(*) AS n FROM observations WHERE deleted_at IS NULL'),
         deleted: n('SELECT count(*) AS n FROM observations WHERE deleted_at IS NOT NULL'),
         needing_review: n('SELECT count(*) AS n FROM observations WHERE deleted_at IS NULL AND review_after IS NOT NULL AND review_after <= ?', stamp()),

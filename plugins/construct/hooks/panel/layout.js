@@ -32,6 +32,7 @@
 //   main     model, idle/busy, effort meter, mode, requests, ctx gauge, 5h and 7d
 //   ODD      hidden without a feature: feature, current task, one checkpoint per task
 //   GATE     stacked verdict bar, allowed / decider / pending / denied, buckets, last denied, inline alert
+//   MEMORY   `N memories`: to review (amber), pinned, pending relations; last save and saves this session
 //   agents   `N running · M total`; one row per agent: mark, short name, routed model and effort, elapsed
 //   changes  titled with the branch, `↑N ↓N` on the right, one row per changed file
 //            (`+added -removed`), rows clamped by changeRows with a `+N more` row when cut
@@ -258,6 +259,32 @@ function gateCard({ gate, inline, mode, width }) {
   return card({ title: 'GATE · permissions', status: { text: `${total} checks`, dim: true }, color: PALETTE.gate, children: rows, width })
 }
 
+// ---- MEMORY card (S20) ------------------------------------------------------------
+
+// `memory` is parseMemoryStats's result: the counts, `{ off }` with a reason, or null (card left out).
+function memoryCard(memory, nowMs, width) {
+  if (!memory) return null
+  const iw = width - 4
+  const color = PALETTE.cleared
+  const mem = (status, rows) => card({ title: 'MEMORY', status, color, children: rows, width })
+  if (typeof memory.off === 'string') return mem(null, [line(dim(fit(stripControl(memory.off), iw)))])
+  if (memory.memories === 0) return mem({ text: '0 memories', dim: true }, [line(dim('no memories yet'))])
+  const parts = [`${memory.review} to review`, `${memory.pinned} pinned`, `${memory.pending} pending`]
+  const flat = parts.join(' · ')
+  // Too narrow for the colored pieces: one clipped plain row.
+  const counts =
+    flat.length > iw
+      ? line(dim(fit(flat, iw)))
+      : line(text(parts[0], memory.review > 0 ? { color: PALETTE.amber } : { dim: true }), dim(` · ${parts[1]} · ${parts[2]}`))
+  const rows = [counts]
+  const saved = typeof memory.lastSaveAt === 'string' ? Date.parse(memory.lastSaveAt) : NaN
+  // fmtResetIn formats a span: the same distance mirrored before `now` reads as the age.
+  const age = Number.isNaN(saved) ? '' : fmtResetIn(2 * nowMs - saved, nowMs)
+  const last = [age ? `last save ${age} ago` : null, isNum(memory.sessionSaves) ? `+${memory.sessionSaves} this session` : null].filter(Boolean)
+  if (last.length > 0) rows.push(line(dim(fit(last.join(' · '), iw))))
+  return mem({ text: `${memory.memories} memories`, color }, rows)
+}
+
 // ---- agents (S1) -----------------------------------------------------------------
 
 const AGENT_MARK = { running: ['◐', PALETTE.agent], done: ['✓', PALETTE.gate], failed: ['✗', PALETTE.warn] }
@@ -375,7 +402,7 @@ function changesCard({ git, changes, rows, used, width }) {
 // the Pane's bodyColumns and scroll.bodyRows. `usage` is `$.session.usage()`, `model` and `effort` are
 // the fallbacks for a main thread that has not made a request yet (the state's `main` wins). `git` is parseGitStatus's result (branch, ahead, behind)
 // and `changes` the changed files ({ path, added, removed, binary, untracked }) for the changes card.
-export function buildPanel({ panel, usage, odd, nowMs, columns, rows, model, effort, git, changes }) {
+export function buildPanel({ panel, usage, odd, memory, nowMs, columns, rows, model, effort, git, changes }) {
   const state = panel ?? {}
   const width = isNum(columns) && columns > 0 ? Math.max(MIN_COLUMNS, Math.floor(columns)) : PANEL_COLUMNS
   const busy = mainBusy(state)
@@ -391,6 +418,7 @@ export function buildPanel({ panel, usage, odd, nowMs, columns, rows, model, eff
   push(mainCard({ main, usage, model: name, busy, phase, blocked: state.blocked === true, compactions: state.compactions ?? 0, branch: git?.branch, width, nowMs }))
   push(oddCard(odd, width))
   push(gateCard({ gate: state.gate, inline: state.inline, mode: state.main?.mode, width }))
+  push(memoryCard(memory, nowMs, width))
   push(agentsCard(state, nowMs, width))
   const used = children.reduce((n, k) => n + height(k), 0)
   push(changesCard({ git, changes, rows, used, width }))

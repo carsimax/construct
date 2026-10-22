@@ -21,7 +21,7 @@ const USAGE = `usage: construct-memory <command> [options]
   suggest-topic-key                 JSON on stdin: type, title, content; prints a topic key such as bug/fix-login, writes nothing
   timeline <id> [--before N] [--after N]  the observations around one in its session (default 5 and 5), the focus marked with >
   pin <id> | unpin <id>             pinned observations always load in the session context and rank higher in search
-  stats                             counts of observations, sessions, prompts, and the database size
+  stats [--json] [--session <id>]   counts of observations, sessions, prompts, pending relations, last save, and the database size
   doctor [--json]                   read-only health checks (schema, integrity, search indexes, WAL, writable); exit 1 when one fails
   judge <judgment-id> <relation> [--reason T] [--evidence T] [--confidence 0..1]  record a verdict on a candidate printed after save (re-judging overwrites)
   judge-many                        JSON array on stdin (1-32 of judgment_id, relation, reason, evidence, confidence); all or nothing
@@ -220,7 +220,8 @@ async function main(argv) {
         return `${command}ned #${id}\n`
       }
       case 'stats': {
-        const s = store.stats()
+        const s = store.stats({ session: values.session })
+        if (values.json) return `${JSON.stringify(s)}\n`
         return `${[
           `observations: ${s.observations}`,
           `soft-deleted observations: ${s.deleted}`,
@@ -229,6 +230,9 @@ async function main(argv) {
           `sessions: ${s.sessions}`,
           `prompts: ${s.prompts}`,
           `database size: ${s.bytes} bytes`,
+          `pending relations: ${s.pending_relations}`,
+          `last save: ${s.last_save_at ?? 'never'}`,
+          ...(s.session_saves === undefined ? [] : [`saved this session: ${s.session_saves}`]),
         ].join('\n')}\n`
       }
       case 'doctor': {

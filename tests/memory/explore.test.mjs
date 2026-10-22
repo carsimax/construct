@@ -232,7 +232,7 @@ describe('stats', () => {
     store.remove(b)
     store.remove(c, { hard: true })
     const s = store.stats()
-    assert.deepEqual({ ...s, bytes: 0 }, { observations: 2, deleted: 1, needing_review: 0, pinned: 1, sessions: 1, prompts: 2, bytes: 0 })
+    assert.deepEqual({ ...s, bytes: 0 }, { observations: 2, deleted: 1, needing_review: 0, pinned: 1, sessions: 1, prompts: 2, bytes: 0, pending_relations: 0, last_save_at: '2026-01-15T12:00:00.000Z' })
     assert.ok(s.bytes > 0)
   })
 
@@ -248,12 +248,42 @@ describe('stats', () => {
     assert.equal(store.stats().needing_review, 1)
   })
 
+  test('pending relations, last save, and saves in one session (S20)', () => {
+    const { store } = open()
+    assert.equal(store.stats().last_save_at, null)
+    assert.equal(store.stats({ session: 's1' }).session_saves, 0)
+    assert.equal('session_saves' in store.stats(), false)
+    store.save(note('cache layer design', { session_id: 's1' }), { candidates: true })
+    store.save(note('cache layer design notes', { session_id: 's1' }), { candidates: true })
+    store.save(note('other thing entirely', { session_id: 's2' }))
+    const gone = store.save(note('removed one', { session_id: 's1' })).id
+    store.remove(gone)
+    const s = store.stats({ session: 's1' })
+    assert.equal(s.session_saves, 2)
+    assert.equal(store.stats({ session: 's2' }).session_saves, 1)
+    assert.equal(s.pending_relations, 1)
+    assert.equal(s.last_save_at, '2026-01-15T12:00:00.000Z')
+  })
+
+  test('CLI stats --json prints the object, with --session', () => {
+    const { repo, store } = open()
+    store.save(plain('x', { session_id: 's1' }))
+    store.close()
+    const all = JSON.parse(ok(cli(repo, ['stats', '--json'])))
+    assert.equal(all.observations, 1)
+    assert.equal(all.pending_relations, 0)
+    assert.match(all.last_save_at, /^\d{4}-/)
+    assert.equal('session_saves' in all, false)
+    assert.equal(JSON.parse(ok(cli(repo, ['stats', '--json', '--session', 's1']))).session_saves, 1)
+    assert.equal(JSON.parse(ok(cli(repo, ['stats', '--json', '--session', 'nope']))).session_saves, 0)
+  })
+
   test('CLI prints one line per count', () => {
     const { repo, store } = open()
     store.save(plain('x'))
     store.close()
     const out = ok(cli(repo, ['stats']))
-    assert.match(out, /^observations: 1\nsoft-deleted observations: 0\nneeding review: 0\npinned observations: 0\nsessions: 0\nprompts: 0\ndatabase size: \d+ bytes\n$/)
+    assert.match(out, /^observations: 1\nsoft-deleted observations: 0\nneeding review: 0\npinned observations: 0\nsessions: 0\nprompts: 0\ndatabase size: \d+ bytes\npending relations: 0\nlast save: \d{4}-[^\n]+\n$/)
   })
 })
 
