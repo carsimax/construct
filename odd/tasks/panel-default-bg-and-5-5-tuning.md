@@ -18,7 +18,7 @@ Objective: a batch of small changes: drop the panel's fixed background, then Cla
 | T1 | S1 | Remove the panel's fixed background; update tests and README | odd-worker (parallel with T2) | none | done (RED 4 fail → GREEN 3 known fail; node --test 724/0) | f277689 |
 | T2 | S2 | Research and proposal list | odd-general + odd-explorer (parallel with T1) | none (read-only) | done (proposals in L4) | — |
 | T3 | S3, S6 | Panel `weight` and prettyModel tests | odd-worker (parallel with T4) | none | done (RED 3 new fail → GREEN 3 known fail; node --test 726/0) | 3e22991 |
-| T4 | S4, S5 | Contract 5.5 lines | odd-worker (parallel with T3) | item 6 (prompt behavior no test catches) | done (RED 2 fail → GREEN; node --test 726/0; session 7622/8000, subagent 2905/3000); verify pending | c71c899 |
+| T4 | S4, S5 | Contract 5.5 lines | odd-worker (parallel with T3) | item 6 (prompt behavior no test catches) | done (RED 2 fail → GREEN; node --test 726/0; session 7622/8000, subagent 2905/3000); S4 fix after verify | c71c899, 33853ed |
 
 ## Log
 
@@ -33,3 +33,4 @@ Objective: a batch of small changes: drop the panel's fixed background, then Cla
   - P5: per-role effort (all `medium`): measure with `scripts/eval.sh` before changing; Sonnet 5.5 at `medium` may skip verification. Risk item 3 if defaults change.
   - P6: tests for `prettyModel` with `claude-fable-5-1` and `claude-haiku-5-5`. Risk none.
 - **L5 (2026-10-21, user):** "si vamos con la primera tanda" (P1, P2, P3, P6 → S3–S6, T3–T4; P4 and P5 out of this batch).
+- **L6 (2026-10-21):** Review at 20219d4 (base 7210afd): `review-reliability` approved, no findings. `odd-verify`: S1, S3, S5, S6 pass; S4 fail: `subagent.md:15` "A change is done only after a real check ran" contradicts `agents/odd-worker.md:31,51` (docs-only exception); source scopes it to code that can be run, built, or type-checked, with an exit. T4 reopened for that fix. Follow-ups (advisory, not in this batch): "the prompt did not ask for" relies on the parent passing the Test-first section; the source's "mention it at the end instead of doing it" route is missing for features/docs/refactors; "stops only when blocked" vs the worker's two-attempt `partial` rule. Subagent text margin is ~95 chars.
