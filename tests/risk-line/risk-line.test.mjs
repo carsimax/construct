@@ -261,7 +261,7 @@ describe('audit fixes', () => {
     assert.equal(existsSync(join(dir, 'fresh.backstop')), true)
   })
 
-  test('check with a Risk line never calls git', () => {
+  test('check with a Risk line fails open when git fails', () => {
     const { repo, e } = changed()
     const shim = scratchDir('odd-git-shim-')
     const log = join(shim, 'calls')
@@ -273,6 +273,73 @@ describe('audit fixes', () => {
     })
     assert.equal(r.status, 0)
     assert.equal(r.stdout, '')
-    assert.equal(existsSync(log), false)
+  })
+})
+
+describe('verifier-weakening markers (S2)', () => {
+  const marked = (files, message = 'Done.\nRisk: none') => {
+    const { repo, e } = changed(files)
+    return { repo, e, r: check(repo, e, message) }
+  }
+
+  for (const [name, path, line] of [
+    ['it.skip', 'src/a.test.js', "it.skip('x', () => {})"],
+    ['describe.only', 'src/a.test.js', "describe.only('x', () => {})"],
+    ['test.todo', 'src/a.test.js', "test.todo('x')"],
+    ['xit', 'src/a.test.js', "xit('x', () => {})"],
+    ['pytest skip', 'tests/test_a.py', '@pytest.mark.skip(reason="x")'],
+    ['t.Skip', 'a_test.go', '\tt.Skip("x")'],
+    ['Not implemented stub', 'src/a.js', "throw new Error('Not implemented')"],
+    ['TODO comment', 'src/a.js', '// TODO fix later'],
+  ]) {
+    test(`${name} blocks even with a Risk line, naming path:line`, () => {
+      const { r } = marked({ [path]: `export const ok = 1\n${line}\n` })
+      assert.equal(r.json.decision, 'block')
+      assert.match(r.json.reason, new RegExp(`${path.replace(/\./g, '\\.')}:2`))
+      assert.match(r.json.reason, /Remove the marker/)
+    })
+  }
+
+  test('a marker inside a quoted string does not block', () => {
+    const { r } = marked({ 'src/a.test.js': `const fixture = "it.skip('x')"\nconst t = 'throw new Error("Not implemented")'\n` })
+    silent(r)
+  })
+
+  test('TODO in a Markdown file or a non-comment does not block', () => {
+    const { r } = marked({ 'docs/a.md': 'TODO: write\n', 'src/b.js': "const todo = 'TODO'\n" })
+    silent(r)
+  })
+
+  test('markers under odd/tasks are ignored', () => {
+    const { r } = marked({ 'odd/tasks/f.md': '// TODO x\nit.skip(1)\n' })
+    silent(r)
+  })
+
+  test('markers that predate the turn are not reported', () => {
+    const repo = makeRepo({ 'src/a.test.js': "it.skip('old', () => {})\n" })
+    const e = env()
+    silent(run('mark', repo, e))
+    applyFiles(repo, { 'src/b.js': 'export const b = 1\n' })
+    silent(check(repo, e, 'Done.\nRisk: none'))
+  })
+
+  test('at most three hits are named and a second Stop passes', () => {
+    const { repo, e, r } = marked({ 'src/a.test.js': ['it.skip(1)', 'it.skip(2)', 'it.skip(3)', 'it.skip(4)'].join('\n') + '\n' })
+    assert.equal(r.json.decision, 'block')
+    assert.equal((r.json.reason.match(/a\.test\.js:\d/g) ?? []).length, 3)
+    silent(check(repo, e, 'Done.\nRisk: none'))
+  })
+
+  test('stop_hook_active still wins', () => {
+    const { repo, e } = changed({ 'src/a.test.js': 'it.skip(1)\n' })
+    silent(check(repo, e, 'Done.\nRisk: none', { stop_hook_active: true }))
+  })
+
+  test('a marker and a missing Risk line give one block covering both', () => {
+    const { repo, e, r } = marked({ 'src/a.test.js': 'it.skip(1)\n' }, 'Done.')
+    assert.equal(r.json.decision, 'block')
+    assert.match(r.json.reason, /Risk: none/)
+    assert.match(r.json.reason, /a\.test\.js:1/)
+    silent(check(repo, e, 'Done.'))
   })
 })

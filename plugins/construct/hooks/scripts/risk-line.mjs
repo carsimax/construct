@@ -10,6 +10,16 @@ import { fileURLToPath } from 'node:url'
 import { dataDir, hasOpenSubagents, pruneState, readInput, safeName } from './hook-io.mjs'
 
 const MAX_PATHS = 3
+// Code-shaped markers of a weakened verifier, matched on one added line. Anchored to the line
+// start or a comment so a string literal in a fixture does not match; TODO needs a comment opener.
+const MARKERS = [
+  /^\s*(?:it|test|describe|context)\.(?:skip|only|todo)\(/,
+  /^\s*x(?:it|describe)\(/,
+  /^\s*@pytest\.mark\.skip/,
+  /^\s*t\.Skip\(/,
+  /^\s*throw new Error\(['"`]Not implemented/,
+]
+const TODO = /(?:\/\/|\/\*|#|--|^\s*\*).*\bTODO\b/
 // Optional list marker (-, *, +, 1., 1)) and emphasis around the label and the
 // value, then `none` or `item 1-6` that ends the line or is followed by
 // whitespace or `(`; the space after the colon is optional.
@@ -34,6 +44,28 @@ function readRecord(file) {
   return parsed
 }
 
+// markerHits returns `path:line` for each added line of a -U0 diff that carries a marker,
+// skipping odd/tasks/ and Markdown for TODO.
+function markerHits(diff) {
+  const hits = []
+  let path = null
+  let line = 0
+  for (const text of diff.split('\n')) {
+    if (text.startsWith('+++ ')) {
+      path = text.startsWith('+++ b/') ? text.slice(6) : null
+    } else if (text.startsWith('@@')) {
+      line = Number(/\+(\d+)/.exec(text)?.[1] ?? 0)
+    } else if (text.startsWith('+') && path !== null) {
+      const code = text.slice(1)
+      if (!path.startsWith('odd/tasks/') && (MARKERS.some((m) => m.test(code)) || (!path.endsWith('.md') && TODO.test(code)))) {
+        hits.push(`${path}:${line}`)
+      }
+      line++
+    }
+  }
+  return hits
+}
+
 async function main() {
   const mode = process.argv[2]
   const input = readInput()
@@ -43,11 +75,12 @@ async function main() {
   if (mode === 'check' && hasOpenSubagents(input.session_id)) return
 
   const { dir, file } = recordFile(input.session_id)
-  // Cheap exits first: a spent block, or a Risk line already present, needs no git.
+  // Cheap exit first: a spent block needs no git. A Risk line no longer does, because markers
+  // are blocked whatever the reply says.
   let record = null
   if (mode === 'check') {
     record = readRecord(file)
-    if (!record || record.blocked === true || RISK_LINE.test(input.last_assistant_message)) return
+    if (!record || record.blocked === true) return
   }
 
   const { repositoryRoot, freezeWorkingTree, git, headCommit, atomicWrite } = await import('./git-tree.mjs')
@@ -93,13 +126,29 @@ async function main() {
     .split('\0')
     .filter((path) => path !== '' && !path.startsWith('odd/tasks/'))
   if (paths.length === 0) return
+  const riskMissing = !RISK_LINE.test(input.last_assistant_message)
+  let hits = []
+  try {
+    hits = markerHits(git(root, ['-c', 'core.quotepath=off', 'diff', '--no-renames', '-U0', record.tree, candidateTree]).toString('utf8'))
+  } catch {
+    // Fail open on the marker scan.
+  }
+  if (!riskMissing && hits.length === 0) return
 
   // One block per turn: the next Stop of this turn finds the record spent.
   write({ ...record, blocked: true })
-  const named = paths.slice(0, MAX_PATHS).join(', ') + (paths.length > MAX_PATHS ? `, and ${paths.length - MAX_PATHS} more` : '')
-  const reason =
-    `Risk line missing: this turn changed ${named}. ` +
-    'End the final message with one line, `Risk: item N (reason)` for a high-risk item 1-6, or `Risk: none`.'
+  const list = (items) => items.slice(0, MAX_PATHS).join(', ') + (items.length > MAX_PATHS ? `, and ${items.length - MAX_PATHS} more` : '')
+  const reasons = []
+  if (riskMissing) {
+    reasons.push(
+      `Risk line missing: this turn changed ${list(paths)}. ` +
+        'End the final message with one line, `Risk: item N (reason)` for a high-risk item 1-6, or `Risk: none`.',
+    )
+  }
+  if (hits.length > 0) {
+    reasons.push(`Verifier-weakening marker added: ${list(hits)}. Remove the marker, or explain in the final message why it must stay.`)
+  }
+  const reason = reasons.join(' ')
   process.stdout.write(`${JSON.stringify({ decision: 'block', reason })}\n`)
 }
 
