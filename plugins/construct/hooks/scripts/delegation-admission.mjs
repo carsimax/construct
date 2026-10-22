@@ -194,10 +194,13 @@ function segmentsCompatible(a, b) {
   return affixesCompatible(a, b)
 }
 
+// A brace group that spans '/' cannot be compared position by position (its branches differ in depth), so such an entry overlaps everything.
+const spansSlash = (entry) => entry.split('/').some((segment) => (segment.match(/{/g) ?? []).length !== (segment.match(/}/g) ?? []).length)
+
 export function surfacesOverlap(a, b) {
   const left = normalizeEntry(a)
   const right = normalizeEntry(b)
-  if (left === undefined || right === undefined) return true
+  if (left === undefined || right === undefined || spansSlash(left) || spansSlash(right)) return true
   const as = left.split('/')
   const bs = right.split('/')
   for (let i = 0; i < Math.min(as.length, bs.length); i++) {

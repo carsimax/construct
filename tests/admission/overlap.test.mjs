@@ -31,8 +31,11 @@ describe('per-segment overlap', () => {
   })
   test('backslash and unbalanced braces stay conservative at their segment only', () => {
     assert.equal(surfacesOverlap('src/a\\b/x', 'src/z/x'), true)
-    assert.equal(surfacesOverlap('src/{a/x', 'src/z/y'), false)
-    assert.equal(surfacesOverlap('src/{a/x', 'src/z/x'), true)
-    assert.equal(surfacesOverlap('src/{a/x', 'lib/z/x'), false)
+  })
+  test('a brace group that spans / overlaps everything; a balanced one compares per segment', () => {
+    assert.equal(surfacesOverlap('src/{lib,gen/out/v1}/index.ts', 'src/lib/index.ts'), true)
+    assert.equal(surfacesOverlap('src/{a/x', 'lib/z/x'), true)
+    assert.equal(surfacesOverlap('src/{a,b}.js', 'src/a.js'), true)
+    assert.equal(surfacesOverlap('src/{a,b}.js', 'lib/a.js'), false)
   })
 })
