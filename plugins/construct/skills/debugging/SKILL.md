@@ -39,12 +39,12 @@ Adapted from addyosmani/agent-skills (MIT), `debugging-and-error-recovery`.
 ## Execution Steps
 
 1. **Stop and preserve.** Capture the failing command, full output, and environment.
-2. **Reproduce.** Run the smallest command that fails (one test, one file, in isolation to rule out test pollution). Use the repository's own test command, not an assumed runner.
+2. **Reproduce.** First `construct-memory search` the symptom or error text. Run the smallest command that fails (one test, one file, in isolation to rule out test pollution). Use the repository's own test command, not an assumed runner.
 3. **Localize.** Name the failing layer (UI, API, data, build, external service, or the test itself). For a regression, bisect with `git bisect run`.
 4. **Reduce.** Shrink input, config, and test to the smallest case that still fails.
 5. **Hand off the fix.** `construct:odd-worker` receives the minimal reproduction as the RED test, the evidence, the suspected root cause, and the allowed edit surfaces. It observes RED, fixes the cause, and observes GREEN.
 6. **Guard.** The regression test fails without the fix and passes with it. It asserts the observable behavior, not the implementation.
-7. **Verify end to end.** Run the focused test, then the full suite and build the repository defines. Confirm the original scenario, not only the new test.
+7. **Verify end to end.** Run the focused test, then the full suite and build the repository defines. Confirm the original scenario, not only the new test. Save the root cause with `construct-memory save` as type `bugfix`.
 8. **Resume** the interrupted work only after step 7 passes.
 
 ## Output Contract

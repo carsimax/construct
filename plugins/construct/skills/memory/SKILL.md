@@ -89,3 +89,12 @@ A subagent ends its final report with a `## Key Learnings:` section of numbered 
 `construct-memory import <file> --project <name>` loads one project of a file written by `engram export`. It is idempotent, so running it again inserts nothing new.
 
 `construct-memory export [file]` writes this repository's live memory as JSON (stdout, or a new file) for backup or to move it to another clone or machine; load it there with `import <file> --project <repository directory name>`.
+
+## Where memory is used
+
+- Session contract: Explore starts with `construct-memory search`; Close saves decisions, root causes, and conventions, and large work stores the session summary.
+- Subagent contract, `odd-worker`, `odd-general`, `odd-verify`, and `odd-explorer`: reports end with `## Key Learnings:`; the explorer also searches memory before mapping.
+- `odd-workflow` (explore, close, resume) and its `persistence.md`: resume reads the injected context, then searches the feature name.
+- `odd-delegation` and its handoff templates: the parent pastes search hits into an optional `## Memory` section.
+- `debugging`: search the symptom first; save the root cause as `bugfix`. `rdd-review`: a fixed rejection is saved as `bugfix`, a deferred advisory as `decision`.
+- `constraint-driven`: `quality/<rule>`. `migration`: `migration/<name>`.

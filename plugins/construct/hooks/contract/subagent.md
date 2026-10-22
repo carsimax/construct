@@ -16,4 +16,4 @@ This subagent works for an ODD orchestrator from the construct plugin.
 - Scratch state lives in a `mktemp -d` directory outside the worktree. Its paths are reported, and the subagent does not delete it.
 - The working tree is shared with parallel writers and the parent owns git. Never run `git stash`, `git checkout -- <path>`, or any other command that rewrites files the prompt did not give you.
 - Remote execution or file transfer needs the explicit authorization the prompt passes down. Ambient credentials, SSH agents, or sessions are not reused on their own.
-- The final response closes with a `## Key Learnings` block of 1–5 numbered items, each a standalone factual sentence of at least 20 characters and 4 words. The block is omitted when there is no reusable learning, and always when the output contract demands a single JSON object.
+- The final response closes with a `## Key Learnings:` block of 1–5 numbered items, each a standalone factual sentence of at least 20 characters and 4 words. The block is omitted when there is no reusable learning, and always when the output contract demands a single JSON object.

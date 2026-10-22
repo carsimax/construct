@@ -60,6 +60,7 @@ No tool checks the suppression and skipped-test items for you. Read the diff for
 5. **Place checks by cost**: seconds-level checks after an edit, test and coverage on changed lines at task end, everything else in CI. Scope to the diff.
 6. **Guard the bar** in review: compare `CONSTRAINTS.md` against the branch point; look for moved thresholds, easier tests, silenced checkers (including coverage, mutation, and security ignores), unfinished work, and unexplained exceptions.
 7. Check that at least one constraint is external (a scanner, browser measurement, or vulnerability database), not judged only by the project's own tests.
+8. Save each quality-bar decision with `construct-memory save` under `topic_key` `quality/<rule>`.
 
 ## Output Contract
 

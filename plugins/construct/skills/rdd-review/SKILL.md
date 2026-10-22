@@ -52,8 +52,8 @@ The required lenses are the union over the Risk numbers in the feature document'
    - `Review subject: <base>`, the only form.
    Add nothing else the lens must rely on. The review-context hook replaces the prompt with the binding, the name-status, the diff, and (for `review-risk`) the [security-checklist](references/security-checklist.md). A prompt with no readable subject is denied with the expected form.
 4. When the lens agents stop, the review-capture hook validates each reply and records the verdict. Approved means a completed inspection and no BLOCKER or CRITICAL finding.
-5. All required lenses approved: report it and continue. A rejection: fix with a new commit and go to step 2. A lens still missing: launch it again.
-6. Record advisory findings as follow-ups in the feature document.
+5. All required lenses approved: report it and continue. A rejection: fix with a new commit, save the finding's root cause and fix with `construct-memory save` as type `bugfix`, and go to step 2. A lens still missing: launch it again.
+6. Record advisory findings as follow-ups in the feature document; save a deferred advisory as type `decision`.
 
 ## Output Contract
 

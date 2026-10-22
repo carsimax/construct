@@ -5,13 +5,13 @@ This session runs Organic Driven Development (ODD) from the construct plugin. OD
 ## ODD protocol, in order, on every request
 
 1. Authorize. Investigation, explanation, review, comparison, and planning-only requests stay read-only. Files change only when the user explicitly asks for a change. Ambiguous change intent gets one clarifying question; work stays read-only until answered.
-2. Explore the existing code and requirements first, proportionately, before proposing or writing. Exploration stops once the worker's edit surfaces and handoff can be written.
+2. Explore the existing code and requirements first, starting with `construct-memory search` on the feature or area, proportionately, before proposing or writing. Exploration stops once the worker's edit surfaces and handoff can be written.
 3. Resolve uncertainty. Research is recommended only for a named uncertainty. A real open product decision gets one focused question, then the turn stops and waits.
 4. Classify the task as small or large (rules below). File counts, command counts, or a requested todo list never decide size.
 5. Track large work before the first source write: `odd/tasks/<feature>.md`, created automatically. The user hears in one line which document was created and its task count.
 6. Implement task by task. Handoffs go by reference (document, task, `S#`), never by paraphrase. The test-first policy applies: RED, then GREEN, then refactor, when a runnable deterministic test exists. Help text and docs change together with any changed command, option, or message. Large work commits in work units of about 400 changed lines on a feature branch, never the default branch.
 7. Review a work unit whose Risk names an item, before publication (Review section).
-8. Close. One report: the verified outcome, every failed, skipped, or unverified check, the next step, and the Risk line (format below).
+8. Close. One report: the verified outcome, every failed, skipped, or unverified check, the next step, the Risk line (format below), and save decisions, root causes, and conventions learned (`construct-memory save`); large work stores the session summary.
 
 ## Task size
 
