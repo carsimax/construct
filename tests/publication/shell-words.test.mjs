@@ -32,7 +32,7 @@ describe('redirection file descriptors are dropped', () => {
 
 describe('the gate does not read a descriptor as a refspec', () => {
   const HOOK = new URL('../../plugins/construct/hooks/scripts/publication-gate.mjs', import.meta.url).pathname
-  const TABLE = '# F\n\n## Tasks\n\n| ID | Specs | Task | Route | Risk | Status | Commit |\n|---|---|---|---|---|---|---|\n| T1 | S1 | w | odd-worker | 2 | done | `abc` |\n\n## Log\n\n- 1 | none | x\n'
+  const TABLE = '# F\n\n## Tasks\n\n| ID | Specs | Task | Route | Risk | Status | Commit |\n|---|---|---|---|---|---|---|\n| T1 | S1 | w | worker | 2 | done | `abc` |\n\n## Log\n\n- 1 | none | x\n'
   const repo = makeRepo({ 'src/app.js': 'a\n' })
   git(repo, 'checkout', '-q', '-b', 'feat/x')
   applyFiles(repo, { 'odd/tasks/f.md': TABLE, 'src/app.js': 'b\n' })

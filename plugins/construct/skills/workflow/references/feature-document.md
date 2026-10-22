@@ -19,7 +19,7 @@ Objective: <one line>. Branch: <feature branch>. Baseline: <commit before the fi
 
 | ID | Specs | Task | Route | Risk | Status | Commit |
 |---|---|---|---|---|---|---|
-| T1 | S1 | <one line> | odd-worker | none | pending | — |
+| T1 | S1 | <one line> | worker | none | pending | — |
 
 ## Log
 
@@ -36,7 +36,7 @@ Objective: <one line>. Branch: <feature branch>. Baseline: <commit before the fi
   - Mark assumptions as assumptions.
   - When the behavior is testable, add one or more `Given … When … Then …` lines to the `S#`. They are optional, never required, and never replace the user's quoted words.
 - **Tasks.**
-  - Give each task a stable ID, its linked `S#`, its route (`odd-worker`, and which units launch together), its status, and its commit or RED/GREEN evidence.
+  - Give each task a stable ID, its linked `S#`, its route (`worker`, and which units launch together), its status, and its commit or RED/GREEN evidence.
   - Plan about 400 authored changed lines per task as a heuristic only. It is not a cap, a stop, or a reason to split artificially.
 - **Log.**
   - `L1` is the original request, verbatim.

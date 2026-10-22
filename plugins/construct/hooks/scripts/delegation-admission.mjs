@@ -1,11 +1,11 @@
 // Delegation admission. PreToolUse on Agent denies a launch that breaks a rule,
 // with a reason naming what is missing and the expected form:
-//   - construct:odd-worker and construct:jd-fix-agent need a `## Allowed edit
+//   - construct:worker needs a `## Allowed edit
 //     surfaces` section of narrow repository-relative entries, a `Spec:
 //     odd/tasks/<f>.md, T<n>` line naming an existing regular file when an
 //     unfinished feature document exists, and surfaces that do not overlap those
 //     of a writer still open;
-//   - construct:odd-verify needs a `Risk: item N` line (N 1-6).
+//   - construct:verifier needs a `Risk: item N` line (N 1-6).
 // Other agents pass untouched, and an admitted launch prints nothing, so it never
 // conflicts with review-context.mjs (the hooks run in parallel; deny wins).
 // `stop` (SubagentStop) clears the stopped writer's record: it hashes the first

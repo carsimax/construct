@@ -144,7 +144,7 @@ describe('context hook', () => {
   })
 
   test('other agents pass through untouched', () => {
-    const r = hook(CONTEXT_HOOK, spawnInput(reviewed(), 'no subject here', 'construct:odd-worker'))
+    const r = hook(CONTEXT_HOOK, spawnInput(reviewed(), 'no subject here', 'construct:worker'))
     assert.equal(r.status, 0)
     assert.equal(r.stdout, '')
   })

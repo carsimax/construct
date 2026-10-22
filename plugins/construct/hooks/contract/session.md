@@ -1,6 +1,6 @@
 # Construct contract
 
-This session runs Organic Driven Development (ODD) from the construct plugin. ODD is the workflow for every request, without the user asking for it. Procedures live in skills, loaded when their topic comes up: `construct:odd-workflow` (protocol, feature document, tests, commits, resume), `construct:odd-delegation` (delegation), `construct:task-size-risk` (sizing, high-risk list, Risk line), `construct:lossless-prompts` (blocking questions), `construct:debugging` (failures and unexpected behavior), and `construct:constraint-driven` (the project's quality bar). Memory is built in: `construct:memory` and the `construct-memory` CLI (per repository). Structural codebase questions (architecture, call flow, references, impact) use the native `LSP` tool when a language server is available, otherwise Grep, Glob, and Read.
+This session runs Organic Driven Development (ODD) from the construct plugin. ODD is the workflow for every request, without the user asking for it. Procedures live in skills, loaded when their topic comes up: `construct:workflow` (protocol, feature document, tests, commits, resume), `construct:delegation` (delegation), `construct:task-size-risk` (sizing, high-risk list, Risk line), `construct:lossless-prompts` (blocking questions), `construct:debugging` (failures and unexpected behavior), and `construct:constraints` (the project's quality bar). Memory is built in: `construct:memory` and the `construct-memory` CLI (per repository). Structural codebase questions (architecture, call flow, references, impact) use the native `LSP` tool when a language server is available, otherwise Grep, Glob, and Read.
 
 ## ODD protocol, in order, on every request
 
@@ -21,7 +21,7 @@ A task is small when all three hold:
 - No high-risk item applies.
 - It is resumable from the original request plus `git diff` alone.
 
-Small work goes to one `construct:odd-worker` (one understood change may span files): it observes RED and runs the focused test; the parent runs the suite once. No feature document and no commits unless asked. Large means the resume test fails: several sessions, external waits, separate deliverables, or requirements too long to survive compaction.
+Small work goes to one `construct:worker` (one understood change may span files): it observes RED and runs the focused test; the parent runs the suite once. No feature document and no commits unless asked. Large means the resume test fails: several sessions, external waits, separate deliverables, or requirements too long to survive compaction.
 
 High risk means a mistake is hard to detect, hard to undo, or reaches beyond the change:
 
@@ -36,19 +36,19 @@ Every code change closes with `Risk: item N (reason)` or `Risk: none`. Before `R
 
 ## Delegation
 
-The parent orchestrates and never writes code. It reads, answers, plans, asks, runs checks, owns git, and writes only the feature document. Every write to repository code, tests, or docs goes to `construct:odd-worker`, whatever the size; writing it inline is a routing defect.
+The parent orchestrates and never writes code. It reads, answers, plans, asks, runs checks, owns git, and writes only the feature document. Every write to repository code, tests, or docs goes to `construct:worker`, whatever the size; writing it inline is a routing defect.
 
-- Writer: one `construct:odd-worker` per independent unit (code, tests, docs together). Disjoint units launch in one message; dependent units run in order. Its prompt includes `Spec: odd/tasks/<f>.md, T<n>`, `## Allowed edit surfaces` (one bare path or glob per line), `## Verification` commands, the test-first policy, and the helpers it must reuse. The parent checks the diff against the surfaces.
-- Mapping: needing more than one bounded batch or about 5 sequential lookups goes to `construct:odd-explorer`, one per independent front (max 3 per message); dependents wait. Each returns ~2k tokens, `path:line` cited. Spot check one claim each, then re-evaluate size.
-- Verification: only a change whose Risk line names a high-risk item gets one independent `construct:odd-verify` after its own checks, its prompt carrying `Risk: item N`. It receives the whole feature document and the baseline commit.
-- Long suites, builds, installs, and research can go to `construct:odd-general`.
+- Writer: one `construct:worker` per independent unit (code, tests, docs together). Disjoint units launch in one message; dependent units run in order. Its prompt includes `Spec: odd/tasks/<f>.md, T<n>`, `## Allowed edit surfaces` (one bare path or glob per line), `## Verification` commands, the test-first policy, and the helpers it must reuse. The parent checks the diff against the surfaces.
+- Mapping: needing more than one bounded batch or about 5 sequential lookups goes to `construct:explorer`, one per independent front (max 3 per message); dependents wait. Each returns ~2k tokens, `path:line` cited. Spot check one claim each, then re-evaluate size.
+- Verification: only a change whose Risk line names a high-risk item gets one independent `construct:verifier` after its own checks, its prompt carrying `Risk: item N`. It receives the whole feature document and the baseline commit.
+- Long suites, builds, installs, and research can go to `construct:general`.
 - Each role's model and effort come from the plugin configuration (`/config`). The routing mod applies them; prompts do not set models.
 
 Parent bash output stays bounded: counts, `--stat`, tails, or summaries.
 
 ## Review
 
-- Review is mandatory for high-risk work (`construct:rdd-review`); no switch, no consent. Lenses follow the task's Risk numbers.
+- Review is mandatory for high-risk work (`construct:review`); no switch, no consent. Lenses follow the task's Risk numbers.
 - Launch each required lens (for example `construct:review-risk`) with the line `Review subject: <base>`. Hooks build the evidence and record the verdict; never write either.
 - `git push`, `gh pr create`, and `gh release create` are denied until the required lenses approve. A rejection stands: fix with a new commit, review again.
 - An approval never authorizes delivery; commit, push, PR, and merge stay human decisions.

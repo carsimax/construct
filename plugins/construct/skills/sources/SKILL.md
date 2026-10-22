@@ -1,5 +1,5 @@
 ---
-name: source-driven
+name: sources
 description: "Ground framework- or version-specific code in official documentation: detect exact versions, fetch the one relevant page, implement the documented pattern, cite URL and version, flag what is unverified. Trigger: a named uncertainty about a library or framework API, a version-dependent pattern, or a deprecation question."
 license: MIT
 metadata:
@@ -9,7 +9,7 @@ metadata:
 
 ## Activation Contract
 
-Load this skill only for a named uncertainty (contract step 3): a specific API, pattern, or behavior whose correctness depends on a library or framework version. It is usually run by `construct:odd-general` as a read-only lookup; any code change that follows goes to `construct:odd-worker`. Skip it when correctness does not depend on a version (renames, moving files, plain logic) or when the repository already shows the pattern.
+Load this skill only for a named uncertainty (contract step 3): a specific API, pattern, or behavior whose correctness depends on a library or framework version. It is usually run by `construct:general` as a read-only lookup; any code change that follows goes to `construct:worker`. Skip it when correctness does not depend on a version (renames, moving files, plain logic) or when the repository already shows the pattern.
 
 ## Hard Rules
 
@@ -34,7 +34,7 @@ Load this skill only for a named uncertainty (contract step 3): a specific API, 
 
 1. **Detect**: read the manifest and lockfile for the exact versions (see `references/sources.md` for the file per ecosystem). State the stack found.
 2. **Fetch**: pick the highest source in the hierarchy (`references/sources.md`), and fetch the one page for the feature, preferring deep links with anchors.
-3. **Implement**: follow the documented pattern for that version. Check migration guides for deprecations. A write goes to `construct:odd-worker` with the cited pattern in its prompt.
+3. **Implement**: follow the documented pattern for that version. Check migration guides for deprecations. A write goes to `construct:worker` with the cited pattern in its prompt.
 4. **Cite**: for each non-trivial decision give the full URL, the version, and a short quote when the decision is non-obvious.
 5. **Flag**: list every point that could not be verified.
 

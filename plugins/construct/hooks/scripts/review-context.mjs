@@ -15,7 +15,7 @@ import { lensOf } from './roles.mjs'
 import { subjectHash, writePending } from './review-store.mjs'
 
 const SUBJECT_LINE = /^Review subject: (\S+)[ \t]*$/m
-const CHECKLIST = new URL('../../skills/rdd-review/references/security-checklist.md', import.meta.url)
+const CHECKLIST = new URL('../../skills/review/references/security-checklist.md', import.meta.url)
 const MAX_CONTEXT_BYTES = 400 * 1024
 const MAX_HINT_BYTES = 4096
 const DIFF_FLAGS = ['--no-color', '--no-ext-diff', '--no-textconv', '--no-renames', '--ignore-submodules=none']

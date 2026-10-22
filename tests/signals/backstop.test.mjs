@@ -34,7 +34,7 @@ describe('context backstop', () => {
       assert.equal(r.json.hookSpecificOutput.hookEventName, 'PostToolUse')
       assert.match(r.context, /Context backstop: the parent context measures 150,000 tokens, at or past the 150,000-token backstop/)
       assert.doesNotMatch(r.context, /context window|%/)
-      assert.match(r.context, /construct:odd-worker/)
+      assert.match(r.context, /construct:worker/)
     }
   })
 
@@ -58,7 +58,7 @@ describe('context backstop', () => {
   test('a subagent call is ignored and does not use up the notice', () => {
     const data = { CLAUDE_PLUGIN_DATA: scratchDir('odd-sig-state-') }
     const t = transcript(row(150_000))
-    assert.equal(post(t, { agent_id: 'a1', agent_type: 'construct:odd-worker' }, data).stdout, '')
+    assert.equal(post(t, { agent_id: 'a1', agent_type: 'construct:worker' }, data).stdout, '')
     assert.match(post(t, {}, data).context, /Context backstop/)
   })
 

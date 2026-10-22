@@ -1,5 +1,5 @@
 ---
-name: rdd-review
+name: review
 description: "Mandatory review of high-risk work units: an outside view by lens agents chosen from the task's Risk numbers, recorded by hooks. Trigger: a work unit whose Risk names an item is ready, the publication gate denied a push, PR, or release, or the user asks for a review."
 license: MIT
 metadata:

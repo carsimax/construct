@@ -123,7 +123,7 @@ test('session mode records the start time that gates the reminder', () => {
 })
 
 const report = (...sections) => `Done.\n\n${sections.join('\n\n')}\n`
-const capture = (c, text, extra = {}) => hook(c, 'capture', { session_id: SID, agent_type: 'construct:odd-worker', last_assistant_message: text, ...extra })
+const capture = (c, text, extra = {}) => hook(c, 'capture', { session_id: SID, agent_type: 'construct:worker', last_assistant_message: text, ...extra })
 const passive = (c) => rows(c, "SELECT title, content, type, session_id FROM observations WHERE type = 'passive' ORDER BY id")
 
 test('capture: numbered items, emphasis stripped, short items dropped, nothing emitted', () => {

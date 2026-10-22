@@ -10,9 +10,9 @@ import { makeRepo, scratchDir, write } from '../helpers/repo.mjs'
 
 const PLUGIN = new URL('../../plugins/construct/', import.meta.url).pathname
 const SCRIPT = join(PLUGIN, 'hooks/scripts/delegation-admission.mjs')
-const WORKER = 'construct:odd-worker'
+const WORKER = 'construct:worker'
 const FIX = 'construct:jd-fix-agent'
-const VERIFY = 'construct:odd-verify'
+const VERIFY = 'construct:verifier'
 
 const FEATURE = (status = 'pending') =>
   `# Feature\n\n## Tasks\n\n| ID | Specs | Task | Route | Risk | Status | Commit |\n|---|---|---|---|---|---|---|\n| T1 | S1 | Do it | w | none | ${status} | - |\n\n## Log\n`
@@ -58,7 +58,11 @@ const withFeature = (status) => {
 const SPEC = 'Spec: odd/tasks/feat.md, T1, S1\n'
 
 describe('writer surfaces', () => {
-  for (const type of [WORKER, FIX]) {
+  test('jd-fix-agent is no longer a writer: no section, Spec, or overlap check applies', () => {
+    allowed(launch(plain(), env(), FIX, 'Do the thing'))
+    allowed(launch(withFeature(), env(), FIX, surfaces('src/a.js')))
+  })
+  for (const type of [WORKER]) {
     test(`${type} without the section is denied naming the heading`, () => {
       denied(launch(plain(), env(), type, 'Do the thing'), /## Allowed edit surfaces/)
     })
@@ -93,7 +97,6 @@ describe('Spec line', () => {
   })
   test('required when an unfinished document exists, with the expected form in the reason', () => {
     denied(launch(withFeature(), env(), WORKER, surfaces('src/a.js')), /Spec: odd\/tasks\/<feature>\.md, T<n>/)
-    denied(launch(withFeature(), env(), FIX, surfaces('src/a.js')), /Spec:/)
   })
   test('a Spec line naming an existing regular file is allowed', () => {
     allowed(launch(withFeature(), env(), WORKER, SPEC + surfaces('src/a.js')))
@@ -133,7 +136,7 @@ describe('verifier', () => {
 })
 
 describe('other launches are untouched', () => {
-  for (const type of ['construct:odd-explorer', 'construct:review-risk', 'general-purpose', undefined]) {
+  for (const type of ['construct:explorer', 'construct:review-risk', 'general-purpose', undefined]) {
     test(`${type}`, () => allowed(launch(withFeature(), env(), type, 'anything')))
   }
   test('a non-Agent tool call', () => {
@@ -146,7 +149,7 @@ describe('overlap with an open writer', () => {
     const repo = plain()
     const e = env()
     allowed(launch(repo, e, WORKER, surfaces('src/**', 'docs/a.md')))
-    denied(launch(repo, e, FIX, surfaces('src/x/y.js')), /overlap/, /src\/x\/y\.js/, /src\/\*\*/)
+    denied(launch(repo, e, WORKER, surfaces('src/x/y.js')), /overlap/, /src\/x\/y\.js/, /src\/\*\*/)
     denied(launch(repo, e, WORKER, surfaces('src')), /overlap/)
     allowed(launch(repo, e, WORKER, surfaces('lib/b.js', 'tests/*.mjs')))
     denied(launch(repo, e, WORKER, surfaces('tests/a.mjs')), /overlap/)
@@ -185,7 +188,7 @@ describe('overlap with an open writer', () => {
     const repo = plain()
     const e = env()
     allowed(launch(repo, e, VERIFY, 'Risk: item 1'))
-    allowed(launch(repo, e, 'construct:odd-explorer', surfaces('src/a.js')))
+    allowed(launch(repo, e, 'construct:explorer', surfaces('src/a.js')))
     allowed(launch(repo, e, WORKER, surfaces('src/a.js')))
   })
 })
@@ -325,7 +328,7 @@ describe('concurrent admission (L7 gap)', () => {
 })
 
 describe('A5: the construct: prefix is optional', () => {
-  for (const [type, prefixed] of [['odd-worker', WORKER], ['jd-fix-agent', FIX]]) {
+  for (const [type, prefixed] of [['worker', WORKER]]) {
     test(`${type} without the prefix is admitted like ${prefixed}`, () => {
       allowed(launch(plain(), env(), type, surfaces('src/a.js')))
     })
@@ -345,9 +348,9 @@ describe('A5: the construct: prefix is optional', () => {
       denied(launch(repo, e, prefixed, surfaces('src/a.js'), 'ov'), /overlap/i)
     })
   }
-  test('odd-verify without the prefix needs a Risk line', () => {
-    denied(launch(plain(), env(), 'odd-verify', 'Verify it'), /Risk: item/)
-    allowed(launch(plain(), env(), 'odd-verify', 'Verify it\nRisk: item 2\n'))
+  test('verifier without the prefix needs a Risk line', () => {
+    denied(launch(plain(), env(), 'verifier', 'Verify it'), /Risk: item/)
+    allowed(launch(plain(), env(), 'verifier', 'Verify it\nRisk: item 2\n'))
   })
   test('other agents are untouched', () => {
     allowed(launch(plain(), env(), 'odd-explore', 'look'))
@@ -396,7 +399,7 @@ describe('start mode (F10)', () => {
     const repo = plain()
     const e = env()
     allowed(launch(repo, e, WORKER, surfaces('src/a.js')))
-    allowed(start(e, 'construct:odd-explorer'))
+    allowed(start(e, 'construct:explorer'))
     age(e, 5)
     allowed(launch(repo, e, WORKER, surfaces('src/a.js')))
   })

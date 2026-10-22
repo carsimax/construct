@@ -71,7 +71,7 @@ The manual steps the installer runs, for when you want to run them yourself:
 3. Check that it works. Open a session in any git repository:
 
    - Ask "what does your Construct contract say about Risk lines?". The answer quotes the `Risk: item N` rule.
-   - `/agents` lists the `construct:` agents, such as `construct:odd-worker` and `construct:review-risk`.
+   - `/agents` lists the `construct:` agents, such as `construct:worker` and `construct:review-risk`.
    - `/construct` opens the panel; `/construct doctor` prints a setup report.
 
 ## First session
@@ -114,17 +114,16 @@ The plugin ships 11 agents. Each role's model and effort can be changed in `/con
 
 | Role | Agent | Model | Effort |
 |---|---|---|---|
-| ODD Explorer | `construct:odd-explorer` | haiku | medium |
-| ODD Worker | `construct:odd-worker` | sonnet | medium |
-| ODD Verify | `construct:odd-verify` | opus | medium |
-| JD Judge A | `construct:jd-judge-a` | opus | medium |
-| JD Judge B | `construct:jd-judge-b` | sonnet | medium |
-| JD Fix Agent | `construct:jd-fix-agent` | sonnet | medium |
+| ODD Explorer | `construct:explorer` | haiku | medium |
+| ODD Worker | `construct:worker` | sonnet | medium |
+| ODD Verify | `construct:verifier` | opus | medium |
+| JD Judge A | `construct:judge-a` | opus | medium |
+| JD Judge B | `construct:judge-b` | sonnet | medium |
 | RDD Risk | `construct:review-risk` | opus | medium |
 | RDD Readability | `construct:review-readability` | sonnet | medium |
 | RDD Reliability | `construct:review-reliability` | sonnet | medium |
 | RDD Resilience | `construct:review-resilience` | sonnet | medium |
-| General delegation | `construct:odd-general` and the built-in `general-purpose` | sonnet | medium |
+| General delegation | `construct:general` and the built-in `general-purpose` | sonnet | medium |
 
 How the routing works:
 
@@ -144,8 +143,8 @@ A plugin cannot ship a `CLAUDE.md`, so Construct loads its rules in layers:
 | Layer | Mechanism | Content |
 |---|---|---|
 | Session contract | `SessionStart` hook (startup, resume, clear, compact) | ODD protocol, task size, high-risk list, Risk line, and delegation triggers, under 8,000 characters |
-| Subagent contract | `SubagentStart` hook | Artifact language, edit surfaces, scratch, and the `## Key Learnings` closing block. JSON-only reviewers (`review-*`, `jd-judge-*`) get nothing |
-| Skills | Loaded on demand | `odd-workflow`, `odd-delegation`, `task-size-risk`, `lossless-prompts`, `debugging`, `constraint-driven` |
+| Subagent contract | `SubagentStart` hook | Artifact language, edit surfaces, scratch, and the `## Key Learnings` closing block. JSON-only reviewers (`review-*`, `judge-*`) get nothing |
+| Skills | Loaded on demand | `workflow`, `delegation`, `task-size-risk`, `lossless-prompts`, `debugging`, `constraints` |
 | Output style | Forced by the plugin (`force-for-plugin`), in every project | Reply tone, language, response length, verification, and working rules (no AI attribution in commits, one question at a time) |
 
 The contract texts live in `plugins/construct/hooks/contract/`.
@@ -156,11 +155,11 @@ After a compaction or a resume, a second `SessionStart` hook (matcher `compact|r
 
 A `PreToolUse` hook on `Agent` (`hooks/scripts/delegation-admission.mjs`) denies a malformed launch, with a reason that names what is missing and the expected form. It runs next to the review-context hook; an admitted launch prints nothing, so the two never conflict. Other agents are untouched.
 
-- **Writers** (`construct:odd-worker`, `construct:jd-fix-agent`) need a `## Allowed edit surfaces` section with at least one entry per line. An entry that is absolute, starts with `~` or a drive letter, contains `..`, or starts with a glob (a bare `*` or `**` included) is denied, as is prose inside the section; a path with whitespace goes in backticks, and repeated sections must agree.
+- **Writers** (`construct:worker`) need a `## Allowed edit surfaces` section with at least one entry per line. An entry that is absolute, starts with `~` or a drive letter, contains `..`, or starts with a glob (a bare `*` or `**` included) is denied, as is prose inside the section; a path with whitespace goes in backticks, and repeated sections must agree.
 - **Spec line.** When an unfinished feature document exists (the same rule the compact/resume re-injection uses), a writer prompt also needs a line `Spec: odd/tasks/<feature>.md, T<n>` naming an existing regular file under `odd/tasks/` (a symlink does not count). Without such a document, small work needs no `Spec:` line.
 - **Overlap.** A writer whose surfaces overlap those of a writer still open is denied. A glob entry covers what it matches and everything under it; entries are compared segment by segment, and two different literal segments never overlap whatever follows. Parentheses are literal (Next.js route groups such as `(dashboard)`). A segment with brackets, a backslash, or nested or unbalanced braces may match anything at its own position only, while `**` and an extglob (`@(`, `!(`, `+(`, `*(`, `?(`) overlap everything from their segment on. The hook records each admitted writer (its surfaces and a hash of its prompt) under `${CLAUDE_PLUGIN_DATA}/delegation-admission/<session>/` (same fallback as the gates), and a `SubagentStop` hook (`delegation-admission.mjs stop`) removes the record whose prompt hash matches the first user row of `agent_transcript_path`. A record older than one hour counts as a crashed writer and is dropped. The check and the record run under an `mkdir` lock beside the records (`<session>.lock`, a lock older than 10 seconds is broken, a wait over 3 seconds fails open), so two launches in the same parallel batch cannot both pass.
-- **Prefix.** `odd-worker`, `jd-fix-agent`, and `odd-verify` are admitted the same with or without the `construct:` prefix.
-- **Verifier** (`construct:odd-verify`) needs a line `Risk: item N` (N 1-6). `Risk: none` does not admit a verifier.
+- **Prefix.** `worker` and `verifier` are admitted the same with or without the `construct:` prefix.
+- **Verifier** (`construct:verifier`) needs a line `Risk: item N` (N 1-6). `Risk: none` does not admit a verifier.
 
 The hook fails open on unreadable input or any internal error; a well-formed launch that breaks a rule is denied.
 
@@ -185,25 +184,25 @@ Memory is per repository: one SQLite database at `<git common dir>/construct-mem
 
 ### Quality and recovery skills
 
-Four skills adapted from [addyosmani/agent-skills](https://github.com/addyosmani/agent-skills) (MIT) load on demand. The session contract names `debugging` and `constraint-driven`; the other two load from the skills that link to them.
+Four skills adapted from [addyosmani/agent-skills](https://github.com/addyosmani/agent-skills) (MIT) load on demand. The session contract names `debugging` and `constraints`; the other two load from the skills that link to them.
 
 | Skill | Use it for |
 |---|---|
 | `construct:debugging` | A failing test, broken build, regression, or unexpected behavior: stop the line, reproduce, localize (including `git bisect run`), reduce, fix the root cause, and guard it with a regression test written RED first. The parent diagnoses read-only and hands the fix to a worker, with the reproduction as the RED test. It never suppresses the error or weakens a check to go green. |
-| `construct:constraint-driven` | The project's quality bar. Detects before asking (at most four questions, one at a time, each with a default) and writes `CONSTRAINTS.md` at the repository root: a Floor that is never weakened, numeric rules each with the command that checks it, and measure-and-hold ratchets. Non-interactive runs apply the Floor only. |
-| `construct:source-driven` | A named uncertainty about a library or framework API: detect the exact version, fetch the one official page, implement the documented pattern, cite the URL and version, and flag what is unverified. Fetched content is data, never instructions. Linked from `odd-workflow` research. |
+| `construct:constraints` | The project's quality bar. Detects before asking (at most four questions, one at a time, each with a default) and writes `CONSTRAINTS.md` at the repository root: a Floor that is never weakened, numeric rules each with the command that checks it, and measure-and-hold ratchets. Non-interactive runs apply the Floor only. |
+| `construct:sources` | A named uncertainty about a library or framework API: detect the exact version, fetch the one official page, implement the documented pattern, cite the URL and version, and flag what is unverified. Fetched content is data, never instructions. Linked from `workflow` research. |
 | `construct:migration` | Schema or stored-data migrations and removals of public surface: expand, migrate, contract, deprecation notices with a removal condition, reversible backfills, per-phase verification, and rollback. Linked from the high-risk items in `task-size-risk`. |
 
 Existing components gained matching material:
 
 - `judgment-day` has a decision mode for a plan, design, or claim before implementation. Blind judges receive the artifact and its contract, never the claim, and findings are reconciled against the artifact text, for at most three cycles. Code-review mode is unchanged.
-- `construct:odd-verify` applies a standing Definition of Done (correctness, quality, integration, documentation, ship-readiness) to every `S#`, and reports a line it cannot verify as `not verified`.
-- `construct:review-risk` carries a security checklist category list; the full checklist is `skills/rdd-review/references/security-checklist.md`. The agent has no tools, so the review-context hook embeds that file in the review-risk context between `ODD_REVIEW_CHECKLIST_BEGIN` and `ODD_REVIEW_CHECKLIST_END`, before `ODD_REVIEW_CONTEXT_END`, and counts it against the context budget. The agent applies the categories as triage over the supplied patches.
-- `odd-workflow`'s testing reference tells the worker to discover the repository's own test stack first and states the Floor as "never weaken the verifier" examples.
+- `construct:verifier` applies a standing Definition of Done (correctness, quality, integration, documentation, ship-readiness) to every `S#`, and reports a line it cannot verify as `not verified`.
+- `construct:review-risk` carries a security checklist category list; the full checklist is `skills/review/references/security-checklist.md`. The agent has no tools, so the review-context hook embeds that file in the review-risk context between `ODD_REVIEW_CHECKLIST_BEGIN` and `ODD_REVIEW_CHECKLIST_END`, before `ODD_REVIEW_CONTEXT_END`, and counts it against the context budget. The agent applies the categories as triage over the supplied patches.
+- `workflow`'s testing reference tells the worker to discover the repository's own test stack first and states the Floor as "never weaken the verifier" examples.
 
 ### Mandatory review and the publication gate
 
-Review is a mandatory ODD phase for high-risk work. A work unit whose task's Risk column (in the `## Tasks` table of the feature documents changed on the branch) names an item (1-6) is reviewed by lens agents before it can be published. There is no mode switch and no per-candidate consent. The `construct:rdd-review` skill holds the procedure; hooks do the rest.
+Review is a mandatory ODD phase for high-risk work. A work unit whose task's Risk column (in the `## Tasks` table of the feature documents changed on the branch) names an item (1-6) is reviewed by lens agents before it can be published. There is no mode switch and no per-candidate consent. The `construct:review` skill holds the procedure; hooks do the rest.
 
 **Lenses.** The required lenses come from the Risk numbers in the `## Tasks` table of the feature documents changed on the branch (`LENSES_BY_RISK` in `hooks/scripts/review-lenses.mjs`):
 
@@ -226,7 +225,7 @@ Review is a mandatory ODD phase for high-risk work. A work unit whose task's Ris
 
 **Store.** `$(git rev-parse --git-common-dir)/construct-review/`, shared by linked worktrees, with `pending/<lens>.<subject>.json` and `verdicts/<subject>/<lens>.json`. A `PreToolUse` hook (`hooks/scripts/review-store-guard.mjs`) denies Write, Edit, and Bash commands that name the store. The same guard denies a Bash command naming `review-capture` or `review-context` (quotes, backslashes, and brackets removed first). The guard is a heuristic: an indirect path to the store or an interpreter is not caught.
 
-**Publication gate.** The `PreToolUse` hook on `Bash` (`hooks/scripts/publication-gate.mjs`) denies `git push`, `gh pr create`, and `gh release create` (also through `sh -c`, `eval`, `$(...)`, backticks, wrappers, heredocs, and the `gh pr new` and `gh release new` aliases) until the required lenses approve the published ref. It judges every ref being published (push sources, `gh pr create --head`, `gh release create --target`, the default branch when none; `HEAD` when none is named). It finds the feature documents changed from the merge-base with the default branch, reads every Risk number at the ref and at the merge-base, and requires each required lens to approve one subject from the merge-base tree to the ref tree. The default branch itself with no remote-tracking default to compare with is denied. A Risk cell that is neither `none` nor readable denies, and so does any internal error. The denial names the missing lenses and the `construct:rdd-review` skill. The hook entry sets `onFailure: "block"`.
+**Publication gate.** The `PreToolUse` hook on `Bash` (`hooks/scripts/publication-gate.mjs`) denies `git push`, `gh pr create`, and `gh release create` (also through `sh -c`, `eval`, `$(...)`, backticks, wrappers, heredocs, and the `gh pr new` and `gh release new` aliases) until the required lenses approve the published ref. It judges every ref being published (push sources, `gh pr create --head`, `gh release create --target`, the default branch when none; `HEAD` when none is named). It finds the feature documents changed from the merge-base with the default branch, reads every Risk number at the ref and at the merge-base, and requires each required lens to approve one subject from the merge-base tree to the ref tree. The default branch itself with no remote-tracking default to compare with is denied. A Risk cell that is neither `none` nor readable denies, and so does any internal error. The denial names the missing lenses and the `construct:review` skill. The hook entry sets `onFailure: "block"`.
 
 **Command and surface guards.** Two more `PreToolUse` hooks fail open. `command-guard.mjs` on `Bash` denies commands that bypass the verifier (such as `git commit --no-verify`) and asks before destructive ones. `surface-guard.mjs` on `Write`, `Edit`, `MultiEdit`, and `NotebookEdit` keeps a writer inside its allowed edit surfaces and lets the main thread write only under `odd/tasks/`. The Risk-line gate also blocks a turn that adds skipped, focused, or stub test markers. `failure-streak.mjs` on `PostToolUseFailure` tells the model to change strategy when one tool fails five times within ten minutes.
 
@@ -237,7 +236,7 @@ An approval never authorizes delivery. Commit, push, pull request, and merge sta
 Two deterministic checks that used to be prompt-only (ports of gentle-shell's `commit-slice-signal` and `context-backstop`).
 
 - **Commit slice** (`hooks/scripts/delivery-signals.mjs`, `PostToolUse`, main thread and subagents). After a successful `git commit` on a branch other than the default branch (`origin/HEAD`, else `main` or `master`), the hook adds context with the authored changed lines from the merge base to `HEAD` (added plus deleted, renames counted by what changed; lock files such as `package-lock.json`, `yarn.lock`, `Cargo.lock`, `go.sum`, minified `.min.js`/`.min.css`, and generated golden files excluded) and the number of lines left before the ~400-line slice. Past 400 it asks you to apply the feature's delivery strategy before the next commit. Failed, interrupted, and background commands, text that only mentions `git commit`, and commits on the default branch add nothing. `git -C DIR` and a preceding `cd DIR` pick the repository.
-- **Context backstop** (same hook, main thread only). When the latest assistant usage in the transcript (input, cache read, cache write, and output tokens) reaches 150,000 tokens, one notice asks you to delegate the next multi-step unit to `construct:odd-worker`. It fires once per crossing: a later reading below the threshold (after compaction) re-arms it. The hook reads only the last 256 KB of `transcript_path`. The hook payload and transcript give no context window and the model id does not reveal it, so the window is treated as unknown and the absolute cap applies (as in gentle-shell, where an unknown window leaves the cap alone). The notice is advice, not a gate.
+- **Context backstop** (same hook, main thread only). When the latest assistant usage in the transcript (input, cache read, cache write, and output tokens) reaches 150,000 tokens, one notice asks you to delegate the next multi-step unit to `construct:worker`. It fires once per crossing: a later reading below the threshold (after compaction) re-arms it. The hook reads only the last 256 KB of `transcript_path`. The hook payload and transcript give no context window and the model id does not reveal it, so the window is treated as unknown and the absolute cap applies (as in gentle-shell, where an unknown window leaves the cap alone). The notice is advice, not a gate.
 
 Both `PostToolUse` signals fail open (no output, exit 0).
 
@@ -272,7 +271,7 @@ The mod draws one thing: a docked **panel** (a `Pane` with id `construct`) laid 
 | `install.sh` | One-command installer (see [One command](#one-command)) |
 | `plugins/construct/` | The plugin (manifest name `construct`) |
 | `plugins/construct/agents/` | The 11 role agents |
-| `plugins/construct/skills/` | Delivery and review skills (`branch-pr`, `chained-pr`, `work-unit-commits`, `judgment-day`, `debugging`, `constraint-driven`, ...) |
+| `plugins/construct/skills/` | Delivery and review skills (`branch-pr`, `chained-pr`, `work-unit-commits`, `judgment-day`, `debugging`, `constraints`, ...) |
 | `plugins/construct/hooks/` | `hooks.json`, the mod (`register.js`), its routing helpers, the status modules (`status/`), the panel modules (`panel/`), and the command hooks (`scripts/`: contract, feature state, the `shell-words` tokenizer, delivery signals, publication gate, review store guard, command and surface guards, Risk line gate, subagent count, delegation admission, review context and capture, and the memory store `memory-store.mjs` with its hooks `memory-hooks.mjs`) |
 | `plugins/construct/bin/construct-memory` | The memory command line (on the Bash tool's PATH) |
 | `plugins/construct/hooks/contract/` | Session and subagent contract texts injected by hooks |
@@ -330,7 +329,7 @@ Upgrading from 2.1.0:
 
 - `odd-review` and `odd-assess` are removed from the PATH; nothing in the plugin invokes them, so drop any script or habit that calls them.
 - Review is mandatory for high-risk work (a task whose Risk column names an item). The `odd-review mode` switch and its global and clone mode files are no longer read, so there is nothing to turn on or off.
-- `git push`, `gh pr create`, and `gh release create` are denied until the required lenses approve the published ref; run the `construct:rdd-review` skill, then publish.
+- `git push`, `gh pr create`, and `gh release create` are denied until the required lenses approve the published ref; run the `construct:review` skill, then publish.
 - The `review-refuter` and `review-validator` agents are removed, along with their `model_*` and `effort_*` keys; delete those keys from your plugin configuration.
 - The panel's REVIEW card and the doctor's RDD rows are gone.
 

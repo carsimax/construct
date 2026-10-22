@@ -54,7 +54,7 @@ describe('commit slice', () => {
   })
 
   test('a subagent commit gets the signal too', () => {
-    const r = commit(featureRepo({ 'src/b.js': lines(3) }), { agent_id: 'a1', agent_type: 'construct:odd-worker' })
+    const r = commit(featureRepo({ 'src/b.js': lines(3) }), { agent_id: 'a1', agent_type: 'construct:worker' })
     assert.match(r.context, /3 authored changed lines/)
   })
 

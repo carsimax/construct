@@ -1,5 +1,5 @@
 ---
-name: odd-workflow
+name: workflow
 description: "Organic Driven Development protocol: authorize, explore, classify, track large work in odd/tasks/<feature>.md, implement test-first in work units, and close with evidence. Trigger: any implementation request, feature planning, resuming a feature, or writing a feature document."
 license: MIT
 metadata:
@@ -9,7 +9,7 @@ metadata:
 
 ## Activation Contract
 
-Load this skill for any request that may change code or docs, for planning a feature, for resuming interrupted work, or when a feature document under `odd/tasks/` is involved. Sizing rules live in `construct:task-size-risk`; delegation rules live in `construct:odd-delegation`.
+Load this skill for any request that may change code or docs, for planning a feature, for resuming interrupted work, or when a feature document under `odd/tasks/` is involved. Sizing rules live in `construct:task-size-risk`; delegation rules live in `construct:delegation`.
 
 ## Hard Rules
 
@@ -29,7 +29,7 @@ Load this skill for any request that may change code or docs, for planning a fea
 | Open product or design decision | Ask one focused question; stop |
 | High-consequence unproven premise | One scoped, read-only assumption challenge; no debate loop |
 | Unresolved question needing external evidence | Recommend optional research (see references/research.md) |
-| Small task | One `construct:odd-worker`, no feature document, no commits unless asked |
+| Small task | One `construct:worker`, no feature document, no commits unless asked |
 | Large task | Feature document, task-by-task work units |
 | User reports a failure | Reproduce it before deciding it already works |
 | Requirement changes mid-feature | Append it verbatim to `## Log`, rewrite only the affected `S#`, reopen only its task |

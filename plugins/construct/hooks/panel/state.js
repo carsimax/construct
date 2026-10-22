@@ -314,7 +314,7 @@ export function agentsView(state, nowMs, max = 3) {
   return { cards, rest: ordered.length - cards.length, running: running.length }
 }
 
-// `odd_worker` / `construct:odd-worker` -> `worker`, `review_risk` -> `review-risk`; an agent with no
+// `worker` / `construct:worker` -> `worker`, `review_risk` -> `review-risk`; an agent with no
 // construct role keeps its subagent type.
 export function shortName(a) {
   const raw = String(a.role ?? a.type ?? 'agent')

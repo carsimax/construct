@@ -1,5 +1,5 @@
 // The lenses each Risk item requires: the single source the publication gate
-// and the rdd-review skill quote. review-readability is never required.
+// and the review skill quote. review-readability is never required.
 export const LENSES_BY_RISK = {
   1: ['review-risk', 'review-resilience'],
   2: ['review-risk'],

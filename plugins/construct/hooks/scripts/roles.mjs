@@ -7,13 +7,12 @@
 export const PREFIX = 'construct:'
 
 export const ROLES = {
-  'odd-explorer': 'reader',
-  'odd-worker': 'writer',
-  'jd-fix-agent': 'writer',
-  'odd-verify': 'verifier',
-  'odd-general': 'runner',
-  'jd-judge-a': 'judge',
-  'jd-judge-b': 'judge',
+  'explorer': 'reader',
+  'worker': 'writer',
+  'verifier': 'verifier',
+  'general': 'runner',
+  'judge-a': 'judge',
+  'judge-b': 'judge',
   'review-risk': 'lens',
   'review-resilience': 'lens',
   'review-readability': 'lens',
@@ -21,7 +20,10 @@ export const ROLES = {
 }
 
 // Built-in subagent types that follow a construct role
-export const BUILTINS = { 'general-purpose': 'odd-general' }
+export const BUILTINS = { 'general-purpose': 'general' }
+
+// Legacy agent names of the six renamed roles (S7): saved model_<old>/effort_<old> values keep applying through 6.x
+export const LEGACY = { explorer: 'odd-explorer', worker: 'odd-worker', verifier: 'odd-verify', general: 'odd-general', 'judge-a': 'jd-judge-a', 'judge-b': 'jd-judge-b' }
 
 export const qualified = (name) => `${PREFIX}${name}`
 export const roleKey = (name) => name.replaceAll('-', '_')

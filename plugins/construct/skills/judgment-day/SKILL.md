@@ -13,11 +13,11 @@ Load only when the user explicitly requests Judgment Day or equivalent dual/adve
 
 ## Hard Rules
 
-- Resolve matching project skills before starting and pass the same paths to both judges (`construct:jd-judge-a`, `construct:jd-judge-b`) and the fix actor (`construct:jd-fix-agent`).
+- Resolve matching project skills before starting and pass the same paths to both judges (`construct:judge-a`, `construct:judge-b`) and the fix actor (`construct:worker`).
 - Build one complete immutable target, then launch two blind read-only judges in parallel with identical scope and criteria.
 - Each judge returns one neutral findings result and terminates. Wait for both; never accept a partial judgment.
 - Two-judge agreement is the corroboration mechanism; no further corroboration step exists.
-- Only the parent orchestrator merges/persists findings, launches the fix actor (`construct:jd-fix-agent`), and launches scoped re-judgment.
+- Only the parent orchestrator merges/persists findings, launches the fix actor (`construct:worker`), and launches scoped re-judgment.
 - Fix only severe findings confirmed by both judges. WARNING/SUGGESTION rows remain `info`.
 - Permit at most two fix rounds and two scoped re-judgments. Re-judgment sees only the frozen ledger plus fix delta and may record fix-caused defects.
 - The only terminal verdicts are `APPROVED | ESCALATED`; never reset or extend an exhausted round budget.
@@ -38,10 +38,10 @@ Load only when the user explicitly requests Judgment Day or equivalent dual/adve
 ## Execution Steps
 
 1. Build the complete immutable target and freeze the scope both judges will inspect.
-2. Launch both read-only judges in parallel (`construct:jd-judge-a`, `construct:jd-judge-b`) against the same immutable target.
+2. Launch both read-only judges in parallel (`construct:judge-a`, `construct:judge-b`) against the same immutable target.
 3. Merge findings into the frozen ledger and persist it through the selected artifact store.
-4. Ask before round-one correction; run the fix actor (`construct:jd-fix-agent`) only for confirmed severe IDs.
-5. Run both judges again (`construct:jd-judge-a`, `construct:jd-judge-b`) only over the frozen ledger plus immutable fix delta.
+4. Ask before round-one correction; run the fix actor (`construct:worker`) only for confirmed severe IDs.
+5. Run both judges again (`construct:judge-a`, `construct:judge-b`) only over the frozen ledger plus immutable fix delta.
 6. Repeat once at most, then run independent final verification and return the terminal verdict.
 
 ## Output Contract

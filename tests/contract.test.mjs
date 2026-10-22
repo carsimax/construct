@@ -53,17 +53,17 @@ test('the session contract carries the ODD protocol, task size, risk line, and d
     'concurrency',
     'installers',
     'no test would catch',
-    'construct:odd-explorer',
-    'construct:odd-worker',
-    'construct:odd-verify',
-    'construct:odd-general',
-    'construct:odd-workflow',
-    'construct:odd-delegation',
+    'construct:explorer',
+    'construct:worker',
+    'construct:verifier',
+    'construct:general',
+    'construct:workflow',
+    'construct:delegation',
     'construct:task-size-risk',
     'construct:lossless-prompts',
     'construct:memory',
     'construct-memory',
-    'construct:rdd-review',
+    'construct:review',
     'Review subject:',
     'review is mandatory',
   ]) {
@@ -87,10 +87,10 @@ test('the session contract scales autonomy to the verifier and closes with check
 
 test('code writes go to the worker while reads and answers stay with the parent', () => {
   const text = context('session', SESSION).additionalContext
-  assert.ok(text.includes('Every write to repository code, tests, or docs goes to `construct:odd-worker`'))
+  assert.ok(text.includes('Every write to repository code, tests, or docs goes to `construct:worker`'))
   assert.ok(!text.includes('works inline by default'))
-  const delegation = readFileSync(join(pluginRoot, 'skills/odd-delegation/SKILL.md'), 'utf8')
-  assert.ok(delegation.includes('Every write to repository code, tests, or docs goes to `construct:odd-worker`'))
+  const delegation = readFileSync(join(pluginRoot, 'skills/delegation/SKILL.md'), 'utf8')
+  assert.ok(delegation.includes('Every write to repository code, tests, or docs goes to `construct:worker`'))
   assert.ok(!delegation.includes('When in doubt, work inline.'))
   const sizing = readFileSync(join(pluginRoot, 'skills/task-size-risk/SKILL.md'), 'utf8')
   assert.ok(!sizing.includes('No feature document, worker, or verifier'))
@@ -99,7 +99,7 @@ test('code writes go to the worker while reads and answers stay with the parent'
 })
 
 test('SubagentStart gives worker agents the subagent contract', () => {
-  for (const agent of ['construct:odd-worker', 'construct:odd-explorer', 'general-purpose']) {
+  for (const agent of ['construct:worker', 'construct:explorer', 'general-purpose']) {
     const out = context('subagent', { hook_event_name: 'SubagentStart', agent_type: agent })
     assert.equal(out.hookEventName, 'SubagentStart')
     assert.ok(out.additionalContext.includes('## Key Learnings'), agent)
@@ -109,7 +109,7 @@ test('SubagentStart gives worker agents the subagent contract', () => {
 })
 
 test('SubagentStart carries the S2 engineering rules for writers', () => {
-  const text = context('subagent', { hook_event_name: 'SubagentStart', agent_type: 'construct:odd-worker' }).additionalContext
+  const text = context('subagent', { hook_event_name: 'SubagentStart', agent_type: 'construct:worker' }).additionalContext
   assert.match(text, /never weaken a verifier/i)
   assert.match(text, /suppress an error, widen a type, skip a test, or delete an assertion/)
   assert.match(text, /root cause/i)
@@ -128,7 +128,7 @@ test('SubagentStart carries the S2 engineering rules for writers', () => {
 })
 
 test('SubagentStart injects nothing into agents that must return a single JSON object', () => {
-  for (const agent of ['construct:review-risk', 'construct:jd-judge-a', 'construct:jd-judge-b', 'review-risk', 'jd-judge-b']) {
+  for (const agent of ['construct:review-risk', 'construct:judge-a', 'construct:judge-b', 'review-risk', 'judge-b']) {
     const { code, stdout } = run('subagent', { hook_event_name: 'SubagentStart', agent_type: agent })
     assert.equal(code, 0, agent)
     assert.equal(stdout, '', agent)
@@ -179,14 +179,14 @@ test('stdin that parses to a non-object (null, array, number, string) is treated
 
 test('the contracts never mention codegraph and the subagent contract names LSP', () => {
   const session = context('session', SESSION).additionalContext
-  const subagent = context('subagent', { hook_event_name: 'SubagentStart', agent_type: 'construct:odd-worker' }).additionalContext
+  const subagent = context('subagent', { hook_event_name: 'SubagentStart', agent_type: 'construct:worker' }).additionalContext
   assert.doesNotMatch(session, /codegraph/i)
   assert.doesNotMatch(subagent, /codegraph/i)
   assert.match(subagent, /\bLSP\b/)
 })
 
 test('S4: the subagent contract finishes the asked work, adds nothing unasked, and rejects a syntax-only check', () => {
-  const text = context('subagent', { hook_event_name: 'SubagentStart', agent_type: 'construct:odd-worker' }).additionalContext
+  const text = context('subagent', { hook_event_name: 'SubagentStart', agent_type: 'construct:worker' }).additionalContext
   assert.match(text, /a syntax-only check does not count/)
   assert.match(text, /can be run, built, or type-checked/)
   assert.match(text, /If none can run, say which and why/)

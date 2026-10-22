@@ -14,7 +14,7 @@
 //     that is neither, a reversed or out-of-range range, or a missing Risk column, denies);
 //   - requiredLenses(items) (review-lenses.mjs) says which lenses must have approved the subject, the
 //     hash of the merge-base tree and the ref tree (review-store.mjs). A rejected subject stays
-//     rejected. A required lens without approval: deny, naming the lenses, the `Review subject:` line, and the construct:rdd-review skill;
+//     rejected. A required lens without approval: deny, naming the lenses, the `Review subject:` line, and the construct:review skill;
 //   - an error while deciding denies with its reason, including one thrown after the command was
 //     found to be a publication. Only unreadable hook input, a command that is no publication, and a
 //     directory that is no git repository pass. The hook entry sets onFailure: "block" as well.
@@ -359,7 +359,7 @@ function refVerdict(root, pub, base, ref) {
   if (missing.length === 0 && rejected.length === 0) return null
   const parts = [missing.length > 0 && `no verdict from ${missing.join(', ')}`, rejected.length > 0 && `not approved by ${rejected.join(', ')}`].filter(Boolean)
   const checkout = out(root, ['rev-parse', 'HEAD']) === sha ? '' : ` (the head is HEAD: check out ${short} first)`
-  return `publication-gate: ${pub.gate} is denied because the feature documents of ${short} name Risk items ${[...items].sort().join(', ')} and it is not reviewed: ${parts.join('; ')}. Run the construct:rdd-review skill with the subject line \`Review subject: ${mergeBase}\`${checkout}, fix what a lens rejects, and publish again; new commits change the subject, so review after the last commit.`
+  return `publication-gate: ${pub.gate} is denied because the feature documents of ${short} name Risk items ${[...items].sort().join(', ')} and it is not reviewed: ${parts.join('; ')}. Run the construct:review skill with the subject line \`Review subject: ${mergeBase}\`${checkout}, fix what a lens rejects, and publish again; new commits change the subject, so review after the last commit.`
 }
 
 function verdict(pub) {

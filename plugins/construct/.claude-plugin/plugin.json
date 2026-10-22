@@ -16,10 +16,23 @@
   ],
   "types": "./types/construct.d.ts",
   "userConfig": {
-    "model_odd_explorer": {
+    "model_explorer": {
       "type": "string",
       "title": "ODD Explorer model",
-      "description": "Model the odd-explorer agent runs on",
+      "description": "Model the explorer agent runs on; \"inherit\" = use the deprecated model_odd_explorer setting if any, else the agent's own frontmatter",
+      "options": [
+        "inherit",
+        "haiku",
+        "sonnet",
+        "opus",
+        "fable"
+      ],
+      "default": "inherit"
+    },
+    "model_odd_explorer": {
+      "type": "string",
+      "title": "ODD Explorer model (deprecated, use model_explorer)",
+      "description": "Model the odd-explorer agent runs on; deprecated, use model_explorer",
       "options": [
         "haiku",
         "sonnet",
@@ -28,10 +41,25 @@
       ],
       "default": "haiku"
     },
-    "effort_odd_explorer": {
+    "effort_explorer": {
       "type": "string",
       "title": "ODD Explorer effort",
-      "description": "Effort level for the odd-explorer agent; default keeps the model's own level",
+      "description": "Effort level for the explorer agent; default keeps the model's own level; \"inherit\" = use the deprecated effort_odd_explorer setting if any, else the agent's own frontmatter",
+      "options": [
+        "inherit",
+        "default",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "default": "inherit"
+    },
+    "effort_odd_explorer": {
+      "type": "string",
+      "title": "ODD Explorer effort (deprecated, use effort_explorer)",
+      "description": "Effort level for the odd-explorer agent; default keeps the model's own level; deprecated, use effort_explorer",
       "options": [
         "default",
         "low",
@@ -41,11 +69,24 @@
         "max"
       ],
       "default": "medium"
+    },
+    "model_worker": {
+      "type": "string",
+      "title": "ODD Worker model",
+      "description": "Model the worker agent runs on; \"inherit\" = use the deprecated model_odd_worker setting if any, else the agent's own frontmatter",
+      "options": [
+        "inherit",
+        "haiku",
+        "sonnet",
+        "opus",
+        "fable"
+      ],
+      "default": "inherit"
     },
     "model_odd_worker": {
       "type": "string",
-      "title": "ODD Worker model",
-      "description": "Model the odd-worker agent runs on",
+      "title": "ODD Worker model (deprecated, use model_worker)",
+      "description": "Model the odd-worker agent runs on; deprecated, use model_worker",
       "options": [
         "haiku",
         "sonnet",
@@ -53,11 +94,26 @@
         "fable"
       ],
       "default": "sonnet"
+    },
+    "effort_worker": {
+      "type": "string",
+      "title": "ODD Worker effort",
+      "description": "Effort level for the worker agent; default keeps the model's own level; \"inherit\" = use the deprecated effort_odd_worker setting if any, else the agent's own frontmatter",
+      "options": [
+        "inherit",
+        "default",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "default": "inherit"
     },
     "effort_odd_worker": {
       "type": "string",
-      "title": "ODD Worker effort",
-      "description": "Effort level for the odd-worker agent; default keeps the model's own level",
+      "title": "ODD Worker effort (deprecated, use effort_worker)",
+      "description": "Effort level for the odd-worker agent; default keeps the model's own level; deprecated, use effort_worker",
       "options": [
         "default",
         "low",
@@ -67,11 +123,24 @@
         "max"
       ],
       "default": "medium"
+    },
+    "model_verifier": {
+      "type": "string",
+      "title": "ODD Verify model",
+      "description": "Model the verifier agent runs on; \"inherit\" = use the deprecated model_odd_verify setting if any, else the agent's own frontmatter",
+      "options": [
+        "inherit",
+        "haiku",
+        "sonnet",
+        "opus",
+        "fable"
+      ],
+      "default": "inherit"
     },
     "model_odd_verify": {
       "type": "string",
-      "title": "ODD Verify model",
-      "description": "Model the odd-verify agent runs on",
+      "title": "ODD Verify model (deprecated, use model_verifier)",
+      "description": "Model the odd-verify agent runs on; deprecated, use model_verifier",
       "options": [
         "haiku",
         "sonnet",
@@ -79,11 +148,26 @@
         "fable"
       ],
       "default": "opus"
+    },
+    "effort_verifier": {
+      "type": "string",
+      "title": "ODD Verify effort",
+      "description": "Effort level for the verifier agent; default keeps the model's own level; \"inherit\" = use the deprecated effort_odd_verify setting if any, else the agent's own frontmatter",
+      "options": [
+        "inherit",
+        "default",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "default": "inherit"
     },
     "effort_odd_verify": {
       "type": "string",
-      "title": "ODD Verify effort",
-      "description": "Effort level for the odd-verify agent; default keeps the model's own level",
+      "title": "ODD Verify effort (deprecated, use effort_verifier)",
+      "description": "Effort level for the odd-verify agent; default keeps the model's own level; deprecated, use effort_verifier",
       "options": [
         "default",
         "low",
@@ -94,10 +178,23 @@
       ],
       "default": "medium"
     },
-    "model_jd_judge_a": {
+    "model_judge_a": {
       "type": "string",
       "title": "JD Judge A model",
-      "description": "Model the jd-judge-a agent runs on",
+      "description": "Model the judge-a agent runs on; \"inherit\" = use the deprecated model_jd_judge_a setting if any, else the agent's own frontmatter",
+      "options": [
+        "inherit",
+        "haiku",
+        "sonnet",
+        "opus",
+        "fable"
+      ],
+      "default": "inherit"
+    },
+    "model_jd_judge_a": {
+      "type": "string",
+      "title": "JD Judge A model (deprecated, use model_judge_a)",
+      "description": "Model the jd-judge-a agent runs on; deprecated, use model_judge_a",
       "options": [
         "haiku",
         "sonnet",
@@ -106,10 +203,25 @@
       ],
       "default": "opus"
     },
-    "effort_jd_judge_a": {
+    "effort_judge_a": {
       "type": "string",
       "title": "JD Judge A effort",
-      "description": "Effort level for the jd-judge-a agent; default keeps the model's own level",
+      "description": "Effort level for the judge-a agent; default keeps the model's own level; \"inherit\" = use the deprecated effort_jd_judge_a setting if any, else the agent's own frontmatter",
+      "options": [
+        "inherit",
+        "default",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "default": "inherit"
+    },
+    "effort_jd_judge_a": {
+      "type": "string",
+      "title": "JD Judge A effort (deprecated, use effort_judge_a)",
+      "description": "Effort level for the jd-judge-a agent; default keeps the model's own level; deprecated, use effort_judge_a",
       "options": [
         "default",
         "low",
@@ -119,11 +231,24 @@
         "max"
       ],
       "default": "medium"
+    },
+    "model_judge_b": {
+      "type": "string",
+      "title": "JD Judge B model",
+      "description": "Model the judge-b agent runs on; \"inherit\" = use the deprecated model_jd_judge_b setting if any, else the agent's own frontmatter",
+      "options": [
+        "inherit",
+        "haiku",
+        "sonnet",
+        "opus",
+        "fable"
+      ],
+      "default": "inherit"
     },
     "model_jd_judge_b": {
       "type": "string",
-      "title": "JD Judge B model",
-      "description": "Model the jd-judge-b agent runs on",
+      "title": "JD Judge B model (deprecated, use model_judge_b)",
+      "description": "Model the jd-judge-b agent runs on; deprecated, use model_judge_b",
       "options": [
         "haiku",
         "sonnet",
@@ -132,11 +257,12 @@
       ],
       "default": "sonnet"
     },
-    "effort_jd_judge_b": {
+    "effort_judge_b": {
       "type": "string",
       "title": "JD Judge B effort",
-      "description": "Effort level for the jd-judge-b agent; default keeps the model's own level",
+      "description": "Effort level for the judge-b agent; default keeps the model's own level; \"inherit\" = use the deprecated effort_jd_judge_b setting if any, else the agent's own frontmatter",
       "options": [
+        "inherit",
         "default",
         "low",
         "medium",
@@ -144,24 +270,12 @@
         "xhigh",
         "max"
       ],
-      "default": "medium"
+      "default": "inherit"
     },
-    "model_jd_fix_agent": {
+    "effort_jd_judge_b": {
       "type": "string",
-      "title": "JD Fix Agent model",
-      "description": "Model the jd-fix-agent agent runs on",
-      "options": [
-        "haiku",
-        "sonnet",
-        "opus",
-        "fable"
-      ],
-      "default": "sonnet"
-    },
-    "effort_jd_fix_agent": {
-      "type": "string",
-      "title": "JD Fix Agent effort",
-      "description": "Effort level for the jd-fix-agent agent; default keeps the model's own level",
+      "title": "JD Judge B effort (deprecated, use effort_judge_b)",
+      "description": "Effort level for the jd-judge-b agent; default keeps the model's own level; deprecated, use effort_judge_b",
       "options": [
         "default",
         "low",
@@ -175,20 +289,22 @@
     "model_review_risk": {
       "type": "string",
       "title": "RDD Risk model",
-      "description": "Model the review-risk agent runs on",
+      "description": "Model the review-risk agent runs on; \"inherit\" = use the agent's own frontmatter",
       "options": [
+        "inherit",
         "haiku",
         "sonnet",
         "opus",
         "fable"
       ],
-      "default": "opus"
+      "default": "inherit"
     },
     "effort_review_risk": {
       "type": "string",
       "title": "RDD Risk effort",
-      "description": "Effort level for the review-risk agent; default keeps the model's own level",
+      "description": "Effort level for the review-risk agent; default keeps the model's own level; \"inherit\" = use the agent's own frontmatter",
       "options": [
+        "inherit",
         "default",
         "low",
         "medium",
@@ -196,25 +312,27 @@
         "xhigh",
         "max"
       ],
-      "default": "medium"
+      "default": "inherit"
     },
     "model_review_readability": {
       "type": "string",
       "title": "RDD Readability model",
-      "description": "Model the review-readability agent runs on",
+      "description": "Model the review-readability agent runs on; \"inherit\" = use the agent's own frontmatter",
       "options": [
+        "inherit",
         "haiku",
         "sonnet",
         "opus",
         "fable"
       ],
-      "default": "sonnet"
+      "default": "inherit"
     },
     "effort_review_readability": {
       "type": "string",
       "title": "RDD Readability effort",
-      "description": "Effort level for the review-readability agent; default keeps the model's own level",
+      "description": "Effort level for the review-readability agent; default keeps the model's own level; \"inherit\" = use the agent's own frontmatter",
       "options": [
+        "inherit",
         "default",
         "low",
         "medium",
@@ -222,25 +340,27 @@
         "xhigh",
         "max"
       ],
-      "default": "medium"
+      "default": "inherit"
     },
     "model_review_reliability": {
       "type": "string",
       "title": "RDD Reliability model",
-      "description": "Model the review-reliability agent runs on",
+      "description": "Model the review-reliability agent runs on; \"inherit\" = use the agent's own frontmatter",
       "options": [
+        "inherit",
         "haiku",
         "sonnet",
         "opus",
         "fable"
       ],
-      "default": "sonnet"
+      "default": "inherit"
     },
     "effort_review_reliability": {
       "type": "string",
       "title": "RDD Reliability effort",
-      "description": "Effort level for the review-reliability agent; default keeps the model's own level",
+      "description": "Effort level for the review-reliability agent; default keeps the model's own level; \"inherit\" = use the agent's own frontmatter",
       "options": [
+        "inherit",
         "default",
         "low",
         "medium",
@@ -248,25 +368,27 @@
         "xhigh",
         "max"
       ],
-      "default": "medium"
+      "default": "inherit"
     },
     "model_review_resilience": {
       "type": "string",
       "title": "RDD Resilience model",
-      "description": "Model the review-resilience agent runs on",
+      "description": "Model the review-resilience agent runs on; \"inherit\" = use the agent's own frontmatter",
       "options": [
+        "inherit",
         "haiku",
         "sonnet",
         "opus",
         "fable"
       ],
-      "default": "sonnet"
+      "default": "inherit"
     },
     "effort_review_resilience": {
       "type": "string",
       "title": "RDD Resilience effort",
-      "description": "Effort level for the review-resilience agent; default keeps the model's own level",
+      "description": "Effort level for the review-resilience agent; default keeps the model's own level; \"inherit\" = use the agent's own frontmatter",
       "options": [
+        "inherit",
         "default",
         "low",
         "medium",
@@ -274,12 +396,25 @@
         "xhigh",
         "max"
       ],
-      "default": "medium"
+      "default": "inherit"
+    },
+    "model_general": {
+      "type": "string",
+      "title": "General delegation model",
+      "description": "Model the general agent runs on; \"inherit\" = use the deprecated model_odd_general setting if any, else the agent's own frontmatter",
+      "options": [
+        "inherit",
+        "haiku",
+        "sonnet",
+        "opus",
+        "fable"
+      ],
+      "default": "inherit"
     },
     "model_odd_general": {
       "type": "string",
-      "title": "General delegation model",
-      "description": "Model the odd-general agent runs on",
+      "title": "General delegation model (deprecated, use model_general)",
+      "description": "Model the odd-general agent runs on; deprecated, use model_general",
       "options": [
         "haiku",
         "sonnet",
@@ -288,10 +423,25 @@
       ],
       "default": "sonnet"
     },
-    "effort_odd_general": {
+    "effort_general": {
       "type": "string",
       "title": "General delegation effort",
-      "description": "Effort level for the odd-general agent; default keeps the model's own level",
+      "description": "Effort level for the general agent; default keeps the model's own level; \"inherit\" = use the deprecated effort_odd_general setting if any, else the agent's own frontmatter",
+      "options": [
+        "inherit",
+        "default",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "default": "inherit"
+    },
+    "effort_odd_general": {
+      "type": "string",
+      "title": "General delegation effort (deprecated, use effort_general)",
+      "description": "Effort level for the odd-general agent; default keeps the model's own level; deprecated, use effort_general",
       "options": [
         "default",
         "low",
