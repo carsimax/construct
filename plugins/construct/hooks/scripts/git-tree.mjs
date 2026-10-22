@@ -1,4 +1,4 @@
-// Git and file helpers shared by the risk-line and mirror-drift hooks: bounded git calls,
+// Git and file helpers shared by the risk-line hook: bounded git calls,
 // a frozen working tree, the HEAD commit, and an atomic file write.
 import { spawnSync } from 'node:child_process'
 import { randomBytes } from 'node:crypto'

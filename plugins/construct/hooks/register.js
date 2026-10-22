@@ -20,7 +20,7 @@ import {
   onTurnStep,
   onUnblocked,
 } from './panel/state.js'
-import { checkClaude, checkCodegraph, checkEngram, checkNode, formatReport } from './status/doctor.js'
+import { checkClaude, checkCodegraph, checkMemory, checkNode, formatReport, MEMORY_PROBE } from './status/doctor.js'
 import { activeWork } from './status/tasks.js'
 import { parseGitStatus, parseNumstat, parseRevParse } from './status/data.js'
 
@@ -252,13 +252,13 @@ async function runDoctor($) {
   const cwd = await probe(() => $.session.cwd())
   const rev = parseRevParse(await probe(() => runText($, ['git', 'rev-parse', '--show-toplevel'], cwd ?? undefined, GIT_MS)))
   const root = rev?.root ?? cwd
-  const [version, node, plugins, codegraph] = await Promise.all([
+  const [version, node, memory, codegraph] = await Promise.all([
     probe(async () => (await $.session.version()).version),
     probe(() => runText($, ['node', '--version'], cwd ?? undefined, GIT_MS)),
-    probe(() => $.settings.read({ key: 'enabledPlugins' })),
+    probe(() => runText($, ['node', '-e', MEMORY_PROBE], cwd ?? undefined, GIT_MS)),
     probe(() => (root ? $.fs.exists(`${root}/.codegraph`) : null)),
   ])
-  return formatReport([checkClaude(version), checkNode(node), checkEngram(plugins), checkCodegraph(codegraph)])
+  return formatReport([checkClaude(version), checkNode(node), checkMemory(memory), checkCodegraph(codegraph)])
 }
 
 // /construct opens the pane, /construct close closes it, /construct doctor reports the setup.

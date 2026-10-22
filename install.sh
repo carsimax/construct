@@ -1,5 +1,5 @@
 #!/bin/bash
-# Construct installer: sets up engram, the Construct plugin, the optional
+# Construct installer: sets up the Construct plugin, the optional
 # codegraph MCP server, and merges the Construct settings into
 # ~/.claude/settings.json. Safe to run again; a second run changes nothing.
 #
@@ -10,9 +10,7 @@
 set -euo pipefail
 
 MIN_CLAUDE=2.1.304
-MIN_NODE=20
-ENGRAM_FORMULA=gentleman-programming/tap/engram
-ENGRAM_REPO=Gentleman-Programming/engram
+MIN_NODE=22.16
 CONSTRUCT_REPO=carsimax/construct
 CONSTRUCT_REF=v3.0.0 # the release this script belongs to; keep in step with the URL above
 CONSTRUCT_PLUGIN=construct@construct
@@ -86,6 +84,10 @@ preflight() {
   has node || fail "Node.js $MIN_NODE or later is required (node is not on the PATH). See https://nodejs.org"
   version=$(run node -p 'process.versions.node')
   version_ge "$version" "$MIN_NODE" || fail "Node.js $version is too old; Construct needs $MIN_NODE or later"
+  # Node 22.13-22.15 and 23.x load node:sqlite without the fts5 module, so the version alone is not enough.
+  # Keep this probe in step with MEMORY_PROBE in plugins/construct/hooks/status/doctor.js.
+  run node -e "const { DatabaseSync } = require('node:sqlite'); new DatabaseSync(':memory:').exec(\"CREATE VIRTUAL TABLE t USING fts5(x, tokenize='trigram')\")" >/dev/null 2>&1 ||
+    fail "Node.js $version has no node:sqlite with FTS5 trigram, which Construct memory needs; use Node.js $MIN_NODE or later (Node.js 23 is not supported)"
   has git || fail "git is required and is not on the PATH"
   check_writable
   local rc=0
@@ -94,30 +96,15 @@ preflight() {
     fail "$HOME/.claude/settings.json cannot be read because a component of its path is not a directory, or its link loops, so nothing was installed; fix the path and run the installer again"
   fi
   [ "$rc" = 0 ] || fail "nothing was installed"
-  if ! has engram; then
-    has brew || fail "engram is not installed and Homebrew (brew) is not available to install it. See https://brew.sh"
-  fi
   if [ "$WITH_MCP" = 1 ] && ! has codegraph; then
     has npm || fail "npm is required to install the codegraph CLI (or pass --no-mcp)"
   fi
 }
 
-setup_engram() {
+# Construct keeps its own memory; an existing engram is left alone, never removed.
+note_engram() {
   if has engram; then
-    skipped "engram binary (already installed)"
-  else
-    say "Installing the engram binary"
-    run brew install "$ENGRAM_FORMULA"
-    installed "engram binary"
-  fi
-  local plugins
-  plugins=$(run claude plugin list)
-  if [[ "$plugins" == *"engram@engram"* ]] && run claude mcp get engram >/dev/null 2>&1; then
-    skipped "engram setup (plugin and MCP server present)"
-  else
-    say "Registering engram with Claude Code"
-    run engram setup claude-code
-    installed "engram setup claude-code"
+    say "engram is installed, but Construct no longer needs it; nothing was removed"
   fi
 }
 
@@ -202,7 +189,8 @@ const path = require('node:path')
 const [mode, file] = process.argv.slice(2)
 // Earlier versions set this theme; it is removed, and any other theme stays.
 const OLD_THEME = 'custom:construct:construct'
-const ALLOW = ['mcp__engram', 'mcp__plugin_engram_engram']
+// Lets the plugin's bin/construct-memory run without a prompt (a trailing ` *` also matches the bare command).
+const ALLOW = ['Bash(construct-memory *)']
 
 let text = null
 try {
@@ -249,7 +237,7 @@ if (missing.length) {
   changed = true
   lines.push(`+ permissions.allow gained ${missing.join(', ')}`)
 } else {
-  lines.push('= permissions.allow has the engram MCP servers')
+  lines.push('= permissions.allow has the construct-memory CLI')
 }
 
 if (changed) {
@@ -330,8 +318,7 @@ main() {
     warn "--force is deprecated and has no effect; the installer no longer sets a theme"
   fi
   preflight
-  setup_engram
-  add_marketplace "$ENGRAM_REPO"
+  note_engram
   add_marketplace "$CONSTRUCT_REPO" "$CONSTRUCT_REF"
   install_plugin
   setup_mcp

@@ -14,9 +14,6 @@
     "agents",
     "skills"
   ],
-  "dependencies": [
-    "engram@engram"
-  ],
   "types": "./types/construct.d.ts",
   "userConfig": {
     "model_odd_explorer": {

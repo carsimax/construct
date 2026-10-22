@@ -103,7 +103,7 @@ async function main() {
   process.stdout.write(`${JSON.stringify({ decision: 'block', reason })}\n`)
 }
 
-// Run only as a script; mirror-drift.mjs imports the record helpers above.
+// Run only as a script.
 if (process.argv[1] && fileURLToPath(import.meta.url) === realpathSync(process.argv[1])) {
   try {
     await main()

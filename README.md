@@ -263,10 +263,6 @@ Two deterministic checks that used to be prompt-only (ports of gentle-shell's `c
 
 Both `PostToolUse` signals fail open (no output, exit 0).
 
-### Mirror drift gate
-
-The ODD feature documents (`odd/tasks/<f>.md`) are mirrored into engram so a later session can resume them. No hook enforced that; `hooks/scripts/mirror-drift.mjs` does, on `Stop`. It reuses the Risk line gate's per-turn record (`mark` on `UserPromptSubmit`): when an `odd/tasks/<f>.md` was added or changed since the turn began and the transcript, since the last real user prompt (a prompt row, not a tool result), holds no engram `mem_save` call (`mcp__engram__mem_save` or `mcp__plugin_engram_engram__mem_save`) whose `topic_key` is exactly `odd/<f>/tasks`, it blocks the stop once per turn. The reason names each unsaved document and its topic key; a document that was saved is not named. It stays silent while a subagent of the session is open (the first `Stop` after the agents finish runs the check), on `stop_hook_active`, with no mark record, and for changes outside `odd/tasks/*.md`. It reads only the last 512 KB of `transcript_path`; a turn longer than that has no prompt boundary in view and the gate stays silent. It fails open (no output, exit 0) on any error.
-
 ### Construct panel (mod)
 
 The mod draws one thing: a docked **panel** (a `Pane` with id `construct`) laid out as [claude-flightdeck](https://github.com/scasella/claude-flightdeck) cards and adapted to the ODD flow: one column at any width, no header or legend, `round` bordered cards, the bold title on the left and the status on the right. The band above the prompt is not drawn. It needs Claude Code 2.1.304 or later and does not appear in `claude -p` runs, which draw no interface.
@@ -298,7 +294,7 @@ The mod draws one thing: a docked **panel** (a `Pane` with id `construct`) laid 
 | `plugins/construct/` | The plugin (manifest name `construct`) |
 | `plugins/construct/agents/` | The 11 role agents |
 | `plugins/construct/skills/` | Delivery and review skills (`branch-pr`, `chained-pr`, `work-unit-commits`, `judgment-day`, `debugging`, `constraint-driven`, ...) |
-| `plugins/construct/hooks/` | `hooks.json`, the mod (`register.js`), its routing helpers, the status modules (`status/`), the panel modules (`panel/`), and the command hooks (`scripts/`: contract, feature state, the `shell-words` tokenizer, delivery signals, publication gate, review store guard, Risk line gate, mirror drift gate, subagent count, delegation admission, review context and capture) |
+| `plugins/construct/hooks/` | `hooks.json`, the mod (`register.js`), its routing helpers, the status modules (`status/`), the panel modules (`panel/`), and the command hooks (`scripts/`: contract, feature state, the `shell-words` tokenizer, delivery signals, publication gate, review store guard, Risk line gate, subagent count, delegation admission, review context and capture) |
 | `plugins/construct/hooks/contract/` | Session and subagent contract texts injected by hooks |
 | `plugins/construct/evals/` | Behavior eval cases run by `claude plugin eval` |
 | `plugins/construct/tests/` | Mod tests run by `claude plugin test` |

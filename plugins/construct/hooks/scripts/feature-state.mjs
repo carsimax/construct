@@ -72,8 +72,7 @@ function parseDoc(root, path) {
 }
 
 function render(docs) {
-  const topics = docs.map((d) => `\`odd/${d.feature}/tasks\``).join(', ')
-  const footer = `Read the full document before continuing; the engram mirror is under topic ${topics}.`
+  const footer = 'Read the full document before continuing.'
   const intro = 'Active ODD feature state (re-injected after compaction or resume):'
   const fixed = docs.map((d) => [...d.head, ...(d.next ? [d.next] : [])].join('\n'))
   const used = [intro, footer, ...fixed].join('\n\n').length + docs.length * 2

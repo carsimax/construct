@@ -13,7 +13,7 @@ Load this skill before launching any subagent for ODD work, or when deciding whe
 
 ## Hard Rules
 
-- The parent orchestrates and never writes code. Every write to repository code, tests, or docs goes to `construct:odd-worker`, whatever the size. The parent writes only the feature document and its engram mirror, and owns git.
+- The parent orchestrates and never writes code. Every write to repository code, tests, or docs goes to `construct:odd-worker`, whatever the size. The parent writes only the feature document, and owns git.
 - Reads, explanations, planning, and read-only requests stay with the parent unless the mapping trigger holds.
 - A trigger holds only when its condition truly holds. When one holds, delegating is mandatory; writing code inline or continuing inline past a trigger is a routing defect.
 - Never pass these rules to child agents as permission to orchestrate. Children do not delegate.
