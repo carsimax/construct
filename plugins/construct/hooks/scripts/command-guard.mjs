@@ -8,8 +8,9 @@
 // Commands are found through shell-words.mjs (`sh -c`, `eval`, `env -S`, wrappers, `$(...)`,
 // backticks, heredoc bodies fed to a shell), so compounds and `git -C dir` are covered. When a
 // deny and an ask both match, deny is reported. Unreadable input or any error: no output (fail open).
-// shortcut: a heuristic parser; git aliases, interpreter one-liners, xargs, and variable-built
-// commands are not caught. Upgrade if one of them shows up in real use.
+// Long options match as git does: any prefix at least as long as the minimum in `abbr` calls.
+// shortcut: a heuristic parser; git aliases, interpreter one-liners, xargs, `find -exec rm`, and
+// variable-built commands are not caught. Upgrade if one of them shows up in real use.
 // Usage: node command-guard.mjs   (hook JSON on stdin)
 import { readInput } from './hook-io.mjs'
 import { extractHeredocs, GIT_VALUE_FLAGS, nestedLines, SHELLS, splitCommands, substitutionBodies } from './shell-words.mjs'
@@ -26,6 +27,7 @@ function parse(args) {
   const long = new Set()
   const short = new Set()
   const pos = []
+  const order = []
   let after = []
   for (let i = 0; i < args.length; i++) {
     const a = args[i]
@@ -35,6 +37,7 @@ function parse(args) {
     }
     if (a.startsWith('--')) {
       long.add(a.split('=')[0])
+      order.push(a.split('=')[0])
       if (VALUE_FLAGS.has(a)) i++
     } else if (a.startsWith('-') && a.length > 1) {
       for (let k = 1; k < a.length; k++) {
@@ -46,12 +49,21 @@ function parse(args) {
       }
     } else pos.push(a)
   }
-  return { long, short, pos, after }
+  return { long, short, pos, after, order }
 }
+
+// abbr: some argument is a prefix of `full` that is at least `min` long (the shortest unambiguous
+// form among that subcommand's real options; keep the table of calls small).
+const abbr = (flags, full, min) => [...flags].some((a) => a.length >= min && full.startsWith(a))
+const ROOTS = ['.', './', ':/']
+const LEASE = '--force-with-lease'
 
 const hit = (decision, reason) => ({ decision, reason: `command-guard: ${reason}` })
 
-function gitHit(args) {
+function gitHit(args, words = []) {
+  if (words.some((w) => /^GIT_CONFIG_KEY_\d+=core\.hookspath$/i.test(w) || (/^GIT_CONFIG_PARAMETERS=/.test(w) && /core\.hookspath/i.test(w)))) {
+    return hit('deny', 'GIT_CONFIG_KEY_n / GIT_CONFIG_PARAMETERS with core.hooksPath replaces the repository hooks. Fix the failing hook instead of bypassing it.')
+  }
   let i = 0
   while (args[i]?.startsWith('-')) {
     const value = args[i + 1] ?? ''
@@ -62,18 +74,24 @@ function gitHit(args) {
   }
   const sub = args[i]
   if (sub === undefined) return null
-  const { long, short, pos, after } = parse(args.slice(i + 1))
-  if (long.has('--no-gpg-sign')) return hit('deny', `git ${sub} --no-gpg-sign skips signing. Sign the commit or fix the signing setup instead of bypassing it.`)
-  if (NO_VERIFY.has(sub) && (long.has('--no-verify') || (sub === 'commit' && short.has('n')))) {
+  const { long, short, pos, after, order } = parse(args.slice(i + 1))
+  if (abbr(long, '--no-gpg-sign', 6)) return hit('deny', `git ${sub} --no-gpg-sign skips signing. Sign the commit or fix the signing setup instead of bypassing it.`)
+  if (NO_VERIFY.has(sub) && (abbr(long, '--no-verify', 7) || (sub === 'commit' && short.has('n')))) {
     return hit('deny', `git ${sub} --no-verify skips the hooks. Fix the failing hook instead of bypassing it.`)
   }
-  if (sub === 'push' && !long.has('--force-with-lease') && (long.has('--force') || short.has('f') || pos.some((p) => p.startsWith('+')))) {
+  // The last of --force-with-lease / --no-force-with-lease wins; a lease prefix is the lease, not --force.
+  let lease = false
+  for (const a of order) {
+    if (a.length >= 9 && LEASE.startsWith(a)) lease = true
+    else if (a.length >= 12 && `--no-${LEASE.slice(2)}`.startsWith(a)) lease = false
+  }
+  if (sub === 'push' && !lease && (order.some((a) => a.length >= 6 && '--force'.startsWith(a)) || short.has('f') || pos.some((p) => p.startsWith('+')))) {
     return hit('ask', 'git push with --force, -f, or a +refspec can overwrite remote work. Use --force-with-lease instead.')
   }
-  if (sub === 'reset' && long.has('--hard')) return hit('ask', 'git reset --hard discards uncommitted work. Confirm, or use git stash or git reset --soft instead.')
-  if (sub === 'clean' && (long.has('--force') || short.has('f')) && !long.has('--dry-run') && !short.has('n')) return hit('ask', 'git clean -f deletes untracked files for good. Run git clean -n first to list them.')
-  if (sub === 'checkout' && (after.includes('.') || (pos.length === 1 && pos[0] === '.' && after.length === 0))) return hit('ask', 'git checkout . discards uncommitted changes. Confirm, or name the files to restore.')
-  if (sub === 'restore' && [...pos, ...after].includes('.') && (!long.has('--staged') || long.has('--worktree') || short.has('W'))) return hit('ask', 'git restore . discards uncommitted changes. Confirm, or name the files to restore.')
+  if (sub === 'reset' && abbr(long, '--hard', 5)) return hit('ask', 'git reset --hard discards uncommitted work. Confirm, or use git stash or git reset --soft instead.')
+  if (sub === 'clean' && (abbr(long, '--force', 4) || short.has('f')) && !long.has('--dry-run') && !short.has('n')) return hit('ask', 'git clean -f deletes untracked files for good. Run git clean -n first to list them.')
+  if (sub === 'checkout' && (after.some((p) => ROOTS.includes(p)) || (pos.length === 1 && ROOTS.includes(pos[0]) && after.length === 0))) return hit('ask', 'git checkout . discards uncommitted changes. Confirm, or name the files to restore.')
+  if (sub === 'restore' && [...pos, ...after].includes('.') && (!(long.has('--staged') || short.has('S')) || long.has('--worktree') || short.has('W'))) return hit('ask', 'git restore . discards uncommitted changes. Confirm, or name the files to restore.')
   return null
 }
 
@@ -99,7 +117,7 @@ function hitsIn(command, depth = 0) {
     for (const line of lines) nested(line)
     // `bash <<< 'git commit -n'`: the here-string reaches the tokenizer as a plain word.
     if (SHELLS.has(name)) for (const arg of args) if (!arg.startsWith('-')) nested(arg)
-    const h = name === 'git' ? gitHit(args) : name === 'rm' ? rmHit(args) : null
+    const h = name === 'git' ? gitHit(args, words) : name === 'rm' ? rmHit(args) : null
     if (h) found.push(h)
   }
   // A heredoc body is data unless its command line runs a shell.

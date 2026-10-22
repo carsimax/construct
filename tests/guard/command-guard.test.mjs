@@ -68,6 +68,49 @@ describe('deny: verifier bypasses', () => {
   })
 })
 
+describe('T6 corrections: deny', () => {
+  expect('deny', [
+    'git commit --no-verif -m x',
+    'git commit --no-ver -m x',
+    'git push --no-ve',
+    'git commit --no-gpg -m x',
+    'GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/dev/null git commit -m x',
+    'GIT_CONFIG_KEY_3=CORE.HOOKSPATH git status',
+    "GIT_CONFIG_PARAMETERS=\"'core.hooksPath=/dev/null'\" git commit -m x",
+  ])
+})
+
+describe('T6 corrections: ask', () => {
+  expect('ask', [
+    'git reset --har HEAD~1',
+    'git push --forc',
+    'git push --force --force-with-lease --no-force-with-lease',
+    'git push -f --force-with-lease --no-force-with-lease origin main',
+    'git push origin +main --force-with-lease --no-force-with-lease',
+    'git clean --forc',
+    'git checkout ./',
+    'git checkout :/',
+    'git checkout -- ./',
+    'git checkout -- :/',
+    'git restore -SW .',
+    'git restore --staged --worktree .',
+  ])
+})
+
+describe('T6 corrections: allowed', () => {
+  silent([
+    'git push --force-w',
+    'git push --force-with-lea origin main',
+    'git push --no-force-with-lease --force-with-lease -f',
+    'git restore -S .',
+    'git restore --staged .',
+    'git commit --no-edit -m x',
+    'git commit --no-v',
+    'git checkout -- ./file',
+    'GIT_CONFIG_KEY_0=user.name git status',
+  ])
+})
+
 describe('ask: destructive commands', () => {
   expect('ask', [
     'rm -rf build',
