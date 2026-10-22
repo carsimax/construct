@@ -223,3 +223,18 @@ test('hooks.json registers each mode in exec form, existing hooks first', () => 
   assert.ok(hooks.UserPromptSubmit[0].hooks[0].args[0].endsWith('risk-line.mjs'))
   assert.ok(hooks.SessionStart[0].hooks[0].args[0].endsWith('contract.mjs'))
 })
+
+test('every mode fails open when node:sqlite cannot load (W1)', () => {
+  const c = setup()
+  const dir = scratchDir('construct-mem-nosqlite-')
+  const hooks = join(dir, 'hooks.mjs')
+  const preload = join(dir, 'preload.mjs')
+  writeFileSync(hooks, "export async function resolve(s, c, next) { if (s === 'node:sqlite') throw new Error('no sqlite'); return next(s, c) }\n")
+  writeFileSync(preload, `import { register } from 'node:module'\nregister(${JSON.stringify(`file://${hooks}`)})\n`)
+  for (const mode of ['session', 'compact', 'prompt', 'capture']) {
+    const r = spawnSync('node', ['--no-deprecation', '--import', preload, SCRIPT, mode], { cwd: c.repo, encoding: 'utf8', input: JSON.stringify({ session_id: SID, prompt: 'hello there', last_assistant_message: '## Key Learnings\n1. A long enough learning item here.' }), env: { ...process.env, CLAUDE_PLUGIN_DATA: c.data } })
+    assert.equal(r.status, 0, `${mode}: ${r.stderr}`)
+    assert.equal(r.stdout, '', mode)
+    assert.equal(r.stderr, '', mode)
+  }
+})

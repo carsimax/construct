@@ -2,7 +2,6 @@
 // construct-memory: the command line over the per-repository memory store (S5 of odd/tasks/construct-memory.md).
 import { readFileSync } from 'node:fs'
 import { parseArgs } from 'node:util'
-import { openMemory } from '../hooks/scripts/memory-store.mjs'
 
 const USAGE = `usage: construct-memory <command> [options]
 
@@ -61,7 +60,7 @@ function show(row) {
   return out
 }
 
-function main(argv) {
+async function main(argv) {
   const [command, ...rest] = argv
   if (command === undefined || command === 'help' || command === '--help' || command === '-h') return `${USAGE}\n`
   const { values, positionals } = parseArgs({
@@ -75,6 +74,13 @@ function main(argv) {
 
   if (command === 'import' && !positionals[0]) fail('import needs a file: construct-memory import <file> [--project <name>]')
 
+  // Loaded here, not at the top: the store needs node:sqlite, and help and usage errors must work without it.
+  let openMemory
+  try {
+    ;({ openMemory } = await import('../hooks/scripts/memory-store.mjs'))
+  } catch {
+    fail('memory needs node:sqlite with FTS5 (Node.js 22.16 or later; Node 23 is not supported)')
+  }
   const store = openMemory(process.cwd())
   if (!store) fail('memory is off: not inside a git repository')
   try {
@@ -147,7 +153,7 @@ function main(argv) {
 }
 
 try {
-  process.stdout.write(main(process.argv.slice(2)))
+  process.stdout.write(await main(process.argv.slice(2)))
 } catch (error) {
   // parseArgs errors (unknown option) and store errors (missing title, newer schema) all end here.
   process.stderr.write(`construct-memory: ${oneLine(error.message)}\n`)

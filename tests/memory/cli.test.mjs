@@ -3,7 +3,8 @@
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { statSync } from 'node:fs'
+import { statSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { makeRepo, scratchDir } from '../helpers/repo.mjs'
 
@@ -225,5 +226,22 @@ describe('construct-memory', () => {
     for (const [args, input] of [[['context'], ''], [['search', 'x'], ''], [['get', '1'], ''], [['save'], '{"title":"a","content":"b"}'], [['review', 'list'], '']]) {
       fails(cli(dir, args, input), /memory is off/i)
     }
+  })
+
+  test('without node:sqlite a store command fails with one line and help still works', () => {
+    const dir = scratchDir('cli-nosqlite-')
+    const hooks = join(dir, 'hooks.mjs')
+    const preload = join(dir, 'preload.mjs')
+    writeFileSync(hooks, "export async function resolve(s, c, next) { if (s === 'node:sqlite') throw new Error('no sqlite'); return next(s, c) }\n")
+    writeFileSync(preload, `import { register } from 'node:module'\nregister(${JSON.stringify(`file://${hooks}`)})\n`)
+    const run = (args) => spawnSync('node', ['--no-deprecation', '--import', preload, BIN, ...args], { cwd: makeRepo(), encoding: 'utf8' })
+    const r = run(['context'])
+    assert.equal(r.status, 1)
+    assert.equal(r.stdout, '')
+    assert.equal(r.stderr, 'construct-memory: memory needs node:sqlite with FTS5 (Node.js 22.16 or later; Node 23 is not supported)\n')
+    const help = run(['help'])
+    assert.equal(help.status, 0, help.stderr)
+    assert.match(help.stdout, /usage: construct-memory/)
+    fails(run(['frobnicate']), /unknown command/)
   })
 })

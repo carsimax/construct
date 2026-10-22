@@ -4,7 +4,6 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { dataDir, readInput, safeName } from './hook-io.mjs'
-import { normalizedHash, openMemory } from './memory-store.mjs'
 
 const REMIND_AFTER_MS = 15 * 60 * 1000
 const MIN_SESSION_MS = 5 * 60 * 1000
@@ -52,6 +51,8 @@ async function main() {
   const mode = process.argv[2]
   const input = readInput()
   if (!input || !['session', 'compact', 'prompt', 'capture'].includes(mode)) return
+  // Loaded here, not at the top, so a Node without node:sqlite fails open instead of crashing on import.
+  const { normalizedHash, openMemory } = await import('./memory-store.mjs')
   const memory = openMemory(input.cwd || process.cwd())
   if (!memory) return
   const session = input.session_id || 'unknown'
