@@ -24,6 +24,7 @@ const MEMORY_RULES = [
   'Bash(construct-memory update *)',
   'Bash(construct-memory summary *)',
   'Bash(construct-memory review list *)',
+  'Bash(construct-memory review stale *)',
   'Bash(construct-memory prompts --search *)',
   'Bash(construct-memory prompts --limit *)',
   'Bash(construct-memory pin *)',
@@ -571,7 +572,7 @@ test('the merged rules pre-approve reads and saves and never a destructive const
   assert.deepEqual(rules, MEMORY_RULES)
   // These prefixes are only safe because the CLI refuses trailing options and words that reach a destructive form
   // (tests/memory/cli.test.mjs, 'a pre-approved prefix plus a destructive suffix'); the rules alone would match `prompts --limit 5 delete 1`.
-  for (const ok of ['search auth bug', 'prompts', 'prompts --search x', 'prompts --limit 5', 'review list', 'review list --limit 5', 'doctor --json', 'help'])
+  for (const ok of ['search auth bug', 'prompts', 'prompts --search x', 'prompts --limit 5', 'review list', 'review list --limit 5', 'review stale', 'review stale --json', 'doctor --json', 'help'])
     assert.ok(allows(rules, `construct-memory ${ok}`), ok)
   for (const bad of ['delete 1 --hard', 'delete 1', 'prompts delete 1', 'export x.json', 'consolidate 1 2', 'import x.json', 'review done 1'])
     assert.ok(!allows(rules, `construct-memory ${bad}`), bad)
