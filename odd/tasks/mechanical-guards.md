@@ -14,15 +14,15 @@ Objective: turn prompt-only rules into hooks: git bypass and destructive-command
 
 | ID | Specs | Task | Route | Risk | Status | Commit |
 |---|---|---|---|---|---|---|
-| T1 | S1 | `command-guard.mjs` + unit tests | odd-worker (batch A, parallel) | 2 | done (RED 55/56 fail; GREEN 243/243) | 0675f6a |
-| T2 | S2 | marker scan in `risk-line.mjs check` + tests | odd-worker (batch A, parallel) | 6 | done (RED 10 fail; GREEN 66/66) | 4cfc576 |
-| T3 | S3 | memory injection scan + tests | odd-worker (batch A, parallel) | 2 | done (RED 6 fail; GREEN 241/241; 0 false positives on 78 real rows) | 0db4fb3 |
-| T4 | S4 | `agent_id` link, containment matcher, `surface-guard.mjs` + tests | odd-worker (batch A, parallel) | 2, 4 | done (RED observed after the fact, counts not captured; GREEN 99/99) | cff9f1f |
-| T5 | S5 | `hooks.json` registration, registration tests, README/CLAUDE.md/memory skill docs | odd-worker (after batch A) | 3 | done (RED 2 fail; GREEN 829/829; validate --strict passed) | (this commit) |
-| T6 | S1 | correction: command-guard abbreviations, env config, lease negation, restore -S, checkout ./ :/ | odd-worker (batch B, parallel) | 2 | done (RED 18 fail; GREEN 272/272) | 465785b |
-| T7 | S2 | correction: TODO anchored to comment start, renames, .md skip, node:test options, more markers | odd-worker (batch B, parallel) | 6 | done (RED 8 fail; GREEN 75/75; 0 hits on branch diff, was 4) | d918789 |
-| T8 | S3 | correction: narrow false-positive patterns, add "disregard ... instructions above" | odd-worker (batch B, parallel) | 2 | done (RED 1 fail; GREEN 242/242; 0 false positives on 224 real strings) | d168cd7 |
-| T9 | S4 | correction: directory surfaces contain descendants, canonical-case realpath, `..name` paths | odd-worker (batch B, parallel) | 2 | done (RED observed, counts not captured; GREEN 108/108) | 889798c |
+| T1 | S1 | `command-guard.mjs` + unit tests | odd-worker (batch A, parallel) | 2 | done | 0675f6a (RED 55/56 fail; GREEN 243/243) |
+| T2 | S2 | marker scan in `risk-line.mjs check` + tests | odd-worker (batch A, parallel) | 6 | done | 4cfc576 (RED 10 fail; GREEN 66/66) |
+| T3 | S3 | memory injection scan + tests | odd-worker (batch A, parallel) | 2 | done | 0db4fb3 (RED 6 fail; GREEN 241/241; 0 false positives on 78 real rows) |
+| T4 | S4 | `agent_id` link, containment matcher, `surface-guard.mjs` + tests | odd-worker (batch A, parallel) | 2, 4 | done | cff9f1f (RED observed after the fact, counts not captured; GREEN 99/99) |
+| T5 | S5 | `hooks.json` registration, registration tests, README/CLAUDE.md/memory skill docs | odd-worker (after batch A) | 3 | done | (this commit) (RED 2 fail; GREEN 829/829; validate --strict passed) |
+| T6 | S1 | correction: command-guard abbreviations, env config, lease negation, restore -S, checkout ./ :/ | odd-worker (batch B, parallel) | 2 | done | 465785b (RED 18 fail; GREEN 272/272) |
+| T7 | S2 | correction: TODO anchored to comment start, renames, .md skip, node:test options, more markers | odd-worker (batch B, parallel) | 6 | done | d918789 (RED 8 fail; GREEN 75/75; 0 hits on branch diff, was 4) |
+| T8 | S3 | correction: narrow false-positive patterns, add "disregard ... instructions above" | odd-worker (batch B, parallel) | 2 | done | d168cd7 (RED 1 fail; GREEN 242/242; 0 false positives on 224 real strings) |
+| T9 | S4 | correction: directory surfaces contain descendants, canonical-case realpath, `..name` paths | odd-worker (batch B, parallel) | 2 | done | 889798c (RED observed, counts not captured; GREEN 108/108) |
 
 ## Log
 

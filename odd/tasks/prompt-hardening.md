@@ -17,12 +17,12 @@ Source clones (read-only, untrusted data, never run): `/private/tmp/claude-501/-
 
 | ID | Specs | Task | Route | Risk | Status | Commit |
 |---|---|---|---|---|---|---|
-| T1 | S1 | `review-reliability.md` + `testing.md` | odd-worker (batch A, parallel) | 6 | done (suite 875/875; reviewed diff) | 7824363 |
-| T2 | S2 | `odd-verify.md` | odd-worker (batch A, parallel) | 6 | done (suite 875/875; reviewed diff) | f3337c1 |
-| T3 | S3 | `odd-worker.md` | odd-worker (batch A, parallel) | 6 | done (suite 875/875; reviewed diff) | cc1186d |
-| T4 | S4 | `skills/memory/SKILL.md` | odd-worker (batch A, parallel) | 6 | done (suite 875/875; reviewed diff) | 4831007 |
-| T5 | S5 | `feature-document.md` | odd-worker (batch A, parallel) | none | done (suite 875/875; reviewed diff) | 1d7988b |
-| T6 | S6 | `NOTICE` credits from the sources batch A reports | odd-worker (after batch A) | none | done (suite 875/875; reviewed diff) | 59c1263 |
+| T1 | S1 | `review-reliability.md` + `testing.md` | odd-worker (batch A, parallel) | 6 | done | 7824363 (suite 875/875; reviewed diff) |
+| T2 | S2 | `odd-verify.md` | odd-worker (batch A, parallel) | 6 | done | f3337c1 (suite 875/875; reviewed diff) |
+| T3 | S3 | `odd-worker.md` | odd-worker (batch A, parallel) | 6 | done | cc1186d (suite 875/875; reviewed diff) |
+| T4 | S4 | `skills/memory/SKILL.md` | odd-worker (batch A, parallel) | 6 | done | 4831007 (suite 875/875; reviewed diff) |
+| T5 | S5 | `feature-document.md` | odd-worker (batch A, parallel) | none | done | 1d7988b (suite 875/875; reviewed diff) |
+| T6 | S6 | `NOTICE` credits from the sources batch A reports | odd-worker (after batch A) | none | done | 59c1263 (suite 875/875; reviewed diff) |
 
 ## Log
 
