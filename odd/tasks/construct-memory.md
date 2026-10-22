@@ -75,7 +75,7 @@ Source: L1-L3, map in L4. Engram references are to commit `258e7a3` of github.co
 | T21 | S21 | (a) unclosed `<private>`, (b) secure delete, FTS optimize, WAL checkpoint, (c) unavailable line in SessionStart and the card's error state; tests | odd-worker, parallel with T22 | 1, 2 | done (node RED 6, mod RED 2 → GREEN memory 228/228, mod 169 + 3 known) | `0b52d78` |
 | T22 | S21 | (d) installer allow rules narrowed to non-destructive commands; README; install tests | odd-worker, parallel with T21 | 2, 5 | done (install RED 8 → GREEN 41/41) | `9c29d29` |
 | T23 | S21 | The CLI refuses a destructive subcommand that carries any option (`prompts --search x delete 1`, `prompts --limit 5 delete 1`), so no pre-approved prefix can reach it; `prompts --limit *` rule; tests | odd-worker, after T22 | 2 | done (RED: `prompts --search x delete 1` deleted → GREEN 270/270; suite 702/702) | `9c29d29` |
-| T24 | S21 | Fix L43: redact `<private>` in relation reason, evidence, and reasoning (judge, judge-many, compare, import); a busy or locked store is reported as `busy` (not `node:sqlite or fts5 missing`); tests | odd-worker | 2 | done (RED 3 → GREEN 232/232; suite 705/705) | see L44 |
+| T24 | S21 | Fix L43: redact `<private>` in relation reason, evidence, and reasoning (judge, judge-many, compare, import); a busy or locked store is reported as `busy` (not `node:sqlite or fts5 missing`); tests | odd-worker | 2 | done (RED 3 → GREEN 232/232; suite 705/705) | `ff6acee` |
 
 Review lenses before publication (Risk 1, 3, 4, 5): `review-risk`, `review-resilience`, `review-reliability`, run once over the whole branch after T7 so the reviewed tree is the published one.
 
