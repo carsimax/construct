@@ -10,7 +10,7 @@ const USAGE = `usage: construct-memory <command> [options]
   get <id> [--history]
   context
   update <id>                       JSON on stdin: title, content, type, topic_key, or find + replace
-  delete <id>
+  delete <id> [--hard]              soft delete; --hard erases the observation and its earlier versions for good
   summary --session <id>            summary on stdin; stores it and ends the session
   review list | review done <id>
   prompts [--limit N]               list stored prompts (id, date, preview), newest first
@@ -73,7 +73,7 @@ async function main(argv) {
   const { values, positionals } = parseArgs({
     args: rest,
     allowPositionals: true,
-    options: { type: { type: 'string' }, limit: { type: 'string' }, any: { type: 'boolean' }, history: { type: 'boolean' }, session: { type: 'string' }, project: { type: 'string' } },
+    options: { type: { type: 'string' }, limit: { type: 'string' }, any: { type: 'boolean' }, history: { type: 'boolean' }, hard: { type: 'boolean' }, session: { type: 'string' }, project: { type: 'string' } },
   })
   const known = ['save', 'search', 'get', 'context', 'update', 'delete', 'summary', 'review', 'import', 'prompts']
   if (!known.includes(command)) fail(`unknown command: ${command} (run construct-memory help)`)
@@ -119,8 +119,8 @@ async function main(argv) {
       }
       case 'delete': {
         const id = idArg(positionals[0])
-        if (!store.remove(id)) fail(`observation #${id} not found`)
-        return `deleted #${id}\n`
+        if (!store.remove(id, { hard: values.hard })) fail(`observation #${id} not found`)
+        return `${values.hard ? 'erased' : 'deleted'} #${id}\n`
       }
       case 'summary': {
         if (!values.session) fail('summary needs --session <id>')

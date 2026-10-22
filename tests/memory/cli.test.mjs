@@ -179,12 +179,30 @@ describe('construct-memory', () => {
     fails(cli(repo, ['update', '1'], JSON.stringify({ content: 'a', find: 'b', replace: 'c' })), /not both/)
   })
 
+  test('help documents delete --hard', () => {
+    assert.match(cli(makeRepo(), ['help']).stdout, /delete <id> \[--hard\]/)
+  })
+
   test('delete hides the observation from get and search', () => {
     const repo = makeRepo()
     ok(saveJson(repo, { title: 'Gone soon', content: 'ephemeral', type: 'discovery' }))
     assert.match(ok(cli(repo, ['delete', '1'])), /deleted #1/)
     fails(cli(repo, ['get', '1']), /not found/)
     assert.match(ok(cli(repo, ['search', 'ephemeral'])), /no memories/i)
+  })
+
+  test('delete --hard erases the observation and its history; plain delete is unchanged', () => {
+    const repo = makeRepo()
+    ok(saveJson(repo, { title: 'Leaky', content: 'the key is quokka42', type: 'discovery' }))
+    ok(cli(repo, ['update', '1'], JSON.stringify({ content: 'rotated now' })))
+    assert.equal(ok(cli(repo, ['delete', '1', '--hard'])), 'erased #1\n')
+    fails(cli(repo, ['get', '1', '--history']), /not found/)
+    assert.match(ok(cli(repo, ['search', 'quokka42'])), /no memories/i)
+    fails(cli(repo, ['delete', '1', '--hard']), /observation #1 not found/)
+    fails(cli(repo, ['delete', 'abc', '--hard']), /id/i)
+    ok(saveJson(repo, { title: 'Soft', content: 'plain removal', type: 'discovery' }))
+    assert.equal(ok(cli(repo, ['delete', '2'])), 'deleted #2\n')
+    assert.equal(ok(cli(repo, ['delete', '2', '--hard'])), 'erased #2\n')
   })
 
   test('summary stores the summary and ends the session', () => {

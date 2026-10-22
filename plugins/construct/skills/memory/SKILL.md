@@ -32,7 +32,7 @@ JSON
 
 - Content has four parts: **What** was done, **Why**, **Where** (paths), **Learned** (the part that is not obvious from the code).
 - Give an evolving topic one stable `topic_key` (`area/subject`): saving again with the same key updates that memory and keeps the previous text as a version.
-- Fix a wrong memory with `update <id>` (JSON on stdin) and drop one with `delete <id>`.
+- Fix a wrong memory with `update <id>` (JSON on stdin) and drop one with `delete <id>`. `delete <id> --hard` erases it and its earlier versions for good; use it for anything sensitive.
 
 ## Recall
 

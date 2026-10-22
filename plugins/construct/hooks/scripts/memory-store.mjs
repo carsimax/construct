@@ -76,6 +76,7 @@ CREATE TABLE IF NOT EXISTS user_prompts (
   import_id TEXT
 );
 CREATE UNIQUE INDEX IF NOT EXISTS prompts_import ON user_prompts(import_id) WHERE import_id IS NOT NULL;
+-- Import keys of erased prompts and observations (keys differ by their prompt:/obs: prefix).
 CREATE TABLE IF NOT EXISTS prompt_tombstones (
   import_id TEXT PRIMARY KEY,
   deleted_at TEXT NOT NULL
@@ -288,8 +289,20 @@ function makeStore(db, path, now) {
       })
     },
 
-    // remove soft-deletes; true when a live row was deleted.
-    remove(id) {
+    // remove soft-deletes; true when a live row was deleted. With hard it erases the row and its versions
+    // (the observations_ad trigger drops a live row's FTS entry and skips a soft-deleted one, which has none);
+    // an imported row leaves a tombstone of its import key. True for any existing row, false for an unknown id.
+    remove(id, { hard = false } = {}) {
+      if (hard) {
+        return write(() => {
+          const row = one('SELECT import_id FROM observations WHERE id = ?', id)
+          if (!row) return false
+          if (row.import_id) run('INSERT OR IGNORE INTO prompt_tombstones (import_id, deleted_at) VALUES (?, ?)', row.import_id, stamp())
+          run('DELETE FROM observation_versions WHERE observation_id = ?', id)
+          run('DELETE FROM observations WHERE id = ?', id)
+          return true
+        })
+      }
       return write(() => run('UPDATE observations SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL', stamp(), id).changes > 0)
     },
 
@@ -446,7 +459,7 @@ function makeStore(db, path, now) {
             continue
           }
           const importId = idOf('obs', o)
-          if (one('SELECT 1 AS found FROM observations WHERE import_id = ?', importId)) {
+          if (one('SELECT 1 AS found FROM observations WHERE import_id = ? UNION SELECT 1 FROM prompt_tombstones WHERE import_id = ?', importId, importId)) {
             counts.skipped++
             continue
           }

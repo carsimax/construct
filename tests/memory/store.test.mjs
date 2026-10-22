@@ -142,6 +142,52 @@ describe('schema (S2)', () => {
   })
 })
 
+describe('hard delete (S13)', () => {
+  const fts = (store, word) => raw(store, `SELECT rowid FROM observations_fts WHERE observations_fts MATCH '"${word}"'`).length
+
+  test('remove with hard erases the row, every version, and the FTS match', () => {
+    const { store } = open()
+    const { id } = store.save(obs('Token note', { content: 'the token is zebrafinch99' }))
+    store.update(id, { content: 'the token was rotated, see vault' })
+    assert.equal(raw(store, 'SELECT * FROM observation_versions WHERE observation_id = ?', id).length, 1)
+    assert.equal(store.remove(id, { hard: true }), true)
+    assert.equal(raw(store, 'SELECT * FROM observations WHERE id = ?', id).length, 0)
+    assert.equal(raw(store, 'SELECT * FROM observation_versions WHERE observation_id = ?', id).length, 0)
+    assert.equal(fts(store, 'zebrafinch99'), 0)
+    assert.equal(fts(store, 'rotated'), 0)
+    assert.equal(store.get(id, { history: true }), null)
+    assert.deepEqual(store.search('zebrafinch99'), [])
+    assert.equal(store.remove(id, { hard: true }), false)
+    assert.equal(store.remove(99999, { hard: true }), false)
+    store.close()
+  })
+
+  test('hard delete works on an already soft-deleted observation and leaves the index sound', () => {
+    const { store } = open()
+    const { id } = store.save(obs('Old secret', { content: 'swordfish77 lives here' }))
+    const keep = store.save(obs('Keeper', { content: 'keeper text stays' })).id
+    assert.equal(store.remove(id), true)
+    assert.equal(raw(store, 'SELECT count(*) AS n FROM observations WHERE id = ?', id)[0].n, 1)
+    assert.equal(store.remove(id, { hard: true }), true)
+    assert.equal(raw(store, 'SELECT count(*) AS n FROM observations WHERE id = ?', id)[0].n, 0)
+    assert.equal(fts(store, 'swordfish77'), 0)
+    assert.equal(store.search('keeper')[0].id, keep)
+    store.close()
+  })
+
+  test('plain remove stays a soft delete that keeps the row and its versions', () => {
+    const { store } = open()
+    const { id } = store.save(obs('Soft', { content: 'softly removed' }))
+    store.update(id, { content: 'softly removed again' })
+    assert.equal(store.remove(id), true)
+    assert.equal(store.remove(id), false)
+    assert.equal(raw(store, 'SELECT deleted_at FROM observations WHERE id = ?', id).length, 1)
+    assert.equal(raw(store, 'SELECT * FROM observation_versions WHERE observation_id = ?', id).length, 1)
+    assert.equal(store.get(id), null)
+    store.close()
+  })
+})
+
 describe('write rules (S3)', () => {
   test('redacts <private> spans in title and content', () => {
     const { store } = open()
