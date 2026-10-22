@@ -40,8 +40,8 @@ A unit is one independent piece of behavior with its code, tests, and docs toget
 3. Write the handoff by reference: the feature document, the task, and its `S#`; or, without a document, the user's request verbatim. Include the verification commands as the unit's verifier with its strength (strong: tests, build, typecheck; weak: ambiguous requirements or external side effects, so the worker stops after one step and reports; no verifier: say what would make it verifiable, and for docs-only units the reviewed diff is the verifier, so the worker proceeds), the test-first policy, the helpers to reuse, and the invariants to keep.
 4. Launch parallel units in one message.
 5. Check each writer's diff against its surface before accepting it. Run one seam check (the full suite, once) after parallel units.
-6. Spot check one reported command yourself. A worker's final message is a summary; read its report file (the reported path) only when you need detail.
-7. Remove scratch paths that workers report, report files included, only after the spot check.
+6. Spot check one reported command yourself.
+7. Remove scratch paths that workers report.
 
 ## Launch deduplication
 
