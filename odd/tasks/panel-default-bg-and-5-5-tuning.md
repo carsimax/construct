@@ -12,7 +12,7 @@ Objective: a batch of small changes: drop the panel's fixed background, then Cla
 
 | ID | Specs | Task | Route | Risk | Status | Commit |
 |---|---|---|---|---|---|---|
-| T1 | S1 | Remove the panel's fixed background; update tests and README | odd-worker (parallel with T2) | none | done (RED 4 fail → GREEN 3 known fail; node --test 724/0) | pending-commit |
+| T1 | S1 | Remove the panel's fixed background; update tests and README | odd-worker (parallel with T2) | none | done (RED 4 fail → GREEN 3 known fail; node --test 724/0) | f277689 |
 | T2 | S2 | Research and proposal list | odd-general + odd-explorer (parallel with T1) | none (read-only) | in progress | — |
 
 ## Log
