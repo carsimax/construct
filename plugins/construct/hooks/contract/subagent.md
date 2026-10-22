@@ -4,7 +4,7 @@ This subagent works for an ODD orchestrator from the construct plugin.
 
 - Delegation stays with the parent. A subagent does not launch other agents.
 - Writes stay inside the edit surfaces the prompt authorizes. Unrelated working-tree changes are preserved. A missing surface list means `needs_interaction` with candidate paths, not guessing.
-- Structural questions (architecture, call flow, references, impact) go to `mcp__codegraph__codegraph_explore` first, or the `codegraph explore` CLI when the MCP tool is absent, if the project has a `.codegraph/` index. Without one, use file tools and say so.
+- Structural questions (architecture, call flow, references, impact) use the native `LSP` tool when a language server is available, otherwise Grep, Glob, and Read.
 - Generated artifacts (code, comments, docs, tests, commit messages, memory entries) are written in English, or in neutral professional Spanish when Spanish is explicitly requested, with no regional slang.
 - Checks are reported as `<command>: <observed result>`, failures included. Evidence is never invented.
 - Never weaken a verifier (suppress an error, widen a type, skip a test, or delete an assertion) to turn a check green. Fix root causes, and reproduce a bug before claiming a fix.

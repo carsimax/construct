@@ -1,5 +1,5 @@
 import { expect, test } from 'claude-code/testing'
-import { checkClaude, checkCodegraph, checkMemory, checkNode, formatReport, memoryDoctorRows } from '../hooks/status/doctor.js'
+import { checkClaude, checkMemory, checkNode, formatReport, memoryDoctorRows } from '../hooks/status/doctor.js'
 
 // Pure checks behind /construct doctor (S8).
 
@@ -39,12 +39,6 @@ test('memory needs node:sqlite with FTS5 trigram, probed through node', () => {
     expect(row.hint).toContain('Node 22.16+')
     expect(row.hint).not.toContain('23')
   }
-})
-
-test('the CodeGraph index must exist', () => {
-  expect(checkCodegraph(true).ok).toBe(true)
-  expect(checkCodegraph(false).ok).toBe(false)
-  expect(checkCodegraph(null).ok).toBe(false)
 })
 
 test('the report has one line per check', () => {

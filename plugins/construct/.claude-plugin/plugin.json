@@ -307,12 +307,6 @@
       "title": "Open the Construct panel on start",
       "description": "Open the docked Construct panel when a session starts (on by default); /construct opens it any time and /construct close closes it",
       "default": true
-    },
-    "codegraph_auto_index": {
-      "type": "boolean",
-      "title": "Index with CodeGraph at session start",
-      "description": "When on, a session that starts in a git root with no .codegraph/ index runs codegraph init in the background (needs the codegraph CLI on the PATH). Off by default: indexing stays your decision",
-      "default": false
     }
   }
 }

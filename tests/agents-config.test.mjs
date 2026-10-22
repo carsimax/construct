@@ -54,10 +54,7 @@ test('userConfig declares model and effort options whose defaults match each age
   // The panel's switch is a key that is not a model or effort option
   assert.equal(cfg.panel_open_on_start?.type, 'boolean')
   assert.equal(cfg.panel_open_on_start?.default, true)
-  // The CodeGraph auto-index switch is the other non-model/effort key (S5)
-  assert.equal(cfg.codegraph_auto_index?.type, 'boolean')
-  assert.equal(cfg.codegraph_auto_index?.default, false)
-  assert.equal(Object.keys(cfg).length, Object.keys(S6).length * 2 + 2)
+  assert.equal(Object.keys(cfg).length, Object.keys(S6).length * 2 + 1)
 })
 
 test('no plugin agent references gentle-ai or any engram tool', () => {
@@ -74,4 +71,12 @@ test('odd-explorer keeps Bash so it can run construct-memory search, and the man
   assert.equal(manifest.dependencies, undefined)
   const market = JSON.parse(readFileSync(new URL('../.claude-plugin/marketplace.json', import.meta.url), 'utf8'))
   assert.equal(market.allowCrossMarketplaceDependenciesOn, undefined)
+})
+
+test('S2: explorer and judge agents list LSP, and no agent lists a codegraph tool', () => {
+  const tools = (file) => readFileSync(join(pluginRoot, 'agents', file), 'utf8').split('---')[1].match(/^tools: (.*)$/m)?.[1] ?? ''
+  for (const agent of ['odd-explorer', 'jd-judge-a', 'jd-judge-b', 'jd-fix-agent']) {
+    assert.match(tools(`${agent}.md`), /\bLSP\b/, `${agent} lists LSP`)
+  }
+  for (const file of agentFiles) assert.doesNotMatch(tools(file), /mcp__codegraph/, `${file} lists no codegraph tool`)
 })
