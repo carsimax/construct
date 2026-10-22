@@ -15,7 +15,6 @@ const EXPECTED = [
   'constraints',
   'debugging',
   'go-testing',
-  'judgment-day',
   'memory',
   'migration',
   'delegation',
@@ -75,8 +74,8 @@ test('relative markdown links inside skills resolve to existing files', () => {
   }
 })
 
-test('judgment-day names the plugin-namespaced agents', () => {
-  const text = readFileSync(join(skillsRoot, 'judgment-day', 'SKILL.md'), 'utf8')
+test('review (dual review) names the plugin-namespaced agents', () => {
+  const text = filesUnder(join(skillsRoot, 'review')).map((f) => readFileSync(f, 'utf8')).join('\n')
   for (const agent of ['judge-a', 'judge-b', 'worker']) {
     assert.match(text, new RegExp(`construct:${agent}`), agent)
     assert.doesNotMatch(text, new RegExp(`\`${agent}\``), `bare ${agent}`)

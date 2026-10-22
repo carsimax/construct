@@ -1,9 +1,10 @@
 ---
 name: judge-b
 description: >
-  Adversarial code reviewer — blind judge B for judgment-day parallel review protocol.
-  Triggered by the orchestrator when judgment-day is invoked. Reviews code for
-  correctness, edge cases, security, performance, and project standards.
+  Adversarial code reviewer — blind judge B for the dual review mode of
+  construct:review. Launched by the orchestrator when the user asks for a dual or
+  adversarial review. Reviews code for correctness, edge cases, security,
+  performance, and project standards.
 model: sonnet
 effort: medium
 tools: Read, Glob, Grep, LSP

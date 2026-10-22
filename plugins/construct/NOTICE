@@ -5,7 +5,7 @@ Adapted material:
 - agents/review-risk.md, review-readability.md, review-reliability.md,
   review-resilience.md, judge-a.md, judge-b.md
 - skills/branch-pr, chained-pr, cognitive-doc-design, comment-writer,
-  go-testing, judgment-day, skill-creator, skill-improver, work-unit-commits
+  go-testing, skill-creator, skill-improver, work-unit-commits
 - skills/workflow, delegation and
   hooks/contract/session.md, subagent.md (condensed from the orchestrator,
   routing, research, and persistence guidance)
@@ -49,8 +49,7 @@ Construct also includes material adapted from the agent-skills project
 Adapted material:
 - skills/debugging, skills/constraints, skills/sources,
   skills/migration
-- skills/judgment-day/references/decision-mode.md (skills/judgment-day/SKILL.md
-  itself comes from the Gentle AI material above)
+- skills/review/references/dual-review.md (the decision mode)
 - skills/review/references/security-checklist.md
 - agents/review-risk.md (the Checklist section)
 - evals/debugging-fires/**, evals/debugging-stays-quiet/** (adapted from the
