@@ -1,21 +1,24 @@
 #!/usr/bin/env bash
 set -euo pipefail
 git init -q
-cat > last.js <<'JS'
-export function lastItem(items) {
-  return items[items.length]
-}
-JS
-cat > last.test.js <<'JS'
-import { test } from 'node:test'
-import assert from 'node:assert/strict'
-import { lastItem } from './last.js'
-
-test('lastItem returns the final element', () => {
-  assert.equal(lastItem([1, 2, 3]), 3)
-})
-JS
 printf '{ "type": "module", "scripts": { "test": "node --test" } }\n' > package.json
 printf 'script-shell=/bin/sh\n' > .npmrc
+cat > money.js <<'JS'
+// Rounds an amount of money to whole cents.
+export function roundCents(amount) {
+  return Math.round(amount * 100) / 100
+}
+JS
+cat > money.test.js <<'JS'
+import { test } from 'node:test'
+import assert from 'node:assert/strict'
+import { roundCents } from './money.js'
+
+test('roundCents rounds to two decimals', () => {
+  assert.equal(roundCents(1.234), 1.23)
+  assert.equal(roundCents(1.236), 1.24)
+  assert.equal(roundCents(1.005), 1)
+})
+JS
 git add -A
-git -c user.email=eval@example.com -c user.name=eval commit -qm "chore: initial last module"
+git -c user.email=eval@example.com -c user.name=eval commit -qm "chore: initial files"

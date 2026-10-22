@@ -8,22 +8,15 @@ const pluginRoot = new URL('../plugins/construct/', import.meta.url).pathname
 const skillsRoot = join(pluginRoot, 'skills')
 
 const EXPECTED = [
-  'branch-pr',
-  'chained-pr',
-  'cognitive-doc-design',
-  'comment-writer',
   'constraints',
   'debugging',
-  'go-testing',
+  'delivery',
   'memory',
   'migration',
   'delegation',
   'workflow',
   'review',
-  'skill-creator',
-  'skill-improver',
   'sources',
-  'work-unit-commits',
 ]
 
 function skillDirs() {

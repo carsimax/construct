@@ -5,7 +5,7 @@ Path `odd/tasks/<feature>.md`, created before the first source write of large wo
 ```markdown
 # <Feature>
 
-Objective: <one sentence>. Branch: <branch>. Baseline: <commit>. Delivery strategy: <strategy>. Test runner: <command>.
+Objective: <one sentence>. Branch: <branch>. Baseline: <commit>. Delivery strategy: <ask-on-risk | auto-chain | single-pr | exception-ok; chains: stacked-to-main | feature-branch-chain>. Test runner: <command>.
 
 ## Specs
 

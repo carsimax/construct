@@ -21,14 +21,15 @@ prompt="$(awk 'c>=2{print} /^---$/{c++}' "$case_dir/prompt.md" | sed '/./,$!d')"
 status=0
 for i in $(seq 1 "$runs"); do
   work="$(mktemp -d)"
-  stream="$work/stream.jsonl"
+  out="$(mktemp -d)" # stream and stderr stay outside the fixture workspace
+  stream="$out/stream.jsonl"
   (cd "$work" && bash "$case_dir/fixture.sh" >/dev/null 2>&1)
   (cd "$work" && claude -p "$prompt" \
     --plugin-dir "$repo_root/plugins/construct" \
     --settings '{"enabledPlugins":{"construct@construct":false}}' \
     --output-format stream-json --verbose --max-turns 20 --model sonnet \
-    --allowedTools Read Glob Grep Skill Agent 'Bash(git status*)' 'Bash(git diff*)' 'Bash(git log*)' 'Bash(git push*)' \
-    >"$stream" 2>"$work/stderr.txt") || true
+    --allowedTools Read Glob Grep Skill Agent 'Bash(npm test*)' 'Bash(node --test*)' 'Bash(git status*)' 'Bash(git diff*)' 'Bash(git log*)' 'Bash(git push*)' \
+    >"$stream" 2>"$out/stderr.txt") || true
   node - "$stream" <<'JS' || status=1
 const fs = require('fs')
 const path = process.argv[2]

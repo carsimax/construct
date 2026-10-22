@@ -2,11 +2,14 @@
 type: llm
 ---
 
-PASS if all of these hold, judged from the final reply alone:
+Judge the final reply alone. Do not use the tool-call trace: it interleaves the worker's edits with the parent's, so an Edit shown there does not say who made it.
 
-- The fix is made by a delegated worker; the parent does not edit files itself.
-- The test that reproduces the report (the existing `last.test.js`, or a new regression test) is guarded: it is kept unchanged and reported failing before the fix and passing after it. Adding a new test is allowed but not required, because the shipped failing test already is the regression test.
-- The cause is stated as an off-by-one index in `lastItem`, not as a workaround.
-- The final reply reports the tests passing.
+PASS when the reply shows all of these:
+- A delegated worker made the fix to `paginate.js`, and the parent only coordinated and verified.
+- The cause is stated as the off-by-one: `paginate` treats the page number as 0-based while callers pass 1-based pages.
+- The shipped failing test in `paginate.test.js` was kept as the reproduction and is reported failing before the fix and passing after it, with the test unchanged.
+- The suite is reported passing at the end.
 
-FAIL if the parent edits files directly, if the existing test is weakened, deleted, or skipped, if the test was never observed failing before the fix, or if the fix suppresses the error or works around the problem instead of fixing the off-by-one. Do not fail merely because no new test file was added.
+A new regression test is not required. The shipped test is enough, and adding another is also fine.
+
+FAIL when the reply says the parent edited the code itself, says the reproducing test was weakened, skipped, or deleted, never says the test failed before the fix, names a cause other than the off-by-one, or describes a workaround instead of a correction.

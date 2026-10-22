@@ -1,55 +1,39 @@
 # Migration phases
 
-## Expand, migrate, contract
+## Expand, migrate, contract (schemas and stored data)
 
-```
-EXPAND -> MIGRATE -> CONTRACT
-add new shape beside old; backfill and dual-write; drop the old shape later, alone
-```
+Each step: own unit, verifier, rollback.
 
-Example, renaming `name` to `full_name`:
+1. **Expand.** Add the new column or field as nullable. Verify: old code runs. Rollback: drop it.
+2. **Dual-write.** New code writes both shapes and reads the old one. Verify the shapes agree. Rollback: redeploy the previous code.
+3. **Backfill.** Copy old data in throttled, bounded, re-runnable batches; keep the source backed up. Verify counts and a sample. Rollback: clear the new column or restore.
+4. **Switch reads.** Move reads to the new shape, behind a flag if possible. Verify results match. Rollback: flip the flag.
+5. **Contract.** Stop writing the old shape, then drop it, in a later unit, after nothing references it. Verify with the full tests and a reference search. Rollback: restore the pre-drop backup.
 
-1. Expand: add `full_name` as nullable. Old code ignores it. Verify: schema check, existing tests pass.
-2. Dual-write: write both on every insert and update. Verify: test asserting both are set.
-3. Backfill: copy `name` to `full_name` in throttled batches. Verify: count of rows where they differ is zero.
-4. Switch reads to `full_name`, keep dual-writing, let it bake. Rollback: revert the code; data is still complete.
-5. Contract: stop writing `name`; in a separate later unit drop it. Verify: no reference remains (grep, query logs).
+A down path counts once run on a copy.
 
-Rules:
-- Every migration has a down path that was run, not just written.
-- Backfills are idempotent, batched, off the hot path; back up or keep the source column until contraction.
-- Large indexes are built without blocking writes where the database supports it.
-- Decouple a risky cutover with a flag.
+## Code and API patterns
 
-## Patterns for code and APIs
-
-- Adapter: old interface, new implementation; consumers migrate later.
-- Flag migration: switch consumers one at a time.
-- Strangler: run both, shift traffic in steps, remove the old at zero.
+- **Adapter:** old interface wraps the new one; callers move one by one.
+- **Flag migration:** ship the new path dark, ramp it up, delete the flag with the old path.
+- **Strangler:** route one slice at a time to the replacement.
 
 ## Deprecation notice
 
-```
-Deprecated: <name>
-Replacement: <name and migration steps>
-Reason: <why it goes>
-Removal condition: <zero usage observed | date>
-Type: advisory | compulsory (compulsory needs tooling and a deadline)
-```
+Fields (notice and memory entry):
 
-The owner of the thing being removed migrates its consumers or ships a compatible bridge; announcing is not migrating.
+- **Deprecated:** the name, API, flag, or format.
+- **Replacement:** what to use, already working.
+- **Reason:** why it goes.
+- **Removal condition:** an observable state, such as zero calls for 30 days.
+- **Type:** advisory, or compulsory. Compulsory needs tooling and a deadline.
 
-## Removal checklist
+The owner of the removed thing migrates consumers or ships a bridge. Announcing is not migrating.
 
-- Replacement covers every critical use and is proven.
-- Zero active use confirmed by evidence, not assumption.
-- Code, tests, docs, config, and the notice removed; no reference to the old name remains.
+## Removal
 
-## Rationalizations
+Only with the replacement proven and zero use evidenced. Code, tests, docs, config, and the notice go together in one unit.
 
-| Excuse | Reality |
-|---|---|
-| "Just rename the column" | During rollout old and new code run together; one fails. |
-| "Add and drop in one migration" | Couples a safe add to a destructive drop. |
-| "Write the rollback if needed" | An unwritten down path is a deploy you cannot reverse. |
-| "Users will migrate on their own" | They will not; supply tooling or do it. |
+## Rejected
+
+Renaming in place; adding and dropping in one step; planning rollback later; "users will migrate themselves".

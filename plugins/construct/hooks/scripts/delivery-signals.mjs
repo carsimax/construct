@@ -14,7 +14,7 @@ import { closeSync, mkdirSync, openSync, readSync, rmSync, statSync, writeFileSy
 import { join, resolve } from 'node:path'
 import { dataDir, readInput, safeName } from './hook-io.mjs'
 
-const SLICE_LINES = 400
+export const SLICE_LINES = 400
 const isGeneratedGoldenPath = (logicalPath) => {
   const normalized = `/${logicalPath.replace(/^\.\//, '')}`
   return normalized.includes('/testdata/golden/') && normalized.endsWith('.golden')

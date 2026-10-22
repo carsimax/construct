@@ -271,7 +271,7 @@ The mod draws one thing: a docked **panel** (a `Pane` with id `construct`) laid 
 | `install.sh` | One-command installer (see [One command](#one-command)) |
 | `plugins/construct/` | The plugin (manifest name `construct`) |
 | `plugins/construct/agents/` | The 11 role agents |
-| `plugins/construct/skills/` | Delivery and review skills (`branch-pr`, `chained-pr`, `work-unit-commits`, `review`, `debugging`, `constraints`, ...) |
+| `plugins/construct/skills/` | Delivery and review skills (`delivery`, `review`, `debugging`, `constraints`, ...) |
 | `plugins/construct/hooks/` | `hooks.json`, the mod (`register.js`), its routing helpers, the status modules (`status/`), the panel modules (`panel/`), and the command hooks (`scripts/`: contract, feature state, the `shell-words` tokenizer, delivery signals, publication gate, review store guard, command and surface guards, Risk line gate, subagent count, delegation admission, review context and capture, and the memory store `memory-store.mjs` with its hooks `memory-hooks.mjs`) |
 | `plugins/construct/bin/construct-memory` | The memory command line (on the Bash tool's PATH) |
 | `plugins/construct/hooks/contract/` | Session and subagent contract texts injected by hooks |
