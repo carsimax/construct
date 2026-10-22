@@ -19,7 +19,7 @@ Source: L1-L3.
 | T2 | S2 | Redirection file descriptors and `&>` in `shell-words.mjs`; tests | odd-worker, parallel with T1, T3 | 2 | done (RED 7 → GREEN 177/177; suite 726/726) | `59e2acf` |
 | T3 | S3 | Per-segment overlap in `delegation-admission.mjs`; tests | odd-worker, parallel with T1, T2 | 2 | done (RED 5/6 on a HEAD copy, code written first → GREEN 75/75) | `b9ed987` |
 | T4 | S4 | Eval sandbox causes and fixes; rerun the evals | odd-general for the diagnosis, then odd-worker | 5 | done (hooks RED 4 → GREEN 274/274; suite 727/727; evals 5/6, mean Δ +0.44) | `eb1b1b5` |
-| T5 | S3, S4 | Fix L10: an entry with a brace group that spans `/` overlaps everything again; pin the eval allow rule to the plugin copy's absolute CLI path; tests | odd-worker | 2 | done (RED 1 → GREEN 76/76) | see L11 |
+| T5 | S3, S4 | Fix L10: an entry with a brace group that spans `/` overlaps everything again; pin the eval allow rule to the plugin copy's absolute CLI path; tests | odd-worker | 2 | done (RED 1 → GREEN 76/76) | `070fd96` |
 
 ## Log
 
