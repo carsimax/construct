@@ -165,7 +165,7 @@ describe('overlap with an open writer', () => {
     const repo = plain()
     const e = env()
     allowed(launch(repo, e, WORKER, surfaces('src/[ab].js')))
-    denied(launch(repo, e, WORKER, surfaces('docs/readme.md')), /overlap/)
+    denied(launch(repo, e, WORKER, surfaces('src/readme.md')), /overlap/)
   })
   test('a denied launch records nothing', () => {
     const repo = plain()

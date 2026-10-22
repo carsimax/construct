@@ -15,9 +15,9 @@ Source: L1-L3.
 
 | ID | Specs | Task | Route | Risk | Status | Commit |
 |---|---|---|---|---|---|---|
-| T1 | S1 | Relation confidence range on import; close the doctor test's connection; tests | odd-worker, parallel with T2, T3 | 1 | done (RED 1 → GREEN 233/233) | see L4 |
+| T1 | S1 | Relation confidence range on import; close the doctor test's connection; tests | odd-worker, parallel with T2, T3 | 1 | done (RED 1 → GREEN 233/233) | `d53fd4c` |
 | T2 | S2 | Redirection file descriptors and `&>` in `shell-words.mjs`; tests | odd-worker, parallel with T1, T3 | 2 | in progress | — |
-| T3 | S3 | Per-segment overlap in `delegation-admission.mjs`; tests | odd-worker, parallel with T1, T2 | 2 | in progress | — |
+| T3 | S3 | Per-segment overlap in `delegation-admission.mjs`; tests | odd-worker, parallel with T1, T2 | 2 | done (RED 5/6 on a HEAD copy, code written first → GREEN 75/75) | see L5 |
 | T4 | S4 | Eval sandbox causes and fixes; rerun the evals | odd-general for the diagnosis, then odd-worker | 5 | in progress (diagnosis) | — |
 
 ## Log
@@ -26,3 +26,4 @@ Source: L1-L3.
 - **L2 (2026-10-21, user):** "Listo" after merging #34 (`0c22366`). Tag `v4.0.0` not created yet.
 - **L3 (2026-10-21, parent):** The publication gate parser bug (`2>&1` read as a refspec) joins the list from construct-memory L46. Under construct-memory L21 (apply the parent's recommendations), the fixes run without further questions; tags and releases stay the user's.
 - **L4 (2026-10-21, T1):** Relation import stores `confidence` only when it is a finite number in [0,1], else null (a numeric string is null too); the doctor test that opened a `DatabaseSync` probe now closes it in a `finally`. RED 1 → GREEN 233/233 (parent rerun of `tests/memory/`).
+- **L5 (2026-10-21, T3):** `uninterpretable()` takes one segment (brackets, backslash, nested or unbalanced braces) and only makes that position compatible; parentheses are literal; `**` and extglob segments (`[@!+*?](`) overlap everything from their position on; differing literal segments end the comparison as no overlap. `tests/admission/overlap.test.mjs` (6 tests: the reported Java/Next.js pair, two writers in one `[id]/_components/**`, route groups, extglob, `[id]/a.ts` vs `[id]/b.ts`, backslash and braces). One existing assertion encoded the defect (`src/[ab].js` vs `docs/readme.md`, different at the first segment, expected to overlap); now `src/readme.md`. README Overlap bullet reworded. RED shown afterwards on a HEAD copy (5 of 6 fail). Parent checks: diff read; `node --test tests/admission/` 75/75.
