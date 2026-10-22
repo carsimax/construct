@@ -11,10 +11,10 @@
 import { readFileSync } from 'node:fs'
 import { repositoryRoot } from './git-tree.mjs'
 import { readInput } from './hook-io.mjs'
+import { lensOf } from './roles.mjs'
 import { checkLensResult, clearPending, pendingRecords, pruneStore, writePending, writeVerdict } from './review-store.mjs'
 
 const MAX_RETRIES = 2
-const AGENT = /^construct:(review-[a-z]+)$/
 const FENCE = /^```[A-Za-z]*[ \t]*\r?\n([\s\S]*?)\r?\n```$/
 const unfence = (text) => FENCE.exec(text.trim())?.[1] ?? text
 
@@ -47,7 +47,7 @@ const block = (reason) => process.stdout.write(`${JSON.stringify({ decision: 'bl
 
 function main() {
   const input = readInput()
-  const lens = AGENT.exec(input?.agent_type ?? '')?.[1]
+  const lens = lensOf(input?.agent_type)
   if (!lens || typeof input.cwd !== 'string') return
   const reply = replyOf(input)
   if (reply === null) return

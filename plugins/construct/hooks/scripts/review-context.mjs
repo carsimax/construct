@@ -11,9 +11,9 @@ import { existsSync, readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { git, repositoryRoot } from './git-tree.mjs'
 import { readInput } from './hook-io.mjs'
+import { lensOf } from './roles.mjs'
 import { subjectHash, writePending } from './review-store.mjs'
 
-const REVIEW_AGENT = /^construct:(review-(?:risk|resilience|readability|reliability))$/
 const SUBJECT_LINE = /^Review subject: (\S+)[ \t]*$/m
 const CHECKLIST = new URL('../../skills/rdd-review/references/security-checklist.md', import.meta.url)
 const MAX_CONTEXT_BYTES = 400 * 1024
@@ -99,9 +99,9 @@ async function main() {
   const input = readInput()
   const toolInput = input?.tool_input
   if (input?.tool_name !== 'Agent' || typeof toolInput?.prompt !== 'string') return
-  const match = REVIEW_AGENT.exec(toolInput.subagent_type ?? '')
-  if (!match) return
-  const [agent, lens] = match
+  const lens = lensOf(toolInput.subagent_type)
+  if (!lens) return
+  const agent = toolInput.subagent_type
   const base = SUBJECT_LINE.exec(toolInput.prompt)?.[1]
   const head = 'HEAD'
   if (base?.includes('..')) {
