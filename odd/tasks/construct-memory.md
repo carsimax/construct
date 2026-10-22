@@ -69,7 +69,7 @@ Source: L1-L3, map in L4. Engram references are to commit `258e7a3` of github.co
 | T16 | S18 | `consolidate` with preview, fingerprint, and confirm; tests, skill and README | odd-worker, after T15 | 1 | done (RED 13 → GREEN; follow-ups RED 3 and RED 1 → GREEN 201/201 three times; suite 673/673 twice) | `2bfaf55` |
 | T18 | S19 | Text touchpoints: session and subagent contracts, `odd-workflow`, `persistence.md`, `odd-delegation` handoffs, `debugging`, `rdd-review`, `constraint-driven`, `migration`, agent bodies; pin test | odd-worker, after T16, parallel with T19 | 3 | done (RED 16/17 on a HEAD copy → GREEN 131/131; suite 690/690) | `5864731` |
 | T19 | S19 | `/construct doctor` runs the memory doctor; `memory-recall` eval case; tests | odd-worker, after T16, parallel with T18 | 3 | done (mod RED 5 new → GREEN 157 pass + the 3 known failures; suite 691/691) | `3b669fe` |
-| T20 | S20 | `stats --json` (with `--session`), MEMORY card in layout, collection in `register.js`; mod tests | odd-worker, after T19 (shares `register.js`) | none | done (mod RED 6 new → GREEN 167 + 3 known; memory 221/221; suite 693/693) | see L39 |
+| T20 | S20 | `stats --json` (with `--session`), MEMORY card in layout, collection in `register.js`; mod tests | odd-worker, after T19 (shares `register.js`) | none | done (mod RED 6 new → GREEN 167 + 3 known; memory 221/221; suite 693/693) | `963cb55` |
 
 Review lenses before publication (Risk 1, 3, 4, 5): `review-risk`, `review-resilience`, `review-reliability`, run once over the whole branch after T7 so the reviewed tree is the published one.
 
