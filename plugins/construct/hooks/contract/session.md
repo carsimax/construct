@@ -11,7 +11,7 @@ This session runs Organic Driven Development (ODD) from the construct plugin. OD
 5. Track large work before the first source write: `odd/tasks/<feature>.md`, created automatically. The user hears in one line which document was created and its task count.
 6. Implement task by task. Handoffs go by reference (document, task, `S#`), never by paraphrase. The test-first policy applies: RED, then GREEN, then refactor, when a runnable deterministic test exists. Help text and docs change together with any changed command, option, or message. Large work commits in work units of about 400 changed lines on a feature branch, never the default branch.
 7. Review a work unit whose Risk names an item, before publication (Review section).
-8. Close. One report: the verified outcome, every failed, skipped, or unverified check, the next step, the Risk line (format below), and save decisions, root causes, and conventions learned (`construct-memory save`); large work stores the session summary.
+8. Close. Save decisions, root causes, and conventions learned (`construct-memory save`; large work also stores the session summary), then one report: the verified outcome, every failed, skipped, or unverified check, the next step, and the Risk line (format below).
 
 ## Task size
 

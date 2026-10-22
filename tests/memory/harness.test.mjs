@@ -15,6 +15,8 @@ describe('memory touchpoints (S19)', () => {
     const close = line(session, /^8\. Close/)
     assert.match(close, /construct-memory save/)
     assert.match(close, /session summary/)
+    assert.ok(close.indexOf('construct-memory save') < close.indexOf('one report'), 'save before the report')
+    assert.match(close, /Risk line \(format below\)\.$/)
   })
 
   test('subagent contract ends reports with `## Key Learnings:`', () => {
@@ -25,6 +27,7 @@ describe('memory touchpoints (S19)', () => {
   const LEARNINGS = /## Key Learnings:/
   const cases = [
     ['skills/odd-workflow/SKILL.md', MEMORY],
+    ['skills/odd-workflow/SKILL.md', /\*\*Close\.\*\* Save[^\n]*construct-memory save[^\n]*then one report[^\n]*and the Risk line \(last\)\./],
     ['skills/odd-workflow/references/persistence.md', /construct-memory search/],
     ['skills/odd-delegation/SKILL.md', MEMORY],
     ['skills/odd-delegation/references/handoffs.md', /## Memory/],
