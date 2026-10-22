@@ -52,6 +52,7 @@ function reason(error) {
   const msg = String(error?.message ?? error)
   if (/newer construct/i.test(msg)) return 'newer schema'
   if (/readonly|read-only|unable to open|EACCES|EROFS|EPERM/i.test(msg)) return 'not writable'
+  if (/SQLITE_BUSY|database is locked/i.test(msg)) return 'busy, try again'
   if (/sqlite|fts5|trigram|ERR_UNKNOWN_BUILTIN_MODULE/i.test(msg)) return 'node:sqlite or fts5 missing'
   return [...(msg.split('\n')[0] || 'unknown error')].slice(0, 120).join('')
 }

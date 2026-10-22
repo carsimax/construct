@@ -274,6 +274,41 @@ describe('hard delete and doctor', () => {
   })
 })
 
+describe('relation text is redacted (S21a)', () => {
+  const TAGGED = ['<private>secret</private> kept', 'kept <private>secret']
+  const clean = (store) => {
+    const dump = JSON.stringify([rels(store), store.exportData().relations])
+    assert.ok(!dump.includes('secret'), dump)
+    assert.ok(dump.includes('[REDACTED]'), dump)
+  }
+  for (const t of TAGGED) {
+    test(`judge, judge-many, compare, and import redact ${JSON.stringify(t)}`, () => {
+      const { store } = fresh()
+      const a = note(store, 'Logging format json').id
+      const b = note(store, 'Logging format text')
+      store.judge(b.candidates[0].judgment_id, 'conflicts_with', { reason: t, evidence: t })
+      clean(store)
+      const m = fresh()
+      const x = note(m.store, 'Cache policy json').id
+      const y = note(m.store, 'Cache policy text')
+      m.store.judgeMany([{ judgment_id: y.candidates[0].judgment_id, relation: 'scoped', reason: t, evidence: t }])
+      clean(m.store)
+      const c = fresh()
+      const p = note(c.store, 'Queue layout one').id
+      const q = note(c.store, 'Queue layout two').id
+      c.store.compare(p, q, 'related', { confidence: 0.5, reasoning: t })
+      clean(c.store)
+      const data = c.store.exportData()
+      data.relations[0].reason = t
+      data.relations[0].evidence = t
+      const dest = fresh()
+      dest.store.importExport(JSON.parse(JSON.stringify(data)), { project: data.observations[0].project })
+      assert.equal(rels(dest.store).length, 1)
+      clean(dest.store)
+    })
+  }
+})
+
 describe('export and import of relations', () => {
   test('relations whose ends are both exported round-trip, and importing twice adds nothing', () => {
     const src = fresh()

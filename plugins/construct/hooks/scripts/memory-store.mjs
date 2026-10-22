@@ -232,7 +232,7 @@ function checkVerdict(relation, confidence) {
   if (!(c >= 0 && c <= 1)) throw new Error('confidence must be a number between 0 and 1')
   return c
 }
-const text = (v) => (v === undefined || v === null ? null : String(v))
+const text = (v) => (v === undefined || v === null ? null : stripPrivate(v))
 const reviewAfter = (type, from) => (type in REVIEW_MONTHS ? addMonths(from, REVIEW_MONTHS[type]) : null)
 
 // openMemory returns the store of the repository containing cwd, or null outside one.
