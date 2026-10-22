@@ -26,8 +26,8 @@ Objective: close the remaining feedback loops from the harness comparison: spec/
 | T7 | S7 | pressure eval case | odd-worker (batch A, parallel) | none | done | a13e792 (structure only; eval not run) |
 | T8 | S3 | correction: per-session state dir pruned by `STATE_DIRS`; tests use `scratchDir` | odd-worker (batch B, parallel) | none | done | 47dab14 (RED 2 fail; GREEN 901/901) |
 | T9 | S1 | correction: first-word `done`/`dropped` status in feature-state and status/tasks.js | odd-worker (batch B, parallel) | none | done | b35aa43 (RED 2+1 fail; GREEN 134/134, mod 170 pass + 3 known) |
-| T10 | S8 | NOTICE credits | odd-worker (batch B, parallel) | none | pending | — |
-| T11 | S5 | pre-approve `construct-memory review stale` in `install.sh` with its test and the README list | odd-worker (batch C, parallel) | 5 | pending | — |
+| T10 | S8 | NOTICE credits | odd-worker (batch B, parallel) | none | done | 3d3072b (suite 901/901; reviewed diff) |
+| T11 | S5 | pre-approve `construct-memory review stale` in `install.sh` with its test and the README list | odd-worker (batch C, parallel) | 5 | done | bc4dd58 (RED 7 fail; GREEN 41/41) |
 
 ## Log
 
