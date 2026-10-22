@@ -1,65 +1,53 @@
 ---
 name: workflow
-description: "Organic Driven Development protocol: authorize, explore, classify, track large work in odd/tasks/<feature>.md, implement test-first in work units, and close with evidence. Trigger: any implementation request, feature planning, resuming a feature, or writing a feature document."
-license: MIT
-metadata:
-  author: Construct
-  version: "1.0"
+description: The ODD protocol for every implementation request, feature plan, resume, task sizing, and the closing Risk line. Use it to authorize, explore, classify small or large, track large work in odd/tasks/<feature>.md, implement test-first, and close with evidence.
 ---
 
-## Activation Contract
+# Workflow
 
-Load this skill for any request that may change code or docs, for planning a feature, for resuming interrupted work, or when a feature document under `odd/tasks/` is involved. Sizing rules live in `construct:task-size-risk`; delegation rules live in `construct:delegation`.
+Order for every request. The parent orchestrates; `construct:delegation` says who writes.
 
-## Hard Rules
+1. **Authorize.** Investigation, explanation, review, comparison, and planning stay read-only. Files change only when the user asks for a change. Ambiguous intent: one question, read-only until answered. The surface-guard hook denies a main-thread write outside `odd/tasks/`.
+2. **Explore.** Start with `construct-memory search <feature or area>`, proportionately. Stop once the worker's edit surfaces and handoff can be written. More than one bounded batch goes to `construct:explorer`.
+3. **Resolve uncertainty.** Research only a named uncertainty ([research](references/research.md)). A real open product decision gets one question, then the turn stops.
+4. **Classify.** Print `Size: small | large (reason)`.
+5. **Track.** Large work gets `odd/tasks/<feature>.md` before the first source write ([feature document](references/feature-document.md)). Say in one line which document exists and its task count.
+6. **Implement** task by task, test-first ([testing](references/testing.md)). Hand off by reference (document, task, `S#`), never paraphrase. Any changed command, option, or message changes its help text and docs in the same unit. Commits and branches: [delivery](references/delivery.md).
+7. **Review.** A unit whose Risk names an item gets `construct:review` before publication; the publication gate denies `git push`, `gh pr create`, and `gh release create` until the lenses approve.
+8. **Close.** Save what was learned (`construct-memory save`; large work also saves the session summary), then one report: the verified outcome, every failed, skipped, or unverified check, the next step, and the Risk line (last). Close reports and never starts another verification loop. On large work, converge first: compare the code to every `S#`, append each gap as a new `T#` row, never rewrite or delete rows; a gap reopens work. Converge is not a verification run.
 
-- Run the protocol below in order on every request. Never describe it only when asked about it.
-- Read-only requests (investigation, explanation, review, audit, comparison, proposals, planning) never write files, delegate a writer, or create implementation artifacts.
-- Ask at most one focused question, and only for a real open product decision. Then stop and wait.
-- Small work creates no durable task artifacts. Large authorized work gets `odd/tasks/<feature>.md` before the first source write, without asking permission for them.
-- Specs quote the user's exact strings, error messages, commands, and examples verbatim. Never summarize them, and never add requirements the user did not ask for. Mark assumptions as assumptions.
-- Check a task off only after its outcome and checks were observed. Record failed, skipped, unavailable, and pending checks honestly.
-- Commit work units only on a feature branch (branch first when on the default branch). Push, PR creation, and merge stay with the user.
+## Size
 
-## Decision Gates
+Small means all three hold:
 
-| Situation | Action |
-|---|---|
-| Change intent ambiguous or conditional | Ask one clarifying question; stay read-only |
-| Open product or design decision | Ask one focused question; stop |
-| High-consequence unproven premise | One scoped, read-only assumption challenge; no debate loop |
-| Unresolved question needing external evidence | Recommend optional research (see references/research.md) |
-| Small task | One `construct:worker`, no feature document, no commits unless asked |
-| Large task | Feature document, task-by-task work units |
-| User reports a failure | Reproduce it before deciding it already works |
-| Requirement changes mid-feature | Append it verbatim to `## Log`, rewrite only the affected `S#`, reopen only its task |
-| Branch passes about 400 changed lines | Apply the delivery strategy before the next commit (references/delivery.md) |
+- Understood: outcome, change, and location are provable in one bounded read batch (about 3 calls, 10k tokens).
+- No high-risk item applies.
+- Resumable from the request plus `git diff` alone (the resume test).
 
-## Execution Steps
+Large means the resume test fails: several sessions, external waits, separate deliverables, or requirements too long to survive compaction. File counts, command counts, or a requested todo list never decide size.
 
-1. **Authorize.** Decide whether the request explicitly authorizes a change.
-2. **Explore** the existing code and requirements, proportionately, after `construct-memory search <feature or area>`. Explore only for a map needed to decide or route.
-3. **Resolve uncertainty.** Research only for a named uncertainty; one question only for a real product decision.
-4. **Classify** with `construct:task-size-risk`.
-5. **Track** large work: create the feature document (references/feature-document.md) and tell the user in one line which document was created and how many tasks it holds.
-6. **Implement task by task.**
-   - Hand off by reference (`Spec: odd/tasks/<feature>.md, T2, S3-S4`) and ask which `S#` were covered.
-   - Apply the test-first policy (references/testing.md). During implementation a strong verifier means loop until it passes.
-   - Update help text and docs with any changed command, option, or message.
-   - After each task, update the document.
-   - Commit the work unit and record its commit in `## Tasks`.
-7. **Close.** Save decisions, root causes, and conventions learned with `construct-memory save` (large work: `construct-memory summary`), then one report: the verified outcome, every failed, skipped, or unverified check, the next step, and the Risk line (last). For a tracked feature, converge before the report: compare the code with every `S#` (reuse the verifier's per-`S#` verdict when one ran) and append each gap as a new `T#` row with its `S#`, never rewriting or deleting existing rows; the feature-state injection warns about specs without tasks. A gap found at close reopens the work instead of closing it. Converge is a comparison, not a verification run: the Close reports and never starts another verification loop. Partial or missing proof becomes one **Needs your decision** result.
+- Small: one `construct:worker`, no feature document, no commits unless asked.
+- Large: feature document first, then work-unit commits on a feature branch.
 
-To resume an interrupted feature, read the injected memory context, run `construct-memory search <feature>`, then follow references/persistence.md.
+## Risk
 
-## Output Contract
+High risk means a mistake is hard to detect, hard to undo, or reaches beyond the change:
 
-Every implementation reply ends with: the outcome, the checks run as `<command>: <observed result>`, every failed, skipped, or unverified check, the next step, and `Risk: item N (reason)` or `Risk: none`.
+1. Data or irreversible effects: migrations, stored-data changes, persisted formats.
+2. Security: auth, permissions, credentials, secrets, guards, sandbox.
+3. Contracts others consume: changing or removing public API, CLI flags, config formats, exports, or shared code other behavior uses. Adding one, or making a requested change, is not high risk.
+4. Concurrency: locks, races, async ordering.
+5. Delivery or environment: installers, release, CI, deploy, dependencies.
+6. Places where no test would catch a regression.
 
-## References
+Before `Risk: none`, check whether the diff touches shared code other behavior uses; if so, that is item 3.
 
-- [references/feature-document.md](references/feature-document.md): feature document format and update rules.
-- [references/testing.md](references/testing.md): test-first policy, differential checks, and scratch state.
-- [references/delivery.md](references/delivery.md): work-unit commits, line budget, and delivery strategies.
-- [references/persistence.md](references/persistence.md): feature document read-back and resume.
-- [references/research.md](references/research.md): optional research and evidence quality.
+Every code change closes with `Risk: item N (reason)` (one such line per item) or `Risk: none`. The Risk-line hook blocks a reply once when paths outside `odd/tasks/` changed and no Risk line exists, or when the diff adds skipped, focused, or stub test markers. The admission hook reads the same line before it admits a verifier. In the Tasks table, the Risk cell holds the item numbers (`2, 5`, `2-3`) or `none`; the publication gate reads them to require lenses.
+
+## Autonomy
+
+During implementation, with a strong verifier (tests, build, typecheck), loop until it passes. With a weak verifier (no tests, ambiguous requirements, external effects), take one small step, show it, and stop. With none, say what would make the work verifiable; for docs-only units the reviewed diff is the verifier. Approval for one step is never approval for the next. Commit, push, PR, and merge belong to the user, except work-unit commits on a feature branch.
+
+## Resume
+
+Run `construct-memory context`, then follow [persistence](references/persistence.md). The feature-state hook re-injects unfinished tasks after compaction or resume.

@@ -16,7 +16,6 @@ const EXPECTED = [
   'debugging',
   'go-testing',
   'judgment-day',
-  'lossless-prompts',
   'memory',
   'migration',
   'delegation',
@@ -25,7 +24,6 @@ const EXPECTED = [
   'skill-creator',
   'skill-improver',
   'sources',
-  'task-size-risk',
   'work-unit-commits',
 ]
 

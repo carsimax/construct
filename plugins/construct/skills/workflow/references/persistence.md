@@ -1,34 +1,16 @@
 # Persistence and resume
 
-## Feature document
-
-For large authorized implementation, the local document `odd/tasks/<feature-name>.md` is the only record of the work; git versions it.
-
-- If a local write is unsafe, preserve existing state and report the limitation.
-- On irreconcilable edits, preserve both versions and ask only about the real conflict.
+The feature document is the only record of large work: The feature-state hook re-injects the unfinished rows (at most 2,500 characters) after compaction or resume; read the full document before continuing.
 
 ## Resume
 
-1. Read the injected memory context, then run `construct-memory search <feature>`.
-2. Read the local task file.
-3. Reconcile the document, the code, and the tests before continuing the next unfinished task. Observed code and tests win over a stale document.
+1. Read the memory context the session injected, then `construct-memory search <feature>`.
+2. Read `odd/tasks/<feature>.md` fully.
+3. Reconcile document, code, and tests (`git log`, `git status`, the test run). Observed code wins; fix the document.
+4. Continue from the first unfinished task, or run the converge step when all are done.
 
-Never infer active work from the newest global memory.
+## Writing
 
-## Memory lifecycle
-
-Run `construct-memory review list` before architecture-sensitive work.
-
-- Treat `needs_review` memories as stale context: verify them against current evidence before relying on them.
-- Never mark memories reviewed without explicit user confirmation.
-
-## Delegated work
-
-The parent passes the worker:
-
-- its allowed edit surfaces;
-- the document locator and task IDs;
-- the test-first policy and runner;
-- the exact verification commands.
-
-Workers read the document before editing and report the checks they actually ran. Workers save only significant verified discoveries to memory. The parent reconciles the document after each transition. A task checkbox grants no approval.
+- A task is `done` only after its outcome and checks were observed. Record failed, skipped, and pending honestly, with the evidence in the Status cell.
+- Write the document safely: an interrupted or unsafe write must preserve the prior state. Irreconcilable concurrent edits keep both versions and ask the user.
+- Save decisions, root causes, and conventions with `construct-memory save`; close a session with `construct-memory summary --session <id>`.

@@ -1,48 +1,33 @@
 # Feature document
 
-Path: `odd/tasks/<feature-name>.md`, with a descriptive, filename-safe feature name. Reuse the same identity for the whole feature, and never overwrite another feature's document. Keep one document per feature, not a separate plan file.
-
-The document is the specification that subagents read by reference. Keep this fixed order: stable content first, the growing log last.
+Path `odd/tasks/<feature>.md`, created before the first source write of large work. The feature-state hook re-injects its unfinished tasks after compaction or resume; the publication gate reads its Risk cells. Fixed order:
 
 ```markdown
-# <Feature title>
+# <Feature>
 
-Objective: <one line>. Branch: <feature branch>. Baseline: <commit before the first change>. Delivery strategy: <ask-on-risk | auto-chain | single-pr | exception-ok>. Test runner: <command>.
+Objective: <one sentence>. Branch: <branch>. Baseline: <commit>. Delivery strategy: <strategy>. Test runner: <command>.
 
 ## Specs
 
-- **S1 — <name>.** "<the user's exact words>". Scope, acceptance criteria, applicable checks.
-  Given <state> When <action> Then <outcome>   (optional, one or more lines)
-- **S2 — ...**
+- **S1 — <name>.** "<user words, verbatim, in their language>"
+  - Given <state> When <action> Then <observable result>.
 
 ## Tasks
 
 | ID | Specs | Task | Route | Risk | Status | Commit |
 |---|---|---|---|---|---|---|
-| T1 | S1 | <one line> | worker | none | pending | — |
+| T1 | S1 | <task> | worker | none | pending | — |
 
 ## Log
 
-- **L1 (<date>, user):** "<the user's original request, verbatim>"
-- **L2 (<date>, ...):** <evidence, decision, correction, or progress>
+- **L1 (<date>):** "<the request, verbatim>"
 ```
 
 ## Rules
 
-- **Specs.**
-  - Number them `S1`..`Sn`.
-  - Quote the user's strings, error messages, commands, and examples verbatim, in the user's language.
-  - Never reword those fragments, and never add unrequested requirements.
-  - Mark assumptions as assumptions.
-  - When the behavior is testable, add one or more `Given … When … Then …` lines to the `S#`. They are optional, never required, and never replace the user's quoted words.
-- **Tasks.**
-  - Give each task a stable ID, its linked `S#`, its route (`worker`, and which units launch together), its status, and its commit or RED/GREEN evidence.
-  - Plan about 400 authored changed lines per task as a heuristic only. It is not a cap, a stop, or a reason to split artificially.
-- **Log.**
-  - `L1` is the original request, verbatim.
-  - Later user corrections are appended verbatim with their date.
-  - Analysis, the rationale for accepted changes, verification evidence, progress, and the next step are appended briefly.
-- **Changes.** An accepted requirement change appends its verbatim Log entry, rewrites only the affected `S#`, and reopens only its task. Preserve valid completed work. Findings alone never expand scope. Business scope changes need user authorization.
-- **Close gaps.** A gap found when comparing the code with the specs at close is appended as a new task row with its `S#`. Existing rows are never rewritten or deleted.
-- **Baseline.** Record the commit before the first change in the header, and fix it if it is missing. The verifier's `Baseline commit` comes from it.
-- **Handoffs.** Workers read the document until `## Log` before editing, and report which `S#` they covered.
+- Specs quote the user verbatim, mark every assumption, and add nothing unrequested. Given/When/Then is optional.
+- Tasks have stable IDs linked to `S#`. The hook needs the `ID`, `Task`, `Status`, and `Specs` columns, and warns when a spec has no task or a task names an unknown spec. A Status whose first word is `done` or `dropped` is finished; anything else is unfinished.
+- Risk cell: item numbers 1-6 (ranges allowed) or `none`; any other text makes the gate deny.
+- Log: L1 is the verbatim request; later corrections are verbatim with a date; progress notes stay brief. Keep a line `Next step: <action>` near the end; the hook shows it.
+- A requirement change appends a verbatim Log entry, rewrites only the affected `S#`, and reopens only its task. Findings never expand scope.
+- Record the baseline commit in the header before the first change; the verifier's baseline comes from it.

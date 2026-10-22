@@ -9,7 +9,7 @@ metadata:
 
 ## Activation Contract
 
-Load this skill when a test fails, a build breaks, something that worked stopped working, an error or stack trace appears, or behavior does not match the request. It does not apply to read-only explanations of working code. Sizing lives in `construct:task-size-risk`; delegation lives in `construct:delegation`.
+Load this skill when a test fails, a build breaks, something that worked stopped working, an error or stack trace appears, or behavior does not match the request. It does not apply to read-only explanations of working code. Sizing lives in `construct:workflow`; delegation lives in `construct:delegation`.
 
 Adapted from addyosmani/agent-skills (MIT), `debugging-and-error-recovery`.
 

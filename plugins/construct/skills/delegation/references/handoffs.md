@@ -1,75 +1,84 @@
 # Handoff templates
 
-## Allowed edit surfaces
+Fill every `<placeholder>`; drop an optional section when empty. Each role has its own `##` heading and fenced template; tests/admission/templates.test.mjs sends them through delegation-admission.
 
-A bounded writer refuses to write outside its allowed edit surfaces. Deriving them is part of planning the delegation:
-
-- The heading is exactly `## Allowed edit surfaces`. Under it, one bare repository-relative path or narrow glob per line, and nothing else: no `- path (new)` notes, no trailing comments, no prose. Never use `.`, a bare repository root, an absolute path, `..`, or a glob in the first segment (`*`, `**`). Wrap paths that contain whitespace in backticks.
-- The section ends at the next Markdown heading, and every non-empty line inside it must be a surface entry. Put notes (which paths are new, why) under a later heading such as `## Reuse`.
-- Two writers open at once need disjoint surfaces; the hook denies an overlap, and an entry it cannot interpret counts as overlapping. Wait for the first writer or split the paths.
-- A writer (`construct:worker`) is also denied without a line `Spec: odd/tasks/<feature>.md, T<n>` naming an existing regular file (not a symlink) while an unfinished feature document exists.
-- `construct:verifier` is denied without a line `Risk: item N` (N 1-6); `Risk: none` does not admit it.
-- List pre-existing untracked targets the writer may write explicitly.
-- Name the directories where new files are authorized, when the task needs new files.
-- Include nothing beyond the delegated task. A surface wider than the task is the same defect as no surface.
-
-When a worker asks about surfaces, present its candidate paths as an approve/decline choice. Add or drop paths only on the human's explicit instruction.
-
-## Explorer
-
-```markdown
-Question: <the decision this map serves>
-Front: <the one module, layer, or question this explorer maps>
-Out of scope: <the other fronts, owned by parallel explorers>
-Scope: <directories or symbols to start from>
-Memory: <optional: relevant `construct-memory search` hits the parent pastes>
-Return at most about 2k tokens with path:line evidence: answer, map, open questions.
-```
-
-## General
-
-`construct:general` has no hook-enforced fields: state the command or research, its bounds, and what to return.
+Verifier strength: strong (a deterministic command with a clear expected outcome), weak (ambiguous requirements or external side effects: the agent stops after one step and reports), or none. With no verifier the agent says what would make the work verifiable; for docs-only units the reviewed diff is the verifier.
 
 ## Worker
 
 ```markdown
-Spec: odd/tasks/<feature>.md, T<n>, <S#...> — read the document until ## Log.
-(Without a document: the user's request, verbatim.)
+Spec: odd/tasks/<feature>.md, T<n> (covers S<n>)
+
+<task: the one unit of behavior, with its acceptance rule>
 
 ## Allowed edit surfaces
-path/to/file.ts
-path/to/dir/*.test.ts
+<repo-path-or-glob>
+<another-path>
 
 ## Memory
-<optional: relevant `construct-memory search` hits the parent pastes; omit when none>
+<search hits, or omit>
 
 ## Reuse
-<existing helpers for shared state, and the invariants they keep>
+<existing helpers and invariants to keep>
 
 ## Test-first
-Runner: <command>. One RED test per rule; prove previous behavior of touched commands still holds.
+<the failing test per rule; existing behavior to keep covered>
 
 ## Verification
-<exact commands to run in the foreground; these are the unit's verifier>
-Verifier strength: <strong (tests, build, typecheck): loop until it passes | weak (ambiguous requirements or external side effects): the worker stops after one step and reports | no verifier: say what would make it verifiable; for docs-only units the reviewed diff is the verifier, so the worker proceeds>
+<command: expected result>
+Verifier strength: <strong|weak|none>
 
 ## Known environmental failures
-<exact failing test names or command lines already failing on the base, with evidence>
+<failures to ignore, or none>
+
+Close with `## Key Learnings:`.
+```
+
+## Explorer
+
+```markdown
+Question: <one front to map>
+
+## Memory
+<search hits, or omit>
+
+## Report
+<what to return: path:line evidence, facts split from assumptions>
+
+Read-only. Close with `## Key Learnings:`.
+```
+
+## General
+
+```markdown
+Task: <suite, build, install, or research to run>
+
+## Memory
+<search hits, or omit>
+
+## Verification
+<command: expected result>
+Verifier strength: <strong|weak|none>
+
+## Known environmental failures
+<failures to ignore, or none>
+
+Report each command as `<command>: <observed result>`. Close with `## Key Learnings:`.
 ```
 
 ## Verifier
 
 ```markdown
-Risk: item N (reason), N from 1 to 6 as in the Risk line.
-Feature document: odd/tasks/<feature>.md (all S#).
-Baseline commit: <sha>. Candidate: <branch or sha>.
-Probe command forms: <authorized commands>.
-Run probes in a fresh mktemp -d copy outside the workspace. Return a verdict per S#, blockers, advisories, probes to commit, and scratch paths.
+Risk: item N (<reason>)
+
+Feature document: odd/tasks/<feature>.md (read in full)
+Baseline: <ref before>
+Candidate: <ref or worktree after>
+Probes: <commands or forms that exercise each Risk-named unit>
+Scratch: <mktemp -d path outside the worktree>
+
+## Memory
+<search hits, or omit>
+
+Report each probe as `<command>: <observed result>`. Close with `## Key Learnings:`.
 ```
-
-## Correction bounds
-
-- Verifier blockers get one correction batch that fixes every reported blocker, then one recheck limited to those blockers.
-- A second correction runs only when the same blocker still fails. A new finding never earns one.
-- Blockers still open after that become one **Needs your decision** result.
-- A writer's self-review follows the same bound, then reports `partial`.

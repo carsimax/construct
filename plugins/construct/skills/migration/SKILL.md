@@ -9,7 +9,7 @@ metadata:
 
 ## Activation Contract
 
-Load this skill when a change migrates or deletes stored data, changes a persisted format, or removes, renames, or replaces something other code or users consume (`construct:task-size-risk` items 1 and 3). Adapted from addyosmani/agent-skills (MIT); see NOTICE.
+Load this skill when a change migrates or deletes stored data, changes a persisted format, or removes, renames, or replaces something other code or users consume (`construct:workflow` items 1 and 3). Adapted from addyosmani/agent-skills (MIT); see NOTICE.
 
 ## Hard Rules
 
@@ -47,4 +47,4 @@ Return the phase plan: for each phase its change, verifier, rollback, and remova
 ## References
 
 - `references/phases.md`: phase templates, backfill rules, deprecation notice, and rationalizations.
-- `construct:task-size-risk`: the high-risk items this skill serves.
+- `construct:workflow`: the high-risk items this skill serves.

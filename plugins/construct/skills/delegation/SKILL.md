@@ -1,86 +1,59 @@
 ---
 name: delegation
-description: "When and how an ODD orchestrator delegates to construct agents: mapping, writer, verification, and per-action triggers, allowed edit surfaces, parallel writers, and handoff prompts. Trigger: deciding whether to delegate, launching an explorer, worker, or verifier, or writing a delegation prompt."
+description: "When and how the ODD orchestrator delegates to construct agents: role mapping, allowed edit surfaces, parallel writers, verifier timing, handoff prompts, and relaying a subagent's blocking question or choice menu. Trigger: deciding to delegate, launching an agent, writing a handoff, or a subagent or tool returns a question, menu, or consent request."
 license: MIT
 metadata:
   author: Construct
-  version: "1.0"
+  version: "2.0"
 ---
 
-## Activation Contract
+## When it applies
 
-Load this skill before launching any subagent for ODD work, or when deciding whether a delegation trigger holds.
+The parent orchestrates; agents do the work. Handoff templates are in `references/handoffs.md`; copy the one for the role.
 
-## Hard Rules
+## Mapping
 
-- The parent orchestrates and never writes code. Every write to repository code, tests, or docs goes to `construct:worker`, whatever the size. The parent writes only the feature document, and owns git.
-- Reads, explanations, planning, and read-only requests stay with the parent unless the mapping trigger holds.
-- A trigger holds only when its condition truly holds. When one holds, delegating is mandatory; writing code inline or continuing inline past a trigger is a routing defect.
-- Never pass these rules to child agents as permission to orchestrate. Children do not delegate.
-- Each role's model and effort come from the plugin configuration. The routing mod applies them, so prompts never choose a model.
-- Never delegate a writer without `## Allowed edit surfaces`: one bare repository-relative path or glob per line, notes under a later heading. Never ask the human to author paths in free text.
-- A writer prompt also carries `Spec: odd/tasks/<feature>.md, T<n>` while a feature document is unfinished; a `construct:verifier` prompt carries `Risk: item N (reason)`. The admission hook denies a launch without them.
+Every write to repository code, tests, or docs goes to `construct:worker`; reads, answers, and `odd/tasks/` stay with the parent (surface-guard denies any other main-thread write).
 
-## Decision Gates
+- Worker: one per independent unit, code, tests, and docs together. Disjoint units launch in one message; dependent ones in order. Never launch a second agent of the same role and task in one turn.
+- `construct:explorer`: mapping beyond one batch or about 5 sequential lookups, one per front, at most 3 per message; dependents wait.
+- `construct:general`: long suites, builds, installs, broad research.
+- `construct:verifier`: only for a Risk-named item (see Verification).
+- Model and effort come from plugin config (`model_<role>`, `effort_<role>`; routing.js applies them); a prompt never picks a model.
+- Keep parent output bounded: counts, stat, tails, summaries.
 
-| Trigger | Condition | Agent |
-|---|---|---|
-| Evidence budget | Decide or verify within one parallel batch (at most 3 calls, about 10k tokens) | none: the parent reads |
-| Mapping | Needs more evidence than one batch, or more than about 5 sequential lookups | `construct:explorer` (one per independent front, up to 3, launched together), then re-evaluate task size |
-| Writer | Any authorized write to repository code, tests, or docs | `construct:worker`, one per unit; disjoint units launched together, dependent units one after another |
-| Verification | A Risk line that names a high-risk item, after the unit's own checks; for a tracked feature with several such units, one verifier at the feature's end over the whole branch instead of one per unit, and a unit alone only when it must ship or be relied on before then | `construct:verifier` (one) |
-| Per action | Long suites, builds, installs, broad research | `construct:general` |
+## Writer handoff
 
-A unit is one independent piece of behavior with its code, tests, and docs together. Never split one behavior into separate test, docs, and code writers. A delivery that depends on another is not independent.
+delegation-admission denies a `construct:worker` launch that lacks:
 
-## Execution Steps
+- The exact heading `## Allowed edit surfaces`, then one bare repository-relative path or narrow glob per line, nothing else. No `.`, root, absolute path, `..`, leading glob, or notes; prose goes under the next heading.
+- While a feature document is unfinished: `Spec: odd/tasks/<feature>.md, T<n>` naming an existing regular file (not a symlink) under `odd/tasks/`.
+- Surfaces disjoint from every writer still open. An entry it cannot interpret counts as overlap. A shared file has one owner; run writers in sequence or `isolation: worktree` when files overlap.
 
-1. Name the trigger and its evidence. For large work, record the route per task in the feature document.
-2. Derive the allowed edit surface from the task (references/handoffs.md). If it cannot be derived, present the candidate path list as an approve/decline choice under `construct:lossless-prompts`.
-3. Write the handoff by reference: the feature document, the task, and its `S#`; or, without a document, the user's request verbatim. Include the verification commands as the unit's verifier with its strength (strong: tests, build, typecheck; weak: ambiguous requirements or external side effects, so the worker stops after one step and reports; no verifier: say what would make it verifiable, and for docs-only units the reviewed diff is the verifier, so the worker proceeds), the test-first policy, the helpers to reuse, and the invariants to keep.
-4. Launch parallel units in one message.
-5. Check each writer's diff against its surface before accepting it. Run one seam check (the full suite, once) after parallel units.
-6. Spot check one reported command yourself.
-7. Remove scratch paths that workers report.
+surface-guard then denies writes outside those entries. A worker given no list returns `needs_interaction` with candidate paths; the parent offers approve or decline, and paths change only on a human instruction. Writers run no repo-wide formatters, generators, or installs, and other-repository work goes in a fresh worktree.
 
-## Launch deduplication
+## Prompt contents
 
-Keep a list of `(role, task fingerprint)` pairs launched this turn, where the fingerprint is a normalized summary of the task text. Never launch a second agent for a pair already launched while it runs or after it returned; emit one launch per distinct task.
+Each handoff holds the task, the Spec line or question, `## Memory` (search hits the parent pastes; Bash-capable subagents may also run `construct-memory search`), reuse pointers, the verification commands with their strength, known environmental failures, and a request to close with `## Key Learnings:` (memory-hooks saves those passively).
 
-## Parallel explorers
+Test-first: a runnable deterministic test and a clear expected outcome mean RED, then GREEN. For docs-only or no runnable RED the worker states the exception.
 
-- An independent front is a separate module, layer, or question whose answer does not depend on another front's answer.
-- Launch one `construct:explorer` per independent front, up to 3, in one message. One front stays one explorer.
-- Each prompt names its front and question, and lists the other fronts as out of scope.
-- A front that needs another front's answer runs after it.
-- Distinct fronts are distinct fingerprints, so deduplication does not block them.
-- The limit is 3 because 3 reports of about 2k tokens stay inside the parent's 10k batch budget.
-- The parent spot checks one claim per report, then re-evaluates task size.
+## Verification
 
-## Checking contract
+- Verifier strength is stated in each handoff. A weak verifier has ambiguous requirements or external side effects: the worker stops after one step and reports. With no verifier it says what would make the work verifiable; for docs-only units the reviewed diff is the verifier.
+- Formatters run before verification, afterwards only check-only commands. A byte change reruns the affected checks. Unavailable, partial, or declined proof is never a pass.
+- A docs-only change gets a parent structural readback; executable, operational, or unknown content gets the verifier when Risk-named.
+- One `construct:verifier` per delivery slice (PR), before publication, covering every Risk-named unit in it, after their own checks. delegation-admission denies a verifier prompt without `Risk: item N` (N from 1 to 6; `Risk: none` does not admit). It also carries the whole feature document, baseline, candidate, probe forms, and a scratch directory.
 
-- Run formatters, generators, and normalizers before verification. After verification only check-only commands run; any byte change after it re-runs the affected checks.
-- Proof that is unavailable, partial, declined, or exhausted is never a pass. Report it as one **Needs your decision** result naming the missing proof.
-- A docs-only change gets a structural readback by the parent, not a verifier. Executable, operational, mode-changing, or unknown content gets the Verification trigger above.
+## Correction bounds
 
-## Subagent memory
+A verifier or review round allows one correction batch and one recheck. A second runs only if the same blocker still fails; new findings never earn one. Leftovers go to the user as "Needs your decision". Inside one worker run: one fix attempt per failing check.
 
-- The parent runs `construct-memory search` for relevant project context and passes the hits in the prompt's optional `## Memory` section (worker and explorer templates). Subagents with Bash (worker, explorer, general, verify) may search themselves.
-- Include in each prompt: end the report with a `## Key Learnings:` section (the SubagentStop hook captures it) and save decisions with `construct-memory save`.
+## Relaying a blocking question
 
-## Parallel writers
+When a subagent or tool returns a question, menu, consent request, or approve or decline choice:
 
-- Work in another repository goes in a fresh worktree based on that repository's main, never in a checkout someone else may be using.
-- Parallel units in the same repository share the tree only with disjoint edit surfaces:
-  - The parent owns git.
-  - Writers run no repository-wide formatters, generators, or installs.
-  - A shared file has one owner, or the parent edits it at the end.
-- Units that need the same file use isolated worktrees (`isolation: worktree` for the worker).
-
-## Output Contract
-
-Report the trigger used, each delegated unit's status (`done`, `partial`, `needs_interaction`), the checks as `<command>: <observed result>`, the parent spot check, and any open blockers as one **Needs your decision** result.
-
-## References
-
-- [references/handoffs.md](references/handoffs.md): prompt templates for explorer, worker, and verifier, plus edit-surface rules.
+1. Pass the whole envelope: reason, every question in order, headers, labels, descriptions, selection mode, answer domain. Never summarize, reorder, merge, or split.
+2. Use AskUserQuestion when the envelope fits; otherwise a plain-text envelope with the answer syntax, then stop. Never choose, default, or launch dependent work while the answer is pending.
+3. Validate the reply: trimmed, case-insensitive label match, exactly one label; ordinals ("first", "2") alias to positions. An invalid answer re-presents the envelope; a valid one is returned once.
+4. A question about a choice is answered from the envelope without recommending, then the choice is re-presented.

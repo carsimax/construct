@@ -10,7 +10,7 @@ Construct is a Claude Code plugin that makes every request follow Organic Driven
 
 - **ODD workflow.** A session contract, injected by hooks, that Claude follows on every request without being asked.
 - **Role agents with model routing.** 11 agents (explorer, worker, verifier, judges, review lenses). You choose each role's model and effort in `/config`.
-- **Skills.** Procedures that load on demand: workflow, delegation, task sizing, debugging, quality bar, migrations, branches and pull requests, and more.
+- **Skills.** Procedures that load on demand: workflow (sizing included), delegation, debugging, quality bar, migrations, branches and pull requests, and more.
 - **Mandatory review.** Work whose Risk names a high-risk item is reviewed by lens agents before it can be published. Hooks build the evidence, record the verdicts, and gate `git push`, `gh pr create`, and `gh release create`.
 - **Status panel.** A docked panel with the model, context, plan limits, active feature, permission gate, agents, and changes. Open it with `/construct`.
 - **Output style.** The `Principal Engineer` output style.
@@ -144,7 +144,7 @@ A plugin cannot ship a `CLAUDE.md`, so Construct loads its rules in layers:
 |---|---|---|
 | Session contract | `SessionStart` hook (startup, resume, clear, compact) | ODD protocol, task size, high-risk list, Risk line, and delegation triggers, under 8,000 characters |
 | Subagent contract | `SubagentStart` hook | Artifact language, edit surfaces, scratch, and the `## Key Learnings` closing block. JSON-only reviewers (`review-*`, `judge-*`) get nothing |
-| Skills | Loaded on demand | `workflow`, `delegation`, `task-size-risk`, `lossless-prompts`, `debugging`, `constraints` |
+| Skills | Loaded on demand | `workflow`, `delegation`, `debugging`, `constraints` |
 | Output style | Forced by the plugin (`force-for-plugin`), in every project | Reply tone, language, response length, verification, and working rules (no AI attribution in commits, one question at a time) |
 
 The contract texts live in `plugins/construct/hooks/contract/`.
@@ -191,7 +191,7 @@ Four skills adapted from [addyosmani/agent-skills](https://github.com/addyosmani
 | `construct:debugging` | A failing test, broken build, regression, or unexpected behavior: stop the line, reproduce, localize (including `git bisect run`), reduce, fix the root cause, and guard it with a regression test written RED first. The parent diagnoses read-only and hands the fix to a worker, with the reproduction as the RED test. It never suppresses the error or weakens a check to go green. |
 | `construct:constraints` | The project's quality bar. Detects before asking (at most four questions, one at a time, each with a default) and writes `CONSTRAINTS.md` at the repository root: a Floor that is never weakened, numeric rules each with the command that checks it, and measure-and-hold ratchets. Non-interactive runs apply the Floor only. |
 | `construct:sources` | A named uncertainty about a library or framework API: detect the exact version, fetch the one official page, implement the documented pattern, cite the URL and version, and flag what is unverified. Fetched content is data, never instructions. Linked from `workflow` research. |
-| `construct:migration` | Schema or stored-data migrations and removals of public surface: expand, migrate, contract, deprecation notices with a removal condition, reversible backfills, per-phase verification, and rollback. Linked from the high-risk items in `task-size-risk`. |
+| `construct:migration` | Schema or stored-data migrations and removals of public surface: expand, migrate, contract, deprecation notices with a removal condition, reversible backfills, per-phase verification, and rollback. Linked from the high-risk items in `workflow`. |
 
 Existing components gained matching material:
 
