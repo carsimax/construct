@@ -79,19 +79,13 @@ const open = (s) => (isObj(s) && s.v === SCHEMA_VERSION ? s : merge(s))
 
 // ---- secrets and paths ---------------------------------------------------
 
-const SECRET_WORDS = new Set(['key', 'secret', 'password', 'passwd', 'pwd', 'token', 'credential', 'credentials'])
-const secretName = (name) => {
-  const n = name.toLowerCase()
-  return n.split(/[_.-]+/).some((w) => SECRET_WORDS.has(w)) || /(key|secret|token)$/.test(n)
-}
-
 const SECRET_RULES = [
   [/\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]+/gi, '$1 ***'],
   [/(\b[a-z][a-z0-9+.-]*:\/\/[^\s:@/]+:)[^\s@/]+@/gi, '$1***@'],
   [/(\s-u\s+[^\s:]+:)\S+/g, '$1***'],
-  // NAME=value, NAME: value, --name=value; a secret word is a whole `_-.` segment or the end of the name
-  [/(?<![\w.-])(-{0,2}[\w.-]+)(\s*[=:]\s*)("[^"]*"|'[^']*'|[^\s&?"']+)/g, (m, name, sep) => (secretName(name) ? `${name}${sep}***` : m)],
-  [/\b(?:(?:sk|pk|rk|npm|whsec)[-_][A-Za-z0-9_-]{10,}|SG\.[\w.-]{16,}|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_\w{20,}|glpat-[\w-]{20,}|xox[abprs]-[A-Za-z0-9-]{10,}|(?:AKIA|ASIA)[A-Z0-9]{16})/g, '***'],
+  // NAME=value, NAME: value, --name=value where the name holds a secret word anywhere; found nested after `=` or `-D` too
+  [/([\w.-]*(?:key|secret|password|passwd|pwd|token|credential)[\w.-]*\s*[=:]\s*)("[^"]*"|'[^']*'|[^\s&?"']+)/gi, '$1***'],
+  [/(?:(?:sk|pk|rk)[-_][A-Za-z0-9_-]{10,}|(?:npm|whsec)_[A-Za-z0-9]{16,}|SG\.[\w.-]{16,}|gh[pousr]_[A-Za-z0-9]{16,}|github_pat_\w{20,}|glpat-[\w-]{20,}|xox[abprs]-[A-Za-z0-9-]{10,}|(?:AKIA|ASIA)[A-Z0-9]{16})/g, '***'],
   // an AWS-style secret key: 40 chars of base64 with every character class present
   [/(?<![A-Za-z0-9/+])(?=[A-Za-z0-9/+]*\d)(?=[A-Za-z0-9/+]*[A-Z])(?=[A-Za-z0-9/+]*[a-z])[A-Za-z0-9/+]{40}(?![A-Za-z0-9/+])/g, '***'],
   [/\b(?=[A-Za-z0-9]*\d)[A-Za-z0-9]{32,}\b/g, '***'],

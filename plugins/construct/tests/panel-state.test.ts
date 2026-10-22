@@ -255,7 +255,37 @@ test('maskSecrets masks secret words mid-name, short auth tokens, provider token
     expect(out).toContain('***')
     expect(out).not.toContain(secret)
   }
-  for (const plain of ['MAX_TOKENS=4096', 'max_tokens: 1024', 'keys=3', 'tokenizer=bpe', 'git commit -m "fix token parsing"', '123e4567-e89b-12d3-a456-426614174000']) {
+  // L7: the broad rule masks any name holding a secret word, so these are masked now
+  for (const input of ['MAX_TOKENS=4096', 'max_tokens: 1024', 'keys=3', 'tokenizer=bpe']) expect(maskSecrets(input)).toContain('***')
+  for (const plain of ['git commit -m "fix token parsing"', '123e4567-e89b-12d3-a456-426614174000']) {
+    expect(maskSecrets(plain)).toBe(plain)
+  }
+})
+
+test('maskSecrets masks joined secret words, nested pairs, and 16-char provider tokens; plain text stays (L7)', () => {
+  expect(maskSecrets('PGPASSWORD=s3cret psql -h db')).toBe('PGPASSWORD=*** psql -h db')
+  for (const [input, secret] of [
+    ['export PGPASSWORD=s3cret', 's3cret'],
+    ['dbPassword=pw', 'pw'],
+    ['adminPassword: pw', ' pw'],
+    ['KEYSTOREPASSWORD=x', '=x'],
+    ['SECRETS=abc', 'abc'],
+    ['keypass=x', '=x'],
+    ['APICREDENTIALS=x', '=x'],
+    ['helm install x --set postgresql.auth.postgresPassword=abc', 'abc'],
+    ['-Djavax.net.ssl.keyStorePassword=abc', 'abc'],
+    ['kubectl create secret generic s --from-literal=password=abc', 'abc'],
+    ['--from-literal=api-key=abc', 'abc'],
+    ['-Dpassword=abc', 'abc'],
+    ['ghp_abcdefghijklmnop', 'abcdefghijklmnop'],
+    ['gho_abcdefghijklmnop', 'abcdefghijklmnop'],
+    ['ghs_abcdefghijklmnop', 'abcdefghijklmnop'],
+  ] as [string, string][]) {
+    const out = maskSecrets(input)
+    expect(out).toContain('***')
+    expect(out).not.toContain(secret)
+  }
+  for (const plain of ['npm_config_cache=/x', 'git commit -m "fix parsing"', 'ls -la /src', '123e4567-e89b-12d3-a456-426614174000', 'https://example.com/a?b=1']) {
     expect(maskSecrets(plain)).toBe(plain)
   }
 })
