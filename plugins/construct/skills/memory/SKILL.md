@@ -45,7 +45,7 @@ JSON
 - `construct-memory pin <id>` for what must load in every session (a rule, a hard constraint): pinned memories get their own `### Pinned` context section (at most 20) and rank higher in search; `unpin <id>` undoes it. Pin sparingly.
 - Before saving a new evolving topic, run `construct-memory suggest-topic-key` (JSON on stdin: `type`, `title`, `content`) and use the key it prints, such as `bug/fix-login-redirect-loop`, as `topic_key`; it writes nothing.
 - `construct-memory timeline <id> [--before N] [--after N]` shows what was saved around a hit in the same session, for context the hit alone lacks.
-- `construct-memory prompts --search <query>` finds an earlier prompt; `construct-memory stats` counts what is stored.
+- `construct-memory prompts --search <query>` finds an earlier prompt; `construct-memory stats` counts what is stored. Run `construct-memory doctor` when memory behaves oddly (it only reads; it never repairs).
 
 Before architecture-sensitive work, run `construct-memory review list`. Memories marked `needs_review` are stale: verify them, and run `review done <id>` only after the user confirms.
 

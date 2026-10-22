@@ -22,6 +22,7 @@ const USAGE = `usage: construct-memory <command> [options]
   timeline <id> [--before N] [--after N]  the observations around one in its session (default 5 and 5), the focus marked with >
   pin <id> | unpin <id>             pinned observations always load in the session context and rank higher in search
   stats                             counts of observations, sessions, prompts, and the database size
+  doctor [--json]                   read-only health checks (schema, integrity, search indexes, WAL, writable); exit 1 when one fails
   help`
 
 class UsageError extends Error {}
@@ -80,9 +81,9 @@ async function main(argv) {
   const { values, positionals } = parseArgs({
     args: rest,
     allowPositionals: true,
-    options: { type: { type: 'string' }, limit: { type: 'string' }, any: { type: 'boolean' }, history: { type: 'boolean' }, before: { type: 'string' }, after: { type: 'string' }, search: { type: 'string' }, hard: { type: 'boolean' }, session: { type: 'string' }, project: { type: 'string' } },
+    options: { type: { type: 'string' }, limit: { type: 'string' }, any: { type: 'boolean' }, history: { type: 'boolean' }, before: { type: 'string' }, after: { type: 'string' }, search: { type: 'string' }, hard: { type: 'boolean' }, json: { type: 'boolean' }, session: { type: 'string' }, project: { type: 'string' } },
   })
-  const known = ['save', 'search', 'get', 'context', 'update', 'delete', 'summary', 'review', 'import', 'prompts', 'export', 'suggest-topic-key', 'timeline', 'pin', 'unpin', 'stats']
+  const known = ['save', 'search', 'get', 'context', 'update', 'delete', 'summary', 'review', 'import', 'prompts', 'export', 'suggest-topic-key', 'timeline', 'pin', 'unpin', 'stats', 'doctor']
   if (!known.includes(command)) fail(`unknown command: ${command} (run construct-memory help)`)
   if (command === 'review' && !['list', 'done'].includes(positionals[0])) fail('review needs list or done <id>')
 
@@ -210,6 +211,11 @@ async function main(argv) {
           `prompts: ${s.prompts}`,
           `database size: ${s.bytes} bytes`,
         ].join('\n')}\n`
+      }
+      case 'doctor': {
+        const list = store.doctor()
+        if (list.some((c) => !c.ok)) process.exitCode = 1
+        return values.json ? `${JSON.stringify(list, null, 2)}\n` : `${list.map((c) => (c.ok ? `ok ${c.check}` : `fail ${c.check}: ${c.detail}`)).join('\n')}\n`
       }
       case 'review': {
         if (positionals[0] === 'list') {

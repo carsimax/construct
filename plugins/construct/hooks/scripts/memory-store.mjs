@@ -2,7 +2,7 @@
 // database under the git common dir (construct-memory/memory.db), shared by every worktree.
 // Imported by the construct-memory CLI and the memory hooks; it prints nothing itself.
 import { createHash, randomUUID } from 'node:crypto'
-import { mkdirSync } from 'node:fs'
+import { accessSync, constants, mkdirSync } from 'node:fs'
 import { basename, dirname, join, resolve } from 'node:path'
 import { git } from './git-tree.mjs'
 
@@ -516,6 +516,61 @@ function makeStore(db, path, now, repoName) {
         prompts: n('SELECT count(*) AS n FROM user_prompts'),
         bytes: n('SELECT page_count * page_size AS n FROM pragma_page_count, pragma_page_size'),
       }
+    },
+
+    // doctor runs read-only health checks and returns [{ check, ok, detail }]; it repairs nothing.
+    doctor() {
+      const list = []
+      const check = (name, fn) => {
+        try {
+          const detail = fn()
+          list.push({ check: name, ok: detail === true || detail === undefined, detail: detail === true || detail === undefined ? 'ok' : detail })
+        } catch (error) {
+          list.push({ check: name, ok: false, detail: String(error.message).replace(/\s+/g, ' ') })
+        }
+      }
+      // The FTS5 integrity-check command (rank 1: index against the content table) only reads; the transaction is rolled back anyway.
+      const fts = (table) => () => {
+        db.exec('BEGIN')
+        try {
+          db.exec(`INSERT INTO ${table}(${table}, rank) VALUES('integrity-check', 1)`)
+        } catch (error) {
+          return `${error.message}; the index no longer matches the data, rebuild it (INSERT INTO ${table}(${table}) VALUES('rebuild')) or restore from an export`
+        } finally {
+          db.exec('ROLLBACK')
+        }
+      }
+      check('schema', () => {
+        const v = one('PRAGMA user_version').user_version
+        if (v !== SCHEMA_VERSION) return `schema ${v}, this construct knows ${SCHEMA_VERSION}; update the plugin`
+      })
+      check('integrity', () => {
+        const rows = all('PRAGMA integrity_check').map((r) => r.integrity_check)
+        if (rows.join() !== 'ok') return `${rows.slice(0, 3).join('; ')}; export what you can and start a new database`
+      })
+      check('fts observations', fts('observations_fts'))
+      check('fts prompts', fts('prompts_fts'))
+      check('orphaned versions', () => {
+        const n = one('SELECT count(*) AS n FROM observation_versions WHERE observation_id NOT IN (SELECT id FROM observations)').n
+        if (n) return `${n} versions have no observation; delete them from observation_versions`
+      })
+      check('wal', () => {
+        const mode = one('PRAGMA journal_mode').journal_mode
+        if (mode !== 'wal') return `journal mode is ${mode}, expected wal; run PRAGMA journal_mode = WAL`
+      })
+      check('db id', () => {
+        if (!one("SELECT value FROM meta WHERE key = 'db_id'")) return 'the meta table has no db_id; exports would get unstable keys'
+      })
+      check('writable', () => {
+        for (const target of [path, dirname(path)]) {
+          try {
+            accessSync(target, constants.W_OK)
+          } catch {
+            return `${target} is not writable; fix its permissions`
+          }
+        }
+      })
+      return list
     },
 
     // needingReview lists live observations whose review_after has passed, oldest first.
