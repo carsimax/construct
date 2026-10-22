@@ -1,7 +1,7 @@
 # Construct
 
 [![Claude Code](https://img.shields.io/badge/Claude_Code-2.1.304%2B-blue)](#requirements)
-[![Plugin version](https://img.shields.io/badge/version-3.0.0-informational)](plugins/construct/.claude-plugin/plugin.json)
+[![Plugin version](https://img.shields.io/badge/version-4.0.0-informational)](plugins/construct/.claude-plugin/plugin.json)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 Construct is a Claude Code plugin that makes every request follow Organic Driven Development (ODD): authorize, explore, size, track, implement test-first, and close with evidence and a Risk line.
@@ -30,7 +30,7 @@ Construct is a Claude Code plugin that makes every request follow Organic Driven
 ### One command
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v3.0.0/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v4.0.0/install.sh | bash
 ```
 
 The installer checks the requirements above and stops before changing anything if one is missing, or if `~/.claude` or `~/.claude/settings.json` is not writable, or if `settings.json` is a directory. Then it runs the manual steps below for you:
@@ -49,7 +49,7 @@ If engram is installed, the installer says Construct no longer needs it and remo
 Pass options after `bash -s --`, for example `curl -fsSL <url> | bash -s -- --no-mcp`. To read the script before running it:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v3.0.0/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v4.0.0/install.sh -o install.sh
 less install.sh
 bash install.sh
 ```
@@ -65,7 +65,7 @@ The manual steps the installer runs, for when you want to run them yourself:
    claude plugin install construct@construct
    ```
 
-   The installer (`install.sh`) pins this marketplace to the release tag (`carsimax/construct#v3.0.0`); the command above follows the default branch. A failed `claude mcp add` in the installer warns and the install continues.
+   The installer (`install.sh`) pins this marketplace to the release tag (`carsimax/construct#v4.0.0`); the command above follows the default branch. A failed `claude mcp add` in the installer warns and the install continues.
 
 2. Optional: install the CodeGraph CLI and register the codegraph MCP server (see [MCP servers](#mcp-servers)).
 
@@ -291,7 +291,18 @@ Setup, checks, and pull request rules are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Status
 
-Current version: 3.0.0 (`plugins/construct/.claude-plugin/plugin.json`); review is now a mandatory phase for high-risk work, enforced by hooks, and the deterministic review and assessment CLIs are gone. Breaking. Releases are tagged `vX.Y.Z`.
+Current version: 4.0.0 (`plugins/construct/.claude-plugin/plugin.json`); memory now lives in the repository through `construct-memory`, and the engram dependency is gone. Breaking. Releases are tagged `vX.Y.Z`.
+
+Upgrading from 3.0.0:
+
+- Breaking: the `engram@engram` dependency is removed, and the engram MCP tools (`mcp__engram__*`) are gone from every agent.
+- Breaking: Node 22.16 or later is required, and Node 23 is not supported.
+- Breaking: the feature-document mirror and the `mirror-drift` hook are removed.
+- New: `construct-memory` keeps per-repository memory, with hooks that load session context, capture prompts, and record passive learnings, and the `construct:memory` skill describes how to use it.
+- Migrate: run `engram export`, then `construct-memory import <file> --project <name>`. Uninstalling `engram@engram` is optional.
+- The installer no longer adds `mcp__engram*` permission rules and leaves existing ones alone.
+
+3.0.0 was a breaking release that made review a mandatory phase for high-risk work, enforced by hooks, and removed the deterministic review and assessment CLIs.
 
 Upgrading from 2.1.0:
 
