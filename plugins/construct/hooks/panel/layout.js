@@ -54,8 +54,6 @@ export const PANEL_COLUMNS = 66
 
 const MIN_COLUMNS = 40
 const MAX_AGENT_ROWS = 6
-// The panel body is drawn on pure black.
-const PANEL_BACKGROUND = '#000000'
 
 // ---- small helpers ---------------------------------------------------------
 
@@ -427,5 +425,5 @@ export function buildPanel({ panel, usage, odd, memory, nowMs, columns, rows, mo
   push(changesCard({ git, changes, rows, used, width }))
   // minHeight (not height) fills the pane body without clipping cards taller than it.
   const fill = isNum(rows) && rows > 0 ? { minHeight: Math.floor(rows) } : {}
-  return { type: 'Box', props: { flexDirection: 'column', width, backgroundColor: PANEL_BACKGROUND, ...fill }, children }
+  return { type: 'Box', props: { flexDirection: 'column', width, ...fill }, children }
 }

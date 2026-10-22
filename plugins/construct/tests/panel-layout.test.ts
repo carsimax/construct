@@ -121,14 +121,14 @@ test('one column: the root is a column Box and nothing splits at 140 columns', a
   }
 })
 
-test('the root paints pure black and fills the pane body at 40, 66 and 120 columns', async () => {
+test('the root has no background and fills the pane body at 40, 66 and 120 columns', async () => {
   for (const columns of [40, 66, 120]) {
     const tree = buildPanel(args({ columns, rows: 50 }))
-    expect(tree.props.backgroundColor).toBe('#000000')
+    expect(tree.props.backgroundColor).toBeUndefined()
     expect(tree.props.minHeight).toBe(50)
   }
-  // no usable rows: the background stays, no fill height is set
-  expect(buildPanel(args({ rows: undefined })).props.backgroundColor).toBe('#000000')
+  // no usable rows: no fill height is set
+  expect(buildPanel(args({ rows: undefined })).props.backgroundColor).toBeUndefined()
   expect(buildPanel(args({ rows: undefined })).props.minHeight).toBe(undefined)
 })
 

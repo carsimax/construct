@@ -247,7 +247,7 @@ The mod draws one thing: a docked **panel** (a `Pane` with id `construct`) laid 
 
 **Width.** The panel asks for 66 columns when it opens (`columns: 66` on `ui.open`). That is a request, not a guarantee: a width you drag or keep wins, and the layout reads the real width (never below 40). Rows that do not fit are clipped, and the changes card keeps only the file rows that fit the pane height.
 
-**Colors.** The text colors are theme keys, so they follow the active theme, while the panel background is fixed: it draws on pure black (`#000000`) whatever the terminal theme.
+**Colors.** The text colors are theme keys, so they follow the active theme, and the panel draws on the terminal's own background.
 
 **The panel, top to bottom.** Every section is a card of the same width (round border, bold title on the left, status on the right); the borders separate the sections. A card with nothing to show takes no room.
 
