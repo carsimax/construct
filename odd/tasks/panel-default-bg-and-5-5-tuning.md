@@ -20,7 +20,7 @@ Objective: a batch of small changes: drop the panel's fixed background, then Cla
 | T2 | S2 | Research and proposal list | odd-general + odd-explorer (parallel with T1) | none (read-only) | done (proposals in L4) | — |
 | T3 | S3, S6 | Panel `weight` and prettyModel tests | odd-worker (parallel with T4) | none | done (RED 3 new fail → GREEN 3 known fail; node --test 726/0) | 3e22991 |
 | T4 | S4, S5 | Contract 5.5 lines | odd-worker (parallel with T3) | item 6 (prompt behavior no test catches) | done (RED 2 fail → GREEN; node --test 726/0; session 7622/8000, subagent 2905/3000); S4 fix after verify | c71c899, 33853ed |
-| T5 | S7 | Release 5.1.0 bump | odd-worker | item 5 (release) | in progress | — |
+| T5 | S7 | Release 5.1.0 bump | odd-worker | item 5 (release) | done (RED 3 fail → GREEN; node --test 726/0; validate --strict both pass) | ed7f7bd |
 
 ## Log
 
