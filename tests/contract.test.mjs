@@ -184,3 +184,18 @@ test('the contracts never mention codegraph and the subagent contract names LSP'
   assert.doesNotMatch(subagent, /codegraph/i)
   assert.match(subagent, /\bLSP\b/)
 })
+
+test('S4: the subagent contract finishes the asked work, adds nothing unasked, and rejects a syntax-only check', () => {
+  const text = context('subagent', { hook_event_name: 'SubagentStart', agent_type: 'construct:odd-worker' }).additionalContext
+  assert.match(text, /a syntax-only check does not count/)
+  assert.match(text, /can be run, built, or type-checked/)
+  assert.match(text, /If none can run, say which and why/)
+  assert.match(text, /until everything the prompt asked for is done/i)
+  assert.match(text, /no features, tests, files, docs, or refactors the prompt did not ask for/i)
+})
+
+test('S5: the session contract names the text-only progress report as an early stop', () => {
+  const flat = context('session', SESSION).additionalContext.replace(/\s+/g, ' ')
+  assert.match(flat, /text-only progress report[^.]*"Next, I'll[^.]*"Shall I apply this\?"[^.]*not a stop/i)
+  assert.match(flat, /completion notifications/i)
+})

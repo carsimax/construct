@@ -44,7 +44,7 @@ test('card is a round bordered column with a space-between title row', () => {
   expect(c.props).toMatchObject({ flexDirection: 'column', borderStyle: 'round', borderColor: 'claude', paddingX: 1, width: 40 })
   const [head, ...rest] = c.children
   expect(head.props.justifyContent).toBe('space-between')
-  expect(head.children[0]).toEqual({ type: 'Text', props: { color: 'claude', bold: true }, children: ['Opus · main'] })
+  expect(head.children[0]).toEqual({ type: 'Text', props: { color: 'claude', weight: 'semibold' }, children: ['Opus · main'] })
   expect(head.children[1]).toEqual({ type: 'Text', props: { color: 'claude' }, children: ['● working'] })
   expect(rest).toEqual([body])
 })
