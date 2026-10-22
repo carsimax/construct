@@ -2,7 +2,7 @@
 // database under the git common dir (construct-memory/memory.db), shared by every worktree.
 // Imported by the construct-memory CLI and the memory hooks; it prints nothing itself.
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
-import { accessSync, constants, mkdirSync } from 'node:fs'
+import { accessSync, constants, existsSync, mkdirSync } from 'node:fs'
 import { basename, dirname, join, resolve } from 'node:path'
 import { git } from './git-tree.mjs'
 
@@ -244,6 +244,9 @@ function checkVerdict(relation, confidence) {
 }
 const text = (v) => (v === undefined || v === null ? null : stripPrivate(v))
 const reviewAfter = (type, from) => (type in REVIEW_MONTHS ? addMonths(from, REVIEW_MONTHS[type]) : null)
+
+// whereTokens lists the path-like tokens of every `Where:` line in a memory's content.
+const whereTokens = (content) => (content.match(/^[ \t]*Where:(.*)$/gm) ?? []).flatMap((line) => line.replace(/^[ \t]*Where:/, '').split(/[\s,;]+/)).map((t) => t.replace(/^[`'"(]+|[`'")]+$|\.+$/g, '')).filter(Boolean)
 
 // openMemory returns the store of the repository containing cwd, or null outside one.
 // `now` is the clock (tests move it). A database written by a newer schema throws.
@@ -584,9 +587,19 @@ function makeStore(db, path, now, repoName) {
     // shortcut: scans every live bugfix/decision row instead of an FTS pre-filter, fine for one repository's notes, add the trigram pre-filter if it grows large.
     observationsWhere(paths) {
       const hit = (named) => paths.some((p) => p === named || p.startsWith(`${named.replace(/\/+$/, '')}/`))
-      const named = (content) => (content.match(/^[ \t]*Where:(.*)$/gm) ?? []).flatMap((line) => line.replace(/^[ \t]*Where:/, '').split(/[\s,;]+/)).map((t) => t.replace(/^[`'"(]+|[`'")]+$|\.+$/g, '')).filter(Boolean)
       return all("SELECT id, type, title, content FROM observations WHERE deleted_at IS NULL AND type IN ('bugfix', 'decision') AND content LIKE '%Where:%' ORDER BY updated_at DESC, id DESC")
-        .filter((o) => !injects(o.title) && !injects(o.content) && named(o.content).some(hit))
+        .filter((o) => !injects(o.title) && !injects(o.content) && whereTokens(o.content).some(hit))
+    },
+
+    // staleWhere lists live observations (any type) whose `Where:` line names a repository-relative path
+    // missing from the work tree of cwd, with the missing paths; read-only, oldest id first.
+    // shortcut: a token counts as a path only with a `/` or a file extension, so a bare root file such as `Makefile` is not checked.
+    staleWhere(cwd) {
+      const root = git(cwd, ['rev-parse', '--show-toplevel']).toString('utf8').trim()
+      const missingOf = (content) => [...new Set(whereTokens(content).map((t) => t.replace(/:\d+(-\d+)?$/, '')).filter((t) => /[/]|\.\w+$/.test(t) && !/^[/~]|[*?[\]{}]|(^|\/)\.\.(\/|$)/.test(t)))].filter((t) => !existsSync(join(root, t)))
+      return all("SELECT id, type, title, content FROM observations WHERE deleted_at IS NULL AND content LIKE '%Where:%' ORDER BY id")
+        .map((o) => ({ id: o.id, type: o.type, title: o.title, missing: missingOf(o.content) }))
+        .filter((o) => o.missing.length)
     },
 
     // context renders the session-start text: recent sessions, prompts, and observations.

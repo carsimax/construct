@@ -69,6 +69,8 @@ Use `construct-memory consolidate <id> <id>... --title T [--type T] [--topic-key
 
 Before architecture-sensitive work, run `construct-memory review list`. Memories marked `needs_review` are stale: verify them, and run `review done <id>` only after the user confirms.
 
+`construct-memory review stale [--json]` is a second, read-only source of candidates: live memories whose `Where:` line names repository paths that no longer exist, with the missing paths. A missing path alone is not proof the memory is wrong: check where the code went. A moved path is an Update, a rewritten fact a Replace, and only a gone problem is a Delete (see below). It never changes `review_after`.
+
 Classify each stale candidate against the current code before acting, with one outcome:
 
 - **Keep**: still accurate. Change nothing; `review done <id>` once the user confirms.
