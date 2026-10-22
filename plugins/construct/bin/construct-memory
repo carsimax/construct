@@ -23,6 +23,10 @@ const USAGE = `usage: construct-memory <command> [options]
   pin <id> | unpin <id>             pinned observations always load in the session context and rank higher in search
   stats                             counts of observations, sessions, prompts, and the database size
   doctor [--json]                   read-only health checks (schema, integrity, search indexes, WAL, writable); exit 1 when one fails
+  judge <judgment-id> <relation> [--reason T] [--evidence T] [--confidence 0..1]  record a verdict on a candidate printed after save (re-judging overwrites)
+  judge-many                        JSON array on stdin (1-32 of judgment_id, relation, reason, evidence, confidence); all or nothing
+  compare <id-a> <id-b> <relation> --confidence 0..1 [--reasoning T]  record a verdict for any pair (a supersedes b)
+                                    relations: related, compatible, scoped, conflicts_with, supersedes, not_conflict
   help`
 
 class UsageError extends Error {}
@@ -38,6 +42,17 @@ function stdinJson() {
     fail('invalid JSON on stdin')
   }
   if (value === null || typeof value !== 'object' || Array.isArray(value)) fail('stdin must be a JSON object')
+  return value
+}
+
+function stdinArray() {
+  let value
+  try {
+    value = JSON.parse(readFileSync(0, 'utf8'))
+  } catch {
+    fail('invalid JSON on stdin')
+  }
+  if (!Array.isArray(value)) fail('stdin must be a JSON array')
   return value
 }
 
@@ -58,6 +73,7 @@ function hit(row) {
   if (row.topic_key) parts.push(`(${row.topic_key})`)
   if (row.pinned) parts.push('pinned')
   if (row.needs_review) parts.push('needs_review')
+  if (row.marks?.length) parts.push(...row.marks)
   return `${parts.join(' ')} - ${oneLine(row.preview)}${row.truncated ? '...' : ''}`
 }
 
@@ -67,6 +83,7 @@ function show(row) {
   out += `created: ${row.created_at}  updated: ${row.updated_at}  revisions: ${row.revision_count}  duplicates: ${row.duplicate_count}\n`
   if (row.session_id) out += `session: ${row.session_id}\n`
   if (row.needs_review) out += 'needs_review: yes\n'
+  if (row.marks?.length) out += `relations: ${row.marks.join(', ')}\n`
   out += `\n${row.content}\n`
   if (row.versions) {
     out += `\n## history (${row.versions.length} earlier versions)\n`
@@ -81,9 +98,9 @@ async function main(argv) {
   const { values, positionals } = parseArgs({
     args: rest,
     allowPositionals: true,
-    options: { type: { type: 'string' }, limit: { type: 'string' }, any: { type: 'boolean' }, history: { type: 'boolean' }, before: { type: 'string' }, after: { type: 'string' }, search: { type: 'string' }, hard: { type: 'boolean' }, json: { type: 'boolean' }, session: { type: 'string' }, project: { type: 'string' } },
+    options: { type: { type: 'string' }, limit: { type: 'string' }, any: { type: 'boolean' }, history: { type: 'boolean' }, before: { type: 'string' }, after: { type: 'string' }, search: { type: 'string' }, hard: { type: 'boolean' }, json: { type: 'boolean' }, session: { type: 'string' }, project: { type: 'string' }, reason: { type: 'string' }, evidence: { type: 'string' }, confidence: { type: 'string' }, reasoning: { type: 'string' } },
   })
-  const known = ['save', 'search', 'get', 'context', 'update', 'delete', 'summary', 'review', 'import', 'prompts', 'export', 'suggest-topic-key', 'timeline', 'pin', 'unpin', 'stats', 'doctor']
+  const known = ['save', 'search', 'get', 'context', 'update', 'delete', 'summary', 'review', 'import', 'prompts', 'export', 'suggest-topic-key', 'timeline', 'pin', 'unpin', 'stats', 'doctor', 'judge', 'judge-many', 'compare']
   if (!known.includes(command)) fail(`unknown command: ${command} (run construct-memory help)`)
   if (command === 'review' && !['list', 'done'].includes(positionals[0])) fail('review needs list or done <id>')
 
@@ -102,8 +119,8 @@ async function main(argv) {
   try {
     switch (command) {
       case 'save': {
-        const { id, action } = store.save(stdinJson())
-        return `saved #${id} (${action})\n`
+        const { id, action, candidates = [] } = store.save(stdinJson(), { candidates: true })
+        return `saved #${id} (${action})\n${candidates.map((c) => `  candidate #${c.id} ${oneLine(c.title)} (judge: construct-memory judge ${c.judgment_id} <relation>)\n`).join('')}`
       }
       case 'search': {
         const query = positionals.join(' ')
@@ -151,7 +168,7 @@ async function main(argv) {
           fail(`${positionals[0]} is not valid JSON`)
         }
         const n = store.importExport(data, { project: values.project })
-        return `imported ${n.observations} observations, ${n.sessions} sessions, ${n.prompts} prompts; skipped ${n.skipped} already imported, ${n.deleted} deleted\n`
+        return `imported ${n.observations} observations, ${n.sessions} sessions, ${n.prompts} prompts; skipped ${n.skipped} already imported, ${n.deleted} deleted${n.relations ? `; ${n.relations} relations` : ''}\n`
       }
       case 'export': {
         const data = store.exportData()
@@ -216,6 +233,21 @@ async function main(argv) {
         const list = store.doctor()
         if (list.some((c) => !c.ok)) process.exitCode = 1
         return values.json ? `${JSON.stringify(list, null, 2)}\n` : `${list.map((c) => (c.ok ? `ok ${c.check}` : `fail ${c.check}: ${c.detail}`)).join('\n')}\n`
+      }
+      case 'judge': {
+        if (!positionals[0] || !positionals[1]) fail('judge needs <judgment-id> <relation>')
+        store.judge(positionals[0], positionals[1], { reason: values.reason, evidence: values.evidence, confidence: values.confidence })
+        return `judged ${positionals[0]} ${positionals[1]}\n`
+      }
+      case 'judge-many':
+        return `judged ${store.judgeMany(stdinArray())} relations\n`
+      case 'compare': {
+        if (positionals.length < 3) fail('compare needs <id-a> <id-b> <relation>')
+        const a = idArg(positionals[0])
+        const b = idArg(positionals[1])
+        if (values.confidence === undefined) fail('compare needs --confidence <0..1>')
+        store.compare(a, b, positionals[2], { confidence: values.confidence, reasoning: values.reasoning })
+        return `compared #${a} #${b} ${positionals[2]}\n`
       }
       case 'review': {
         if (positionals[0] === 'list') {

@@ -11,7 +11,7 @@ const BIN = new URL('../../plugins/construct/bin/construct-memory', import.meta.
 const { openMemory } = await import(new URL('../../plugins/construct/hooks/scripts/memory-store.mjs', import.meta.url))
 
 const cli = (cwd, args, input = '') => spawnSync(BIN, args, { cwd, input, encoding: 'utf8' })
-const CHECKS = ['schema', 'integrity', 'fts observations', 'fts prompts', 'orphaned versions', 'wal', 'db id', 'writable']
+const CHECKS = ['schema', 'integrity', 'fts observations', 'fts prompts', 'orphaned versions', 'orphaned relations', 'wal', 'db id', 'writable']
 
 // seeded returns a repo whose store holds an observation with a version and a prompt.
 function seeded() {

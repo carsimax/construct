@@ -47,6 +47,20 @@ JSON
 - `construct-memory timeline <id> [--before N] [--after N]` shows what was saved around a hit in the same session, for context the hit alone lacks.
 - `construct-memory prompts --search <query>` finds an earlier prompt; `construct-memory stats` counts what is stored. Run `construct-memory doctor` when memory behaves oddly (it only reads; it never repairs).
 
+## Related memories
+
+After a `save` that inserts or updates, the command may print up to 3 candidates below its line, each with a judgment id:
+
+```text
+  candidate #12 Logging format json (judge: construct-memory judge rel-1a2b3c4d5e6f7a8b <relation>)
+```
+
+Judging is optional; ignore the candidates unless one really conflicts with or replaces the new memory. To record a verdict: `construct-memory judge <judgment-id> <relation> [--reason T] [--evidence T] [--confidence 0..1]` (re-judging overwrites), `judge-many` (JSON array of 1-32 `{judgment_id, relation, reason?, evidence?, confidence?}` on stdin, all or nothing), or `compare <id-a> <id-b> <relation> --confidence 0..1 [--reasoning T]` for any pair (`a` supersedes `b`). Relations: `related`, `compatible`, `scoped`, `conflicts_with`, `supersedes`, `not_conflict`.
+
+- Judge only a real conflict or supersession; `related`, `compatible`, `scoped`, and `not_conflict` are not worth a call.
+- Ask the user before recording `supersedes` or `conflicts_with` on a `decision`, `architecture`, or `policy` memory, or whenever your confidence is below 0.7; pass what the user said as `--evidence`.
+- `search` and `get` mark judged conflicts as `conflicts with #N` and supersessions as `supersedes #N` / `superseded by #N`; check the other memory before relying on either.
+
 Before architecture-sensitive work, run `construct-memory review list`. Memories marked `needs_review` are stale: verify them, and run `review done <id>` only after the user confirms.
 
 ## Session summary

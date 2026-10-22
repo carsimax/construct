@@ -238,3 +238,10 @@ test('every mode fails open when node:sqlite cannot load (W1)', () => {
     assert.equal(r.stderr, '', mode)
   }
 })
+
+test('capture: passive saves record no relation candidates', () => {
+  const c = setup()
+  capture(c, report('## Key Learnings\n\n1. The store opens with busy_timeout set before WAL.\n2. The store opens with busy_timeout set after WAL too.'))
+  assert.equal(passive(c).length, 2)
+  assert.deepEqual(rows(c, 'SELECT * FROM memory_relations'), [])
+})

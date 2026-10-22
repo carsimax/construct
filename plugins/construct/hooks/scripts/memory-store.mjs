@@ -1,7 +1,7 @@
 // The per-repository memory store (S1-S4 of odd/tasks/construct-memory.md): one SQLite + FTS5
 // database under the git common dir (construct-memory/memory.db), shared by every worktree.
 // Imported by the construct-memory CLI and the memory hooks; it prints nothing itself.
-import { createHash, randomUUID } from 'node:crypto'
+import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { accessSync, constants, mkdirSync } from 'node:fs'
 import { basename, dirname, join, resolve } from 'node:path'
 import { git } from './git-tree.mjs'
@@ -33,6 +33,9 @@ const PINNED_BOOST = 0.1
 const TIMELINE_DEFAULT = 5
 const PROMPTS_DEFAULT = 20
 const PROMPTS_MAX = 100
+const CANDIDATES_MAX = 3
+const JUDGE_MANY_MAX = 32
+export const RELATIONS = ['related', 'compatible', 'scoped', 'conflicts_with', 'supersedes', 'not_conflict']
 // Initial review prompts in months per type, not deadlines; other types have none.
 const REVIEW_MONTHS = { decision: 6, policy: 12, preference: 3, config: 3, discovery: 6, pattern: 6, architecture: 12, bugfix: 12 }
 
@@ -92,6 +95,21 @@ CREATE TABLE IF NOT EXISTS import_tombstones (
   import_id TEXT PRIMARY KEY,
   deleted_at TEXT NOT NULL
 );
+-- Judgments between two observations: one row per unordered pair; status pending until an agent judges it.
+CREATE TABLE IF NOT EXISTS memory_relations (
+  id TEXT PRIMARY KEY,
+  source_id INTEGER NOT NULL,
+  target_id INTEGER NOT NULL,
+  relation TEXT NOT NULL DEFAULT 'pending',
+  status TEXT NOT NULL DEFAULT 'pending',
+  reason TEXT,
+  evidence TEXT,
+  confidence REAL,
+  marked_by TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS memory_relations_pair ON memory_relations(min(source_id, target_id), max(source_id, target_id));
 CREATE VIRTUAL TABLE IF NOT EXISTS observations_fts USING fts5(
   title, content, type, topic_key, content='observations', content_rowid='id', tokenize='trigram'
 );
@@ -205,6 +223,15 @@ export function suggestTopicKey({ type = '', title = '', content = '' } = {}) {
   }
   return `${family}/${segment}`
 }
+const relationId = () => `rel-${randomBytes(8).toString('hex')}`
+function checkVerdict(relation, confidence) {
+  if (!RELATIONS.includes(relation)) throw new Error(`relation must be one of ${RELATIONS.join(', ')}`)
+  if (confidence === undefined || confidence === null) return null
+  const c = typeof confidence === 'string' && confidence.trim() === '' ? NaN : Number(confidence)
+  if (!(c >= 0 && c <= 1)) throw new Error('confidence must be a number between 0 and 1')
+  return c
+}
+const text = (v) => (v === undefined || v === null ? null : String(v))
 const reviewAfter = (type, from) => (type in REVIEW_MONTHS ? addMonths(from, REVIEW_MONTHS[type]) : null)
 
 // openMemory returns the store of the repository containing cwd, or null outside one.
@@ -284,6 +311,43 @@ function makeStore(db, path, now, repoName) {
     return text
   }
 
+  // candidatesFor records up to 3 live observations that share title terms with the saved one as pending
+  // relations and returns them; pairs that already have a relation are skipped. Runs inside save's transaction.
+  // shortcut: terms under 3 characters are dropped (the trigram index cannot match them), a title of only short words gets no candidates.
+  function candidatesFor(id, title, at) {
+    const terms = queryTerms(title).filter((t) => [...t].length >= 3)
+    if (terms.length === 0) return []
+    const rows = all(`SELECT o.id, o.title FROM observations_fts f JOIN observations o ON o.id = f.rowid WHERE observations_fts MATCH ? AND o.deleted_at IS NULL AND o.id != ?
+      AND NOT EXISTS (SELECT 1 FROM memory_relations r WHERE min(r.source_id, r.target_id) = min(o.id, ?) AND max(r.source_id, r.target_id) = max(o.id, ?))
+      ORDER BY bm25(observations_fts, 5.0, 1.0, 0.0, 3.0), o.id LIMIT ?`, ftsQuoted(terms, true), id, id, id, CANDIDATES_MAX)
+    return rows.map((r) => {
+      const judgment_id = relationId()
+      run("INSERT INTO memory_relations (id, source_id, target_id, marked_by, created_at, updated_at) VALUES (?, ?, ?, 'save', ?, ?)", judgment_id, id, r.id, at, at)
+      return { id: r.id, title: r.title, judgment_id }
+    })
+  }
+
+  function applyJudgment(judgmentId, relation, { reason, evidence, confidence } = {}) {
+    const c = checkVerdict(relation, confidence)
+    const at = stamp()
+    const { changes } = run("UPDATE memory_relations SET relation = ?, status = 'judged', reason = ?, evidence = ?, confidence = ?, marked_by = 'agent', updated_at = ? WHERE id = ?", relation, text(reason), text(evidence), c, at, String(judgmentId))
+    if (changes === 0) throw new Error(`judgment ${judgmentId} not found`)
+  }
+
+  // marksFor maps observation id to the judged conflict and supersession marks that point at a live row.
+  function marksFor(ids) {
+    const marks = new Map(ids.map((id) => [id, []]))
+    if (ids.length === 0) return marks
+    const list = ids.map(() => '?').join(',')
+    const rows = all(`SELECT r.source_id, r.target_id, r.relation FROM memory_relations r WHERE r.status = 'judged' AND r.relation IN ('conflicts_with', 'supersedes') AND (r.source_id IN (${list}) OR r.target_id IN (${list}))
+      AND (SELECT count(*) FROM observations WHERE id IN (r.source_id, r.target_id) AND deleted_at IS NULL) = 2 ORDER BY r.updated_at, r.id`, ...ids, ...ids)
+    for (const r of rows) {
+      if (marks.has(r.source_id)) marks.get(r.source_id).push(r.relation === 'supersedes' ? `supersedes #${r.target_id}` : `conflicts with #${r.target_id}`)
+      if (marks.has(r.target_id)) marks.get(r.target_id).push(r.relation === 'supersedes' ? `superseded by #${r.source_id}` : `conflicts with #${r.source_id}`)
+    }
+    return marks
+  }
+
   const api = {
     path,
     dbId: null,
@@ -304,8 +368,8 @@ function makeStore(db, path, now, repoName) {
       })
     },
 
-    // save inserts, upserts by topic_key (versioning the old state), or counts a duplicate.
-    save({ title, content, type = 'manual', topic_key = null, session_id = null }) {
+    // save inserts, upserts (candidates: true, for agent saves, also records pending relations) by topic_key (versioning the old state), or counts a duplicate.
+    save({ title, content, type = 'manual', topic_key = null, session_id = null }, { candidates = false } = {}) {
       const cleanTitle = clean(title, 'title')
       const body = capContent(clean(content, 'content'))
       const key = normalizeTopicKey(topic_key) || null
@@ -316,7 +380,7 @@ function makeStore(db, path, now, repoName) {
         if (live) {
           snapshot(live)
           run('UPDATE observations SET type = ?, title = ?, content = ?, normalized_hash = ?, revision_count = revision_count + 1, last_seen_at = ?, review_after = ?, updated_at = ? WHERE id = ?', type, cleanTitle, body, hash, at, reviewAfter(type, at), at, live.id)
-          return { id: live.id, action: 'upserted' }
+          return { id: live.id, action: 'upserted', ...(candidates && { candidates: candidatesFor(live.id, cleanTitle, at) }) }
         }
         const since = new Date(now().getTime() - DEDUP_WINDOW_MS).toISOString()
         const dup = one('SELECT id FROM observations WHERE normalized_hash = ? AND type = ? AND title = ? AND deleted_at IS NULL AND last_seen_at >= ? ORDER BY id DESC LIMIT 1', hash, type, cleanTitle, since)
@@ -325,7 +389,8 @@ function makeStore(db, path, now, repoName) {
           return { id: dup.id, action: 'deduplicated' }
         }
         const { lastInsertRowid } = run('INSERT INTO observations (session_id, type, title, content, topic_key, normalized_hash, last_seen_at, review_after, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', session_id, type, cleanTitle, body, key, hash, at, reviewAfter(type, at), at, at)
-        return { id: Number(lastInsertRowid), action: 'inserted' }
+        const id = Number(lastInsertRowid)
+        return { id, action: 'inserted', ...(candidates && { candidates: candidatesFor(id, cleanTitle, at) }) }
       })
     },
 
@@ -366,6 +431,7 @@ function makeStore(db, path, now, repoName) {
           if (!row) return false
           if (row.import_id) run('INSERT OR IGNORE INTO import_tombstones (import_id, deleted_at) VALUES (?, ?)', row.import_id, stamp())
           run('DELETE FROM observation_versions WHERE observation_id = ?', id)
+          run('DELETE FROM memory_relations WHERE source_id = ? OR target_id = ?', id, id)
           run('DELETE FROM observations WHERE id = ?', id)
           return true
         })
@@ -375,6 +441,7 @@ function makeStore(db, path, now, repoName) {
 
     get(id, { history = false } = {}) {
       const row = present(one('SELECT * FROM observations WHERE id = ? AND deleted_at IS NULL', id))
+      if (row) row.marks = marksFor([id]).get(id)
       if (row && history) row.versions = all('SELECT * FROM observation_versions WHERE observation_id = ? ORDER BY id', id)
       return row
     },
@@ -407,7 +474,43 @@ function makeStore(db, path, now, repoName) {
         }
         rows = rows.concat(found.filter((r) => !seen.has(r.id)))
       }
-      return rows.slice(0, max).map(({ review_after, truncated, pinned, ...rest }) => present({ ...rest, pinned: Boolean(pinned), truncated: Boolean(truncated), review_after }))
+      const shown = rows.slice(0, max)
+      const marks = marksFor(shown.map((r) => r.id))
+      return shown.map(({ review_after, truncated, pinned, ...rest }) => present({ ...rest, pinned: Boolean(pinned), truncated: Boolean(truncated), review_after, marks: marks.get(rest.id) }))
+    },
+
+    // judge sets the verdict of one pending (or earlier judged) relation by its judgment id; re-judging overwrites.
+    judge: (judgmentId, relation, opts) => write(() => applyJudgment(judgmentId, relation, opts)),
+
+    // judgeMany applies 1-32 { judgment_id, relation, reason?, evidence?, confidence? } verdicts all or nothing.
+    judgeMany(items) {
+      if (!Array.isArray(items) || items.length < 1 || items.length > JUDGE_MANY_MAX) throw new Error(`judge-many needs a JSON array of 1 to ${JUDGE_MANY_MAX} items`)
+      return write(() => {
+        items.forEach((item, i) => {
+          try {
+            if (item === null || typeof item !== 'object' || typeof item.judgment_id !== 'string' || item.judgment_id === '') throw new Error('judgment_id is required')
+            applyJudgment(item.judgment_id, item.relation, item)
+          } catch (error) {
+            throw new Error(`item ${i + 1}: ${error.message}`)
+          }
+        })
+        return items.length
+      })
+    },
+
+    // compare records an agent verdict for any pair of existing observations, creating or updating the pair's relation (a supersedes b).
+    compare(a, b, relation, { confidence, reasoning } = {}) {
+      if (confidence === undefined || confidence === null) throw new Error('confidence is required')
+      const c = checkVerdict(relation, confidence)
+      if (a === b) throw new Error('compare needs two different observations')
+      return write(() => {
+        for (const id of [a, b]) if (!one('SELECT 1 AS found FROM observations WHERE id = ?', id)) throw new Error(`observation #${id} not found`)
+        const at = stamp()
+        const pair = one('SELECT id FROM memory_relations WHERE min(source_id, target_id) = ? AND max(source_id, target_id) = ?', Math.min(a, b), Math.max(a, b))
+        if (pair) run("UPDATE memory_relations SET source_id = ?, target_id = ?, relation = ?, status = 'judged', reason = ?, evidence = NULL, confidence = ?, marked_by = 'agent', updated_at = ? WHERE id = ?", a, b, relation, text(reasoning), c, at, pair.id)
+        else run("INSERT INTO memory_relations (id, source_id, target_id, relation, status, reason, confidence, marked_by, created_at, updated_at) VALUES (?, ?, ?, ?, 'judged', ?, ?, 'agent', ?, ?)", relationId(), a, b, relation, text(reasoning), c, at, at)
+        return { source_id: a, target_id: b, relation }
+      })
     },
 
     // context renders the session-start text: recent sessions, prompts, and observations.
@@ -554,6 +657,10 @@ function makeStore(db, path, now, repoName) {
         const n = one('SELECT count(*) AS n FROM observation_versions WHERE observation_id NOT IN (SELECT id FROM observations)').n
         if (n) return `${n} versions have no observation; delete them from observation_versions`
       })
+      check('orphaned relations', () => {
+        const n = one('SELECT count(*) AS n FROM memory_relations WHERE source_id NOT IN (SELECT id FROM observations) OR target_id NOT IN (SELECT id FROM observations)').n
+        if (n) return `${n} relations point at an erased observation; delete them from memory_relations`
+      })
       check('wal', () => {
         const mode = one('PRAGMA journal_mode').journal_mode
         if (mode !== 'wal') return `journal mode is ${mode}, expected wal; run PRAGMA journal_mode = WAL`
@@ -617,6 +724,8 @@ function makeStore(db, path, now, repoName) {
       else if (!projects.includes(chosen)) throw new Error(`project ${JSON.stringify(chosen)} is not in the export; it holds: ${projects.join(', ') || 'nothing'}`)
       const idOf = (kind, row) => (row.sync_id ? String(row.sync_id) : `${kind}:${chosen}:${row.id}`)
       const counts = { observations: 0, sessions: 0, prompts: 0, skipped: 0, deleted: 0 }
+      const relations = list('relations')
+      if (relations.length) counts.relations = 0 // only an export that carries relations reports them
       const ownPrefix = `cm-${api.dbId}-` // rows exported from this database already live here
       return write(() => {
         for (const s of sessions.filter((r) => projectName(r.project) === chosen)) {
@@ -658,6 +767,18 @@ function makeStore(db, path, now, repoName) {
           run('INSERT INTO user_prompts (session_id, content, created_at, import_id) VALUES (?, ?, ?, ?)', p.session_id, clean(p.content, 'content'), p.created_at, importId)
           counts.prompts++
         }
+        // A relation's ends are export keys: an imported row's import_id, or this database's own cm-<dbid>-obs-<id>.
+        const own = `${ownPrefix}obs-`
+        const local = (key) => (String(key).startsWith(own) ? one('SELECT id FROM observations WHERE id = ? AND deleted_at IS NULL', Number(String(key).slice(own.length))) : one('SELECT id FROM observations WHERE import_id = ? AND deleted_at IS NULL', String(key)))?.id
+        for (const r of relations) {
+          const source = local(r.source)
+          const target = local(r.target)
+          if (source === undefined || target === undefined || source === target || !RELATIONS.includes(r.relation === 'pending' ? 'related' : r.relation)) continue
+          const at = stamp()
+          const { changes } = run('INSERT OR IGNORE INTO memory_relations (id, source_id, target_id, relation, status, reason, evidence, confidence, marked_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            relationId(), source, target, r.relation, r.status === 'judged' ? 'judged' : 'pending', text(r.reason), text(r.evidence), r.confidence ?? null, r.marked_by === 'agent' ? 'agent' : 'save', r.created_at || at, r.updated_at || at)
+          counts.relations += changes
+        }
         return counts
       })
     },
@@ -673,6 +794,10 @@ function makeStore(db, path, now, repoName) {
         sessions: all('SELECT id, started_at, ended_at, summary FROM sessions ORDER BY id').map((s) => ({ ...s, project })),
         observations: all('SELECT id, import_id, session_id, type, title, content, topic_key, revision_count, duplicate_count, last_seen_at, created_at, updated_at, pinned FROM observations WHERE deleted_at IS NULL ORDER BY id').map(({ import_id, pinned, ...o }) => ({ ...o, pinned: pinned === 1, sync_id: import_id ?? `cm-${api.dbId}-obs-${o.id}`, project, scope: 'project' })),
         prompts: all('SELECT id, import_id, session_id, content, created_at FROM user_prompts ORDER BY id').map(({ import_id, ...p }) => ({ ...p, sync_id: import_id ?? `cm-${api.dbId}-prompt-${p.id}`, project })),
+        // Relations whose two ends are both live (so both exported), keyed like the observations' sync_id.
+        relations: all(`SELECT s.import_id AS si, r.source_id, t.import_id AS ti, r.target_id, r.relation, r.status, r.reason, r.evidence, r.confidence, r.marked_by, r.created_at, r.updated_at
+          FROM memory_relations r JOIN observations s ON s.id = r.source_id AND s.deleted_at IS NULL JOIN observations t ON t.id = r.target_id AND t.deleted_at IS NULL ORDER BY r.rowid`)
+          .map(({ si, source_id, ti, target_id, ...r }) => ({ source: si ?? `cm-${api.dbId}-obs-${source_id}`, target: ti ?? `cm-${api.dbId}-obs-${target_id}`, ...r })),
       }
     },
 
