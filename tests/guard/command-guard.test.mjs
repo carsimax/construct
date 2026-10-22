@@ -128,3 +128,16 @@ describe('allowed', () => {
     assert.equal(r.stdout, '')
   })
 })
+
+describe('registration (S5)', () => {
+  test('hooks.json registers command-guard on Bash in exec form, failing open', async () => {
+    const { readFileSync } = await import('node:fs')
+    const hooks = JSON.parse(readFileSync(join(HOOK, '../../hooks.json'), 'utf8')).hooks
+    const group = hooks.PreToolUse.find((g) => g.hooks.some((h) => h.args?.[0].endsWith('command-guard.mjs')))
+    assert.ok(group)
+    assert.equal(group.matcher, 'Bash')
+    const entry = group.hooks.find((h) => h.args?.[0].endsWith('command-guard.mjs'))
+    assert.deepEqual(entry, { type: 'command', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/hooks/scripts/command-guard.mjs'], timeout: 10 })
+    assert.equal(entry.onFailure, undefined)
+  })
+})

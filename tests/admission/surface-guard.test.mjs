@@ -112,3 +112,15 @@ describe('surface-guard', () => {
     isAllowed(run(GUARD, [], null, {}, '{nope'))
   })
 })
+
+describe('registration (S5)', () => {
+  test('hooks.json registers surface-guard on the write tools in exec form, failing open', () => {
+    const hooks = JSON.parse(readFileSync(join(PLUGIN, 'hooks/hooks.json'), 'utf8')).hooks
+    const group = hooks.PreToolUse.find((g) => g.hooks.some((h) => h.args?.[0].endsWith('surface-guard.mjs')))
+    assert.ok(group)
+    assert.equal(group.matcher, 'Write|Edit|MultiEdit|NotebookEdit')
+    const entry = group.hooks.find((h) => h.args?.[0].endsWith('surface-guard.mjs'))
+    assert.deepEqual(entry, { type: 'command', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/hooks/scripts/surface-guard.mjs'], timeout: 10 })
+    assert.equal(entry.onFailure, undefined)
+  })
+})
