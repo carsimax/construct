@@ -1,7 +1,7 @@
 // The per-repository memory store (S1-S4 of odd/tasks/construct-memory.md): one SQLite + FTS5
 // database under the git common dir (construct-memory/memory.db), shared by every worktree.
 // Imported by the construct-memory CLI and the memory hooks; it prints nothing itself.
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { mkdirSync } from 'node:fs'
 import { basename, dirname, join, resolve } from 'node:path'
 import { git } from './git-tree.mjs'
@@ -77,6 +77,11 @@ CREATE TABLE IF NOT EXISTS user_prompts (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS prompts_import ON user_prompts(import_id) WHERE import_id IS NOT NULL;
 -- Import keys of erased prompts and observations (keys differ by their prompt:/obs: prefix).
+-- One row, db_id: this database's random id, used in the export keys of its own rows.
+CREATE TABLE IF NOT EXISTS meta (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS import_tombstones (
   import_id TEXT PRIMARY KEY,
   deleted_at TEXT NOT NULL
@@ -225,6 +230,7 @@ function makeStore(db, path, now, repoName) {
 
   const api = {
     path,
+    dbId: null,
 
     init() {
       retry(() => db.exec('PRAGMA journal_mode = WAL'))
@@ -237,6 +243,8 @@ function makeStore(db, path, now, repoName) {
           db.exec(SCHEMA)
           db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`)
         }
+        run("INSERT OR IGNORE INTO meta (key, value) VALUES ('db_id', ?)", randomUUID().replaceAll('-', ''))
+        api.dbId = one("SELECT value FROM meta WHERE key = 'db_id'").value
       })
     },
 
@@ -450,6 +458,7 @@ function makeStore(db, path, now, repoName) {
       else if (!projects.includes(chosen)) throw new Error(`project ${JSON.stringify(chosen)} is not in the export; it holds: ${projects.join(', ') || 'nothing'}`)
       const idOf = (kind, row) => (row.sync_id ? String(row.sync_id) : `${kind}:${chosen}:${row.id}`)
       const counts = { observations: 0, sessions: 0, prompts: 0, skipped: 0, deleted: 0 }
+      const ownPrefix = `cm-${api.dbId}-` // rows exported from this database already live here
       return write(() => {
         for (const s of sessions.filter((r) => projectName(r.project) === chosen)) {
           const { changes } = run('INSERT OR IGNORE INTO sessions (id, started_at, ended_at, summary) VALUES (?, ?, ?, ?)', s.id, s.started_at, s.ended_at ?? null, s.summary ? stripPrivate(s.summary) : null)
@@ -462,6 +471,10 @@ function makeStore(db, path, now, repoName) {
             continue
           }
           const importId = idOf('obs', o)
+          if (importId.startsWith(ownPrefix)) {
+            counts.skipped++
+            continue
+          }
           if (one('SELECT 1 AS found FROM observations WHERE import_id = ? UNION SELECT 1 FROM import_tombstones WHERE import_id = ?', importId, importId)) {
             counts.skipped++
             continue
@@ -475,6 +488,10 @@ function makeStore(db, path, now, repoName) {
         }
         for (const p of prompts.filter((r) => projectOf(r) === chosen)) {
           const importId = idOf('prompt', p)
+          if (importId.startsWith(ownPrefix)) {
+            counts.skipped++
+            continue
+          }
           if (one('SELECT 1 AS found FROM user_prompts WHERE import_id = ? UNION SELECT 1 FROM import_tombstones WHERE import_id = ?', importId, importId)) {
             counts.skipped++
             continue
@@ -488,17 +505,15 @@ function makeStore(db, path, now, repoName) {
 
     // exportData returns every live observation, session, and prompt in the shape importExport reads,
     // under one project named after the repository directory. A row that came from an import keeps its
-    // import key as sync_id; the others get cm-obs-<id> / cm-prompt-<id>.
-    // shortcut: those keys are only unique within one database, so merging exports of two clones that
-    // each saved their own rows would skip some; upgrade to a content-derived key if that is needed.
+    // import key as sync_id; the others get cm-<dbid>-obs-<id> / cm-<dbid>-prompt-<id>.
     exportData() {
       const project = repoName
       return {
         version: '0.2.0',
         exported_at: stamp(),
         sessions: all('SELECT id, started_at, ended_at, summary FROM sessions ORDER BY id').map((s) => ({ ...s, project })),
-        observations: all('SELECT id, import_id, session_id, type, title, content, topic_key, revision_count, duplicate_count, last_seen_at, created_at, updated_at FROM observations WHERE deleted_at IS NULL ORDER BY id').map(({ import_id, ...o }) => ({ ...o, sync_id: import_id ?? `cm-obs-${o.id}`, project, scope: 'project' })),
-        prompts: all('SELECT id, import_id, session_id, content, created_at FROM user_prompts ORDER BY id').map(({ import_id, ...p }) => ({ ...p, sync_id: import_id ?? `cm-prompt-${p.id}`, project })),
+        observations: all('SELECT id, import_id, session_id, type, title, content, topic_key, revision_count, duplicate_count, last_seen_at, created_at, updated_at FROM observations WHERE deleted_at IS NULL ORDER BY id').map(({ import_id, ...o }) => ({ ...o, sync_id: import_id ?? `cm-${api.dbId}-obs-${o.id}`, project, scope: 'project' })),
+        prompts: all('SELECT id, import_id, session_id, content, created_at FROM user_prompts ORDER BY id').map(({ import_id, ...p }) => ({ ...p, sync_id: import_id ?? `cm-${api.dbId}-prompt-${p.id}`, project })),
       }
     },
 

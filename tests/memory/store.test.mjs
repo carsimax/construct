@@ -77,7 +77,7 @@ describe('schema (S2)', () => {
   test('has the tables, columns, and trigram FTS tables', () => {
     const { store } = open()
     const names = raw(store, "SELECT name FROM sqlite_master WHERE type IN ('table')").map((r) => r.name)
-    for (const n of ['observations', 'observation_versions', 'sessions', 'user_prompts', 'observations_fts', 'prompts_fts', 'import_tombstones']) {
+    for (const n of ['observations', 'observation_versions', 'sessions', 'user_prompts', 'observations_fts', 'prompts_fts', 'import_tombstones', 'meta']) {
       assert.ok(names.includes(n), n)
     }
     const columns = raw(store, 'PRAGMA table_info(observations)').map((r) => r.name)
@@ -86,6 +86,7 @@ describe('schema (S2)', () => {
       'duplicate_count', 'last_seen_at', 'review_after', 'created_at', 'updated_at', 'deleted_at', 'import_id',
     ])
     assert.deepEqual(raw(store, 'PRAGMA table_info(import_tombstones)').map((r) => r.name), ['import_id', 'deleted_at'])
+    assert.deepEqual(raw(store, 'SELECT key FROM meta').map((r) => r.key), ['db_id'])
     assert.match(raw(store, "SELECT sql FROM sqlite_master WHERE name = 'observations_fts'")[0].sql, /trigram/)
     assert.match(raw(store, "SELECT sql FROM sqlite_master WHERE name = 'prompts_fts'")[0].sql, /trigram/)
     store.close()
