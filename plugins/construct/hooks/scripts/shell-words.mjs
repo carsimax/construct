@@ -10,7 +10,7 @@ export const GIT_VALUE_FLAGS = new Set(['-C', '-c', '--git-dir', '--work-tree', 
 // unquoted ; | & ( ) ` newline end a command, and < > are dropped as separators so
 // `cat <.env` yields the word `.env`. A bare digit word glued to < or > is the redirection's
 // file descriptor and is dropped (`2>&1`), and `&>` / `&>>` redirect instead of ending the
-// command. Each returned word keeps whether it was quoted.
+// command. Each returned word keeps whether it was quoted (`r`: redirection target) and its raw source text (`s`, quotes intact).
 export function splitCommands(input) {
   const commands = []
   let words = []
@@ -19,15 +19,16 @@ export function splitCommands(input) {
   let plain = true // no quote or backslash went into the current word
   let redir = false
   let piped = false
-  const endWord = () => {
-    if (has) words.push({ t: cur, r: redir })
+  let ws = 0 // index where the current word's raw source starts
+  const endWord = (end) => {
+    if (has) words.push({ t: cur, r: redir, s: input.slice(ws, end).trim() })
     if (has) redir = false
     cur = ''
     has = false
     plain = true
   }
-  const endCommand = () => {
-    endWord()
+  const endCommand = (end) => {
+    endWord(end)
     redir = false
     if (words.length) {
       words.piped = piped
@@ -61,9 +62,9 @@ export function splitCommands(input) {
       has = true
       plain = false
     } else if (/\s/.test(c) && c !== '\n') {
-      endWord()
+      endWord(i)
     } else if (';|&()`\n'.includes(c) && !(c === '&' && input[i + 1] === '>')) {
-      endCommand()
+      endCommand(i)
       // `|` and `|&` feed the next command; `||` does not.
       if (c === '|') {
         if (input[i + 1] === '|') i++
@@ -75,7 +76,7 @@ export function splitCommands(input) {
       }
     } else if (c === '<' || c === '>' || c === '&') {
       if (c !== '&' && plain && /^[0-9]+$/.test(cur)) { cur = ''; has = false }
-      endWord()
+      endWord(i)
       // Operators: >> >| >&N &>> &> <<EOF; a here-string (<<<) takes data, not a file.
       const op = /^(<<<|<<-?|>>|>\||>&[0-9-]*|<&[0-9-]*|&>>|&>|[<>])/.exec(input.slice(i))[0]
       i += op.length - 1
@@ -84,8 +85,9 @@ export function splitCommands(input) {
       cur += c
       has = true
     }
+    if (!has) ws = i + 1
   }
-  endCommand()
+  endCommand(input.length)
   return commands
 }
 

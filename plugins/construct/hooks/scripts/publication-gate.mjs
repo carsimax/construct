@@ -245,7 +245,8 @@ function publicationsIn(text, cwd, depth) {
   for (const tokens of splitCommands(text)) {
     // A redirection target is not a word.
     const words = tokens.filter((w) => !w.r).map((w) => w.t)
-    for (const word of words) for (const body of substitutionBodies(word)) nested(body, where)
+    // Raw source, not the unquoted text: a backtick or `$(` inside single quotes is literal.
+    for (const w of tokens) if (!w.r) for (const body of substitutionBodies(w.s)) nested(body, where)
     const { name, args, lines } = nestedLines(words)
     for (const line of lines) nested(line, where)
     // `bash <<< 'git push'`: the here-string reaches the tokenizer as a plain word.
