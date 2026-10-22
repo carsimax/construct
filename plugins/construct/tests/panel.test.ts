@@ -259,7 +259,7 @@ test('spawn makes a card and passes the spawn result through', async ($, on) => 
   await p.redraw()
   const text = await joined(p)
   expect(text).toContain('agents')
-  expect(text).toContain('1 running · 1 total')
+  expect(text).toContain('1 at work · 1')
   expect(text).toContain('worker')
   expect(text).not.toContain('construct:worker')
   expect(text).toContain('Sonnet')
@@ -328,8 +328,8 @@ test('a spawn from main sets the permission mode; a nested spawn does not', asyn
   const p = await pane($)
   await p.redraw()
   const text = await joined(p)
-  expect(text).toContain('mode auto')
-  expect(text).not.toContain('mode plan')
+  expect(text).toContain('· auto')
+  expect(text).not.toContain('· plan')
 })
 
 test('a tool.call after an ask settles it as cleared', async ($, on) => {
@@ -447,13 +447,13 @@ const CALL = { tool: 'Bash', input: { command: 'ls' }, tool_use_id: 'tu-1' }
 test('a real tool.check ask shows blocked until the call settles', async ($, on) => {
   await start($, on, { decision: 'ask' })
   const status = await reader($)
-  expect(await status()).toContain('○ idle')
+  expect(await status()).toContain('○ ready')
   await $.tool.check(CALL)
   await settle()
-  expect(await status()).toContain('◆ blocked')
+  expect(await status()).toContain('◆ waiting on you')
   await $.tool.call({ tool: 'Bash', command: 'ls', tool_use_id: 'tu-1' })
   await settle()
-  expect(await status()).not.toContain('blocked')
+  expect(await status()).not.toContain('◆ waiting')
 })
 
 test('an allow verdict and a query ask do not block', async ($, on) => {
@@ -461,7 +461,7 @@ test('an allow verdict and a query ask do not block', async ($, on) => {
   const status = await reader($)
   await $.tool.check(CALL)
   await settle()
-  expect(await status()).not.toContain('blocked')
+  expect(await status()).not.toContain('◆ waiting')
 })
 
 test('a tool.check ask without a tool_use_id (a query) does not block', async ($, on) => {
@@ -469,7 +469,7 @@ test('a tool.check ask without a tool_use_id (a query) does not block', async ($
   const status = await reader($)
   await $.tool.check({ tool: 'Bash', input: { command: 'ls' } })
   await settle()
-  expect(await status()).not.toContain('blocked')
+  expect(await status()).not.toContain('◆ waiting')
 })
 
 // A tool.call whose core step stays open until `release()`, as a question waits on the person.
@@ -486,17 +486,17 @@ async function openCall($, on, tool: string) {
 for (const tool of ['AskUserQuestion', 'ExitPlanMode']) {
   test(`${tool} blocks while its tool.call is open and clears when it returns`, async ($, on) => {
     const { status, release, call } = await openCall($, on, tool)
-    expect(await status()).toContain('◆ blocked')
+    expect(await status()).toContain('◆ waiting on you')
     release()
     await call
     await settle()
-    expect(await status()).not.toContain('blocked')
+    expect(await status()).not.toContain('◆ waiting')
   })
 }
 
 test('another tool does not block while its tool.call is open', async ($, on) => {
   const { status, release, call } = await openCall($, on, 'Bash')
-  expect(await status()).not.toContain('blocked')
+  expect(await status()).not.toContain('◆ waiting')
   release()
   await call
 })
@@ -510,10 +510,10 @@ test('turn.start and turn.complete clear a block', async ($, on) => {
   ]) {
     await $.tool.check(CALL)
     await settle()
-    expect(await status()).toContain('◆ blocked')
+    expect(await status()).toContain('◆ waiting on you')
     await clear()
     await settle()
-    expect(await status()).not.toContain('blocked')
+    expect(await status()).not.toContain('◆ waiting')
   }
 })
 

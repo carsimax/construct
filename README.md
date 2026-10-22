@@ -243,7 +243,7 @@ Both `PostToolUse` signals fail open (no output, exit 0).
 
 ### Construct panel (mod)
 
-The mod draws one thing: a docked **panel** (a `Pane` with id `construct`) laid out as [claude-flightdeck](https://github.com/scasella/claude-flightdeck) cards and adapted to the ODD flow: one column at any width, no header or legend, `round` bordered cards, the bold title on the left and the status on the right. The band above the prompt is not drawn. It needs Claude Code 2.1.304 or later and does not appear in `claude -p` runs, which draw no interface.
+The mod draws one thing: a docked **panel** (a `Pane` with id `construct`) drawn as cards and shaped to the ODD flow: one column at any width, no header or legend, `round` bordered cards, the bold title on the left and the status on the right. It has a voice: each agent role has a glyph and a verb (`⌕ explorer mapping`, `⚒ worker building`, `⊨ verifier verifying`, `⚖ judge judging`, `◎ review-risk reviewing`), the main card reads `● building`, `◆ waiting on you`, or `○ ready`, the GATE card says `all clear` or `N waiting on you`, and empty cards say so (`nothing remembered yet`). The band above the prompt is not drawn. It needs Claude Code 2.1.304 or later and does not appear in `claude -p` runs, which draw no interface.
 
 **Commands and opening.** `/construct` opens the panel, `/construct close` closes it, and `/construct doctor` prints a setup report instead: one line per check, `✓ label` or `✗ label — hint`, for Claude Code 2.1.304 or later, Node 22.16 or later, memory (`node:sqlite` with FTS5 trigram). The checks run in parallel with a 3 s timeout each, and a failed check shows as `✗` and never throws. The panel opens at every session start; to turn that off, set the plugin option `panel_open_on_start` (boolean, default `true`) to `false`.
 
@@ -262,7 +262,7 @@ The mod draws one thing: a docked **panel** (a `Pane` with id `construct`) laid 
 
 **Refresh and fail-open.** Git (status, `diff --numstat HEAD` and a line count per untracked file) and the feature documents are read only on `session.start` and after each main-thread `turn.complete`, in the background with a timeout, never on a redraw. Context and the plan limits are read from the session usage on each redraw. Nothing is animated: the agents' elapsed times are static text computed at each redraw, which happens on the events below, not on a timer. The panel's own state is kept in a versioned `atom` fed from engine events (`agent.spawn`, `turn.start`, `turn.step`, `tool.call`, `tool.check`, `turn.complete`, and `session.compact`); the panel redraws on those events, not per token. These hooks only observe: each passes its event on unchanged and swallows its own failures, and the model and effort routing is untouched. Any error leaves out the affected card and never blocks or delays a turn.
 
-**Credit.** The drawing code (gauges, effort meter, and the card layout) is adapted from [claude-flightdeck](https://github.com/scasella/claude-flightdeck) by Stephen Casella, MIT License. The copyright and permission notice are in [`plugins/construct/LICENSE-flightdeck`](plugins/construct/LICENSE-flightdeck) and at the top of each adapted file.
+**Credit.** The panel code is Construct's own; the card-panel idea came from [claude-flightdeck](https://github.com/scasella/claude-flightdeck) (see [Credits](#credits)).
 
 ### Layout
 
@@ -402,9 +402,10 @@ Ideas, with no text or code copied, from these projects:
 - compound-engineering-plugin, https://github.com/EveryInc/compound-engineering-plugin: the durable-memory bar and stale-memory classification.
 - spec-kit, https://github.com/github/spec-kit: Given/When/Then lines, converge at close.
 - ECC, https://github.com/affaan-m/ECC: the pressure-prompt eval idea.
+- claude-flightdeck, https://github.com/scasella/claude-flightdeck: the card-panel idea for the status panel.
 
 ## License
 
 Construct is released under the MIT License; see [`LICENSE`](LICENSE).
 
-The agents, skills, contracts, and evals are Construct's own text. Adapted MIT code (the panel drawing code, the delegation admission and delivery signals hooks) is listed in [`plugins/construct/NOTICE`](plugins/construct/NOTICE), with each project's license in `plugins/construct/LICENSE-flightdeck` and `LICENSE-gentle-shell`. The ideas Construct draws on from other projects are in [Credits](#credits).
+The agents, skills, contracts, and evals are Construct's own text. Adapted MIT code (the delegation admission and delivery signals hooks) is listed in [`plugins/construct/NOTICE`](plugins/construct/NOTICE), with its license in `plugins/construct/LICENSE-gentle-shell`. The ideas Construct draws on from other projects are in [Credits](#credits).

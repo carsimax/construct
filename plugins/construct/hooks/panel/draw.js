@@ -1,40 +1,11 @@
-// Portions adapted from claude-flightdeck (github.com/scasella/claude-flightdeck), MIT License.
-//
-// MIT License
-//
-// Copyright (c) 2026 Stephen Casella
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in all
-// copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
-// Pure drawing primitives for the Construct panel: gauges, the effort meter, the
-// changes row clamp and the bordered card. They return strings, numbers and plain
-// element objects ({ type, props, children }, as layout.js and hooks/status/format.js
-// build them), so they run and test without `$`.
-//
-// Colors are theme keys only. Flightdeck's "theme" palette maps onto ours as:
-//   main -> claude, agent -> suggestion, gate -> success, cleared -> permission,
-//   arch -> merged (our ODD card), amber -> warning, warn -> error,
-//   dim -> inactive, faint -> subtle.
-// Flightdeck's "pastel" palette (fixed hex) is not adopted.
+// Drawing primitives of the panel: the color palette, gauges and meters, the stacked bar,
+// time formats, and the bordered card. Everything is a pure function over plain data that
+// returns `{ type, props, children }` elements, so layout.js can compose them and the tests
+// can read them without a renderer.
 
 import { isNum, text } from '../status/format.js'
 
+// Roles to theme keys (never raw colors, so the panel follows the user's theme).
 export const PALETTE = {
   main: 'claude',
   agent: 'suggestion',
@@ -48,82 +19,87 @@ export const PALETTE = {
   faint: 'subtle',
 }
 
-
-// Time left until a window resets, its two largest units: 25m, 3h10m, 4d2h. Empty when unknown or past.
-// Adapted from claude-flightdeck's fmtResetIn (core.ts).
-export function fmtResetIn(resetsAt, nowMs) {
-  if (!isNum(resetsAt) || !isNum(nowMs) || resetsAt <= nowMs) return ''
-  const m = Math.max(1, Math.floor((resetsAt - nowMs) / 60_000))
-  const d = Math.floor(m / 1440)
-  const h = Math.floor((m % 1440) / 60)
-  if (d > 0) return `${d}d${h}h`
-  return h > 0 ? `${h}h${String(m % 60).padStart(2, '0')}m` : `${m}m`
-}
-
-// A gauge of `width` cells: ▰ filled, ▱ empty. An unknown or out-of-range pct is clamped.
-export function gauge(pct, width) {
-  const w = Math.max(0, Math.floor(isNum(width) ? width : 0))
-  const full = Math.max(0, Math.min(w, Math.round(((isNum(pct) ? pct : 0) / 100) * w)))
-  return { on: '▰'.repeat(full), off: '▱'.repeat(w - full) }
-}
-
-// The effort meter, four slots: low 1, medium 2, high 3, xhigh and max 4; unknown 0.
-const EFFORT_SLOTS = { low: 1, medium: 2, high: 3, xhigh: 4, max: 4 }
-export function effortMeter(effort) {
-  const n = Object.hasOwn(EFFORT_SLOTS, effort) ? EFFORT_SLOTS[effort] : 0
-  return { on: '▮'.repeat(n), off: '▯'.repeat(4 - n) }
-}
-
-// How many file rows the changes card may show: what the other cards leave less its frame
-// (border 2 + title 1 = 3 rows), at most 10. -1 when not even the frame fits (the caller drops the card),
-// 0 when only the title fits.
+// A card's frame is its border plus the title row.
 export const CHANGES_FRAME_ROWS = 3
 export const MAX_CHANGE_ROWS = 10
-export const changeRows = (bodyRows, used) => {
-  const free = Math.floor(bodyRows - used - CHANGES_FRAME_ROWS)
-  return free < 0 || Number.isNaN(free) ? -1 : Math.min(MAX_CHANGE_ROWS, free)
+
+const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n))
+
+// Cells of a fixed-width gauge: `on` filled, `off` empty.
+export function gauge(pct, width) {
+  const w = isNum(width) ? Math.max(0, Math.floor(width)) : 0
+  const filled = isNum(pct) ? clamp(Math.round((pct * w) / 100), 0, w) : 0
+  return { on: '▰'.repeat(filled), off: '▱'.repeat(w - filled) }
 }
 
-// Largest-remainder split of `width` cells among `counts` (an array of numbers, in drawing order):
-// each non-zero count gets at least one cell and the cells sum to `width` (none when every count is 0
-// or width is 0). Returns an array of cell counts, one per input count.
+const EFFORT_SLOTS = { low: 1, medium: 2, high: 3, xhigh: 4, max: 4 }
+
+// Four slots; an unknown effort fills none.
+export function effortMeter(effort) {
+  const filled = Object.hasOwn(EFFORT_SLOTS, effort) ? EFFORT_SLOTS[effort] : 0
+  return { on: '▮'.repeat(filled), off: '▯'.repeat(4 - filled) }
+}
+
+// Time left until a reset (epoch ms or an ISO string): the two largest units, '' when unknown or past.
+export function fmtResetIn(resetsAt, nowMs) {
+  const at = typeof resetsAt === 'string' ? Date.parse(resetsAt) : resetsAt
+  if (!isNum(at) || !isNum(nowMs) || at <= nowMs) return ''
+  const mins = Math.ceil((at - nowMs) / 60_000)
+  if (mins >= 1440) return `${Math.floor(mins / 1440)}d${Math.floor((mins % 1440) / 60)}h`
+  if (mins >= 60) return `${Math.floor(mins / 60)}h${String(mins % 60).padStart(2, '0')}m`
+  return `${mins}m`
+}
+
+// Rows the changes card may fill: what is left after the other cards and its own frame, at most
+// MAX_CHANGE_ROWS; -1 when not even the frame fits.
+export function changeRows(bodyRows, used) {
+  const left = bodyRows - used - CHANGES_FRAME_ROWS
+  return left < 0 ? -1 : Math.min(MAX_CHANGE_ROWS, left)
+}
+
+// Splits `width` cells over `counts`: every non-zero count keeps one cell, the rest goes by
+// largest remainder. With fewer cells than non-zero counts, the largest counts get one each.
 export function stackBar(counts, width) {
-  const list = (Array.isArray(counts) ? counts : []).map((n) => (isNum(n) && n > 0 ? n : 0))
-  const w = Math.max(0, Math.floor(isNum(width) ? width : 0))
-  const total = list.reduce((a, b) => a + b, 0)
-  if (total === 0 || w === 0) return list.map(() => 0)
-  const nonZero = list.filter((n) => n > 0).length
-  if (nonZero >= w) {
-    // No room for a cell each: the largest counts keep one.
-    const keep = [...list.keys()].filter((i) => list[i] > 0).sort((a, b) => list[b] - list[a]).slice(0, w)
-    return list.map((_, i) => (keep.includes(i) ? 1 : 0))
+  const c = counts.map((n) => (isNum(n) ? Math.max(0, n) : 0))
+  const w = isNum(width) ? Math.max(0, Math.floor(width)) : 0
+  const total = c.reduce((a, b) => a + b, 0)
+  const cells = c.map(() => 0)
+  if (total === 0 || w === 0) return cells
+  const nonZero = c.map((n, i) => i).filter((i) => c[i] > 0)
+  if (w <= nonZero.length) {
+    nonZero.sort((a, b) => c[b] - c[a] || a - b).slice(0, w).forEach((i) => (cells[i] = 1))
+    return cells
   }
-  const spare = w - nonZero
-  const exact = list.map((n) => (n > 0 ? (n / total) * spare : 0))
-  const cells = list.map((n, i) => (n > 0 ? 1 + Math.floor(exact[i]) : 0))
-  let left = w - cells.reduce((a, b) => a + b, 0)
-  const order = [...list.keys()].filter((i) => list[i] > 0).sort((a, b) => exact[b] - Math.floor(exact[b]) - (exact[a] - Math.floor(exact[a])))
-  for (let k = 0; left > 0; k = (k + 1) % order.length, left--) cells[order[k]]++
+  const spare = w - nonZero.length
+  const quota = c.map((n) => (n / total) * spare)
+  for (const i of nonZero) cells[i] = 1 + Math.floor(quota[i])
+  const left = w - cells.reduce((a, b) => a + b, 0)
+  nonZero
+    .sort((a, b) => (quota[b] % 1) - (quota[a] % 1) || a - b)
+    .slice(0, left)
+    .forEach((i) => cells[i]++)
   return cells
 }
 
-// A round bordered column: `dim` dims the border, `marginTop` and `width` are optional.
-export function panelBox({ color, dim, width, marginTop, children = [] }) {
-  const props = { flexDirection: 'column', borderStyle: 'round', borderColor: color, paddingX: 1 }
-  if (dim) props.borderDimColor = true
-  if (isNum(width)) props.width = width
-  if (isNum(marginTop) && marginTop > 0) props.marginTop = marginTop
+// The panel root: one column, `minHeight` fills the pane body when its rows are known.
+export function panelBox({ width, rows, children }) {
+  const props = { flexDirection: 'column', width }
+  if (isNum(rows) && rows > 0) props.minHeight = Math.floor(rows)
   return { type: 'Box', props, children }
 }
 
-// A round bordered card: a bold title on the left and the status on the right of one
-// row, then `children` (element objects). `status` is a string (in the card color) or
-// { text, color, dim }; `width` is omitted to let the pane size the card; `dim` dims the border.
+// A bordered card: bold title on the left, status on the right. A string status takes the
+// card color; `{ text, color, dim }` styles it on its own.
 export function card({ title, status, color, children = [], width, dim, marginTop }) {
-  const head = [text(title, { color, bold: true })]
-  if (status !== undefined && status !== null) {
-    const s = typeof status === 'string' ? { text: status, color } : status
-    head.push(text(s.text, s.dim ? { dim: true } : { color: s.color }))
+  const props = { flexDirection: 'column', borderStyle: 'round', borderColor: color, paddingX: 1 }
+  if (width !== undefined) props.width = width
+  if (marginTop) props.marginTop = marginTop
+  const head = [text(title, { color, bold: true, dim })]
+  if (typeof status === 'string') head.push(text(status, { color }))
+  else if (status) head.push(text(status.text, { color: status.color, dim: status.dim }))
+  return {
+    type: 'Box',
+    props,
+    children: [{ type: 'Box', props: { justifyContent: 'space-between' }, children: head }, ...children],
   }
-  return panelBox({ color, dim, width, marginTop, children: [{ type: 'Box', props: { justifyContent: 'space-between' }, children: head }, ...children] })
 }

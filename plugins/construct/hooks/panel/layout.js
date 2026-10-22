@@ -1,429 +1,363 @@
-// Portions adapted from claude-flightdeck (github.com/scasella/claude-flightdeck), MIT License.
-//
-// MIT License
-//
-// Copyright (c) 2026 Stephen Casella
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in all
-// copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
+// The panel layout: turns the stored panel state and the live data (usage, ODD feature, memory,
+// git) into one column of bordered cards. Each card is built by a small function of its own;
+// buildPanel only decides which cards show and how many rows the changes card may take.
 
-// Pure layout for the Construct panel: flightdeck's card layout with the ODD cycle.
-//
-// One column at any width (S1), asked at PANEL_COLUMNS (66) through `$.ui.open({ columns })`.
-// That is a request: a width the user dragged or kept wins, so the layout reads the real width from
-// `columns` (never below 40). Every section is a `card()` of that width (round border, bold title
-// left, status right); the borders separate the sections, there are no rails. Top to bottom:
-//
-//   main     model, idle/busy, effort meter, mode, requests, ctx gauge, 5h and 7d
-//   ODD      hidden without a feature: feature, current task, one checkpoint per task
-//   GATE     stacked verdict bar, allowed / decider / pending / denied, buckets, last denied, inline alert
-//   MEMORY   `N memories`: to review (amber), pinned, pending relations; last save and saves this session
-//   agents   `N running · M total`; one row per agent: mark, short name, routed model and effort, elapsed
-//   changes  titled with the branch, `↑N ↓N` on the right, one row per changed file
-//            (`+added -removed`), rows clamped by changeRows with a `+N more` row when cut
-//
-// Cards that have nothing to show are left out; the main card always shows (it does not depend on
-// a statusLine, S3). Colors are theme keys only (draw.js PALETTE). Rows are `Text` elements with
-// `wrap: 'truncate'` holding nested `Text` pieces, so the pane clips a long row and nothing here pads
-// to the width except the stacked bar, which is sized from it. Clocks are static text computed at
-// each redraw; no `Client` element is built here.
-//
-// No `$` calls live here, so these run (and test) in isolation. The wiring passes the panel state
-// (hooks/panel/state.js), the session usage, a clock and the Pane's `bodyColumns` / `scroll.bodyRows`.
-
-import { agentsView, mainBusy, maskSecrets, phaseOf, shortName } from './state.js'
-import { PALETTE, card, changeRows, effortMeter, fmtResetIn, gauge, stackBar } from './draw.js'
+import { kindOf } from '../scripts/roles.mjs'
 import { isNum, text } from '../status/format.js'
+import { PALETTE, card, changeRows, effortMeter, fmtResetIn, gauge, panelBox, stackBar } from './draw.js'
+import { agentsView, mainBusy, maskSecrets, phaseOf } from './state.js'
 
 export const PANEL_COLUMNS = 66
 
-const MIN_COLUMNS = 40
 const MAX_AGENT_ROWS = 6
+const MAX_NAME = 18
+const SEP = ' · '
+// eslint-disable-next-line no-control-regex
+const CONTROL = /[\u0000-\u001f\u007f-\u009f]/g
 
-// ---- small helpers ---------------------------------------------------------
+// ---- text helpers ---------------------------------------------------------
 
-const two = (n) => String(n).padStart(2, '0')
+const clean = (s) => (typeof s === 'string' ? s.replace(CONTROL, '') : '')
+const count = (n) => (isNum(n) && n > 0 ? Math.floor(n) : 0)
+const cut = (s, max) => (s.length <= max ? s : max > 1 ? `${s.slice(0, max - 1)}…` : s.slice(0, max))
 
-// `s` clipped to `w` cells, with an ellipsis when it was cut.
-const fit = (s, w) => (s.length <= w ? s : w <= 1 ? s.slice(0, Math.max(0, w)) : `${s.slice(0, w - 1)}…`)
-
-// m:ss, or XhYY from an hour on.
+// `m:ss`, or `XhYY` from an hour on.
 export function clock(ms) {
-  const s = Math.max(0, Math.floor((isNum(ms) ? ms : 0) / 1000))
-  const m = Math.floor(s / 60)
-  return m < 60 ? `${m}:${two(s % 60)}` : `${Math.floor(m / 60)}h${two(m % 60)}`
+  const s = isNum(ms) ? Math.max(0, Math.floor(ms / 1000)) : 0
+  const pad = (n) => String(n).padStart(2, '0')
+  if (s >= 3600) return `${Math.floor(s / 3600)}h${pad(Math.floor((s % 3600) / 60))}`
+  return `${Math.floor(s / 60)}:${pad(s % 60)}`
 }
 
-const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`
-
-// 666000 -> 666k, 1000000 -> 1.0M.
-function kTokens(n) {
-  if (!isNum(n)) return ''
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
-  if (n >= 1000) return `${Math.round(n / 1000)}k`
-  return String(Math.round(n))
+// `claude-opus-5-5` gives `Opus 5.5`; a family alone (`opus[1m]`) gives `Opus`; a date suffix is dropped.
+export function prettyModel(model) {
+  if (typeof model !== 'string') return 'Claude'
+  const parts = model.replace(/\[.*$/, '').split('-').filter((p) => p && p !== 'claude')
+  const family = parts.find((p) => /^[a-z]/i.test(p))
+  if (!family) return 'Claude'
+  const version = parts.filter((p) => /^\d{1,2}$/.test(p)).slice(0, 2).join('.')
+  const name = family[0].toUpperCase() + family.slice(1).toLowerCase()
+  return version ? `${name} ${version}` : name
 }
 
-// The last two path parts, so a long path stays readable.
-function shortPath(path) {
-  const parts = String(path).split('/').filter(Boolean)
+// 666_000 gives `666k`, 1_000_000 gives `1.0M`, below a thousand the integer.
+function tokens(n) {
+  if (n < 1000) return String(Math.round(n))
+  const k = Math.round(n / 1000)
+  return k >= 1000 ? `${(n / 1e6).toFixed(1)}M` : `${k}k`
+}
+
+// "5 minutes ago" as the shortest unit: `<1m`, `5m`, `3h`, `2d`.
+function age(ms) {
+  const m = Math.floor(ms / 60_000)
+  if (m < 1) return '<1m'
+  if (m < 60) return `${m}m`
+  return m < 1440 ? `${Math.floor(m / 60)}h` : `${Math.floor(m / 1440)}d`
+}
+
+// ---- rows: a row is a list of segments `{ t, color?, dim?, bold? }`, clipped to one line -------
+
+const seg = (t, o = {}) => ({ t, ...o })
+const sep = () => seg(SEP, { dim: true })
+const width = (segs) => segs.reduce((n, s) => n + s.t.length, 0)
+
+// The segments that fit in `max` cells, the cut one ending in `…`.
+function clip(segs, max) {
+  if (width(segs) <= max) return segs
+  const out = []
+  let left = Math.max(0, max - 1)
+  for (const s of segs) {
+    if (left <= 0) break
+    out.push(s.t.length <= left ? s : { ...s, t: s.t.slice(0, left) })
+    left -= s.t.length
+  }
+  const last = out.at(-1)
+  if (last) last.t += '…'
+  else out.push(seg('…'))
+  return out
+}
+
+function row(segs, max) {
+  const children = clip(segs, max).map((s) => text(s.t, s))
+  return { type: 'Text', props: { wrap: 'truncate' }, children }
+}
+
+const dimRow = (t, max, color) => row([seg(t, color ? { color } : { dim: true })], max)
+
+// gauge cells as two segments; the filled part turns to the warn color from 80%
+function gaugeSegs(pct, cells) {
+  const g = gauge(pct, cells)
+  const on = pct >= 80 ? PALETTE.warn : PALETTE.main
+  return [...(g.on ? [seg(g.on, { color: on })] : []), ...(g.off ? [seg(g.off, { color: PALETTE.faint })] : [])]
+}
+
+function meterSegs(effort, on = PALETTE.main) {
+  const m = effortMeter(effort)
+  return [...(m.on ? [seg(m.on, { color: on })] : []), seg(m.off, { color: PALETTE.faint })]
+}
+
+// ---- main card ---------------------------------------------------------------
+
+// The phase words of state.js as the voice the main status uses.
+const PHASE_VERB = { implementing: 'building', exploring: 'mapping' }
+
+function mainStatus(panel) {
+  if (panel.blocked) return { text: '◆ waiting on you', color: PALETTE.amber }
+  if (!mainBusy(panel)) return { text: '○ ready', dim: true }
+  const phase = phaseOf(panel)
+  return `● ${phase ? (PHASE_VERB[phase] ?? phase) : 'busy'}`
+}
+
+function branchRow({ panel, git, effort }, max) {
+  const branch = clean(git?.branch)
+  const word = typeof effort === 'string' && effort ? effort : '—'
+  const parts = [
+    ...(branch ? [[seg('⎇ ', { color: PALETTE.git }), seg(branch, { color: PALETTE.git })]] : []),
+    [...meterSegs(effort), seg(` ${word}`)],
+    [seg(`${count(panel.main?.steps)} req`)],
+    ...(typeof panel.main?.mode === 'string' && panel.main.mode ? [[seg(panel.main.mode)]] : []),
+  ]
+  return row(parts.flatMap((p, i) => (i ? [sep(), ...p] : p)), max)
+}
+
+function ctxRow(context, panel, max) {
+  const pct = Math.round(context.percent)
+  const segs = [seg('ctx ', { dim: true }), ...gaugeSegs(pct, 10), seg(' '), seg(`${pct}%`, { bold: true })]
+  if (isNum(context.tokens) && isNum(context.window)) segs.push(seg(` ${tokens(context.tokens)}/${tokens(context.window)}`))
+  if (count(panel.compactions) > 0) segs.push(seg(`  ⟲${count(panel.compactions)}`, { color: PALETTE.amber }))
+  return row(segs, max)
+}
+
+function limitsRow(usage, nowMs, max) {
+  const limits = Array.isArray(usage?.rateLimits) ? usage.rateLimits : []
+  const parts = [['five_hour', '5h'], ['seven_day', '7d']].flatMap(([kind, label]) => {
+    const l = limits.find((x) => x?.kind === kind)
+    if (!isNum(l?.percentUsed)) return []
+    const left = fmtResetIn(l.resetsAt, nowMs)
+    return [[seg(`${label} `, { dim: true }), ...gaugeSegs(l.percentUsed, 5), seg(` ${Math.round(l.percentUsed)}%`), ...(left ? [seg(` ↻${left}`, { dim: true })] : [])]]
+  })
+  return parts.length ? row(parts.flatMap((p, i) => (i ? [seg('   '), ...p] : p)), max) : null
+}
+
+function mainCard({ panel, usage, model, effort, git, nowMs }, w) {
+  const inner = w - 4
+  const live = { panel, git, effort: panel.main?.effort ?? effort }
+  const body = [branchRow(live, inner)]
+  if (isNum(usage?.context?.percent)) body.push(ctxRow(usage.context, panel, inner))
+  const limits = limitsRow(usage, nowMs, inner)
+  if (limits) body.push(limits)
+  return card({ title: prettyModel(panel.main?.model ?? model), status: mainStatus(panel), color: PALETTE.main, children: body, width: w })
+}
+
+// ---- ODD card ------------------------------------------------------------------
+
+// One glyph per task joined by `━`; too many keep the latest behind a leading `…`.
+function checkpoints(tasks, max) {
+  const open = tasks.findIndex((t) => !t.done)
+  const glyphs = tasks.map((t, i) => (t.done ? seg('●', { color: PALETTE.odd }) : i === open ? seg('◆', { color: PALETTE.odd, bold: true }) : seg('○', { color: PALETTE.odd })))
+  const fits = Math.floor((max + 1) / 2)
+  const shown = glyphs.length <= fits ? glyphs : glyphs.slice(-Math.floor((max - 1) / 2))
+  const joined = shown.flatMap((g, i) => (i ? [seg('━', { color: PALETTE.odd }), g] : [g]))
+  return shown === glyphs ? joined : [seg('…━', { color: PALETTE.odd }), ...joined]
+}
+
+function oddCard(odd, w) {
+  const inner = w - 4
+  const status = `${count(odd.open)} open`
+  const body = []
+  if (odd.task) {
+    const id = clean(String(odd.task.id ?? ''))
+    body.push(row([seg(id, { bold: true }), seg(`  ${clean(String(odd.task.title ?? ''))}`)], inner))
+  }
+  const tasks = (Array.isArray(odd.tasks) ? odd.tasks : []).filter((t) => t && typeof t === 'object')
+  if (tasks.length) body.push(row(checkpoints(tasks, inner), inner))
+  const title = cut(`ODD · ${clean(String(odd.feature))}`, inner - status.length - 1)
+  return card({ title, status: { text: status, dim: true }, color: PALETTE.odd, children: body, width: w })
+}
+
+// ---- GATE card -----------------------------------------------------------------
+
+const sumOf = (o) => Object.values(o ?? {}).reduce((n, v) => n + count(v), 0)
+
+function gateStatus({ ask, deny }, total) {
+  if (ask > 0) return { text: `${ask} waiting on you`, color: PALETTE.amber }
+  return deny === 0 ? 'all clear' : `${total} checks`
+}
+
+function gateBody(panel, v, inner) {
+  const classifier = panel.main?.mode === 'auto' ? 'classifier' : 'you'
+  const items = [
+    ['■', `${v.rule} allowed`, PALETTE.gate],
+    ['■', `${v.cleared} ${classifier}`, PALETTE.cleared],
+    ...(v.ask > 0 ? [['■', `${v.ask} pending`, PALETTE.amber]] : []),
+    ['✗', `${v.deny} denied`, PALETTE.warn],
+  ]
+  const counts = [v.rule, v.cleared, v.ask, v.deny]
+  const colors = [PALETTE.gate, PALETTE.cleared, PALETTE.amber, PALETTE.warn]
+  const bar = stackBar(counts, inner).flatMap((n, i) => (n ? [seg('█'.repeat(n), { color: colors[i] })] : []))
+  const legend = items.flatMap(([glyph, label, color], i) => [...(i ? [seg('  ')] : []), seg(`${glyph} `, { color }), seg(label)])
+  const buckets = [['f', 'file'], ['s', 'shell'], ['o', 'other']].flatMap(([key, name], i) => {
+    const n = sumOf(panel.gate?.buckets?.[name])
+    return [...(i ? [seg('  ')] : []), seg(`${key}: ${name} ${n}`, n === 0 ? { dim: true } : {})]
+  })
+  return [row(bar, inner), row(legend, inner), row(buckets, inner)]
+}
+
+function inlineTail(path) {
+  const parts = clean(maskSecrets(path)).split('/').filter(Boolean)
   return parts.length > 2 ? `…/${parts.slice(-2).join('/')}` : parts.join('/')
 }
 
-// 'claude-opus-5-5' -> 'Opus 5.5', 'opus[1m]' -> 'Opus', 'claude-opus-4-1-20250805' -> 'Opus 4.1'.
-export function prettyModel(model) {
-  if (typeof model !== 'string' || model === '') return 'Claude'
-  const parts = model.replace(/^claude-/, '').replace(/\[.*\]$/, '').split('-').filter(Boolean)
-  const family = parts.find((p) => !/^\d+$/.test(p))
-  if (!family) return 'Claude'
-  const version = parts.filter((p) => /^\d{1,2}$/.test(p)).slice(0, 2)
-  return `${family[0].toUpperCase()}${family.slice(1)}${version.length > 0 ? ` ${version.join('.')}` : ''}`
-}
-
-// ---- elements --------------------------------------------------------------
-
-// A one-row piece list: Texts inside a truncating Text, as flightdeck draws its rows.
-const line = (...pieces) => ({ type: 'Text', props: { wrap: 'truncate' }, children: pieces.flat().filter(Boolean) })
-const row = (children) => ({ type: 'Box', props: { flexDirection: 'row' }, children: children.filter(Boolean) })
-const faint = (s) => text(s, { color: PALETTE.faint })
-const dim = (s) => text(s, { dim: true })
-
-// Rows an element takes: a Text one, a column Box the sum of its children.
-function height(node) {
-  if (!node || typeof node === 'string') return 0
-  if (node.type !== 'Box' || node.props?.flexDirection !== 'column') return 1
-  const own = (node.props.borderStyle ? 2 : 0) + (node.props.marginTop ?? 0)
-  return own + (node.children ?? []).reduce((n, k) => n + height(k), 0)
-}
-
-// ---- main card (S3) ------------------------------------------------------------
-
-// A gauge with its percent and, when the window's ISO `resetsAt` is in the future, `↻` and the time left.
-function limitPiece(label, pct, resetsAt, nowMs) {
-  const g = gauge(pct, 5)
-  const at = typeof resetsAt === 'string' ? Date.parse(resetsAt) : NaN
-  const left = fmtResetIn(at, nowMs)
-  return [dim(`${label} `), text(g.on, { color: pct >= 80 ? PALETTE.warn : PALETTE.main }), faint(g.off), dim(` ${Math.round(pct)}%${left ? ` ↻${left}` : ''}`)]
-}
-
-function mainCard({ main, usage, model, busy, phase, blocked, compactions, branch, width, nowMs }) {
-  const effort = main?.effort ?? null
-  const meter = effortMeter(effort)
-  const ctx = usage?.context
-  const pct = isNum(ctx?.percent) ? Math.max(0, Math.min(100, ctx.percent)) : null
-  const name = stripControl(branch ?? '')
-  const rows = [
-    name ? line(dim('⎇ '), text(fit(name, width - 4 - 2))) : null,
-    line(
-      dim('effort '),
-      text(`${meter.on}${meter.off} `, { color: PALETTE.main }),
-      text(effort ?? '—', { color: PALETTE.main, bold: true }),
-      main?.mode ? dim(`   mode ${main.mode}`) : null,
-      dim(`   ${main?.steps ?? 0} req`),
-    ),
-  ]
-  if (pct !== null) {
-    const g = gauge(pct, 10)
-    rows.push(
-      line(
-        dim('ctx '),
-        text(g.on, { color: pct >= 80 ? PALETTE.warn : PALETTE.main }),
-        faint(g.off),
-        text(` ${Math.round(pct)}%`, { bold: true }),
-        isNum(ctx?.tokens) ? dim(` ${kTokens(ctx.tokens)}/${kTokens(ctx.window)}`) : null,
-        compactions > 0 ? text(`  ⟲${compactions}`, { color: PALETTE.amber }) : null,
-      ),
-    )
-  }
-  const limits = (Array.isArray(usage?.rateLimits) ? usage.rateLimits : [])
-    .filter((l) => isNum(l?.percentUsed) && (l.kind === 'five_hour' || l.kind === 'seven_day'))
-    .map((l) => limitPiece(l.kind === 'five_hour' ? '5h' : '7d', l.percentUsed, l.resetsAt, nowMs))
-  if (limits.length > 0) {
-    rows.push(line(limits.flatMap((p, i) => (i === 0 ? p : [text('   '), ...p]))))
-  }
-  return card({
-    title: model,
-    // Waiting on the human outranks busy and idle: one indicator, no extra row (S8b).
-    status: blocked ? { text: '◆ blocked', color: PALETTE.amber } : busy ? `● ${phase ?? 'busy'}` : { text: '○ idle', color: PALETTE.dim },
-    color: PALETTE.main,
-    children: rows.filter(Boolean),
-    width,
-  })
-}
-
-// ---- ODD card (S4) ------------------------------------------------------------
-
-// One checkpoint per task: done filled, the first unfinished one highlighted, the rest hollow.
-function checkpoints(tasks, room) {
-  const firstOpen = tasks.findIndex((t) => !t.done)
-  const marks = tasks.map((t, i) =>
-    t.done ? text('●', { color: PALETTE.odd }) : i === firstOpen ? text('◆', { color: PALETTE.odd, bold: true }) : text('○', { dim: true }),
-  )
-  // Too many to fit: keep the latest ones.
-  const keep = Math.max(1, Math.floor((room + 1) / 2))
-  const shown = marks.slice(-keep)
-  const first = tasks.length - shown.length
-  return line(
-    first > 0 ? [dim('…')] : null,
-    shown.flatMap((m, i) => (i === 0 ? [m] : [text('━', { color: tasks[first + i - 1].done && tasks[first + i].done ? PALETTE.odd : PALETTE.faint }), m])),
-  )
-}
-
-function oddCard(odd, width) {
-  if (!odd?.feature) return null
-  const iw = width - 4
-  const status = `${odd.open ?? 0} open`
-  const rows = []
-  if (odd.task?.id) {
-    const lead = odd.task.id.length + 2
-    rows.push(line(text(odd.task.id, { bold: true }), odd.task.title ? text(`  ${fit(odd.task.title, iw - lead)}`) : null))
-  }
-  if (Array.isArray(odd.tasks) && odd.tasks.length > 0) rows.push(checkpoints(odd.tasks, iw))
-  return card({
-    title: `ODD · ${fit(odd.feature, Math.max(8, iw - status.length - 6))}`,
-    status: { text: status, dim: true },
-    color: PALETTE.odd,
-    children: rows,
-    width,
-  })
-}
-
-// ---- GATE card (S6) ------------------------------------------------------------
-
-const bucketTotal = (b) => (b ? (b.rule ?? 0) + (b.ask ?? 0) + (b.cleared ?? 0) + (b.deny ?? 0) : 0)
-
-function gateCard({ gate, inline, mode, width }) {
-  const v = gate?.verdicts ?? { rule: 0, ask: 0, cleared: 0, deny: 0 }
+function gateCard(panel, w) {
+  const inner = w - 4
+  const v = { rule: count(panel.gate?.verdicts?.rule), ask: count(panel.gate?.verdicts?.ask), cleared: count(panel.gate?.verdicts?.cleared), deny: count(panel.gate?.verdicts?.deny) }
   const total = v.rule + v.ask + v.cleared + v.deny
-  const hasInline = inline?.count > 0
-  if (total === 0 && !hasInline) return null
-  const iw = width - 4
-  const rows = []
-  if (total === 0) {
-    rows.push(line(faint('no checks yet')))
-  } else {
-    const order = [
-      ['rule', PALETTE.gate],
-      ['cleared', PALETTE.cleared],
-      ['ask', PALETTE.amber],
-      ['deny', PALETTE.warn],
-    ]
-    const cells = stackBar(order.map(([k]) => v[k]), iw)
-    rows.push(row(order.map(([, color], i) => (cells[i] > 0 ? text('█'.repeat(cells[i]), { color }) : null))))
-    const decider = mode === 'auto' ? 'classifier' : 'you'
-    rows.push(
-      line(
-        text('■', { color: PALETTE.gate }),
-        dim(` ${v.rule} allowed  `),
-        text('■', { color: PALETTE.cleared }),
-        dim(` ${v.cleared} ${decider}  `),
-        v.ask > 0 ? text(`■ ${v.ask} pending  `, { color: PALETTE.amber }) : null,
-        text(`✗ ${v.deny} denied`, { color: v.deny > 0 ? PALETTE.warn : PALETTE.dim }),
-      ),
-    )
-    const b = gate.buckets ?? {}
-    rows.push(
-      line(
-        ['file', 'shell', 'other'].flatMap((name, i) => {
-          const n = bucketTotal(b[name])
-          return [i > 0 ? text('  ') : null, text(`${name[0]}: ${name} ${n}`, { dim: n === 0 })]
-        }),
-      ),
-    )
+  const inline = count(panel.inline?.count)
+  if (total === 0 && inline === 0) return null
+  const body = total === 0 ? [dimRow('nothing waiting on you', inner)] : gateBody(panel, v, inner)
+  const denied = panel.gate?.lastDenied
+  if (total > 0 && denied && typeof denied === 'object') {
+    const detail = cut(clean(maskSecrets(String(denied.detail ?? ''))), 80)
+    body.push(row([seg(`✗ ${clean(String(denied.tool ?? 'tool'))}${detail ? `: ${detail}` : ''}`, { color: PALETTE.warn })], inner))
   }
-  const last = gate?.lastDenied
-  if (last?.tool) {
-    rows.push(line(text(`✗ ${maskSecrets(`${last.tool}${last.detail ? `: ${last.detail}` : ''}`)}`, { color: PALETTE.warn })))
+  if (inline > 0) {
+    const tail = typeof panel.inline?.last === 'string' ? inlineTail(panel.inline.last) : ''
+    body.push(row([seg(`⚠ ${inline} inline write${inline === 1 ? '' : 's'}${tail ? ` · ${tail}` : ''}`, { color: PALETTE.warn })], inner))
   }
-  if (hasInline) {
-    const where = inline.last ? ` · ${shortPath(maskSecrets(inline.last))}` : ''
-    rows.push(line(text(`⚠ ${plural(inline.count, 'inline write')}${where}`, { color: PALETTE.warn })))
-  }
-  return card({ title: 'GATE · permissions', status: { text: `${total} checks`, dim: true }, color: PALETTE.gate, children: rows, width })
+  return card({ title: 'GATE · permissions', status: gateStatus(v, total), color: PALETTE.gate, children: body, width: w })
 }
 
-// ---- MEMORY card (S20) ------------------------------------------------------------
+// ---- MEMORY card ---------------------------------------------------------------
 
-// `memory` is parseMemoryStats's result: the counts, `{ off }` with a reason, or null (card left out).
-function memoryCard(memory, nowMs, width) {
-  if (!memory) return null
-  const iw = width - 4
+const AMBER_REASON = /newer|read-?only/i
+
+function memoryCard(memory, nowMs, w) {
+  const inner = w - 4
   const color = PALETTE.cleared
-  const mem = (status, rows) => card({ title: 'MEMORY', status, color, children: rows, width })
   if (typeof memory.off === 'string') {
-    const reason = fit(stripControl(memory.off), iw)
-    return mem(null, [/newer|readonly|read-only|unable to open|not writable/i.test(memory.off) ? line(text(reason, { color: PALETTE.amber })) : line(dim(reason))])
+    const reason = clean(memory.off)
+    return card({ title: 'MEMORY', color, children: [dimRow(reason, inner, AMBER_REASON.test(reason) ? PALETTE.amber : undefined)], width: w })
   }
-  if (memory.memories === 0) return mem({ text: '0 memories', dim: true }, [line(dim('no memories yet'))])
-  const parts = [`${memory.review} to review`, `${memory.pinned} pinned`, `${memory.pending} pending`]
-  const flat = parts.join(' · ')
-  // Too narrow for the colored pieces: one clipped plain row.
-  const counts =
-    flat.length > iw
-      ? line(dim(fit(flat, iw)))
-      : line(text(parts[0], memory.review > 0 ? { color: PALETTE.amber } : { dim: true }), dim(` · ${parts[1]} · ${parts[2]}`))
-  const rows = [counts]
-  const saved = typeof memory.lastSaveAt === 'string' ? Date.parse(memory.lastSaveAt) : NaN
-  // fmtResetIn formats a span: the same distance mirrored before `now` reads as the age.
-  const age = Number.isNaN(saved) ? '' : fmtResetIn(2 * nowMs - saved, nowMs)
-  const last = [age ? `last save ${age} ago` : null, isNum(memory.sessionSaves) ? `+${memory.sessionSaves} this session` : null].filter(Boolean)
-  if (last.length > 0) rows.push(line(dim(fit(last.join(' · '), iw))))
-  return mem({ text: `${memory.memories} memories`, color }, rows)
+  const n = count(memory.memories)
+  if (n === 0) return card({ title: 'MEMORY', status: { text: '0 memories', dim: true }, color, children: [dimRow('nothing remembered yet', inner)], width: w })
+  const review = count(memory.review)
+  const body = [row([seg(`${review} to review`, review > 0 ? { color: PALETTE.amber } : {}), seg(` · ${count(memory.pinned)} pinned · ${count(memory.pending)} pending`)], inner)]
+  const saved = Date.parse(memory.lastSaveAt)
+  const facts = [
+    ...(Number.isFinite(saved) ? [`last save ${age(Math.max(0, nowMs - saved))} ago`] : []),
+    ...(isNum(memory.sessionSaves) ? [`+${count(memory.sessionSaves)} this session`] : []),
+  ]
+  if (facts.length) body.push(row([seg(facts.join(SEP))], inner))
+  return card({ title: 'MEMORY', status: `${n} memories`, color, children: body, width: w })
 }
 
-// ---- agents (S1) -----------------------------------------------------------------
+// ---- agents card ---------------------------------------------------------------
 
-const AGENT_MARK = { running: ['◐', PALETTE.agent], done: ['✓', PALETTE.gate], failed: ['✗', PALETTE.warn] }
-const MAX_NAME = 18
-
-// A clock: static text, `—` when the start is unknown.
-function clockPiece(since, endAt, color, nowMs) {
-  if (!isNum(since) || since <= 0) return text('—', { color })
-  return text(clock((endAt ?? nowMs) - since), { color })
+// Glyph, running verb, done verb by role kind (roles.mjs); anything else is a plain worker.
+const LOOKS = {
+  reader: ['⌕', 'mapping', 'mapped'],
+  writer: ['⚒', 'building', 'built'],
+  verifier: ['⊨', 'verifying', 'verified'],
+  runner: ['◇', 'working', 'done'],
+  judge: ['⚖', 'judging', 'judged'],
+  lens: ['◎', 'reviewing', 'reviewed'],
 }
+const OTHER_LOOK = ['•', 'working', 'done']
 
-function agentsCard(panel, nowMs, width) {
-  const view = agentsView(panel, nowMs, MAX_AGENT_ROWS)
-  if (view.cards.length === 0) return null
-  const shown = [...view.cards].sort((a, b) => (a.startedMs ?? 0) - (b.startedMs ?? 0))
-  const total = Array.isArray(panel.agents) ? panel.agents.length : shown.length
-  const names = shown.map((a) => fit(stripControl(shortName(a)), MAX_NAME))
-  const pad = Math.max(...names.map((n) => n.length))
-  const body = []
-  if (view.rest > 0) body.push(line(faint(`+${view.rest} earlier`)))
-  shown.forEach((a, i) => {
-    const [mark, color] = AGENT_MARK[a.status] ?? AGENT_MARK.done
-    const meter = a.effort ? effortMeter(a.effort) : null
-    const end = a.status === 'running' ? null : isNum(a.endedMs) ? a.endedMs : nowMs
-    body.push(
-      line(
-        text(`${mark} `, { color }),
-        text(names[i].padEnd(pad)),
-        dim(`  ${a.model ? prettyModel(a.model) : '—'}`),
-        meter ? text(` ${meter.on}${meter.off}`, { color: PALETTE.agent }) : null,
-        text('  '),
-        clockPiece(a.startedMs, end, PALETTE.dim, nowMs),
-      ),
+function agentsCard(panel, nowMs, w) {
+  const { cards, running } = agentsView(panel, nowMs, Infinity)
+  if (cards.length === 0) return null
+  const inner = w - 4
+  const byStart = [...cards].sort((a, b) => (isNum(a.startedMs) ? a.startedMs : 0) - (isNum(b.startedMs) ? b.startedMs : 0))
+  const shown = byStart.slice(-MAX_AGENT_ROWS)
+  const looks = shown.map((a) => {
+    const [glyph, now, done] = LOOKS[kindOf(a.name)] ?? OTHER_LOOK
+    return { a, glyph, verb: a.status === 'running' ? now : done, model: typeof a.model === 'string' && a.model ? prettyModel(a.model) : '—' }
+  })
+  const pad = (key, cap = Infinity) => Math.min(cap, Math.max(...looks.map((l) => (key === 'name' ? l.a.name : l[key]).length)))
+  const [nameW, verbW, modelW] = [pad('name', MAX_NAME), pad('verb'), pad('model')]
+  const body = looks.map(({ a, glyph, verb, model }) => {
+    const live = a.status === 'running'
+    const tone = live ? { color: PALETTE.agent } : { dim: true }
+    return row(
+      [
+        seg(glyph, live ? tone : { color: PALETTE.gate }),
+        seg(' '),
+        seg(cut(a.name, MAX_NAME).padEnd(nameW), tone),
+        seg(' '),
+        seg(verb.padEnd(verbW), tone),
+        seg(' '),
+        seg(model.padEnd(modelW), { dim: true }),
+        seg(' '),
+        ...meterSegs(a.effort, live ? PALETTE.agent : PALETTE.dim),
+        seg(` ${clock(a.elapsedMs)}`, { dim: true }),
+      ],
+      inner,
     )
   })
-  return card({ title: 'agents', status: { text: `${view.running} running · ${total} total`, dim: true }, color: PALETTE.agent, children: body, width })
+  if (cards.length > shown.length) body.unshift(dimRow(`+${cards.length - shown.length} earlier`, inner))
+  const status = running > 0 ? `${running} at work · ${cards.length}` : `all done · ${cards.length}`
+  return card({ title: 'agents', status, color: PALETTE.agent, children: body, width: w })
 }
 
-// ---- changes card (S9) ----------------------------------------------------------------
+// ---- changes card --------------------------------------------------------------
 
-// eslint-disable-next-line no-control-regex
-const stripControl = (s) => String(s).replace(/[\u0000-\u001f\u007f-\u009f]/g, '')
-
-// `path` in `w` cells with its basename kept: leading directories fall away as `…/dir/name`, and a
-// basename longer than the room is itself clipped.
-function fitPath(path, w) {
-  if (path.length <= w) return path
+// The path shortened to `…/dir/name`, then `…/name`, then clipped, to fit `max` cells.
+function fitPath(path, max) {
+  if (path.length <= max) return path
   const parts = path.split('/').filter(Boolean)
-  const base = parts.at(-1) ?? path
-  if (w <= 2 || base.length + 2 > w) return fit(base, w)
-  let out = base
-  for (let i = parts.length - 2; i >= 0; i--) {
-    const next = `${parts[i]}/${out}`
-    if (next.length + 2 > w) break
-    out = next
+  for (const keep of [2, 1]) {
+    const short = `…/${parts.slice(-keep).join('/')}`
+    if (short.length <= max) return short
   }
-  return `…/${out}`
+  return cut(parts.at(-1) ?? path, max)
 }
 
-const linesOf = (f) => (isNum(f.added) ? f.added : 0) + (isNum(f.removed) ? f.removed : 0)
+const lines = (f) => (f.binary ? 0 : count(f.added) + count(f.removed))
 
-// The stat pieces of one file: `+added -removed`, `bin` for a binary file, `+added` for an untracked
-// file with a known count and `new` without one.
-function statPieces(f) {
-  if (f.binary) return { len: 3, pieces: [dim('bin')] }
-  if (f.untracked && !isNum(f.added)) return { len: 3, pieces: [dim('new')] }
-  const add = `+${f.added ?? 0}`
-  if (f.untracked) return { len: add.length, pieces: [text(add, { color: PALETTE.gate })] }
-  const del = `-${f.removed ?? 0}`
-  return { len: add.length + 1 + del.length, pieces: [text(add, { color: PALETTE.gate }), text(' '), text(del, { color: PALETTE.warn })] }
+function statSegs(f) {
+  if (f.binary) return [seg('bin', { dim: true })]
+  if (f.untracked) return isNum(f.added) ? [seg(`+${count(f.added)}`, { color: PALETTE.gate })] : [seg('new', { dim: true })]
+  return [seg(`+${count(f.added)}`, { color: PALETTE.gate }), seg(' '), seg(`-${count(f.removed)}`, { color: PALETTE.warn })]
 }
 
-function changeRow(f, iw) {
-  const { len, pieces } = statPieces(f)
-  const room = Math.max(1, iw - len - 1)
-  return line(text(fitPath(stripControl(f.path), room).padEnd(room)), text(' '), pieces)
+function changeRow(f, inner) {
+  const stat = statSegs(f)
+  const path = fitPath(clean(f.path), inner - width(stat) - 1)
+  return row([seg(path.padEnd(inner - width(stat))), ...stat], inner)
 }
 
-// Branch, ahead and behind, and the changed files (working tree against HEAD, untracked included),
-// biggest change first. Hidden when nothing changed and the branch is in sync; its rows fit
-// `changeRows`, the last one `+N more` when some are cut.
-function changesCard({ git, changes, rows, used, width }) {
-  const files = (Array.isArray(changes) ? changes : [])
-    .filter((f) => f && typeof f.path === 'string' && stripControl(f.path) !== '')
-    .sort((a, b) => linesOf(b) - linesOf(a))
-  const ahead = isNum(git?.ahead) && git.ahead > 0 ? git.ahead : 0
-  const behind = isNum(git?.behind) && git.behind > 0 ? git.behind : 0
-  if (files.length === 0 && ahead === 0 && behind === 0) return null
-  const room = changeRows(isNum(rows) && rows > 0 ? rows : Infinity, used)
-  if (room < 0) return null
-  const iw = width - 4
-  const status = [ahead > 0 ? `↑${ahead}` : null, behind > 0 ? `↓${behind}` : null].filter(Boolean).join(' ')
-  const name = stripControl(git?.branch ?? '') || 'changes'
-  let shown = files
-  let more = 0
-  if (files.length > room) {
-    shown = room >= 2 ? files.slice(0, room - 1) : []
-    more = files.length - shown.length
-    if (room === 0) more = 0
-  }
-  const body = shown.map((f) => changeRow(f, iw))
-  if (more > 0) body.push(line(faint(`+${more} more`)))
-  return card({
-    title: fit(name, Math.max(8, iw - status.length - 1)),
-    status: status === '' ? null : status,
-    color: PALETTE.git,
-    children: room === 0 ? [] : body,
-    width,
-  })
+function changesCard({ git, changes }, budget, w) {
+  const inner = w - 4
+  const files = (Array.isArray(changes) ? changes : []).filter((f) => f && typeof f.path === 'string')
+  const ahead = count(git?.ahead)
+  const behind = count(git?.behind)
+  if (budget < 0 || (files.length === 0 && ahead === 0 && behind === 0)) return null
+  const status = [...(ahead ? [`↑${ahead}`] : []), ...(behind ? [`↓${behind}`] : [])].join(' ')
+  const title = cut(clean(git?.branch) || 'changes', inner - status.length - 1)
+  const sorted = [...files].sort((a, b) => lines(b) - lines(a))
+  const fit = sorted.length <= budget ? sorted : sorted.slice(0, Math.max(0, budget - 1))
+  const body = budget === 0 ? [] : fit.map((f) => changeRow(f, inner))
+  if (budget > 0 && fit.length < sorted.length) body.push(dimRow(`+${sorted.length - fit.length} more`, inner))
+  return card({ title, status: status || undefined, color: PALETTE.git, children: body, width: w })
 }
 
-// ---- the panel -------------------------------------------------------------------------
+// ---- the panel -----------------------------------------------------------------
 
-// Builds the panel body; the main card always shows, so it is never null. `columns` and `rows` are
-// the Pane's bodyColumns and scroll.bodyRows. `usage` is `$.session.usage()`, `model` and `effort` are
-// the fallbacks for a main thread that has not made a request yet (the state's `main` wins). `git` is parseGitStatus's result (branch, ahead, behind)
-// and `changes` the changed files ({ path, added, removed, binary, untracked }) for the changes card.
+// Rows a card takes: its border, then the title row and the body rows.
+const heightOf = (c) => c.children.length + 2
+
 export function buildPanel({ panel, usage, odd, memory, nowMs, columns, rows, model, effort, git, changes }) {
-  const state = panel ?? {}
-  const width = isNum(columns) && columns > 0 ? Math.max(MIN_COLUMNS, Math.floor(columns)) : PANEL_COLUMNS
-  const busy = mainBusy(state)
-  const phase = phaseOf(state)
-  const main = { ...state.main, effort: state.main?.effort ?? effort ?? null }
-  const name = prettyModel(state.main?.model ?? model)
-
-  const children = []
-  const push = (el) => {
-    if (el) children.push(el)
-    return Boolean(el)
-  }
-  push(mainCard({ main, usage, model: name, busy, phase, blocked: state.blocked === true, compactions: state.compactions ?? 0, branch: git?.branch, width, nowMs }))
-  push(oddCard(odd, width))
-  push(gateCard({ gate: state.gate, inline: state.inline, mode: state.main?.mode, width }))
-  push(memoryCard(memory, nowMs, width))
-  push(agentsCard(state, nowMs, width))
-  const used = children.reduce((n, k) => n + height(k), 0)
-  push(changesCard({ git, changes, rows, used, width }))
-  // minHeight (not height) fills the pane body without clipping cards taller than it.
-  const fill = isNum(rows) && rows > 0 ? { minHeight: Math.floor(rows) } : {}
-  return { type: 'Box', props: { flexDirection: 'column', width, ...fill }, children }
+  const w = isNum(columns) ? Math.max(40, Math.floor(columns)) : PANEL_COLUMNS
+  const now = isNum(nowMs) ? nowMs : Date.now()
+  const cards = [
+    mainCard({ panel, usage, model, effort, git, nowMs: now }, w),
+    odd?.feature ? oddCard(odd, w) : null,
+    gateCard(panel, w),
+    memory ? memoryCard(memory, now, w) : null,
+    agentsCard(panel, now, w),
+  ].filter(Boolean)
+  const used = cards.reduce((n, c) => n + heightOf(c), 0)
+  const last = changesCard({ git, changes }, changeRows(isNum(rows) ? rows : Infinity, used), w)
+  return panelBox({ width: w, rows, children: last ? [...cards, last] : cards })
 }

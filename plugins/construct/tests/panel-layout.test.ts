@@ -51,7 +51,7 @@ const usage = {
   cost: { usd: 104.2 },
 }
 const odd = {
-  feature: 'flightdeck-panel', open: 3, task: { id: 'T4', title: 'Card layout' },
+  feature: 'card-panel', open: 3, task: { id: 'T4', title: 'Card layout' },
   tasks: [{ id: 'T1', done: true }, { id: 'T2', done: true }, { id: 'T3', done: true }, { id: 'T4', done: false }, { id: 'T5', done: false }],
 }
 const verdicts = { rule: 4, ask: 0, cleared: 16, deny: 2 }
@@ -96,7 +96,7 @@ test('PANEL_COLUMNS is 66', async () => {
 
 test('no header and no legend: the panel starts with the main card', async () => {
   const rows = rowsOf()
-  expect(rows[0]).toBe('Opus 5.5 ○ idle')
+  expect(rows[0]).toBe('Opus 5.5 ○ ready')
   expect(rows.some((r) => r.startsWith('CONSTRUCT'))).toBe(false)
   expect(rows.some((r) => r.includes('■ main'))).toBe(false)
   const tree = buildPanel(args())
@@ -108,7 +108,7 @@ test('no header and no legend: the panel starts with the main card', async () =>
 
 test('cards come in order: main, ODD, GATE, agents, changes', async () => {
   const rows = rowsOf()
-  const at = ['Opus 5.5', 'ODD · flightdeck-panel', 'GATE · permissions', 'agents 1 running · 2 total', 'feat/x ↑2'].map((n) => idx(rows, n))
+  const at = ['Opus 5.5', 'ODD · card-panel', 'GATE · permissions', 'agents 1 at work · 2', 'feat/x ↑2'].map((n) => idx(rows, n))
   for (const i of at) expect(i).toBeGreaterThanOrEqual(0)
   expect([...at].sort((a, b) => a - b)).toEqual(at)
 })
@@ -134,24 +134,24 @@ test('the root has no background and fills the pane body at 40, 66 and 120 colum
 
 // ---- main card ---------------------------------------------------------------
 
-test('main card: model, status, effort meter, mode, requests, ctx gauge with tokens, 5h and 7d, no session cost', async () => {
+test('main card: model, status, one row of branch, effort meter, requests and mode, ctx gauge with tokens, 5h and 7d, no session cost', async () => {
   const rows = rowsOf()
-  expect(rows[idx(rows, 'Opus 5.5')]).toBe('Opus 5.5 ○ idle')
+  expect(rows[idx(rows, 'Opus 5.5')]).toBe('Opus 5.5 ○ ready')
   const i = idx(rows, 'Opus 5.5')
-  expect(rows[i + 1]).toBe('⎇ feat/x')
-  expect(rows[i + 2]).toBe('effort ▮▮▯▯ medium   mode auto   7 req')
-  expect(rows[i + 3]).toBe('ctx ▰▰▰▰▰▰▰▱▱▱ 67% 666k/1.0M  ⟲2')
-  expect(rows[i + 4]).toBe('5h ▱▱▱▱▱ 4%   7d ▰▱▱▱▱ 13%')
+  expect(rows[i + 1]).toBe('⎇ feat/x · ▮▮▯▯ medium · 7 req · auto')
+  expect(rows[i + 2]).toBe('ctx ▰▰▰▰▰▰▰▱▱▱ 67% 666k/1.0M  ⟲2')
+  expect(rows[i + 3]).toBe('5h ▱▱▱▱▱ 4%   7d ▰▱▱▱▱ 13%')
   expect(rows.some((r) => r.includes('$'))).toBe(false)
   const card = buildPanel(args()).children.find((c) => c.props?.borderStyle === 'round')
   expect(card.props.borderColor).toBe('claude')
 })
 
 test('main card branch row: first body row, clipped, control-stripped, hidden without a branch', async () => {
-  const at = (o) => { const r = rowsOf(o); return r[idx(r, ' idle') + 1] }
-  expect(at({})).toBe('⎇ feat/x')
+  const at = (o) => { const r = rowsOf(o); return r[idx(r, ' ready') + 1] }
+  expect(at({})).toMatch(/^⎇ feat\/x · /)
+  expect(rowsOf({ panel: { ...full(), main: { ...full().main, mode: null } } })[1]).toBe('⎇ feat/x · ▮▮▯▯ medium · 7 req')
   expect(rowsOf().some((r) => r.includes('· main'))).toBe(false)
-  expect(at({ git: { ...git, branch: 'a\u001b[31mb' } })).toBe('⎇ a[31mb')
+  expect(at({ git: { ...git, branch: 'a\u001b[31mb' } })).toMatch(/^⎇ a\[31mb · /)
   const long = at({ git: { ...git, branch: 'x'.repeat(100) }, columns: 40 })
   expect(long.length).toBe(36)
   expect(long.endsWith('…')).toBe(true)
@@ -160,11 +160,11 @@ test('main card branch row: first body row, clipped, control-stripped, hidden wi
 
 test('main card shows without usage or replica, and is busy while a turn is open', async () => {
   const rows = rowsOf({ usage: null, panel: { ...initialState() }, odd: null, model: 'sonnet' })
-  expect(rows).toContain('Sonnet ○ idle')
+  expect(rows).toContain('Sonnet ○ ready')
   expect(rows.some((r) => r.startsWith('ctx'))).toBe(false)
-  expect(rows.some((r) => r.startsWith('effort ▯▯▯▯ —'))).toBe(true)
+  expect(rows.some((r) => r.includes('▯▯▯▯ — · 0 req'))).toBe(true)
   const busy = { ...full(), turn: { turnId: 't' } }
-  expect(rowsOf({ panel: busy }).some((r) => r === 'Opus 5.5 ● implementing')).toBe(true)
+  expect(rowsOf({ panel: busy }).some((r) => r === 'Opus 5.5 ● building')).toBe(true)
   expect(rowsOf({ panel: { ...busy, agents: [] } }).some((r) => r === 'Opus 5.5 ● busy')).toBe(true)
   expect(rowsOf({ panel: { ...busy, agents: [agent({ status: 'done', endedMs: NOW })] } })[0]).toBe('Opus 5.5 ● busy')
 })
@@ -182,8 +182,8 @@ test('ODD card is hidden without a feature', async () => {
 
 test('ODD card shows the feature, open count, current task and one checkpoint per task', async () => {
   const rows = rowsOf()
-  const i = idx(rows, 'ODD · flightdeck-panel')
-  expect(rows[i]).toBe('ODD · flightdeck-panel 3 open')
+  const i = idx(rows, 'ODD · card-panel')
+  expect(rows[i]).toBe('ODD · card-panel 3 open')
   expect(rows[i + 1]).toBe('T4  Card layout')
   expect(rows[i + 2]).toBe('●━●━●━◆━○')
   expect(leaves(buildPanel(args())).find((l) => l.text === 'T4')?.props.weight).toBe('semibold')
@@ -212,17 +212,36 @@ test('GATE card: stacked bar, verdict legend by decider, buckets, masked last de
   expect(cols).toEqual([['success', 12], ['permission', 44], ['error', 6]])
 })
 
+test('GATE status: all clear, N waiting on you, or N checks; an empty body says nothing is waiting', async () => {
+  const gateOf = (verdicts, o: any = {}) => {
+    const p = { ...full(), gate: { ...full().gate, verdicts, denied: verdicts.deny, lastDenied: null }, ...o }
+    const rows = rowsOf({ panel: p })
+    return rows[idx(rows, 'GATE · permissions')]
+  }
+  expect(gateOf({ rule: 4, ask: 0, cleared: 16, deny: 0 })).toBe('GATE · permissions all clear')
+  expect(gateOf({ rule: 4, ask: 2, cleared: 16, deny: 0 })).toBe('GATE · permissions 2 waiting on you')
+  expect(gateOf({ rule: 4, ask: 2, cleared: 16, deny: 3 })).toBe('GATE · permissions 2 waiting on you')
+  expect(gateOf({ rule: 4, ask: 0, cleared: 16, deny: 2 })).toBe('GATE · permissions 22 checks')
+  const waiting = find(buildPanel(args({ panel: { ...full(), gate: { ...full().gate, verdicts: { rule: 0, ask: 1, cleared: 0, deny: 0 } } } })), '1 waiting on you')
+  expect(waiting?.props.color).toBe('warning')
+  const quiet = rowsOf({ panel: { ...initialState(), inline: { count: 1, last: '/a/b/c.js' } } })
+  expect(quiet).toContain('nothing waiting on you')
+  expect(rowsOf({ panel: { ...full(), gate: { ...full().gate, verdicts: { rule: 1, ask: 0, cleared: 0, deny: 0 } } } })).not.toContain('nothing waiting on you')
+})
+
 test('GATE says "you" when the mode is not auto, pending asks show, and the card hides when empty', async () => {
   const asked = { ...full(), main: { ...full().main, mode: 'default' }, gate: { ...full().gate, verdicts: { rule: 1, ask: 2, cleared: 3, deny: 0 }, denied: 0, lastDenied: null } }
   const rows = rowsOf({ panel: asked })
   const i = idx(rows, 'GATE · permissions')
+  expect(rows[i]).toBe('GATE · permissions 2 waiting on you')
   expect(rows[i + 2]).toBe('■ 1 allowed  ■ 3 you  ■ 2 pending  ✗ 0 denied')
   expect(rows.some((r) => r.startsWith('✗ Bash'))).toBe(false)
   const none = { ...initialState() }
   expect(rowsOf({ panel: none }).some((r) => r.startsWith('GATE'))).toBe(false)
   const inlineOnly = { ...initialState(), inline: { count: 1, last: '/a/b/c.js' } }
   const r2 = rowsOf({ panel: inlineOnly })
-  expect(r2[idx(r2, 'GATE')]).toBe('GATE · permissions 0 checks')
+  expect(r2[idx(r2, 'GATE')]).toBe('GATE · permissions all clear')
+  expect(r2[idx(r2, 'GATE') + 1]).toBe('nothing waiting on you')
   expect(r2).toContain('⚠ 1 inline write · …/b/c.js')
 })
 
@@ -239,7 +258,7 @@ test('agents are hidden when there are none and cap at six with +N earlier', asy
   expect(rowsOf({ panel: { ...full(), agents: [] } }).some((r) => r.startsWith('agents'))).toBe(false)
   const many = { ...full(), agents: Array.from({ length: 8 }, (_, i) => agent({ id: `x${i}`, status: 'done', startedMs: NOW - 80_000 + i * 1000, endedMs: NOW - 40_000 + i * 1000 })) }
   const rows = rowsOf({ panel: many })
-  expect(rows.filter((r) => /^✓ worker/.test(r)).length).toBe(6)
+  expect(rows.filter((r) => /^⚒ worker/.test(r)).length).toBe(6)
   expect(rows).toContain('+2 earlier')
 })
 
@@ -253,17 +272,64 @@ test('agents card: bordered, titled agents, short names, routed model with effor
   expect(box.props.width).toBe(66)
   const rows = rowsOf({ panel })
   const squash = (r: string) => r.replace(/\s+/g, ' ')
-  expect(rows).toContain('agents 1 running · 2 total')
+  expect(rows).toContain('agents 1 at work · 2')
   expect(rows.some((r) => r.includes('construct:worker') || r.includes('construct_worker'))).toBe(false)
-  expect(rows.map(squash)).toContain('◐ worker Sonnet 5.5 ▮▮▮▯ 1:05')
-  expect(rows.map(squash)).toContain('✓ explorer Haiku 4.5 ▮▯▯▯ 0:15')
+  expect(rows.map(squash)).toContain('⚒ worker building Sonnet 5.5 ▮▮▮▯ 1:05')
+  expect(rows.map(squash)).toContain('⌕ explorer mapped Haiku 4.5 ▮▯▯▯ 0:15')
+})
+
+test('each role has its own glyph and verbs: running reads as doing, done as done', async () => {
+  const roles = [
+    ['explorer', 'construct:explorer', '⌕', 'mapping', 'mapped'],
+    ['worker', 'construct:worker', '⚒', 'building', 'built'],
+    ['verifier', 'construct:verifier', '⊨', 'verifying', 'verified'],
+    ['general', 'general-purpose', '◇', 'working', 'done'],
+    ['judge-a', 'construct:judge-a', '⚖', 'judging', 'judged'],
+    ['judge-b', 'construct:judge-b', '⚖', 'judging', 'judged'],
+    ['review-risk', 'construct:review-risk', '◎', 'reviewing', 'reviewed'],
+    ['review-resilience', 'construct:review-resilience', '◎', 'reviewing', 'reviewed'],
+    ['Plan', 'Plan', '•', 'working', 'done'],
+  ]
+  for (const [name, type, glyph, running, done] of roles) {
+    for (const [status, verb] of [['running', running], ['done', done]]) {
+      const panel = { ...initialState(), agents: [agent({ id: 'r', role: name.replaceAll('-', '_'), type, status, endedMs: status === 'done' ? NOW : null })] }
+      const row = rowsOf({ panel }).find((r) => r.startsWith(glyph))
+      expect(row?.replace(/\s+/g, ' ').startsWith(`${glyph} ${name} ${verb} `)).toBe(true)
+    }
+  }
+})
+
+test('running agent rows use the agent color; done rows are dim with a success-colored glyph', async () => {
+  const tree = buildPanel(args())
+  const run = leaves(tree).filter((l) => l.text === '⚒' || l.text.startsWith('worker') || l.text.startsWith('building'))
+  expect(run.length).toBe(3)
+  for (const l of run) expect(l.props).toEqual({ color: 'suggestion' })
+  expect(leaves(tree).find((l) => l.text === '⌕')?.props).toEqual({ color: 'success' })
+  const done = leaves(tree).filter((l) => l.text.startsWith('explorer') || l.text.startsWith('mapped'))
+  expect(done.length).toBe(2)
+  for (const l of done) expect(l.props.dimColor).toBe(true)
+})
+
+test('agents status: N at work · T while any runs, all done · T when none do', async () => {
+  const idle = { ...full(), agents: [agent({ status: 'done', endedMs: NOW }), agent({ id: 'a2', status: 'done', endedMs: NOW })] }
+  expect(rowsOf({ panel: idle })).toContain('agents all done · 2')
+  const three = { ...full(), agents: [agent(), agent({ id: 'a2' }), agent({ id: 'a3', status: 'done', endedMs: NOW })] }
+  expect(rowsOf({ panel: three })).toContain('agents 2 at work · 3')
+})
+
+test('main status: ready when idle, building while a turn runs, waiting on you when blocked', async () => {
+  expect(rowsOf({ panel: initialState() })[0]).toBe('Claude ○ ready')
+  const turn = { ...initialState(), turn: { turnId: 't' }, agents: [agent({ role: 'explorer', type: 'construct:explorer' })] }
+  expect(rowsOf({ panel: turn })[0]).toBe('Claude ● mapping')
+  expect(find(buildPanel(args({ panel: { ...turn, blocked: true } })), '◆ waiting on you')?.props.color).toBe('warning')
+  expect(find(buildPanel(args({ panel: initialState() })), '○ ready')?.props.dimColor).toBe(true)
 })
 
 test('agents card shows the subagent type for an agent with no construct role, and dashes the role', async () => {
   const panel = { ...full(), agents: [agent({ id: 'g', role: 'Explore', type: 'Explore', model: null, effort: null }), agent({ id: 'r', role: 'review_risk', type: 'construct:review-risk' })] }
   const rows = rowsOf({ panel })
-  expect(rows.some((r) => /^◐ Explore\s+— /.test(r))).toBe(true)
-  expect(rows.some((r) => r.startsWith('◐ review-risk'))).toBe(true)
+  expect(rows.some((r) => /^• Explore\s+working\s+— /.test(r))).toBe(true)
+  expect(rows.some((r) => r.startsWith('◎ review-risk'))).toBe(true)
 })
 
 test('no last turn row even when a receipt is stored in the panel', async () => {
@@ -419,9 +485,9 @@ test('the panel never takes more rows than the pane has: the changes rows shrink
   expect(shown(26)).toBeGreaterThan(0)
   expect(rowsOf({ ...lean, rows: 8 }).some(isTitle)).toBe(false)
   // only the frame fits: the title (branch, ↑↓) stays, the rows go
-  expect(rowsOf({ ...lean, rows: 10 }).some(isTitle)).toBe(true)
-  expect(shown(10)).toBe(0)
-  expect(rowsOf({ ...lean, rows: 11 }).at(-1)).toBe('+30 more')
+  expect(rowsOf({ ...lean, rows: 9 }).some(isTitle)).toBe(true)
+  expect(shown(9)).toBe(0)
+  expect(rowsOf({ ...lean, rows: 10 }).at(-1)).toBe('+30 more')
   expect(rowsOf({ ...lean, rows: 26 }).at(-1)).toMatch(/^\+\d+ more$/)
   // a full panel on a short pane: the changes go, the other cards stay
   for (const rows of [20, 24]) {
@@ -448,26 +514,26 @@ test('agent rows at 40 columns are truncating Text rows inside a card of the car
 
 // ---- S8b blocked indicator ----------------------------------------------------
 
-test('blocked: the main card status reads blocked in place of busy or idle, with no extra row', async () => {
+test('blocked: the main card status reads waiting on you in place of busy or ready, with no extra row', async () => {
   const plain = rowsOf({ panel: { ...full(), blocked: false } })
   const rows = rowsOf({ panel: { ...full(), blocked: true } })
-  expect(rows[0]).toBe('Opus 5.5 ◆ blocked')
+  expect(rows[0]).toBe('Opus 5.5 ◆ waiting on you')
   expect(rows.length).toBe(plain.length)
-  expect(rows.filter((r) => r.includes('blocked')).length).toBe(1)
-  const status = find(buildPanel(args({ panel: { ...full(), blocked: true } })), '◆ blocked')
+  expect(rows.filter((r) => r.includes('waiting on you')).length).toBe(1)
+  const status = find(buildPanel(args({ panel: { ...full(), blocked: true } })), '◆ waiting on you')
   expect(status.props.color).toBe('warning')
 })
 
 test('not blocked: the status is unchanged', async () => {
   expect(rowsOf({ panel: { ...full(), blocked: false } })[0]).toBe(rowsOf()[0])
-  expect(rowsOf()[0]).not.toContain('blocked')
+  expect(rowsOf()[0]).not.toContain('waiting')
 })
 
 test('phase: the busy status names the running agents phase, and blocked wins', async () => {
   const verifying = { ...full(), turn: { turnId: 't' }, agents: [agent(), agent({ id: 'v', role: 'verifier' })] }
   expect(rowsOf({ panel: verifying })[0]).toBe('Opus 5.5 ● verifying')
-  expect(rowsOf({ panel: { ...verifying, blocked: true } })[0]).toBe('Opus 5.5 ◆ blocked')
-  expect(rowsOf({ panel: { ...full(), blocked: false } })[0]).toBe('Opus 5.5 ○ idle')
+  expect(rowsOf({ panel: { ...verifying, blocked: true } })[0]).toBe('Opus 5.5 ◆ waiting on you')
+  expect(rowsOf({ panel: { ...full(), blocked: false } })[0]).toBe('Opus 5.5 ○ ready')
 })
 
 test('activeWork joins surplus cells from an unescaped pipe into the task column', async () => {
@@ -513,8 +579,8 @@ test('MEMORY card: empty store and off states are one dim line', async () => {
   const rows = rowsOf({ memory: empty })
   const i = idx(rows, 'MEMORY')
   expect(rows[i]).toBe('MEMORY 0 memories')
-  expect(rows[i + 1]).toBe('no memories yet')
-  expect(find(buildPanel(args({ memory: empty })), 'no memories yet')?.props.dimColor).toBe(true)
+  expect(rows[i + 1]).toBe('nothing remembered yet')
+  expect(find(buildPanel(args({ memory: empty })), 'nothing remembered yet')?.props.dimColor).toBe(true)
   const off = rowsOf({ memory: { off: 'not a git repository' } })
   const j = idx(off, 'MEMORY')
   expect(off[j]).toBe('MEMORY')

@@ -79,12 +79,14 @@ test('NOTICE lists the adapted code and carries no license text', () => {
   const notice = readFileSync(join(pluginRoot, 'NOTICE'), 'utf8')
   assert.doesNotMatch(notice, /Permission is hereby granted/)
   assert.ok(notice.trimEnd().split('\n').length < 30, 'NOTICE stays under 30 lines')
-  for (const project of ['flightdeck', 'gentle-shell']) {
+  for (const project of ['gentle-shell']) {
     assert.match(notice, new RegExp(`LICENSE-${project}`))
     const license = join(pluginRoot, `LICENSE-${project}`)
     assert.ok(existsSync(license))
     assert.match(readFileSync(license, 'utf8'), /Permission is hereby granted/)
   }
+  assert.doesNotMatch(notice, /flightdeck/i)
+  assert.ok(!existsSync(join(pluginRoot, 'LICENSE-flightdeck')))
   assert.doesNotMatch(notice, /gentle-agent-state/)
   assert.ok(!existsSync(join(pluginRoot, 'LICENSE-gentle-agent-state')))
   assert.doesNotMatch(notice, /agent-skills|BMAD|engram/)
@@ -93,7 +95,7 @@ test('NOTICE lists the adapted code and carries no license text', () => {
 test('README credits the ideas-only projects', () => {
   const readme = readFileSync(join(pluginRoot, '..', '..', 'README.md'), 'utf8')
   const credits = readme.slice(readme.indexOf('## Credits'), readme.indexOf('## License'))
-  for (const p of ['gentle-ai', 'agent-skills', 'engram', 'BMAD-METHOD', 'get-shit-done', 'gstack', 'compound-engineering-plugin', 'spec-kit', 'ECC']) assert.match(credits, new RegExp(p))
+  for (const p of ['gentle-ai', 'agent-skills', 'engram', 'BMAD-METHOD', 'get-shit-done', 'gstack', 'compound-engineering-plugin', 'spec-kit', 'ECC', 'claude-flightdeck']) assert.match(credits, new RegExp(p))
 })
 
 test('review quotes the lens mapping of review-lenses.mjs', () => {
