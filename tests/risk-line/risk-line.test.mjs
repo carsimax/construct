@@ -5,7 +5,7 @@ import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, realpathSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { applyFiles, makeRepo, scratchDir } from '../helpers/repo.mjs'
+import { applyFiles, git, makeRepo, scratchDir } from '../helpers/repo.mjs'
 
 const PLUGIN = new URL('../../plugins/construct/', import.meta.url).pathname
 const SCRIPT = join(PLUGIN, 'hooks/scripts/risk-line.mjs')
@@ -291,6 +291,12 @@ describe('verifier-weakening markers (S2)', () => {
     ['t.Skip', 'a_test.go', '\tt.Skip("x")'],
     ['Not implemented stub', 'src/a.js', "throw new Error('Not implemented')"],
     ['TODO comment', 'src/a.js', '// TODO fix later'],
+    ['TODO hash comment', 'src/a.py', '  # TODO fix later'],
+    ['node:test skip option', 'src/a.test.js', "it('x', { skip: true }, () => {})"],
+    ['node:test only option', 'src/a.test.js', "describe('x', { only: true }, () => {})"],
+    ['t.Skipf', 'a_test.go', '\tt.Skipf("x %d", 1)'],
+    ['t.SkipNow', 'a_test.go', '\tt.SkipNow()'],
+    ['NotImplementedError', 'src/a.py', '    raise NotImplementedError'],
   ]) {
     test(`${name} blocks even with a Risk line, naming path:line`, () => {
       const { r } = marked({ [path]: `export const ok = 1\n${line}\n` })
@@ -308,6 +314,28 @@ describe('verifier-weakening markers (S2)', () => {
   test('TODO in a Markdown file or a non-comment does not block', () => {
     const { r } = marked({ 'docs/a.md': 'TODO: write\n', 'src/b.js': "const todo = 'TODO'\n" })
     silent(r)
+  })
+
+  test('anchored TODO and skipif do not false-positive', () => {
+    const { r } = marked({
+      'src/a.js': "const t = '// TODO'\nconst u = 'https://example.com/TODO'\nconst v = 1 // mentions TODO mid-sentence\n",
+      'scripts/a.sh': 'git log --grep TODO\n',
+      'tests/test_a.py': '@pytest.mark.skipif(True, reason="x")\n',
+    })
+    silent(r)
+  })
+
+  test('every marker in a Markdown file is skipped', () => {
+    const { r } = marked({ 'docs/a.md': "it.skip('x')\nraise NotImplementedError\nt.SkipNow()\n" })
+    silent(r)
+  })
+
+  test('a git mv of a file with an existing marker is not flagged', () => {
+    const repo = makeRepo({ 'src/a.test.js': "it.skip('old', () => {})\nexport const a = 1\nexport const b = 2\n" })
+    const e = env()
+    silent(run('mark', repo, e))
+    git(repo, 'mv', 'src/a.test.js', 'src/b.test.js')
+    silent(check(repo, e, 'Done.\nRisk: none'))
   })
 
   test('markers under odd/tasks are ignored', () => {

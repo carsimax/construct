@@ -11,15 +11,18 @@ import { dataDir, hasOpenSubagents, pruneState, readInput, safeName } from './ho
 
 const MAX_PATHS = 3
 // Code-shaped markers of a weakened verifier, matched on one added line. Anchored to the line
-// start or a comment so a string literal in a fixture does not match; TODO needs a comment opener.
+// start (TODO: a comment opener at the line start) so a string literal in a fixture does not match.
+// shortcut: a template-literal fixture whose line starts with a marker still matches, upgrade with a real parser if it bites.
 const MARKERS = [
   /^\s*(?:it|test|describe|context)\.(?:skip|only|todo)\(/,
   /^\s*x(?:it|describe)\(/,
-  /^\s*@pytest\.mark\.skip/,
-  /^\s*t\.Skip\(/,
+  /^\s*(?:it|test|describe)\(.*\{\s*[^}]*\b(?:skip|only|todo)\s*:\s*true/,
+  /^\s*@pytest\.mark\.skip(?!if)/,
+  /^\s*t\.(?:Skip\(|Skipf\(|SkipNow\()/,
+  /^\s*raise NotImplementedError/,
   /^\s*throw new Error\(['"`]Not implemented/,
 ]
-const TODO = /(?:\/\/|\/\*|#|--|^\s*\*).*\bTODO\b/
+const TODO = /^\s*(?:\/\/|#|\/\*|\*|--)\s*TODO\b/
 // Optional list marker (-, *, +, 1., 1)) and emphasis around the label and the
 // value, then `none` or `item 1-6` that ends the line or is followed by
 // whitespace or `(`; the space after the colon is optional.
@@ -45,7 +48,7 @@ function readRecord(file) {
 }
 
 // markerHits returns `path:line` for each added line of a -U0 diff that carries a marker,
-// skipping odd/tasks/ and Markdown for TODO.
+// skipping odd/tasks/ and Markdown.
 function markerHits(diff) {
   const hits = []
   let path = null
@@ -57,7 +60,7 @@ function markerHits(diff) {
       line = Number(/\+(\d+)/.exec(text)?.[1] ?? 0)
     } else if (text.startsWith('+') && path !== null) {
       const code = text.slice(1)
-      if (!path.startsWith('odd/tasks/') && (MARKERS.some((m) => m.test(code)) || (!path.endsWith('.md') && TODO.test(code)))) {
+      if (!path.startsWith('odd/tasks/') && !path.endsWith('.md') && (MARKERS.some((m) => m.test(code)) || TODO.test(code))) {
         hits.push(`${path}:${line}`)
       }
       line++
@@ -129,7 +132,7 @@ async function main() {
   const riskMissing = !RISK_LINE.test(input.last_assistant_message)
   let hits = []
   try {
-    hits = markerHits(git(root, ['-c', 'core.quotepath=off', 'diff', '--no-renames', '-U0', record.tree, candidateTree]).toString('utf8'))
+    hits = markerHits(git(root, ['-c', 'core.quotepath=off', 'diff', '-U0', record.tree, candidateTree]).toString('utf8'))
   } catch {
     // Fail open on the marker scan.
   }
