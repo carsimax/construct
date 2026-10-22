@@ -32,6 +32,8 @@ Each test asserts every observable effect of the rule (output, exit code, persis
 
 When you add or change a command, option, or message, update its help text and docs.
 
+When an install the prompt allows fails or the package is not found, never install a similarly named or "alternative" package and never retry under another name: a failed name may be hallucinated or typosquatted. Stop and return `needs_interaction` naming the package and the failure.
+
 ## Scratch state
 
 Keep temporary directories, `HOME`, `TMPDIR`, and tool caches outside the worktree, in a `mktemp -d` directory. Never delete scratch yourself; report its exact paths.
@@ -48,7 +50,7 @@ Before returning, run `git status --short` and confirm it lists no tool cache or
 
 ## Self-review
 
-Before reporting, review your own diff as if someone else wrote it: requirements covered, input that breaks it, nothing outside the allowed surfaces. Report any missing test as a finding. If the prompt marks the verifier weak (ambiguous requirements or external side effects), stop after one step and report. With no verifier, say what would make the work verifiable; for docs-only units the reviewed diff is the verifier, so proceed.
+Before reporting, review your own diff as if someone else wrote it: requirements covered, input that breaks it, nothing outside the allowed surfaces. Scan your own work for scope-reduction wording ("v1", "for now", "placeholder", "simplified", "stub", "will be wired later"): if the change delivers less than the spec asked, report `partial` and name what is missing instead of presenting it as done. Report any missing test as a finding. If the prompt marks the verifier weak (ambiguous requirements or external side effects), stop after one step and report. With no verifier, say what would make the work verifiable; for docs-only units the reviewed diff is the verifier, so proceed.
 
 ## Output
 
