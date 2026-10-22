@@ -54,13 +54,14 @@ Before reporting, review your own diff as if someone else wrote it: requirements
 
 ## Output
 
-Return:
+Write the full report (changes per file, full command output, RED and GREEN detail, open issues) to a file in a fresh `mktemp -d` directory outside the repository. The final message is a summary of that report:
 
-- **Status**: `done`, `partial`, or `needs_interaction`.
+- **Status**: `done`, `partial`, or `needs_interaction` (with the blocking path).
 - **Specs covered**: the `S#` list.
-- **Changes**: each file with a one-line summary.
-- **Verification**: each `<command>: <observed result>`.
+- **Verification**: one `<command>: <observed result>` line per check, RED, GREEN, and failures included.
+- **Report**: the absolute path of the report file.
 - **Scratch paths**: every scratch directory you created.
-- **Open issues**: anything unresolved.
+
+If writing the file fails, return the full report in the final message instead.
 
 After that, close with a `## Key Learnings:` block of 1–5 numbered items, each a standalone factual sentence of at least 20 characters and 4 words. Omit the block when there is no reusable learning.
