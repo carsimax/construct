@@ -207,13 +207,39 @@ describe('marks in search and get', () => {
     assert.deepEqual(store.get(c).marks, [])
   })
 
-  test('a mark to a soft-deleted observation is not shown', () => {
+  test('marks come out by relation kind then the other id ascending, whatever the creation order', () => {
+    const { store } = fresh()
+    const [a, b, c, d, e] = ['Ord alpha subject', 'Ord beta subject', 'Ord gamma subject', 'Ord delta subject', 'Ord eps subject'].map((t) => note(store, t).id)
+    store.compare(a, e, 'supersedes', { confidence: 0.9 })
+    store.compare(a, d, 'supersedes', { confidence: 0.9 })
+    store.compare(a, c, 'supersedes', { confidence: 0.9 })
+    store.compare(a, b, 'conflicts_with', { confidence: 0.9 })
+    store.remove(c)
+    store.remove(e)
+    assert.deepEqual(store.get(a).marks, [`conflicts with #${b}`, `supersedes #${c} (deleted)`, `supersedes #${d}`, `supersedes #${e} (deleted)`])
+  })
+
+  test('a supersedes mark to a soft-deleted target is shown as deleted; other deleted ends hide the mark', () => {
     const { store } = fresh()
     const a = note(store, 'Ghost alpha subject').id
     const b = note(store, 'Ghost beta subject').id
     store.compare(a, b, 'supersedes', { confidence: 0.9 })
+    const c = note(store, 'Ghost gamma subject').id
+    const d = note(store, 'Ghost delta subject').id
+    store.compare(c, d, 'conflicts_with', { confidence: 0.9 })
     store.remove(b)
-    assert.deepEqual(store.get(a).marks, [])
+    store.remove(d)
+    assert.deepEqual(store.get(a).marks, [`supersedes #${b} (deleted)`])
+    assert.deepEqual(store.get(c).marks, [])
+  })
+
+  test('a superseded row whose superseder is deleted shows no mark', () => {
+    const { store } = fresh()
+    const a = note(store, 'Rev alpha subject').id
+    const b = note(store, 'Rev beta subject').id
+    store.compare(a, b, 'supersedes', { confidence: 0.9 })
+    store.remove(a)
+    assert.deepEqual(store.get(b).marks, [])
   })
 })
 

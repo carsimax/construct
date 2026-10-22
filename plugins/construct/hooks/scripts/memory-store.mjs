@@ -334,14 +334,20 @@ function makeStore(db, path, now, repoName) {
     if (changes === 0) throw new Error(`judgment ${judgmentId} not found`)
   }
 
-  // marksFor maps observation id to the judged conflict and supersession marks that point at a live row.
+  // marksFor maps observation id to the judged marks of a live row: conflicts_with and supersedes between two live rows,
+  // plus supersedes from the row to a soft-deleted target (marked "(deleted)", the trace consolidate leaves).
   function marksFor(ids) {
     const marks = new Map(ids.map((id) => [id, []]))
     if (ids.length === 0) return marks
     const list = ids.map(() => '?').join(',')
-    const rows = all(`SELECT r.source_id, r.target_id, r.relation FROM memory_relations r WHERE r.status = 'judged' AND r.relation IN ('conflicts_with', 'supersedes') AND (r.source_id IN (${list}) OR r.target_id IN (${list}))
-      AND (SELECT count(*) FROM observations WHERE id IN (r.source_id, r.target_id) AND deleted_at IS NULL) = 2 ORDER BY r.updated_at, r.id`, ...ids, ...ids)
+    const rows = all(`SELECT r.source_id, r.target_id, r.relation, (SELECT deleted_at IS NOT NULL FROM observations WHERE id = r.source_id) AS source_gone, (SELECT deleted_at IS NOT NULL FROM observations WHERE id = r.target_id) AS target_gone
+      FROM memory_relations r WHERE r.status = 'judged' AND r.relation IN ('conflicts_with', 'supersedes') AND (r.source_id IN (${list}) OR r.target_id IN (${list})) ORDER BY r.relation, r.source_id, r.target_id`, ...ids, ...ids)
     for (const r of rows) {
+      if (r.source_gone) continue
+      if (r.target_gone) {
+        if (r.relation === 'supersedes' && marks.has(r.source_id)) marks.get(r.source_id).push(`supersedes #${r.target_id} (deleted)`)
+        continue
+      }
       if (marks.has(r.source_id)) marks.get(r.source_id).push(r.relation === 'supersedes' ? `supersedes #${r.target_id}` : `conflicts with #${r.target_id}`)
       if (marks.has(r.target_id)) marks.get(r.target_id).push(r.relation === 'supersedes' ? `superseded by #${r.source_id}` : `conflicts with #${r.source_id}`)
     }
@@ -510,6 +516,40 @@ function makeStore(db, path, now, repoName) {
         if (pair) run("UPDATE memory_relations SET source_id = ?, target_id = ?, relation = ?, status = 'judged', reason = ?, evidence = NULL, confidence = ?, marked_by = 'agent', updated_at = ? WHERE id = ?", a, b, relation, text(reasoning), c, at, pair.id)
         else run("INSERT INTO memory_relations (id, source_id, target_id, relation, status, reason, confidence, marked_by, created_at, updated_at) VALUES (?, ?, ?, ?, 'judged', ?, ?, 'agent', ?, ?)", relationId(), a, b, relation, text(reasoning), c, at, at)
         return { source_id: a, target_id: b, relation }
+      })
+    },
+
+    // consolidate merges live observations into one. Without confirm it only previews: the sources and a fingerprint
+    // (sha256 over the sorted sources' id, updated_at, and content, plus the new title, content, type, and topic key). With confirm equal
+    // to that fingerprint, one transaction inserts the merged row (no upsert, dedup, or candidates), soft-deletes the
+    // sources, and records a judged supersedes relation from the new row to each source.
+    consolidate(ids, { title, content, type = 'manual', topic_key = null, confirm } = {}) {
+      if (!Array.isArray(ids) || ids.length < 2) throw new Error('consolidate needs at least 2 observation ids')
+      for (const id of ids) if (ids.indexOf(id) !== ids.lastIndexOf(id)) throw new Error(`duplicate id #${id}`)
+      const cleanTitle = clean(title, 'title')
+      const body = capContent(clean(content, 'content'))
+      const key = normalizeTopicKey(topic_key) || null
+      const sorted = [...ids].sort((x, y) => x - y)
+      const sources = () => sorted.map((id) => {
+        const row = one('SELECT id, type, title, content, updated_at FROM observations WHERE id = ? AND deleted_at IS NULL', id)
+        if (!row) throw new Error(`observation #${id} not found`)
+        return row
+      })
+      const fingerprint = (rows) => createHash('sha256').update(JSON.stringify([rows.map((r) => [r.id, r.updated_at, r.content]), cleanTitle, body, type, key])).digest('hex')
+      if (confirm === undefined) {
+        const rows = sources()
+        return { sources: rows.map(({ id, type: t, title: ti }) => ({ id, type: t, title: ti })), title: cleanTitle, fingerprint: fingerprint(rows) }
+      }
+      return write(() => {
+        if (fingerprint(sources()) !== confirm) throw new Error('the fingerprint no longer matches: a source changed or was deleted, or the title or content differ; run the preview again')
+        const at = stamp()
+        const { lastInsertRowid } = run('INSERT INTO observations (session_id, type, title, content, topic_key, normalized_hash, last_seen_at, review_after, created_at, updated_at) VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?)', type, cleanTitle, body, key, normalizedHash(body), at, reviewAfter(type, at), at, at)
+        const id = Number(lastInsertRowid)
+        for (const s of sorted) {
+          run('UPDATE observations SET deleted_at = ? WHERE id = ?', at, s)
+          run("INSERT INTO memory_relations (id, source_id, target_id, relation, status, reason, marked_by, created_at, updated_at) VALUES (?, ?, ?, 'supersedes', 'judged', 'consolidated', 'agent', ?, ?)", relationId(), id, s, at, at)
+        }
+        return { id, sources: sorted }
       })
     },
 

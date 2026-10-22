@@ -59,7 +59,11 @@ Judging is optional; ignore the candidates unless one really conflicts with or r
 
 - Judge only a real conflict or supersession; `related`, `compatible`, `scoped`, and `not_conflict` are not worth a call.
 - Ask the user before recording `supersedes` or `conflicts_with` on a `decision`, `architecture`, or `policy` memory, or whenever your confidence is below 0.7; pass what the user said as `--evidence`.
-- `search` and `get` mark judged conflicts as `conflicts with #N` and supersessions as `supersedes #N` / `superseded by #N`; check the other memory before relying on either.
+- `search` and `get` mark judged conflicts as `conflicts with #N` and supersessions as `supersedes #N` / `superseded by #N` (a supersession of a deleted memory shows as `supersedes #N (deleted)`); check the other memory before relying on either.
+
+## Consolidate
+
+Use `construct-memory consolidate <id> <id>... --title T [--type T] [--topic-key K]` (the merged content on stdin) when several memories describe one evolving fact and no `topic_key` ties them. The first run only previews: the sources, the new title, and a fingerprint; nothing is written. Read the preview, then rerun the same command with the same stdin and `--confirm <fingerprint>`: it creates the merged memory, soft-deletes the sources, and records a `supersedes` relation from the new memory to each. A source that changed or was deleted after the preview makes the fingerprint stale and is refused; preview again.
 
 Before architecture-sensitive work, run `construct-memory review list`. Memories marked `needs_review` are stale: verify them, and run `review done <id>` only after the user confirms.
 

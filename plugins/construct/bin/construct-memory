@@ -27,6 +27,8 @@ const USAGE = `usage: construct-memory <command> [options]
   judge-many                        JSON array on stdin (1-32 of judgment_id, relation, reason, evidence, confidence); all or nothing
   compare <id-a> <id-b> <relation> --confidence 0..1 [--reasoning T]  record a verdict for any pair (a supersedes b)
                                     relations: related, compatible, scoped, conflicts_with, supersedes, not_conflict
+  consolidate <id> <id>... --title T [--type T] [--topic-key K]  merge memories into one (content on stdin); prints a preview and a fingerprint, writes nothing
+  consolidate <id> <id>... --title T --confirm <fingerprint>  with the same content: create the merged memory and soft-delete the sources
   help`
 
 class UsageError extends Error {}
@@ -98,9 +100,9 @@ async function main(argv) {
   const { values, positionals } = parseArgs({
     args: rest,
     allowPositionals: true,
-    options: { type: { type: 'string' }, limit: { type: 'string' }, any: { type: 'boolean' }, history: { type: 'boolean' }, before: { type: 'string' }, after: { type: 'string' }, search: { type: 'string' }, hard: { type: 'boolean' }, json: { type: 'boolean' }, session: { type: 'string' }, project: { type: 'string' }, reason: { type: 'string' }, evidence: { type: 'string' }, confidence: { type: 'string' }, reasoning: { type: 'string' } },
+    options: { type: { type: 'string' }, limit: { type: 'string' }, any: { type: 'boolean' }, history: { type: 'boolean' }, before: { type: 'string' }, after: { type: 'string' }, search: { type: 'string' }, hard: { type: 'boolean' }, json: { type: 'boolean' }, session: { type: 'string' }, project: { type: 'string' }, reason: { type: 'string' }, evidence: { type: 'string' }, confidence: { type: 'string' }, reasoning: { type: 'string' }, title: { type: 'string' }, 'topic-key': { type: 'string' }, confirm: { type: 'string' } },
   })
-  const known = ['save', 'search', 'get', 'context', 'update', 'delete', 'summary', 'review', 'import', 'prompts', 'export', 'suggest-topic-key', 'timeline', 'pin', 'unpin', 'stats', 'doctor', 'judge', 'judge-many', 'compare']
+  const known = ['save', 'search', 'get', 'context', 'update', 'delete', 'summary', 'review', 'import', 'prompts', 'export', 'suggest-topic-key', 'timeline', 'pin', 'unpin', 'stats', 'doctor', 'judge', 'judge-many', 'compare', 'consolidate']
   if (!known.includes(command)) fail(`unknown command: ${command} (run construct-memory help)`)
   if (command === 'review' && !['list', 'done'].includes(positionals[0])) fail('review needs list or done <id>')
 
@@ -248,6 +250,22 @@ async function main(argv) {
         if (values.confidence === undefined) fail('compare needs --confidence <0..1>')
         store.compare(a, b, positionals[2], { confidence: values.confidence, reasoning: values.reasoning })
         return `compared #${a} #${b} ${positionals[2]}\n`
+      }
+      case 'consolidate': {
+        if (!values.title) fail('consolidate needs --title <text>')
+        const ids = positionals.map(idArg)
+        const content = readFileSync(0, 'utf8')
+        const input = { title: values.title, content, type: values.type, topic_key: values['topic-key'] }
+        const list = ids.map((id) => `#${id}`).join(', ')
+        if (values.confirm !== undefined) return `consolidated #${store.consolidate(ids, { ...input, confirm: values.confirm }).id} from ${list}\n`
+        const p = store.consolidate(ids, input)
+        const flags = `${values.type ? ` --type ${values.type}` : ''}${values['topic-key'] ? ` --topic-key ${values['topic-key']}` : ''}`
+        return `${[
+          'consolidate preview (nothing written):',
+          ...p.sources.map((s) => `  #${s.id} [${s.type}] ${oneLine(s.title)}`),
+          `new: ${oneLine(p.title)}`,
+          `confirm with: construct-memory consolidate ${ids.join(' ')} --title ${JSON.stringify(p.title)}${flags} --confirm ${p.fingerprint}  (same content on stdin)`,
+        ].join('\n')}\n`
       }
       case 'review': {
         if (positionals[0] === 'list') {
