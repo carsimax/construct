@@ -5,7 +5,7 @@
 import { kindOf } from '../scripts/roles.mjs'
 import { isNum, text } from '../status/format.js'
 import { PALETTE, card, changeRows, effortMeter, fmtResetIn, gauge, panelBox, stackBar } from './draw.js'
-import { agentsView, mainBusy, maskSecrets, phaseOf } from './state.js'
+import { agentsView, initialState, mainBusy, maskSecrets, phaseOf } from './state.js'
 
 export const PANEL_COLUMNS = 66
 
@@ -237,7 +237,7 @@ function gateCard(panel, w) {
 
 // ---- MEMORY card ---------------------------------------------------------------
 
-const AMBER_REASON = /newer|read-?only/i
+const AMBER_REASON = /newer|read-?only|unable to open|not writable/i
 
 function memoryCard(memory, nowMs, w) {
   const inner = w - 4
@@ -279,7 +279,7 @@ function agentsCard(panel, nowMs, w) {
   const shown = [...cards].sort((a, b) => (isNum(a.startedMs) ? a.startedMs : 0) - (isNum(b.startedMs) ? b.startedMs : 0))
   const looks = shown.map((a) => {
     const [glyph, now, done] = LOOKS[kindOf(a.name)] ?? OTHER_LOOK
-    return { a, glyph, verb: a.status === 'running' ? now : done, model: typeof a.model === 'string' && a.model ? prettyModel(a.model) : '—' }
+    return { a: { ...a, name: clean(a.name) }, glyph, verb: a.status === 'running' ? now : done, model: typeof a.model === 'string' && a.model ? prettyModel(a.model) : '—' }
   })
   const pad = (key, cap = Infinity) => Math.min(cap, Math.max(...looks.map((l) => (key === 'name' ? l.a.name : l[key]).length)))
   const [nameW, verbW, modelW] = [pad('name', MAX_NAME), pad('verb'), pad('model')]
@@ -360,7 +360,8 @@ function changesCard({ git, changes }, budget, w) {
 // Rows a card takes: its border, then the title row and the body rows.
 const heightOf = (c) => c.children.length + 2
 
-export function buildPanel({ panel, usage, odd, memory, nowMs, columns, rows, model, effort, git, changes }) {
+export function buildPanel({ panel: stored, usage, odd, memory, nowMs, columns, rows, model, effort, git, changes }) {
+  const panel = stored ?? initialState()
   const w = isNum(columns) ? Math.max(40, Math.floor(columns)) : PANEL_COLUMNS
   const now = isNum(nowMs) ? nowMs : Date.now()
   const cards = [

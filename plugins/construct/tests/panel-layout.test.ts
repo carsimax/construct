@@ -781,3 +781,26 @@ test('L13 row budget: body rows 0, negative, or unknown let the changes card tak
     expect(out.at(-1)).toBe('+21 more')
   }
 })
+
+// ---- slice-2 lens warnings (L16) --------------------------------------------
+
+test('agent names with control characters render no control bytes', async () => {
+  for (const type of ['construct:wor\u001b[31mker', 'x\u0007y', 'a\u009bb']) {
+    const panel = { ...full(), agents: [agent({ type, role: type })] }
+    expect(/[\u0000-\u001f\u007f-\u009f]/.test(textOf(buildPanel(args({ panel }))).replace(/\n/g, ''))).toBe(false)
+  }
+})
+
+test('a null or undefined panel renders the main card', async () => {
+  for (const panel of [undefined, null]) {
+    const rows = rowsOf({ panel, model: undefined })
+    expect(rows[0]).toBe('Claude ○ ready')
+  }
+})
+
+test('MEMORY unable-to-open and not-writable reasons are amber, not a git repository stays dim', async () => {
+  for (const reason of ['unable to open database file', 'attempt to write a readonly database / not writable']) {
+    expect(find(buildPanel(args({ memory: { off: reason } })), reason)?.props.color).toBe('warning')
+  }
+  expect(find(buildPanel(args({ memory: { off: 'not a git repository' } })), 'not a git repository')?.props.color).toBeUndefined()
+})
