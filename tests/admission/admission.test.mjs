@@ -124,11 +124,14 @@ describe('verifier', () => {
     denied(launch(plain(), env(), VERIFY, 'Verify it'), /Risk: item N/)
     denied(launch(plain(), env(), VERIFY, 'Risk: none\nVerify'), /Risk: item N/)
     denied(launch(plain(), env(), VERIFY, 'Risk: item 7\nVerify'), /Risk: item N/)
+    denied(launch(plain(), env(), VERIFY, 'Risk: items 7\nVerify'), /Risk: item N/)
+    denied(launch(plain(), env(), VERIFY, 'Risk: items\nVerify'), /Risk: item N/)
     denied(launch(plain(), env(), VERIFY, 'the Risk: item 3 is here'), /Risk: item N/)
   })
   test('with Risk: item 1-6 is allowed, also as a list item', () => {
     allowed(launch(plain(), env(), VERIFY, 'Verify\nRisk: item 3 (shared parser)'))
     allowed(launch(plain(), env(), VERIFY, '- Risk: item 2, item 3 (why)\nVerify'))
+    allowed(launch(plain(), env(), VERIFY, 'Risk: items 2, 5 (why)\nVerify'))
   })
   test('the verifier does not need surfaces or a Spec line', () => {
     allowed(launch(withFeature(), env(), VERIFY, 'Risk: item 1'))

@@ -73,7 +73,8 @@ describe('check', () => {
 
   for (const line of ['Risk: none', '- **Risk:** item 2 (touches auth)', '* `Risk:` item 6 (x)', '_Risk:_ none', 'Summary\n\nRisk: item 1 (money)',
     '**Risk**: none', 'Risk: **none**', 'Risk: `none`', '**Risk:** item 2', 'Risk:none',
-    '+ Risk: none', '1. Risk: none', '2) Risk: item 3 (x)', 'Risk: item 2(x)', 'Risk: none \t']) {
+    '+ Risk: none', '1. Risk: none', '2) Risk: item 3 (x)', 'Risk: item 2(x)', 'Risk: none \t',
+    'Risk: items 2, 5 (x)', '- **Risk:** items 1, 3', 'Risk: items 2,5']) {
     test(`accepts ${JSON.stringify(line)}`, () => {
       const { repo, e } = changed()
       silent(check(repo, e, line))
@@ -82,7 +83,8 @@ describe('check', () => {
 
   for (const line of ['risk: none', 'Risk: item 7 (x)', 'Risk: maybe', 'The Risk: none holds',
     'Risk: None', 'Risk: item 10', '> Risk: none', '## Risk: none',
-    'Risk: none-ish', 'Risk: nonexistent', 'Risk: item 2x', 'Risk: item 2-ish', 'Risk: none.']) {
+    'Risk: none-ish', 'Risk: nonexistent', 'Risk: item 2x', 'Risk: item 2-ish', 'Risk: none.',
+    'Risk: items', 'Risk: items 7', 'Risk: item 2,', 'Risk: items 2, 7', 'Risk: items 2,']) {
     test(`rejects ${JSON.stringify(line)}`, () => {
       const { repo, e } = changed()
       assert.equal(check(repo, e, line).json?.decision, 'block')
