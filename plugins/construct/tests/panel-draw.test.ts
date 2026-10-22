@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 import { card, effortMeter, fmtResetIn, gauge, changeRows, PALETTE } from '../hooks/panel/draw.js'
 
-// Pure drawing primitives adapted from claude-flightdeck (S2, S7, S10; harness-extras S3 dropped lanes and the Client modules).
+// Pure drawing primitives of the panel (S2): gauges, meters, the stacked bar, and the card frame.
 
 // ---- gauge / effort meter ----------------------------------------------------
 
@@ -57,7 +57,7 @@ test('card status can carry its own color and dim, and may be absent', () => {
   expect(bare.children[0].children.length).toBe(1)
 })
 
-test('palette maps flightdeck roles to theme keys only', () => {
+test('palette maps panel roles to theme keys only', () => {
   expect(PALETTE).toMatchObject({ git: 'remember', main: 'claude', agent: 'suggestion', gate: 'success', dim: 'inactive', faint: 'subtle' })
   for (const v of Object.values(PALETTE)) expect(String(v).startsWith('#')).toBe(false)
 })

@@ -88,7 +88,7 @@ Many tests cross-check text against code, so a change in one place usually needs
 
 ## Third-party material
 
-Adapted code keeps its license in a `plugins/construct/LICENSE-<project>` file and in the header of each adapted file (see `LICENSE-flightdeck`), and is listed in [`plugins/construct/NOTICE`](plugins/construct/NOTICE), which carries no license text. Ideas from another project, with no text or code copied, get one credit line in the README's Credits section.
+Adapted code keeps its license in a `plugins/construct/LICENSE-<project>` file and in the header of each adapted file (see `LICENSE-gentle-shell`), and is listed in [`plugins/construct/NOTICE`](plugins/construct/NOTICE), which carries no license text. Ideas from another project, with no text or code copied, get one credit line in the README's Credits section.
 
 ## License
 

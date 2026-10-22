@@ -668,11 +668,47 @@ test('maskSecrets masks long API keys, JWT signatures, a `?` inside a value, and
 })
 
 test('maskSecrets stays fast on a long run of word characters (L9)', () => {
-  for (const text of ['a'.repeat(200000), 'a'.repeat(100000) + 'key' + 'a'.repeat(100000), 'key'.repeat(30000)]) {
+  const time = (text: string) => {
     const t = performance.now()
     maskSecrets(text)
-    expect(performance.now() - t).toBeLessThan(200)
+    return performance.now() - t
   }
+  const inputs = [(n: number) => 'a'.repeat(n), (n: number) => 'a'.repeat(n / 2) + 'key' + 'a'.repeat(n / 2), (n: number) => 'key'.repeat(n / 3), (n: number) => 'key_' + 'a'.repeat(n)]
+  for (const make of inputs) {
+    time(make(20000))
+    const small = Math.max(time(make(20000)), 1)
+    const big = time(make(200000))
+    // 10x the input stays under 20x the time (quadratic would be ~100x); the ceiling is generous for loaded machines
+    expect(big).toBeLessThan(small * 20)
+    expect(big).toBeLessThan(2000)
+  }
+})
+
+test('maskSecrets masks a value after a very long secret name (L10)', () => {
+  expect(maskSecrets('CLIENT_SECRET_FOR_THE_LEGACY_OAUTH_PROVIDER_INTEGRATION=hunter2')).toBe('CLIENT_SECRET_FOR_THE_LEGACY_OAUTH_PROVIDER_INTEGRATION=***')
+})
+
+test('a main-thread spawn with a mode sets main.mode; a subagent spawn does not (L10)', () => {
+  expect(spawn(initialState(), 'a1', { mode: 'plan' }).main.mode).toBe('plan')
+  expect(spawn(initialState(), 'a1', { mode: 'plan', parentAgentId: 'p' }).main.mode).toBeNull()
+  // register.js passes no mode and no parent today: the mode is kept
+  const kept = onPermissionMode(initialState(), { mode: 'auto' })
+  expect(spawn(kept, 'a1').main.mode).toBe('auto')
+})
+
+test('a damaged v3 value is repaired by every reducer and selector (L10)', () => {
+  const bad: any = { ...initialState(), gate: { ...initialState().gate, buckets: undefined, cells: 'x' }, agents: [null] }
+  delete bad.gate.buckets
+  const finite = (s: any) => {
+    for (const v of [...Object.values(s.gate.counts), ...Object.values(s.gate.verdicts)]) expect(Number.isFinite(v)).toBe(true)
+    for (const b of Object.values(s.gate.buckets) as any[]) for (const v of Object.values(b)) expect(Number.isFinite(v)).toBe(true)
+  }
+  const checked = onToolCheck(bad, { decision: 'ask', tool: 'Bash', callId: 'c' })
+  finite(checked)
+  expect(Array.isArray(checked.gate.cells)).toBe(true)
+  finite(onToolSettle({ ...bad, gate: { ...bad.gate, pending: { c: 'file' } } }, { callId: 'c', tool: 'Read', didRun: true }))
+  expect(() => onTurnStart(bad, { agentId: 'a' })).not.toThrow()
+  expect(agentsView(bad, 5).cards).toEqual([])
 })
 
 test('damaged state: counts stay at or above 0, an unknown pending bucket and odd agents do not throw (L9)', () => {
@@ -686,4 +722,16 @@ test('damaged state: counts stay at or above 0, an unknown pending bucket and od
   expect(view.rest).toBe(0)
   expect(isOutsideTasks('/proj/odd/tasks/x.md', undefined)).toBe(false)
   expect(isOutsideTasks('/proj/src/a.js', undefined)).toBe(true)
+})
+
+test('L13 onUnblocked and onBlocked return the input object when the flag already matches, before any repair', () => {
+  const s = onTurnStart(initialState(), { agentId: undefined, turnId: 't1', nowMs: 5 })
+  expect(onUnblocked(s)).toBe(s)
+  const b = onBlocked(s)
+  expect(onBlocked(b)).toBe(b)
+  const bb = onBlocked(onBlocked(s))
+  expect(onBlocked(bb)).toBe(bb)
+  expect(bb).toEqual(onBlocked(s))
+  const damaged = { ...s, agents: 'x' } as any
+  expect(onUnblocked(damaged)).toBe(damaged)
 })

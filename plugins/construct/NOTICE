@@ -6,9 +6,6 @@ Code adapted from MIT-licensed projects. Each project's copyright and permission
 notice is in its LICENSE file and in the header of each adapted file
 (tests/panel-license.test.mjs checks both).
 
-- claude-flightdeck (https://github.com/scasella/claude-flightdeck), Stephen
-  Casella: the status-panel drawing code in hooks/panel/ (draw.js and
-  layout.js). See LICENSE-flightdeck.
 - gentle-shell (https://github.com/Gentleman-Programming/gentle-shell), Mario
   Zechner: hooks/scripts/delegation-admission.mjs and
   hooks/scripts/delivery-signals.mjs. See LICENSE-gentle-shell.
