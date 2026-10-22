@@ -512,6 +512,13 @@ test('MEMORY card: empty store and off states are one dim line', async () => {
   expect(find(buildPanel(args({ memory: { off: 'not a git repository' } })), 'not a git repository')?.props.dimColor).toBe(true)
 })
 
+test('MEMORY card shows a failure reason, amber for a newer schema or an unwritable database', async () => {
+  const reason = 'memory database is from a newer construct (schema 99)'
+  expect(find(buildPanel(args({ memory: { off: reason } })), reason)?.props.color).toBe('warning')
+  expect(find(buildPanel(args({ memory: { off: 'attempt to write a readonly database' } })), 'attempt to write a readonly database')?.props.color).toBe('warning')
+  expect(find(buildPanel(args({ memory: { off: 'boom' } })), 'boom')?.props.dimColor).toBe(true)
+})
+
 test('MEMORY card clips at the narrowest width', async () => {
   const rows = rowsOf({ columns: 40, memory: { ...memory, memories: 123456, review: 12, pinned: 34, pending: 56 } })
   const i = idx(rows, 'MEMORY')

@@ -267,7 +267,10 @@ function memoryCard(memory, nowMs, width) {
   const iw = width - 4
   const color = PALETTE.cleared
   const mem = (status, rows) => card({ title: 'MEMORY', status, color, children: rows, width })
-  if (typeof memory.off === 'string') return mem(null, [line(dim(fit(stripControl(memory.off), iw)))])
+  if (typeof memory.off === 'string') {
+    const reason = fit(stripControl(memory.off), iw)
+    return mem(null, [/newer|readonly|read-only|unable to open|not writable/i.test(memory.off) ? line(text(reason, { color: PALETTE.amber })) : line(dim(reason))])
+  }
   if (memory.memories === 0) return mem({ text: '0 memories', dim: true }, [line(dim('no memories yet'))])
   const parts = [`${memory.review} to review`, `${memory.pinned} pinned`, `${memory.pending} pending`]
   const flat = parts.join(' · ')

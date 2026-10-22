@@ -249,7 +249,9 @@ test('parseMemoryStats reads the stats object', async () => {
 test('parseMemoryStats names why memory is off, and gives null for any other failure', async () => {
   expect(parseMemoryStats({ exitCode: 1, stdout: '', stderr: 'construct-memory: memory is off: not inside a git repository' })).toEqual({ off: 'not a git repository' })
   expect(parseMemoryStats({ exitCode: 1, stdout: '', stderr: 'construct-memory: memory needs node:sqlite with FTS5 (Node.js 22.16 or later)' })).toEqual({ off: 'memory unavailable (Node 22.16+)' })
-  expect(parseMemoryStats({ exitCode: 1, stdout: '', stderr: 'boom' })).toBeNull()
+  expect(parseMemoryStats({ exitCode: 1, stdout: '', stderr: 'construct-memory: memory database is from a newer construct (schema 99)' })).toEqual({ off: 'memory database is from a newer construct (schema 99)' })
+  expect(parseMemoryStats({ exitCode: 1, stdout: '', stderr: 'boom\nsecond line' })).toEqual({ off: 'boom' })
+  expect(parseMemoryStats({ exitCode: 1, stdout: '', stderr: '' })).toBeNull()
   expect(parseMemoryStats({ exitCode: 0, stdout: 'not json', stderr: '' })).toBeNull()
   expect(parseMemoryStats({ exitCode: 0, stdout: '{}', stderr: '' })).toBeNull()
   expect(parseMemoryStats(null)).toBeNull()

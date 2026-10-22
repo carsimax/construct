@@ -27,5 +27,6 @@ export function parseMemoryStats(run) {
   const err = String(run.stderr ?? '')
   if (err.includes('node:sqlite')) return { off: 'memory unavailable (Node 22.16+)' }
   if (err.includes('not inside a git repository')) return { off: 'not a git repository' }
-  return null
+  const first = err.split('\n').map((l) => l.trim().replace(/^construct-memory:\s*/, '')).find(Boolean)
+  return first ? { off: first } : null
 }

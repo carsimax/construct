@@ -47,13 +47,32 @@ export function learnings(text) {
   return []
 }
 
+// reason shortens a store failure to a phrase for the SessionStart line.
+function reason(error) {
+  const msg = String(error?.message ?? error)
+  if (/newer construct/i.test(msg)) return 'newer schema'
+  if (/readonly|read-only|unable to open|EACCES|EROFS|EPERM/i.test(msg)) return 'not writable'
+  if (/sqlite|fts5|trigram|ERR_UNKNOWN_BUILTIN_MODULE/i.test(msg)) return 'node:sqlite or fts5 missing'
+  return [...(msg.split('\n')[0] || 'unknown error')].slice(0, 120).join('')
+}
+
 async function main() {
   const mode = process.argv[2]
   const input = readInput()
   if (!input || !['session', 'compact', 'prompt', 'capture'].includes(mode)) return
   // Loaded here, not at the top, so a Node without node:sqlite fails open instead of crashing on import.
-  const { normalizedHash, openMemory } = await import('./memory-store.mjs')
-  const memory = openMemory(input.cwd || process.cwd())
+  // session and compact say why memory is off; prompt and capture stay silent.
+  const visible = mode === 'session' || mode === 'compact'
+  let memory
+  let normalizedHash
+  try {
+    const store = await import('./memory-store.mjs')
+    normalizedHash = store.normalizedHash
+    memory = store.openMemory(input.cwd || process.cwd())
+  } catch (error) {
+    if (visible) emit('SessionStart', `Memory: unavailable (${reason(error)}); run construct-memory doctor`)
+    return
+  }
   if (!memory) return
   const session = input.session_id || 'unknown'
   try {

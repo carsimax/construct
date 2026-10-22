@@ -139,7 +139,8 @@ END;
 const sleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
 const isBusy = (error) => error?.errcode === 5 || error?.errcode === 6 || /SQLITE_BUSY|database is locked/i.test(error?.message ?? '')
 
-const stripPrivate = (text) => String(text ?? '').replace(/<private>[\s\S]*?<\/private>/gi, '[REDACTED]')
+// A closed span is redacted; an unclosed <private> redacts to the end of the text.
+const stripPrivate = (text) => String(text ?? '').replace(/<private>(?:[\s\S]*?<\/private>|[\s\S]*$)/gi, '[REDACTED]')
 
 // cutBytes is the longest prefix of text within maxBytes that ends on a character boundary.
 function cutBytes(text, maxBytes) {
@@ -251,6 +252,7 @@ export function openMemory(cwd, { now = () => new Date() } = {}) {
   const path = join(dir, 'memory.db')
   const db = new DatabaseSync(path)
   db.exec('PRAGMA busy_timeout = 5000')
+  db.exec('PRAGMA secure_delete = ON')
   const store = makeStore(db, path, now, repoName)
   try {
     store.init()
@@ -273,6 +275,17 @@ function makeStore(db, path, now, repoName) {
         if (!isBusy(error) || attempt >= BUSY_RETRIES) throw error
         sleep(Math.min(200, 10 * 2 ** attempt) + Math.random() * 10)
       }
+    }
+  }
+
+  // scrub runs after an erase has committed: merges the FTS index so no deleted text stays in a segment,
+  // and truncates the WAL. Best effort: a busy database never fails the delete.
+  function scrub(fts) {
+    try {
+      retry(() => db.exec(`INSERT INTO ${fts}(${fts}) VALUES ('optimize')`))
+      retry(() => db.exec('PRAGMA wal_checkpoint(TRUNCATE)'))
+    } catch {
+      // shortcut: a checkpoint that stays busy leaves erased text in the WAL until the next one, upgrade if that matters
     }
   }
 
@@ -432,7 +445,7 @@ function makeStore(db, path, now, repoName) {
     // an imported row leaves a tombstone of its import key. True for any existing row, false for an unknown id.
     remove(id, { hard = false } = {}) {
       if (hard) {
-        return write(() => {
+        const erased = write(() => {
           const row = one('SELECT import_id FROM observations WHERE id = ?', id)
           if (!row) return false
           if (row.import_id) run('INSERT OR IGNORE INTO import_tombstones (import_id, deleted_at) VALUES (?, ?)', row.import_id, stamp())
@@ -441,6 +454,8 @@ function makeStore(db, path, now, repoName) {
           run('DELETE FROM observations WHERE id = ?', id)
           return true
         })
+        if (erased) scrub('observations_fts')
+        return erased
       }
       return write(() => run('UPDATE observations SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL', stamp(), id).changes > 0)
     },
@@ -615,13 +630,15 @@ function makeStore(db, path, now, repoName) {
     // deletePrompt hard-deletes one prompt (the trigger drops its FTS entry); an imported one leaves a
     // tombstone of its import key so a re-import does not bring it back. False for an unknown id.
     deletePrompt(id) {
-      return write(() => {
+      const erased = write(() => {
         const row = one('SELECT import_id FROM user_prompts WHERE id = ?', id)
         if (!row) return false
         if (row.import_id) run('INSERT OR IGNORE INTO import_tombstones (import_id, deleted_at) VALUES (?, ?)', row.import_id, stamp())
         run('DELETE FROM user_prompts WHERE id = ?', id)
         return true
       })
+      if (erased) scrub('prompts_fts')
+      return erased
     },
 
     suggestTopicKey,

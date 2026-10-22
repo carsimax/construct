@@ -544,11 +544,20 @@ test('the memory card shows the stats read from construct-memory with the sessio
   expect(text).toContain('+4 this session')
 })
 
-test('a failing memory run leaves the card out', async ($, on) => {
-  await start($, on, { run: memoryRun(() => ({ ...ok(''), exitCode: 1, stderr: 'boom' })) })
+test('a failing memory run with an empty stderr leaves the card out', async ($, on) => {
+  await start($, on, { run: memoryRun(() => ({ ...ok(''), exitCode: 1, stderr: '' })) })
   const p = await pane($)
   await p.redraw()
   expect(await joined(p)).not.toContain('MEMORY')
+})
+
+test('a failing memory run with a stderr line shows the reason', async ($, on) => {
+  await start($, on, { run: memoryRun(() => ({ ...ok(''), exitCode: 1, stderr: 'construct-memory: boom' })) })
+  const p = await pane($)
+  await p.redraw()
+  const text = await joined(p)
+  expect(text).toContain('MEMORY')
+  expect(text).toContain('boom')
 })
 
 test('a missing node:sqlite shows why memory is off', async ($, on) => {

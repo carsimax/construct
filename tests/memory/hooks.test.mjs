@@ -1,7 +1,7 @@
 // Memory hooks (T3, S6): session, compact, prompt, and capture over the per-repository store.
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, utimesSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { DatabaseSync } from 'node:sqlite'
@@ -224,7 +224,7 @@ test('hooks.json registers each mode in exec form, existing hooks first', () => 
   assert.ok(hooks.SessionStart[0].hooks[0].args[0].endsWith('contract.mjs'))
 })
 
-test('every mode fails open when node:sqlite cannot load (W1)', () => {
+test('every mode fails open when node:sqlite cannot load, and session and compact say why (W1, S21c)', () => {
   const c = setup()
   const dir = scratchDir('construct-mem-nosqlite-')
   const hooks = join(dir, 'hooks.mjs')
@@ -234,7 +234,8 @@ test('every mode fails open when node:sqlite cannot load (W1)', () => {
   for (const mode of ['session', 'compact', 'prompt', 'capture']) {
     const r = spawnSync('node', ['--no-deprecation', '--import', preload, SCRIPT, mode], { cwd: c.repo, encoding: 'utf8', input: JSON.stringify({ session_id: SID, prompt: 'hello there', last_assistant_message: '## Key Learnings\n1. A long enough learning item here.' }), env: { ...process.env, CLAUDE_PLUGIN_DATA: c.data } })
     assert.equal(r.status, 0, `${mode}: ${r.stderr}`)
-    assert.equal(r.stdout, '', mode)
+    const line = 'Memory: unavailable (node:sqlite or fts5 missing); run construct-memory doctor'
+    assert.equal(r.stdout, mode === 'session' || mode === 'compact' ? JSON.stringify({ hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: line } }) : '', mode)
     assert.equal(r.stderr, '', mode)
   }
 })
@@ -245,3 +246,45 @@ test('capture: passive saves record no relation candidates', () => {
   assert.equal(passive(c).length, 2)
   assert.deepEqual(rows(c, 'SELECT * FROM memory_relations'), [])
 })
+
+describe_unavailable()
+function describe_unavailable() {
+  const breakStore = (ctx, how) => {
+    const path = withStore(ctx, (s) => s.path)
+    if (how === 'newer') {
+      const db = new DatabaseSync(path)
+      db.exec('PRAGMA user_version = 99')
+      db.close()
+    } else {
+      rmSync(path, { force: true })
+      rmSync(`${path}-wal`, { force: true })
+      rmSync(`${path}-shm`, { force: true })
+      mkdirSync(path)
+    }
+  }
+  for (const mode of ['session', 'compact']) {
+    test(`${mode} says memory is unavailable when the schema is newer (S21c)`, () => {
+      const ctx = setup()
+      breakStore(ctx, 'newer')
+      const r = hook(ctx, mode, { session_id: SID })
+      assert.equal(r.code, 0)
+      assert.equal(r.json.hookSpecificOutput.hookEventName, 'SessionStart')
+      assert.equal(ctxOf(r), 'Memory: unavailable (newer schema); run construct-memory doctor')
+    })
+  }
+  test('session says not writable when the database cannot be opened (S21c)', () => {
+    const ctx = setup()
+    breakStore(ctx, 'dir')
+    assert.equal(ctxOf(hook(ctx, 'session', { session_id: SID })), 'Memory: unavailable (not writable); run construct-memory doctor')
+  })
+  test('prompt and capture stay silent when the store is unavailable, and so does a non-repository (S21c)', () => {
+    const ctx = setup()
+    breakStore(ctx, 'newer')
+    assert.equal(hook(ctx, 'prompt', { session_id: SID, prompt: 'hello there' }).out, '')
+    assert.equal(hook(ctx, 'capture', { session_id: SID, last_assistant_message: 'x' }).out, '')
+    const outside = scratchDir('construct-mem-nogit-')
+    const r = hook(ctx, 'session', { session_id: SID }, { cwd: outside })
+    assert.equal(r.code, 0)
+    assert.equal(r.out, '')
+  })
+}
