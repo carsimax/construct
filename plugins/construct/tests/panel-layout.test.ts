@@ -153,8 +153,10 @@ test('main card branch row: first body row, clipped, control-stripped, hidden wi
   expect(rowsOf().some((r) => r.includes('· main'))).toBe(false)
   expect(at({ git: { ...git, branch: 'a\u001b[31mb' } })).toMatch(/^⎇ a\[31mb · /)
   const long = at({ git: { ...git, branch: 'x'.repeat(100) }, columns: 40 })
-  expect(long.length).toBe(36)
-  expect(long.endsWith('…')).toBe(true)
+  // L13: the branch gives way, the effort and the request count stay
+  expect(long.length).toBeLessThanOrEqual(36)
+  expect(long).toContain('…')
+  expect(long).toContain('7 req')
   for (const g of [null, { ...git, branch: '' }, { ...git, branch: undefined }]) expect(at({ git: g }).startsWith('⎇')).toBe(false)
 })
 
@@ -621,4 +623,94 @@ test('MEMORY card clips at the narrowest width', async () => {
 test('prettyModel names the new 5.x ids', () => {
   expect(prettyModel('claude-fable-5-1')).toBe('Fable 5.1')
   expect(prettyModel('claude-haiku-5-5')).toBe('Haiku 5.5')
+})
+
+// ---- slice-2 corrections (L13) ---------------------------------------------------
+
+const agentRows = (rows: string[]) => rows.filter((r) => /^[⌕⚒⊨◇⚖◎•] /.test(r))
+
+test('L13 agent rows: a running worker started first stays visible behind six later finished agents', () => {
+  const agents = [
+    agent({ id: 'w', startedMs: NOW - 900_000 }),
+    ...Array.from({ length: 6 }, (_, i) => agent({ id: `d${i}`, role: 'explorer', status: 'done', startedMs: NOW - 100_000 + i * 1000, endedMs: NOW - 50_000 + i * 1000 })),
+  ]
+  const rows = rowsOf({ panel: { ...full(), agents } })
+  expect(agentRows(rows).length).toBe(6)
+  expect(rows.some((r) => /^⚒ worker\s+building/.test(r))).toBe(true)
+  expect(rows).toContain('+1 earlier')
+})
+
+test('L13 agent rows: seven early running workers and three later finished explorers show six running rows and +4 earlier', () => {
+  const agents = [
+    ...Array.from({ length: 7 }, (_, i) => agent({ id: `w${i}`, startedMs: NOW - 900_000 + i * 1000 })),
+    ...Array.from({ length: 3 }, (_, i) => agent({ id: `e${i}`, role: 'explorer', status: 'done', startedMs: NOW - 100_000, endedMs: NOW - 50_000 })),
+  ]
+  const rows = rowsOf({ panel: { ...full(), agents }, columns: 66 })
+  expect(agentRows(rows).length).toBe(6)
+  expect(rows.filter((r) => /^⚒ worker\s+building/.test(r)).length).toBe(6)
+  expect(rows).toContain('+4 earlier')
+  expect(find(buildPanel(args({ panel: { ...full(), agents } })), '+4 earlier')?.props.color).toBe('subtle')
+})
+
+test('L13 agent rows at 40 columns always end with the clock: model, then meter, then name and verb give way', () => {
+  const agents = [agent({ id: 'r', role: 'review_reliability', type: 'construct:review-reliability' }), agent({ id: 'j', role: 'judge_a', type: 'construct:judge-a', startedMs: NOW - 3_725_000 })]
+  const rows = agentRows(rowsOf({ panel: { ...full(), agents }, columns: 40 }))
+  expect(rows.length).toBe(2)
+  for (const r of rows) {
+    expect(r).toMatch(/\d+:\d\d$|\dh\d\d$/)
+    expect(r.length).toBeLessThanOrEqual(36)
+    expect(r).not.toMatch(/Sonnet|▮|▯/)
+  }
+  // narrower still: the name and verb are clipped with an ellipsis, the clock stays
+  const tight = agentRows(rowsOf({ panel: { ...full(), agents: [agent({ id: 'r', role: 'review_reliability', type: 'construct:review-reliability', startedMs: NOW - 3_725_000 })] }, columns: 40 }))
+  expect(tight[0]).toMatch(/1h02$/)
+})
+
+test('L13 agent rows at 40 columns clip the name and verb with an ellipsis when even the clock row is tight', () => {
+  const long = agent({ id: 'r', role: 'review_reliability', type: 'construct:review-reliability', startedMs: NOW - 36_000_000 })
+  const row = agentRows(rowsOf({ panel: { ...full(), agents: [long] }, columns: 40 }))[0]
+  expect(row.endsWith('10h00')).toBe(true)
+  expect(row.length).toBeLessThanOrEqual(36)
+})
+
+test('L13 main row keeps the effort word and request count behind a long branch at 40 columns', () => {
+  const row = rowsOf({ columns: 40, git: { ...git, branch: 'feat/panel-clean-room-2-layout-with-extra-words' } }).find((r) => r.startsWith('⎇'))!
+  expect(row).toContain('medium')
+  expect(row).toContain('7 req')
+  expect(row).toContain('…')
+  expect(row.length).toBeLessThanOrEqual(36)
+  expect(row.split(' · ')[0].length).toBeGreaterThanOrEqual(2 + 8)
+})
+
+test('L13 main row clips the branch before dropping the mode at 66 columns, and drops the mode when the branch would fall under 8 characters', () => {
+  const panel = { ...full(), main: { steps: 128, model: 'claude-opus-5-5', effort: 'high', mode: 'bypassPermissions' } }
+  const row = rowsOf({ panel, columns: 66, git: { ...git, branch: 'feat/panel-clean-room-2-layout' } }).find((r) => r.startsWith('⎇'))!
+  expect(row).toContain('128 req')
+  expect(row).toContain('bypassPermissions')
+  expect(row).toContain('…')
+  const small = rowsOf({ panel, columns: 40, git: { ...git, branch: 'feat/panel-clean-room-2-layout' } }).find((r) => r.startsWith('⎇'))!
+  expect(small).toContain('128 req')
+  expect(small).not.toContain('bypassPermissions')
+  expect(small.split(' · ')[0].replace('⎇ ', '').length).toBeGreaterThanOrEqual(8)
+})
+
+test('L13 colors: gate status, zero denied, odd joints, branch, memory details, ctx tokens, and legend labels are dim again', () => {
+  const tree = buildPanel(args({ memory, panel: { ...full(), gate: { ...full().gate, verdicts: { rule: 4, ask: 0, cleared: 16, deny: 0 } } } }))
+  expect(find(tree, '20 checks')?.props.color ?? find(tree, 'all clear')?.props.color).toBe('inactive')
+  expect(find(tree, '0 denied')?.props.color).toBe('inactive')
+  expect(find(tree, '4 allowed')?.props.dimColor).toBe(true)
+  expect(find(tree, '━')?.props.color).toBe('subtle')
+  expect(leaves(tree).find((l) => l.text === '○')?.props.color).toBe('subtle')
+  expect(find(tree, 'feat/x')?.props.color).toBe('inactive')
+  expect(find(tree, 'last save')?.props.dimColor).toBe(true)
+  expect(find(tree, '666k/1.0M')?.props.dimColor).toBe(true)
+})
+
+test('L13 row budget: body rows 0, negative, or unknown let the changes card take up to 10 rows', () => {
+  const many = Array.from({ length: 30 }, (_, i) => ({ path: `src/f${i}.js`, added: 30 - i, removed: 0 }))
+  for (const rows of [0, -5, undefined, Number.NaN]) {
+    const out = rowsOf({ rows, changes: many })
+    expect(out.filter((r) => r.startsWith('src/')).length).toBe(9)
+    expect(out.at(-1)).toBe('+21 more')
+  }
 })

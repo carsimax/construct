@@ -283,14 +283,13 @@ export function onToolCall(state, e) {
 const BLOCKING = ['AskUserQuestion', 'ExitPlanMode']
 export const isBlockingTool = (tool) => BLOCKING.includes(tool)
 
+// A flag that already matches returns the input object itself, before any repair.
 export function onBlocked(state) {
-  const s = open(state)
-  return s.blocked ? s : { ...s, blocked: true }
+  return state?.blocked === true ? state : { ...open(state), blocked: true }
 }
 
 export function onUnblocked(state) {
-  const s = open(state)
-  return s.blocked ? { ...s, blocked: false } : s
+  return state?.blocked === false ? state : { ...open(state), blocked: false }
 }
 
 // ---- selectors -----------------------------------------------------------

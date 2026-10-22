@@ -723,3 +723,15 @@ test('damaged state: counts stay at or above 0, an unknown pending bucket and od
   expect(isOutsideTasks('/proj/odd/tasks/x.md', undefined)).toBe(false)
   expect(isOutsideTasks('/proj/src/a.js', undefined)).toBe(true)
 })
+
+test('L13 onUnblocked and onBlocked return the input object when the flag already matches, before any repair', () => {
+  const s = onTurnStart(initialState(), { agentId: undefined, turnId: 't1', nowMs: 5 })
+  expect(onUnblocked(s)).toBe(s)
+  const b = onBlocked(s)
+  expect(onBlocked(b)).toBe(b)
+  const bb = onBlocked(onBlocked(s))
+  expect(onBlocked(bb)).toBe(bb)
+  expect(bb).toEqual(onBlocked(s))
+  const damaged = { ...s, agents: 'x' } as any
+  expect(onUnblocked(damaged)).toBe(damaged)
+})
