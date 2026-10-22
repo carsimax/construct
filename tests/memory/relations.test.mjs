@@ -340,6 +340,24 @@ describe('export and import of relations', () => {
   })
 })
 
+describe('import of relation confidence', () => {
+  test('a confidence outside [0,1] or not a number is stored as null; a valid one is kept', () => {
+    const src = fresh()
+    const a = note(src.store, 'Conf alpha subject').id
+    const b = note(src.store, 'Conf beta subject').id
+    src.store.compare(a, b, 'related', { confidence: 0.5 })
+    const data = src.store.exportData()
+    const project = data.observations[0].project
+    for (const [given, expected] of [[1.5, null], [-0.1, null], ['high', null], [0.4, 0.4]]) {
+      const copy = JSON.parse(JSON.stringify(data))
+      copy.relations[0].confidence = given
+      const dest = fresh()
+      assert.equal(dest.store.importExport(copy, { project }).relations, 1)
+      assert.equal(rels(dest.store)[0].confidence, expected, String(given))
+    }
+  })
+})
+
 describe('CLI', () => {
   const save = (repo, title, extra = {}) => cli(repo, ['save'], JSON.stringify({ title, content: `body ${title}`, ...extra }))
 

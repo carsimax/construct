@@ -836,7 +836,7 @@ function makeStore(db, path, now, repoName) {
           if (source === undefined || target === undefined || source === target || !RELATIONS.includes(r.relation === 'pending' ? 'related' : r.relation)) continue
           const at = stamp()
           const { changes } = run('INSERT OR IGNORE INTO memory_relations (id, source_id, target_id, relation, status, reason, evidence, confidence, marked_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            relationId(), source, target, r.relation, r.status === 'judged' ? 'judged' : 'pending', text(r.reason), text(r.evidence), r.confidence ?? null, r.marked_by === 'agent' ? 'agent' : 'save', r.created_at || at, r.updated_at || at)
+            relationId(), source, target, r.relation, r.status === 'judged' ? 'judged' : 'pending', text(r.reason), text(r.evidence), Number.isFinite(r.confidence) && r.confidence >= 0 && r.confidence <= 1 ? r.confidence : null, r.marked_by === 'agent' ? 'agent' : 'save', r.created_at || at, r.updated_at || at)
           counts.relations += changes
         }
         return counts
