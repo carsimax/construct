@@ -199,6 +199,15 @@ describe('construct-memory', () => {
     fails(cli(repo, ['summary', '--session', 's9'], '  \n'), /content/i)
   })
 
+  test('summary redacts <private> text before storing it', () => {
+    const repo = makeRepo()
+    ok(cli(repo, ['summary', '--session', 's10'], 'Goal <private>secret</private> done'))
+    const store = openMemory(repo)
+    const row = new DatabaseSync(store.path).prepare('SELECT summary FROM sessions WHERE id = ?').get('s10')
+    store.close()
+    assert.equal(row.summary, 'Goal [REDACTED] done')
+  })
+
   test('review list shows due observations and review done clears them', () => {
     const repo = makeRepo()
     ok(saveJson(repo, { title: 'Stale pref', content: 'old', type: 'preference' }))

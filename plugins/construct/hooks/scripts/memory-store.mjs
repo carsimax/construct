@@ -364,7 +364,7 @@ function makeStore(db, path, now) {
       write(() => {
         const at = stamp()
         run('INSERT OR IGNORE INTO sessions (id, started_at) VALUES (?, ?)', id, at)
-        run('UPDATE sessions SET ended_at = ?, summary = ? WHERE id = ?', at, summary ?? null, id)
+        run('UPDATE sessions SET ended_at = ?, summary = ? WHERE id = ?', at, summary == null ? null : stripPrivate(summary), id)
       })
     },
 

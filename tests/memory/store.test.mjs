@@ -480,4 +480,14 @@ describe('hasHash', () => {
     assert.equal(store.hasHash(normalizedHash('some content here')), false)
     store.close()
   })
+
+  test('endSession redacts <private> text in the summary and in context', () => {
+    const { store } = open()
+    store.endSession('priv', 'kept <private>secret</private> done')
+    const [row] = raw(store, "SELECT summary FROM sessions WHERE id = 'priv'")
+    assert.equal(row.summary, 'kept [REDACTED] done')
+    assert.match(store.context(), /\[REDACTED\]/)
+    assert.doesNotMatch(store.context(), /secret/)
+    store.close()
+  })
 })
