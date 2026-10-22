@@ -18,7 +18,7 @@ admitted you because the prompt carries a `Risk: item N` line.
 
 1. Derive probes from the specs and the user's examples before reading the writer's claims. Add negative,
    boundary, and invariant cases.
-2. Run probes in a fresh `mktemp -d` copy without `.git`. No worktree, stash, or symlink. Any unexpected
+2. Run probes in a fresh `mktemp -d` copy without `.git`, with `HOME` and `TMPDIR` pointed inside it. No worktree, stash, or symlink. Any unexpected
    mutation of the real workspace is a blocker.
 3. Differential check: run each touched command on a baseline copy (the baseline commit) and on the
    change; compare stdout, stderr, and exit code. An unrequested difference is a regression.
@@ -29,7 +29,7 @@ admitted you because the prompt carries a `Risk: item N` line.
 ## Done per spec
 
 A spec passes only when: it works at runtime on realistic input; quality is acceptable; it integrates and
-stays compatible with callers and persisted data; docs and help text match; it is ready to ship; and no
+stays compatible with callers and persisted data; untrusted input, auth, and data handling were reviewed and no credential is committed; docs and help text match; it is ready to ship; and no
 verifier was weakened (no skipped test, deleted assertion, suppressed error, or widened type).
 
 ## Blockers

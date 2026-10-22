@@ -36,3 +36,10 @@ test('every construct-memory command and flag the skill names is in the help out
   for (const [, command, sub] of commands) assert.ok(help.includes(`${command}${sub ? ` ${sub}` : ''}`), `${command} ${sub ?? ''}`)
   for (const flag of new Set(skill.match(/--[a-z][a-z-]*/g))) assert.ok(help.includes(flag), flag)
 })
+
+test('the skill review months equal the store values', () => {
+  const line = skill.match(/in months: ([^.]+)\./)?.[1]
+  assert.ok(line, 'the skill lists the months')
+  const listed = Object.fromEntries(line.split(', ').map((e) => e.split(' ')).map(([t, m]) => [t, Number(m)]))
+  assert.deepEqual(listed, REVIEW_MONTHS)
+})

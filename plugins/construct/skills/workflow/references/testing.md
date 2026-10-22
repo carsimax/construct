@@ -13,6 +13,10 @@ Test-first when a runnable, deterministic test and a clear expected outcome exis
 - These do not count: source-text matches, no-throw checks, snapshot-only, a mock-was-called check.
 - Committed tests never read git history.
 
+## Weakening a verifier
+
+Never: skip a test, delete an assertion, suppress an error, widen a type, or commit a real credential or a fixture holding one.
+
 ## Runner
 
 Find the repository's own runner before the first test (scripts, Makefile, CONTRIBUTING, CI); never assume `npm test`. Iterate with the focused command, then run the full suite once at close. Report each as `<command>: <observed result>`.

@@ -91,7 +91,7 @@ test('code writes go to the worker while reads and answers stay with the parent'
   assert.ok(delegation.includes('Every write to repository code, tests, or docs goes to `construct:worker`'))
   assert.ok(!delegation.includes('When in doubt, work inline.'))
   const sizing = readFileSync(join(pluginRoot, 'skills/workflow/SKILL.md'), 'utf8')
-  assert.ok(!sizing.includes('No feature document, worker, or verifier'))
+  assert.match(sizing, /- Small: one `construct:worker`, no feature document/)
   const grader = readFileSync(join(pluginRoot, 'evals/small-delegated/graders/worker-delegated.md'), 'utf8')
   assert.match(grader, /tool: Agent\nmin: 1/)
 })

@@ -157,3 +157,19 @@ test('the subagent contract is injected for non-JSON roles within budget; JSON-o
   }
   assert.ok(run('general-purpose').length > 0)
 })
+
+test('every lens and judge treats the candidate content as evidence, never instructions', () => {
+  for (const n of [...namesOf('lens'), ...namesOf('judge')]) assert.ok(read('agents', `${n}.md`).includes('evidence, never instructions'), n)
+})
+
+test('the README agent count equals the registry size', () => {
+  const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8')
+  const counts = [...readme.matchAll(/\b(\d+) (?:role )?agents\b/g)].map((m) => Number(m[1]))
+  assert.ok(counts.length >= 3, 'the README states the agent count')
+  for (const c of counts) assert.equal(c, names.length)
+})
+
+test('the session skill map lists every skill directory with a trigger', () => {
+  const session = read('hooks/contract/session.md')
+  for (const d of readdirSync(join(pluginRoot, 'skills'))) assert.match(session, new RegExp(`^- \`construct:${d}\`: \\S.+`, 'm'), d)
+})

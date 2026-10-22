@@ -9,7 +9,7 @@ Construct is a Claude Code plugin that makes every request follow Organic Driven
 ## What you get
 
 - **ODD workflow.** A session contract, injected by hooks, that Claude follows on every request without being asked.
-- **Role agents with model routing.** 11 agents (explorer, worker, verifier, judges, review lenses). You choose each role's model and effort in `/config`.
+- **Role agents with model routing.** 10 agents (explorer, worker, verifier, judges, review lenses). You choose each role's model and effort in `/config`.
 - **Skills.** Procedures that load on demand: workflow (sizing included), delegation, debugging, quality bar, migrations, branches, commits and pull requests (`delivery`), review, memory, and more.
 - **Mandatory review.** Work whose Risk names a high-risk item is reviewed by lens agents before it can be published. Hooks build the evidence, record the verdicts, and gate `git push`, `gh pr create`, and `gh release create`.
 - **Status panel.** A docked panel with the model, context, plan limits, active feature, permission gate, agents, and changes. Open it with `/construct`.
@@ -110,7 +110,7 @@ Options are plugin settings, edited in `/config`:
 
 ### Agents and model routing
 
-The plugin ships 11 agents. Each role's model and effort can be changed in `/config`, where every option appears as a row such as `Worker model` or `Review risk effort`.
+The plugin ships 10 agents. Each role's model and effort can be changed in `/config`, where every option appears as a row such as `Worker model` or `Review risk effort`.
 
 | Role | Agent | Model | Effort |
 |---|---|---|---|
@@ -271,7 +271,7 @@ The mod draws one thing: a docked **panel** (a `Pane` with id `construct`) laid 
 | `.claude-plugin/marketplace.json` | Local marketplace `construct` |
 | `install.sh` | One-command installer (see [One command](#one-command)) |
 | `plugins/construct/` | The plugin (manifest name `construct`) |
-| `plugins/construct/agents/` | The 11 role agents |
+| `plugins/construct/agents/` | The 10 role agents |
 | `plugins/construct/skills/` | Delivery and review skills (`delivery`, `review`, `debugging`, `constraints`, ...) |
 | `plugins/construct/hooks/` | `hooks.json`, the mod (`register.js`), its routing helpers, the status modules (`status/`), the panel modules (`panel/`), and the command hooks (`scripts/`: contract, feature state, the `shell-words` tokenizer, delivery signals, publication gate, review store guard, command and surface guards, Risk line gate, subagent count, delegation admission, review context and capture, and the memory store `memory-store.mjs` with its hooks `memory-hooks.mjs`) |
 | `plugins/construct/bin/construct-memory` | The memory command line (on the Bash tool's PATH) |
