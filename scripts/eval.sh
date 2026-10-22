@@ -7,7 +7,7 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-copy_root="$(mktemp -d)"
+copy_root="$(cd "$(mktemp -d)" && pwd -P)" # physical path: the agent sees /private/var, not /var
 plugin_copy="$copy_root/construct"
 
 cp -R "$repo_root/plugins/construct" "$plugin_copy"
