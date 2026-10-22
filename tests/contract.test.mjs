@@ -59,8 +59,6 @@ test('the session contract carries the ODD protocol, task size, risk line, and d
     'construct:general',
     'construct:workflow',
     'construct:delegation',
-    'construct:task-size-risk',
-    'construct:lossless-prompts',
     'construct:memory',
     'construct-memory',
     'construct:review',
@@ -92,7 +90,7 @@ test('code writes go to the worker while reads and answers stay with the parent'
   const delegation = readFileSync(join(pluginRoot, 'skills/delegation/SKILL.md'), 'utf8')
   assert.ok(delegation.includes('Every write to repository code, tests, or docs goes to `construct:worker`'))
   assert.ok(!delegation.includes('When in doubt, work inline.'))
-  const sizing = readFileSync(join(pluginRoot, 'skills/task-size-risk/SKILL.md'), 'utf8')
+  const sizing = readFileSync(join(pluginRoot, 'skills/workflow/SKILL.md'), 'utf8')
   assert.ok(!sizing.includes('No feature document, worker, or verifier'))
   const grader = readFileSync(join(pluginRoot, 'evals/small-delegated/graders/worker-delegated.md'), 'utf8')
   assert.match(grader, /tool: Agent\nmin: 1/)

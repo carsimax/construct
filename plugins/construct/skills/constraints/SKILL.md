@@ -69,5 +69,5 @@ Return the detected stack in two lines, then one question with its guess and def
 ## References
 
 - [references/constraints-template.md](references/constraints-template.md): `CONSTRAINTS.md` template, default thresholds with reasons, ratchet rules.
-- `construct:task-size-risk`: the Risk line.
+- `construct:workflow`: the Risk line.
 - `construct:workflow`: test-first and verification loop.

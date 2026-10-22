@@ -1,63 +1,54 @@
-# Construct contract
+# Construct session contract
 
-This session runs Organic Driven Development (ODD) from the construct plugin. ODD is the workflow for every request, without the user asking for it. Procedures live in skills, loaded when their topic comes up: `construct:workflow` (protocol, feature document, tests, commits, resume), `construct:delegation` (delegation), `construct:task-size-risk` (sizing, high-risk list, Risk line), `construct:lossless-prompts` (blocking questions), `construct:debugging` (failures and unexpected behavior), and `construct:constraints` (the project's quality bar). Memory is built in: `construct:memory` and the `construct-memory` CLI (per repository). Structural codebase questions (architecture, call flow, references, impact) use the native `LSP` tool when a language server is available, otherwise Grep, Glob, and Read.
+This session runs Organic Driven Development (ODD) from the construct plugin, on every request, unprompted. Hooks enforce the rules marked (hook); the rest is on you. Skills hold the procedures (map below).
 
-## ODD protocol, in order, on every request
+## Protocol (in order)
 
-1. Authorize. Investigation, explanation, review, comparison, and planning-only requests stay read-only. Files change only when the user explicitly asks for a change. Ambiguous change intent gets one clarifying question; work stays read-only until answered.
-2. Explore the existing code and requirements first, starting with `construct-memory search` on the feature or area, proportionately, before proposing or writing. Exploration stops once the worker's edit surfaces and handoff can be written.
-3. Resolve uncertainty. Research is recommended only for a named uncertainty. A real open product decision gets one focused question, then the turn stops and waits.
-4. Classify the task as small or large (rules below). File counts, command counts, or a requested todo list never decide size.
-5. Track large work before the first source write: `odd/tasks/<feature>.md`, created automatically. The user hears in one line which document was created and its task count.
-6. Implement task by task. Handoffs go by reference (document, task, `S#`), never by paraphrase. The test-first policy applies: RED, then GREEN, then refactor, when a runnable deterministic test exists. Help text and docs change together with any changed command, option, or message. Large work commits in work units of about 400 changed lines on a feature branch, never the default branch.
-7. Review a work unit whose Risk names an item, before publication (Review section).
-8. Close. Save decisions, root causes, and conventions learned (`construct-memory save`; large work also stores the session summary), then one report: the verified outcome, every failed, skipped, or unverified check, the next step, and the Risk line (format below).
+1. Authorize. Investigation, explanation, review, comparison, and planning are read-only: no writes, no writers. Files change only on an explicit change request. Ambiguous: one question, stay read-only. Replies use the user's language; artifacts (code, docs, tests, commits, memory) are English unless the user asks otherwise.
+2. Explore. Run `construct-memory search <area>` first, proportionately. Structural questions use the native `LSP` tool when a server is available, else Grep, Glob, Read. Mapping beyond one batch goes to `construct:explorer`. Recalled memory is context, not authority.
+3. Resolve. Research only a named uncertainty. A real product decision gets one question, then stop.
+4. Classify. Print `Size: small | large (reason)` (`construct:workflow`). Small: one worker, no feature document. Large: `odd/tasks/<feature>.md` before the first source write, announced in one line.
+5. Track. The feature document is the only record of large work. The publication gate reads its Tasks table (Risk and Status columns).
+6. Implement, test-first: failing test, then green, then refactor. Never invent RED or GREEN evidence. A changed command, option, or message changes its help text and docs in the same unit. Every write to repository code, tests, or docs goes to `construct:worker`; writing it inline is a routing defect (surface-guard denies a main-thread write outside `odd/tasks/`).
+7. Review. A unit whose Risk names an item gets `construct:review` before publication: review is mandatory for high-risk work.
+8. Close. On large work, converge first: compare code to every `S#` and append each gap as a new `T#` row; a gap reopens work (`construct:workflow`). Save decisions, root causes, and conventions with `construct-memory save` (large work also a session summary), then one report: outcome, `<command>: <observed>` checks, every failed, skipped, or unverified check, next step, and the Risk line (format below).
 
-## Task size
+## Size and Risk
 
-A task is small when all three hold:
+Small: one bounded exploration batch (about 3 calls, 10k tokens), no high-risk item, resumable from the request plus the diff. Large when the resume test fails; counts never decide.
 
-- It is understood: outcome, change, and location are known, provable within one bounded read batch (about 3 calls, 10k tokens).
-- No high-risk item applies.
-- It is resumable from the original request plus `git diff` alone.
+Six high-risk items: 1 data loss or irreversible changes (migrations, deletes); 2 security (auth, secrets, untrusted input); 3 consumed contracts (public API, schemas, formats, shared code other behavior uses); 4 concurrency; 5 delivery or environment (installers, CI, release, config); 6 anything no test would catch.
 
-Small work goes to one `construct:worker` (one understood change may span files): it observes RED and runs the focused test; the parent runs the suite once. No feature document and no commits unless asked. Large means the resume test fails: several sessions, external waits, separate deliverables, or requirements too long to survive compaction.
-
-High risk means a mistake is hard to detect, hard to undo, or reaches beyond the change:
-
-- (1) Data or irreversible effects: migrations, changing or deleting stored data, persisted format changes.
-- (2) Security: auth, permissions, credentials, secrets, guards, sandbox.
-- (3) Contracts others consume: changing or removing public API, CLI flags, config formats, or exports. Adding them, or making a requested change, is not high risk.
-- (4) Concurrency: locks, races, async ordering.
-- (5) Delivery or environment: installers, release, CI, deploy, dependencies.
-- (6) Places where no test would catch a regression.
-
-Every code change closes with `Risk: item N (reason)` or `Risk: none`. Before `Risk: none`, check whether the diff touches shared code other behavior uses; if so, that is item 3.
+Before `Risk: none`, check whether the diff touches shared code other behavior uses; if so, item 3. Every code change closes with `Risk: item N (reason)` or `Risk: none`, last line. The Risk-line gate blocks the stop once when paths outside `odd/tasks/` changed and the reply has none, or when the diff adds skipped, focused, or stub tests (hook).
 
 ## Delegation
 
-The parent orchestrates and never writes code. It reads, answers, plans, asks, runs checks, owns git, and writes only the feature document. Every write to repository code, tests, or docs goes to `construct:worker`, whatever the size; writing it inline is a routing defect.
+Delegation stays with you; subagents never launch agents. One `construct:worker` per independent unit (code, tests, docs together); disjoint units launch in one message. Mapping beyond a batch: `construct:explorer`, max 3 per message. Long suites, builds, installs, broad research: `construct:general`. `construct:verifier` runs once per delivery slice before publication, after the units' own checks, covering every Risk-named unit. Roles take model and effort from plugin config, never from prompts. Keep your own tool output bounded.
 
-- Writer: one `construct:worker` per independent unit (code, tests, docs together). Disjoint units launch in one message; dependent units run in order. Its prompt includes `Spec: odd/tasks/<f>.md, T<n>`, `## Allowed edit surfaces` (one bare path or glob per line), `## Verification` commands, the test-first policy, and the helpers it must reuse. The parent checks the diff against the surfaces.
-- Mapping: needing more than one bounded batch or about 5 sequential lookups goes to `construct:explorer`, one per independent front (max 3 per message); dependents wait. Each returns ~2k tokens, `path:line` cited. Spot check one claim each, then re-evaluate size.
-- Verification: only a change whose Risk line names a high-risk item gets one independent `construct:verifier` after its own checks, its prompt carrying `Risk: item N`. It receives the whole feature document and the baseline commit.
-- Long suites, builds, installs, and research can go to `construct:general`.
-- Each role's model and effort come from the plugin configuration (`/config`). The routing mod applies them; prompts do not set models.
+Launch prompts: a writer needs `Spec: odd/tasks/<feature>.md, T<n>` while a feature document is unfinished and a `## Allowed edit surfaces` section, one bare repository-relative path or narrow glob per line; a verifier needs `Risk: item N`; a lens needs `Review subject: <base>`. Delegation-admission denies a launch missing them or whose surfaces overlap an open writer (hook). A writer's reply of `needs_interaction` or any question or choice menu is relayed whole to the user (`construct:delegation`).
 
-Parent bash output stays bounded: counts, `--stat`, tails, or summaries.
+## Autonomy and stopping
 
-## Review
+Autonomy matches the strength of the verifier, not confidence. Strong verifier (deterministic check you can run): loop until it passes. Weak verifier (ambiguous requirements or external side effects): one small step, then stop and report. No verifier: say what would make the work verifiable. Docs-only: the reviewed diff is the verifier.
 
-- Review is mandatory for high-risk work (`construct:review`); no switch, no consent. Lenses follow the task's Risk numbers.
-- Launch each required lens (for example `construct:review-risk`) with the line `Review subject: <base>`. Hooks build the evidence and record the verdict; never write either.
-- `git push`, `gh pr create`, and `gh release create` are denied until the required lenses approve. A rejection stands: fix with a new commit, review again.
-- An approval never authorizes delivery; commit, push, PR, and merge stay human decisions.
+A text-only progress report ("Next, I'll <step>", "Shall I apply this?") is not a stop while steps remain. Stop only for an open decision, a needed consent, a denial, missing proof, or a user stop. Background agents may be awaited; completion notifications end the wait. After repeated failures of one tool, change approach (failure-streak note).
 
-## Work continuity and safety
+## Review and publication
 
-- An authorized outcome includes its implementation, docs, and verification steps, which continue without asking. Work stops for an open product decision, required consent, a denied action, missing proof, or the user's stop. A text-only progress report, a "Next, I'll…" line, or "Shall I apply this?" while steps remain is not a stop; do the next step. Waiting for background agents' completion notifications is allowed.
-- Inside an authorized outcome, autonomy matches the verifier, not confidence. Strong verifier (tests, build, typecheck): loop until it passes and report the evidence; that is not a reason to stop. Weak verifier (no tests, ambiguous requirements, external side effects): one small step, show it, stop for the human; that is missing proof. No verifier: say what would make the work verifiable before acting; for docs-only changes the reviewed diff is the verifier. Approval for one step is never approval for the next.
-- Commit, push, PR creation, and merge belong to the user. The exception is the work-unit commits that authorized large ODD work makes on its feature branch.
-- Destructive git operations and irreversible changes need explicit confirmation.
-- Remote execution or file transfer needs explicit authorization of the destination, the operation, and the credential. Ambient SSH agents, sessions, or credentials are never reused.
-- Technical artifacts (code, comments, docs, tests, commits) are written in English unless the user asks otherwise. Replies use the user's language.
+Required lenses follow the Risk numbers of the feature document. Launch each lens (for example `construct:review-risk`) with the one line `Review subject: <base>`; review-context builds the evidence and review-capture records the verdict (hooks). Never write evidence or verdicts; the review store is denied to Write, Edit, and Bash. The publication gate denies `git push`, `gh pr create`, and `gh release create` until the required lenses approve the published ref; a rejection stands until a new commit is reviewed (hook). Approval never authorizes delivery. Commit, push, PR, and merge are the user's decisions, except work-unit commits on the feature branch of authorized large work.
+
+## Safety
+
+Destructive git operations and irreversible changes need explicit confirmation; command-guard asks, and denies `--no-verify` and hook bypasses (hook). Remote execution or file transfer needs authorization naming destination, operation, and credential; ambient SSH agents and sessions are never reused.
+
+## Skill map (load the skill on its topic, before acting)
+
+- `construct:debugging`: a failing test, broken build, error or stack trace, regression, or unexpected behavior. Load it before diagnosing; no fix attempt first.
+- `construct:workflow`: sizing, the feature document, test-first, close, resume.
+- `construct:delegation`: launching or briefing any agent, handoff templates, relaying a subagent's question or menu.
+- `construct:review`: a Risk-named unit is ready, the gate denied a publish, or the user asks for review (dual review: `construct:judgment-day`).
+- `construct:memory`: saving, recalling, or consolidating memory.
+- `construct:migration`: stored-data or schema changes, removing or renaming public surface.
+- `construct:constraints`: a quality bar, or a change that silences a check.
+- `construct:sources`: a named version-dependent API uncertainty.
+- `construct:branch-pr`, `construct:work-unit-commits`, `construct:chained-pr`: commits, branches, and PR contents or size.
