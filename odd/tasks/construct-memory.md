@@ -33,7 +33,7 @@ Source: L1-L3, map in L4. Engram references are to commit `258e7a3` of github.co
 | T4 | S7 | `construct-memory import` from an engram export; tests with a fixture export | odd-worker, after T2 | 1 | done (RED 0/23 → GREEN 23/23; suite 576/576) | `d9dfd4e` |
 | T5 | S8, S9 | Remove the engram dependency, installer steps, doctor check, agent tools, eval workaround, `mirror-drift.mjs`; raise `MIN_NODE`; tests (install, doctor, panel, agents) | odd-worker × 2 in parallel, after T3, T4: (a) S8 engram removal, (b) S9 mirror removal | 3, 5 | done (a: RED 7 mod + install → GREEN 45/45; b: GREEN 62/62; suite 565/565) | `87925bd` |
 | T6 | S10 | Contract, `memory` skill, ODD skills, output style, README, CONTRIBUTING, CLAUDE.md, NOTICE | odd-worker, after T5 | 3 | done (RED skills EXPECTED → GREEN 96/96; suite 565/565) | `d6d3468` |
-| T7 | S11 | Release 4.0.0 | odd-worker, after T6 | 5 | done (install RED 3 → GREEN 80/80; suite 565/565) | see L13 |
+| T7 | S11 | Release 4.0.0 | odd-worker, after T6 | 5 | done (install RED 3 → GREEN 80/80; suite 565/565) | `ae4f00e` |
 
 Review lenses before publication (Risk 1, 3, 4, 5): `review-risk`, `review-resilience`, `review-reliability`, run once over the whole branch after T7 so the reviewed tree is the published one.
 
