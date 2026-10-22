@@ -1,0 +1,30 @@
+# Wave 3 loops
+
+Objective: close the remaining feedback loops from the harness comparison: spec/task coverage and converge at close, a repeated-failure nudge, memory hints for review lenses, stale-path memory review, file-based worker reports, and pressure evals. Branch: feat/wave3-loops. Baseline: 582181b. Delivery strategy: ask-on-risk (split into chained PRs if over ~400 lines). Test runner: `node --test tests/`.
+
+## Specs
+
+- **S1 — Spec/task coverage.** "Check automático de que cada S# tenga un T# y viceversa" (ranking item 10). `feature-state.mjs` parses `## Specs` ids (`- **S<n>`) and the Tasks `Specs` column (lists like `S3, S4` and ranges like `S3-S4`), and its injection adds one fixed warning line per document naming specs with no task and tasks naming unknown specs; the line sits in the fixed part of the 2,500-character budget so row truncation never drops it. Assumption (recommendation applied): the branch lookup also matches `Branch:` inside the template header line (`Objective: ... Branch: x. ...`), extracting only the value (memory #124; same parser).
+- **S2 — Converge at close.** "paso converge al cierre: compara el código con cada S# y agrega los huecos como T# nuevos" (item 10). `odd-workflow` Close step: before the final report, compare the code with every `S#` (or reuse the verifier's per-`S#` verdict), append each gap as a new `T#` row and never rewrite or delete existing rows; `feature-document.md` gets the append-only rule.
+- **S3 — Repeated-failure nudge.** "Hook `PostToolUseFailure`: si la misma herramienta falla 5 veces, avisar que cambie de enfoque" (item 11). New `hooks/scripts/failure-streak.mjs` on PostToolUseFailure: counts failures per session, agent (`agent_id` or main), and `tool_name` within a 10-minute window, ignores `is_interrupt`; at the 5th it emits `hookSpecificOutput: { hookEventName: "PostToolUseFailure", additionalContext }` telling the model to stop repeating the approach and change strategy or report the blocker, then resets that counter. Fails open. Probe (2026-10-22, `claude -p`): input carries `error`, `is_interrupt`, `duration_ms`; that output shape reaches the model next to the tool result.
+- **S4 — Memory hints for review lenses.** "Que las lentes de revisión reciban lo que la memoria ya sabe de las rutas cambiadas" (item 12). `review-context.mjs` adds a section before the per-path patches: live `bugfix` and `decision` memories whose `Where:` paths match a changed path, titled as untrusted hints that are not evidence, filtered with `injects()`, capped (about 4 KB), loaded through a dynamic import that fails open. The subject hash and verdict binding are unchanged (they hash trees only).
+- **S5 — Stale-path memory review.** "Avisar cuando una memoria cita rutas que ya no existen" (item 13). New additive command `construct-memory review stale`: live observations whose `Where:` paths no longer exist in the current work tree, with the missing paths; read-only. Help text, `skills/memory/SKILL.md` (maps to the Update/Replace/Delete classification), and the README Memory section change together.
+- **S6 — File-based worker reports.** "Que el worker escriba su reporte en un archivo y devuelva un resumen" (item 14). `odd-worker.md` Output: write the full report to a scratch file outside the repository and return a summary that keeps status, `S#` covered, one `<command>: <result>` line per check (RED and GREEN included), the report path, scratch paths, and the `## Key Learnings:` block (read by `memory-hooks.mjs` from `last_assistant_message`); if the write fails, return the full report. `odd-delegation` keeps report files until the parent's spot check instead of removing them with other scratch.
+- **S7 — Pressure evals.** "Evals que comparan con y sin el plugin, y prompts que empujan contra la regla" (item 15). The with/without comparison already exists: `claude plugin eval` runs a no-plugin baseline arm by default (`--ablation with-without`), and `scripts/eval.sh` does not disable it. Add one pressure variant of an existing case whose prompt pushes against the rule implicitly (urgency, "tiny change") without explicitly instructing the model to break it; same fixture and graders as its base case.
+
+## Tasks
+
+| ID | Specs | Task | Route | Risk | Status | Commit |
+|---|---|---|---|---|---|---|
+| T1 | S1 | feature-state coverage warning + branch lookup | odd-worker (batch A, parallel) | none | pending | — |
+| T2 | S2 | converge step in odd-workflow | odd-worker (batch A, parallel) | 6 | pending | — |
+| T3 | S3 | `failure-streak.mjs`, registration, tests, README/CLAUDE.md hook lists | odd-worker (batch A, parallel) | none | pending | — |
+| T4 | S4 | memory hints in `review-context.mjs` | odd-worker (batch A, parallel) | 2, 6 | pending | — |
+| T5 | S5 | `construct-memory review stale` | odd-worker (batch B, after T3 and T4) | none | pending | — |
+| T6 | S6 | worker report file and delegation cleanup rule | odd-worker (batch A, parallel) | 3, 6 | pending | — |
+| T7 | S7 | pressure eval case | odd-worker (batch A, parallel) | none | pending | — |
+
+## Log
+
+- **L1 (2026-10-22, user):** "ola 3"
+- **L2 (2026-10-22, parent):** Wave 3 = items 10-15 of the harness comparison ranking (memory #61). Explorer maps: no `## Specs` parser exists; three Tasks parsers (feature-state, status/tasks.js, publication-gate) each with a `splitRow` copy; feature-state budget 2,500 chars with a fixed part; review subject hash depends on trees only; `review-context` cap 400 KB with the checklist-then-end tail anchored by tests; `memory-store` needs a dynamic import (top-level `node:sqlite`); `review list` = `needingReview()`; `doctor` checks are deep-equaled in tests (so S5 is a new command, not a doctor check); only `memory-hooks.mjs` reads a worker's final message (Key Learnings); the parent removes reported scratch (`odd-delegation/SKILL.md:44`). Docs: SubagentStop carries `last_assistant_message` and `agent_transcript_path`; `claude plugin eval --ablation` defaults to with-without.
