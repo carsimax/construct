@@ -9,8 +9,9 @@ For large authorized implementation, the local document `odd/tasks/<feature-name
 
 ## Resume
 
-1. Read the local task file.
-2. Reconcile the document, the code, and the tests before continuing the next unfinished task. Observed code and tests win over a stale document.
+1. Read the injected memory context, then run `construct-memory search <feature>`.
+2. Read the local task file.
+3. Reconcile the document, the code, and the tests before continuing the next unfinished task. Observed code and tests win over a stale document.
 
 Never infer active work from the newest global memory.
 

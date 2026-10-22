@@ -68,4 +68,4 @@ Return:
 
 Keep the handoff under about 2k tokens.
 
-After that, close with a `## Key Learnings` block of 1–5 numbered items, each a standalone factual sentence of at least 20 characters and 4 words. Omit the block when there is no reusable learning.
+After that, close with a `## Key Learnings:` block of 1–5 numbered items, each a standalone factual sentence of at least 20 characters and 4 words. Omit the block when there is no reusable learning.

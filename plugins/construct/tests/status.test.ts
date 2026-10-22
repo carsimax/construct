@@ -1,4 +1,5 @@
 import { expect, test } from 'claude-code/testing'
+import { parseMemoryStats } from '../hooks/status/memory.js'
 import { parseGitStatus, parseNumstat, parseRevParse } from '../hooks/status/data.js'
 
 // ---- fixtures ----------------------------------------------------------
@@ -233,4 +234,25 @@ test('parseNumstat reads added and removed lines, binary files, and quoted paths
   expect(parseNumstat('')).toEqual([])
   expect(parseNumstat(undefined)).toEqual([])
   expect(parseNumstat('garbage\n\nx\ty\tz\n')).toEqual([])
+})
+
+// ---- memory stats (S20) ----------------------------------------------------
+
+const statsJson = { observations: 12, deleted: 1, needing_review: 2, pinned: 3, sessions: 4, prompts: 5, bytes: 9, pending_relations: 1, last_save_at: '2026-10-19T11:55:00.000Z', session_saves: 2 }
+
+test('parseMemoryStats reads the stats object', async () => {
+  expect(parseMemoryStats({ exitCode: 0, stdout: JSON.stringify(statsJson), stderr: '' })).toEqual({ memories: 12, review: 2, pinned: 3, pending: 1, lastSaveAt: '2026-10-19T11:55:00.000Z', sessionSaves: 2 })
+  const bare = { ...statsJson, last_save_at: null, session_saves: undefined }
+  expect(parseMemoryStats({ exitCode: 0, stdout: JSON.stringify(bare), stderr: '' })).toEqual({ memories: 12, review: 2, pinned: 3, pending: 1, lastSaveAt: null, sessionSaves: null })
+})
+
+test('parseMemoryStats names why memory is off, and gives null for any other failure', async () => {
+  expect(parseMemoryStats({ exitCode: 1, stdout: '', stderr: 'construct-memory: memory is off: not inside a git repository' })).toEqual({ off: 'not a git repository' })
+  expect(parseMemoryStats({ exitCode: 1, stdout: '', stderr: 'construct-memory: memory needs node:sqlite with FTS5 (Node.js 22.16 or later)' })).toEqual({ off: 'memory unavailable (Node 22.16+)' })
+  expect(parseMemoryStats({ exitCode: 1, stdout: '', stderr: 'construct-memory: memory database is from a newer construct (schema 99)' })).toEqual({ off: 'memory database is from a newer construct (schema 99)' })
+  expect(parseMemoryStats({ exitCode: 1, stdout: '', stderr: 'boom\nsecond line' })).toEqual({ off: 'boom' })
+  expect(parseMemoryStats({ exitCode: 1, stdout: '', stderr: '' })).toBeNull()
+  expect(parseMemoryStats({ exitCode: 0, stdout: 'not json', stderr: '' })).toBeNull()
+  expect(parseMemoryStats({ exitCode: 0, stdout: '{}', stderr: '' })).toBeNull()
+  expect(parseMemoryStats(null)).toBeNull()
 })

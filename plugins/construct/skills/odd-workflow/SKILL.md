@@ -38,7 +38,7 @@ Load this skill for any request that may change code or docs, for planning a fea
 ## Execution Steps
 
 1. **Authorize.** Decide whether the request explicitly authorizes a change.
-2. **Explore** the existing code and requirements, proportionately. Explore only for a map needed to decide or route.
+2. **Explore** the existing code and requirements, proportionately, after `construct-memory search <feature or area>`. Explore only for a map needed to decide or route.
 3. **Resolve uncertainty.** Research only for a named uncertainty; one question only for a real product decision.
 4. **Classify** with `construct:task-size-risk`.
 5. **Track** large work: create the feature document (references/feature-document.md) and tell the user in one line which document was created and how many tasks it holds.
@@ -48,9 +48,9 @@ Load this skill for any request that may change code or docs, for planning a fea
    - Update help text and docs with any changed command, option, or message.
    - After each task, update the document.
    - Commit the work unit and record its commit in `## Tasks`.
-7. **Close.** One report: the verified outcome, every failed, skipped, or unverified check, the next step, and the Risk line (the Risk line comes last). The Close reports and never starts another verification loop. Partial or missing proof becomes one **Needs your decision** result.
+7. **Close.** Save decisions, root causes, and conventions learned with `construct-memory save` (large work: `construct-memory summary`), then one report: the verified outcome, every failed, skipped, or unverified check, the next step, and the Risk line (last). The Close reports and never starts another verification loop. Partial or missing proof becomes one **Needs your decision** result.
 
-To resume an interrupted feature, follow references/persistence.md.
+To resume an interrupted feature, read the injected memory context, run `construct-memory search <feature>`, then follow references/persistence.md.
 
 ## Output Contract
 

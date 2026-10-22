@@ -65,7 +65,7 @@ Keep a list of `(role, task fingerprint)` pairs launched this turn, where the fi
 
 ## Subagent memory
 
-- The parent runs `construct-memory search` for relevant project context and passes it in the prompt. Subagents with Bash (worker, explorer, general, verify) may search themselves.
+- The parent runs `construct-memory search` for relevant project context and passes the hits in the prompt's optional `## Memory` section (worker and explorer templates). Subagents with Bash (worker, explorer, general, verify) may search themselves.
 - Include in each prompt: end the report with a `## Key Learnings:` section (the SubagentStop hook captures it) and save decisions with `construct-memory save`.
 
 ## Parallel writers

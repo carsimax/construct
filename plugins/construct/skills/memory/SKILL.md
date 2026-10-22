@@ -40,6 +40,31 @@ JSON
 2. `construct-memory search <query>` for anything not in it; `--type` narrows, `--any` matches any term.
 3. `construct-memory get <id>` for the full text of a hit (`--history` for earlier versions).
 
+## Pin, topic keys, timeline
+
+- `construct-memory pin <id>` for what must load in every session (a rule, a hard constraint): pinned memories get their own `### Pinned` context section (at most 20) and rank higher in search; `unpin <id>` undoes it. Pin sparingly.
+- Before saving a new evolving topic, run `construct-memory suggest-topic-key` (JSON on stdin: `type`, `title`, `content`) and use the key it prints, such as `bug/fix-login-redirect-loop`, as `topic_key`; it writes nothing.
+- `construct-memory timeline <id> [--before N] [--after N]` shows what was saved around a hit in the same session, for context the hit alone lacks.
+- `construct-memory prompts --search <query>` finds an earlier prompt; `construct-memory stats` counts what is stored. Run `construct-memory doctor` when memory behaves oddly (it only reads; it never repairs).
+
+## Related memories
+
+After a `save` that inserts or updates, the command may print up to 3 candidates below its line, each with a judgment id:
+
+```text
+  candidate #12 Logging format json (judge: construct-memory judge rel-1a2b3c4d5e6f7a8b <relation>)
+```
+
+Judging is optional; ignore the candidates unless one really conflicts with or replaces the new memory. To record a verdict: `construct-memory judge <judgment-id> <relation> [--reason T] [--evidence T] [--confidence 0..1]` (re-judging overwrites), `judge-many` (JSON array of 1-32 `{judgment_id, relation, reason?, evidence?, confidence?}` on stdin, all or nothing), or `compare <id-a> <id-b> <relation> --confidence 0..1 [--reasoning T]` for any pair (`a` supersedes `b`). Relations: `related`, `compatible`, `scoped`, `conflicts_with`, `supersedes`, `not_conflict`.
+
+- Judge only a real conflict or supersession; `related`, `compatible`, `scoped`, and `not_conflict` are not worth a call.
+- Ask the user before recording `supersedes` or `conflicts_with` on a `decision`, `architecture`, or `policy` memory, or whenever your confidence is below 0.7; pass what the user said as `--evidence`.
+- `search` and `get` mark judged conflicts as `conflicts with #N` and supersessions as `supersedes #N` / `superseded by #N` (a supersession of a deleted memory shows as `supersedes #N (deleted)`); check the other memory before relying on either.
+
+## Consolidate
+
+Use `construct-memory consolidate <id> <id>... --title T [--type T] [--topic-key K]` (the merged content on stdin) when several memories describe one evolving fact and no `topic_key` ties them. The first run only previews: the sources, the new title, and a fingerprint; nothing is written. Read the preview, then rerun the same command with the same stdin and `--confirm <fingerprint>`: it creates the merged memory, soft-deletes the sources, and records a `supersedes` relation from the new memory to each. A source that changed or was deleted after the preview makes the fingerprint stale and is refused; preview again.
+
 Before architecture-sensitive work, run `construct-memory review list`. Memories marked `needs_review` are stale: verify them, and run `review done <id>` only after the user confirms.
 
 ## Session summary
@@ -64,3 +89,12 @@ A subagent ends its final report with a `## Key Learnings:` section of numbered 
 `construct-memory import <file> --project <name>` loads one project of a file written by `engram export`. It is idempotent, so running it again inserts nothing new.
 
 `construct-memory export [file]` writes this repository's live memory as JSON (stdout, or a new file) for backup or to move it to another clone or machine; load it there with `import <file> --project <repository directory name>`.
+
+## Where memory is used
+
+- Session contract: Explore starts with `construct-memory search`; Close saves decisions, root causes, and conventions, and large work stores the session summary.
+- Subagent contract, `odd-worker`, `odd-general`, `odd-verify`, and `odd-explorer`: reports end with `## Key Learnings:`; the explorer also searches memory before mapping.
+- `odd-workflow` (explore, close, resume) and its `persistence.md`: resume reads the injected context, then searches the feature name.
+- `odd-delegation` and its handoff templates: the parent pastes search hits into an optional `## Memory` section.
+- `debugging`: search the symptom first; save the root cause as `bugfix`. `rdd-review`: a fixed rejection is saved as `bugfix`, a deferred advisory as `decision`.
+- `constraint-driven`: `quality/<rule>`. `migration`: `migration/<name>`.

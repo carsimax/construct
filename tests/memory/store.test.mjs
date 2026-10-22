@@ -83,7 +83,7 @@ describe('schema (S2)', () => {
     const columns = raw(store, 'PRAGMA table_info(observations)').map((r) => r.name)
     assert.deepEqual(columns, [
       'id', 'session_id', 'type', 'title', 'content', 'topic_key', 'normalized_hash', 'revision_count',
-      'duplicate_count', 'last_seen_at', 'review_after', 'created_at', 'updated_at', 'deleted_at', 'import_id',
+      'duplicate_count', 'last_seen_at', 'review_after', 'created_at', 'updated_at', 'deleted_at', 'import_id', 'pinned',
     ])
     assert.deepEqual(raw(store, 'PRAGMA table_info(import_tombstones)').map((r) => r.name), ['import_id', 'deleted_at'])
     assert.deepEqual(raw(store, 'SELECT key FROM meta').map((r) => r.key), ['db_id'])
@@ -190,6 +190,17 @@ describe('hard delete (S13)', () => {
 })
 
 describe('write rules (S3)', () => {
+  test('an unclosed <private> redacts to the end of the text', () => {
+    const { store } = open()
+    const { id } = store.save({ title: 'key <Private>abc', content: 'ok <private>a</private> mid <PRIVATE>secret\nmore' })
+    const row = store.get(id)
+    assert.equal(row.title, 'key [REDACTED]')
+    assert.equal(row.content, 'ok [REDACTED] mid [REDACTED]')
+    store.endSession('s', 'done <private>tail')
+    assert.ok(!JSON.stringify(raw(store, 'SELECT summary FROM sessions')).includes('tail'))
+    store.close()
+  })
+
   test('redacts <private> spans in title and content', () => {
     const { store } = open()
     const { id } = store.save({ title: 'key <private>abc</private> here', content: 'a <PRIVATE>x\ny</private> b <private>z</private>' })

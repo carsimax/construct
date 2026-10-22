@@ -46,7 +46,7 @@ describe('construct-memory', () => {
     const repo = makeRepo()
     for (const args of [[], ['help']]) {
       const out = ok(cli(repo, args))
-      for (const word of ['save', 'search', 'get', 'context', 'update', 'delete', 'summary', 'review', 'import', 'prompts']) assert.match(out, new RegExp(word))
+      for (const word of ['save', 'search', 'get', 'context', 'update', 'delete', 'summary', 'review', 'import', 'prompts', 'suggest-topic-key', 'timeline', 'pin', 'unpin', 'stats', 'doctor', 'consolidate', '--confirm', '--search']) assert.match(out, new RegExp(word))
     }
   })
 
@@ -294,5 +294,86 @@ describe('construct-memory', () => {
     assert.equal(help.status, 0, help.stderr)
     assert.match(help.stdout, /usage: construct-memory/)
     fails(run(['frobnicate']), /unknown command/)
+  })
+
+  // S21 d: install.sh pre-approves `construct-memory <command> *` prefixes, so no trailing words or options may turn
+  // an approved command into a destructive one. The installer test checks the rules; this checks what they can reach.
+  test('a pre-approved prefix plus a destructive suffix is refused and changes nothing', () => {
+    const repo = makeRepo()
+    saveJson(repo, { title: 'One', content: 'first memory' })
+    saveJson(repo, { title: 'Two', content: 'second memory' })
+    const store = openMemory(repo)
+    store.addPrompt('s1', 'first prompt')
+    store.addPrompt('s1', 'second prompt')
+    store.close()
+    age(repo)
+    const counts = () => {
+      const s = JSON.parse(ok(cli(repo, ['stats', '--json'])))
+      return { observations: s.observations, deleted: s.deleted, prompts: s.prompts, needing_review: s.needing_review, pinned: s.pinned }
+    }
+    const before = counts()
+    const refused = [
+      // a destructive positional behind an option that a prefix allows
+      ['prompts', '--search', 'x', 'delete', '1'],
+      ['prompts', '--limit', '5', 'delete', '1'],
+      ['prompts', '--search', 'prompt', '--', 'delete', '1'],
+      ['prompts', 'delete', '1', '--search', 'x'],
+      ['prompts', 'delete', '1', '--limit', '5'],
+      ['prompts', 'delete', '1', '2'],
+      ['prompts', '--search', 'x', 'extra'],
+      ['prompts', '--limit', '5', 'extra'],
+      // delete only in its exact shape
+      ['delete', '1', '--limit', '5'],
+      ['delete', '1', '--search', 'x'],
+      ['delete', '1', '--hard', '--json'],
+      ['delete', '1', '2'],
+      ['delete', '1', '2', '--hard'],
+      // review: list takes nothing, done takes one id and nothing else
+      ['review', 'list', 'done', '1'],
+      ['review', 'list', '--limit', '5'],
+      ['review', 'list', '--hard'],
+      ['review', 'done', '1', '--hard'],
+      ['review', 'done', '1', '2'],
+      // --hard and other options that parseArgs accepts everywhere, on commands that never use them
+      ['get', '1', '--hard'],
+      ['get', '1', '--limit', '3'],
+      ['pin', '1', '--hard'],
+      ['unpin', '1', '--hard'],
+      ['timeline', '1', '--hard'],
+      ['context', '--hard'],
+      ['doctor', '--hard'],
+      ['stats', '--hard'],
+      ['search', 'x', '--hard'],
+      ['update', '1', '--hard'],
+      ['save', '--hard'],
+      ['summary', '--session', 's', '--hard'],
+      ['suggest-topic-key', '--hard'],
+      ['judge', 'j', 'related', '--hard'],
+      ['judge-many', '--hard'],
+      ['compare', '1', '2', 'related', '--confidence', '1', '--hard'],
+      // the other destructive commands, reached through options of a pre-approved one
+      ['get', '1', '--confirm', 'x'],
+      ['stats', '--confirm', 'x'],
+      ['search', 'x', '--confirm', 'x'],
+      ['import', 'f.json', '--hard'],
+      ['export', 'f.json', '--hard'],
+      ['consolidate', '1', '2', '--title', 'T', '--hard'],
+    ]
+    for (const args of refused) {
+      const r = cli(repo, args, '{}')
+      assert.equal(r.status, 1, `${args.join(' ')}: ${r.stdout}`)
+      assert.equal(r.stdout, '', args.join(' '))
+      assert.equal(r.stderr.trim().split('\n').length, 1, `${args.join(' ')}: one line on stderr`)
+      assert.deepEqual(counts(), before, args.join(' '))
+    }
+    // free text after a search is a query, not a command
+    assert.match(ok(cli(repo, ['search', 'delete', '1'])), /no memories found|#/)
+    assert.deepEqual(counts(), before)
+    // the exact shapes still work
+    assert.equal(ok(cli(repo, ['prompts', '--limit', '1'])).trimEnd().split('\n').length, 1)
+    assert.match(ok(cli(repo, ['prompts', '--search', 'first'])), /first prompt/)
+    assert.equal(ok(cli(repo, ['prompts', 'delete', '1'])), 'deleted prompt #1\n')
+    assert.equal(ok(cli(repo, ['delete', '1', '--hard'])), 'erased #1\n')
+    assert.equal(ok(cli(repo, ['review', 'done', '2'])), 'reviewed #2\n')
   })
 })

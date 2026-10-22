@@ -22,6 +22,7 @@ Question: <the decision this map serves>
 Front: <the one module, layer, or question this explorer maps>
 Out of scope: <the other fronts, owned by parallel explorers>
 Scope: <directories or symbols to start from>
+Memory: <optional: relevant `construct-memory search` hits the parent pastes>
 Return at most about 2k tokens with path:line evidence: answer, map, open questions.
 ```
 
@@ -38,6 +39,9 @@ Spec: odd/tasks/<feature>.md, T<n>, <S#...> — read the document until ## Log.
 ## Allowed edit surfaces
 path/to/file.ts
 path/to/dir/*.test.ts
+
+## Memory
+<optional: relevant `construct-memory search` hits the parent pastes; omit when none>
 
 ## Reuse
 <existing helpers for shared state, and the invariants they keep>

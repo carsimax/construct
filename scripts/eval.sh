@@ -20,7 +20,7 @@ claude plugin eval . \
   --trust-plugin \
   --runs 1 \
   --model sonnet \
-  --allow-tools Write Edit "Bash(npm test*)" "Bash(node --test*)" "Bash(git status*)" "Bash(git diff*)" "Bash(git log*)" \
+  --allow-tools Write Edit "Bash(npm test*)" "Bash(node --test*)" "Bash(git status*)" "Bash(git diff*)" "Bash(git log*)" "Bash(construct-memory *)" \
   "$@" || status=$?
 
 echo "Plugin copy and results: $plugin_copy (remove it when done)"

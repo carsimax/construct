@@ -1,5 +1,5 @@
 import { expect, test } from 'claude-code/testing'
-import { checkClaude, checkCodegraph, checkMemory, checkNode, formatReport } from '../hooks/status/doctor.js'
+import { checkClaude, checkCodegraph, checkMemory, checkNode, formatReport, memoryDoctorRows } from '../hooks/status/doctor.js'
 
 // Pure checks behind /construct doctor (S8).
 
@@ -53,4 +53,23 @@ test('the report has one line per check', () => {
     { ok: false, label: 'broken', hint: 'fix it' },
   ])
   expect(text.split('\n')).toEqual(['Construct doctor', '✓ fine', '✗ broken — fix it'])
+})
+
+test('memory doctor rows: one per check, prefixed, with the detail as the hint', () => {
+  const out = JSON.stringify([
+    { check: 'schema', ok: true },
+    { check: 'wal', ok: false, detail: 'journal mode is delete' },
+  ])
+  const rows = memoryDoctorRows(out)
+  expect(rows).toEqual([
+    { ok: true, label: 'memory: schema', hint: '' },
+    { ok: false, label: 'memory: wal', hint: 'journal mode is delete' },
+  ])
+  expect(formatReport(rows).split('\n')).toEqual(['Construct doctor', '✓ memory: schema', '✗ memory: wal — journal mode is delete'])
+})
+
+test('memory doctor that could not run, or printed junk, is one failed row', () => {
+  for (const out of [null, '', 'usage', '{}', '[1]']) {
+    expect(memoryDoctorRows(out)).toEqual([{ ok: false, label: 'memory doctor', hint: 'could not run' }])
+  }
 })

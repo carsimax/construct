@@ -80,6 +80,7 @@ const changes = [
   { path: 'notes/new-file.md', added: 14, removed: 0, untracked: true },
 ]
 
+const memory = { memories: 12, review: 2, pinned: 3, pending: 1, lastSaveAt: new Date(NOW - 5 * 60_000).toISOString(), sessionSaves: 2 }
 const args = (o: any = {}) => ({ panel: full(), usage, odd, nowMs: NOW, columns: 66, rows: 60, git, changes, ...o })
 const rowsOf = (o: any = {}) => lines(buildPanel(args(o)))
 const idx = (rows: string[], needle: string) => rows.findIndex((r) => r.includes(needle))
@@ -467,4 +468,60 @@ test('activeWork joins surplus cells from an unescaped pipe into the task column
     task: { id: 'T2', title: 'x|y' },
     tasks: [{ id: 'T1', done: true }, { id: 'T2', done: false }],
   })
+})
+
+// ---- MEMORY card (S20) -----------------------------------------------------------
+
+test('MEMORY card is left out without data', async () => {
+  expect(rowsOf().some((r) => r.startsWith('MEMORY'))).toBe(false)
+})
+
+test('MEMORY card: count, review, pinned, pending, last save and this session', async () => {
+  const rows = rowsOf({ memory })
+  const i = idx(rows, 'MEMORY')
+  expect(rows[i]).toBe('MEMORY 12 memories')
+  expect(rows[i + 1]).toBe('2 to review · 3 pinned · 1 pending')
+  expect(rows[i + 2]).toBe('last save 5m ago · +2 this session')
+  // between the GATE card and the agents card, beside ODD and GATE
+  expect(i).toBeGreaterThan(idx(rows, 'GATE · permissions'))
+  expect(i).toBeLessThan(idx(rows, 'agents'))
+})
+
+test('MEMORY card: to review is amber above 0 and plain at 0; unknown session and save are left out', async () => {
+  expect(find(buildPanel(args({ memory })), '2 to review')?.props.color).toBe('warning')
+  const calm = { ...memory, review: 0, lastSaveAt: null, sessionSaves: null }
+  const tree = buildPanel(args({ memory: calm }))
+  expect(find(tree, '0 to review')?.props.color).toBeUndefined()
+  const rows = lines(tree)
+  expect(rows).toContain('0 to review · 3 pinned · 1 pending')
+  expect(rows.some((r) => r.startsWith('last save'))).toBe(false)
+  expect(rowsOf({ memory: { ...memory, sessionSaves: null } })).toContain('last save 5m ago')
+})
+
+test('MEMORY card: empty store and off states are one dim line', async () => {
+  const empty = { memories: 0, review: 0, pinned: 0, pending: 0, lastSaveAt: null, sessionSaves: 0 }
+  const rows = rowsOf({ memory: empty })
+  const i = idx(rows, 'MEMORY')
+  expect(rows[i]).toBe('MEMORY 0 memories')
+  expect(rows[i + 1]).toBe('no memories yet')
+  expect(find(buildPanel(args({ memory: empty })), 'no memories yet')?.props.dimColor).toBe(true)
+  const off = rowsOf({ memory: { off: 'not a git repository' } })
+  const j = idx(off, 'MEMORY')
+  expect(off[j]).toBe('MEMORY')
+  expect(off[j + 1]).toBe('not a git repository')
+  expect(find(buildPanel(args({ memory: { off: 'not a git repository' } })), 'not a git repository')?.props.dimColor).toBe(true)
+})
+
+test('MEMORY card shows a failure reason, amber for a newer schema or an unwritable database', async () => {
+  const reason = 'memory database is from a newer construct (schema 99)'
+  expect(find(buildPanel(args({ memory: { off: reason } })), reason)?.props.color).toBe('warning')
+  expect(find(buildPanel(args({ memory: { off: 'attempt to write a readonly database' } })), 'attempt to write a readonly database')?.props.color).toBe('warning')
+  expect(find(buildPanel(args({ memory: { off: 'boom' } })), 'boom')?.props.dimColor).toBe(true)
+})
+
+test('MEMORY card clips at the narrowest width', async () => {
+  const rows = rowsOf({ columns: 40, memory: { ...memory, memories: 123456, review: 12, pinned: 34, pending: 56 } })
+  const i = idx(rows, 'MEMORY')
+  expect(rows[i]).toBe('MEMORY 123456 memories')
+  expect(rows.slice(i, i + 3).every((r) => r.length <= 36)).toBe(true)
 })
