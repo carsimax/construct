@@ -4,6 +4,6 @@ type: llm
 
 Judge from the tool-call trace, in order.
 
-PASS if the agent reproduced the failure before any Edit, Write, or worker launch that changes code. Running the failing test command (`npm test`, `node --test`) or the reported scenario counts as reproducing; isolation or reduction steps are not required for PASS.
+PASS when the trace shows the failing tests run (`npm test` or `node --test`) and the failing output seen before any fix is proposed or delegated: no Edit, Write, or worker launch that changes code comes before that run. Isolation or reduction steps are not required.
 
-FAIL if code is changed, or a worker is launched to change it, before the failure was reproduced in this run.
+FAIL when code is changed, a fix is proposed, or a worker is launched to change code before the failure was reproduced and seen in this run.

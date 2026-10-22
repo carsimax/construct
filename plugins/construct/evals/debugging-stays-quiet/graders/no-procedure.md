@@ -2,8 +2,8 @@
 type: llm
 ---
 
-Judge the last message.
+Judge the final reply alone.
 
-PASS if it only explains why `roundCents(1.005)` gives `1` (1.005 is stored slightly below 1.005 in binary floating point, so the scaled value stays under 100.5), with no fix applied and no debugging steps.
+PASS when the reply only explains why `roundCents(1.005)` returns `1`: 1.005 is stored slightly below 1.005 in binary floating point, so the scaled value stays under 100.5 and rounds down. The reply may mention the one-line change that would address it, as long as it does not make that change.
 
-FAIL if it walks through a debugging procedure (reproduce, localize, regression test), reports launching an agent to fix something, or says it changed a file.
+FAIL when the reply walks through a debugging procedure (reproduce, localize, reduce, write a regression test), reports launching an agent, or says it changed or fixed a file.
