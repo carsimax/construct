@@ -1,6 +1,6 @@
 # Panel clean-room rewrite
 
-Objective: rewrite the status panel (`plugins/construct/hooks/panel/`) as Construct's own code, written from this behavioral spec and the existing tests without reading the current or upstream panel code, so the claude-flightdeck attribution (and, since `state.js` is rewritten whole, the gentle-agent-state one) can be removed. Branch: one per task, `feat/panel-clean-room-<n>-<slice>`. Baseline: 5d2e9ce. Delivery strategy: ask-on-risk; chains: stacked-to-main (T1, then T2, then T3, each about 400 changed lines). Test runner: `claude plugin test plugins/construct` and `node --test tests/` (3 mod tests fail on clean HEAD from an AskUserQuestion permission denial; memory #9).
+Objective: rewrite the status panel (`plugins/construct/hooks/panel/`) as Construct's own code, written from this behavioral spec and the existing tests without reading the current or upstream panel code, so the claude-flightdeck attribution (and, since `state.js` is rewritten whole, the gentle-agent-state one) can be removed. Branch: one per task, `feat/panel-clean-room-<n>-<slice>`. Baseline: 5d2e9ce. Delivery strategy: ask-on-risk; chains: stacked-to-main. Slices: PR #54 = T1 (c19feda..9669a70); PR 2 = T2 + T4 on `feat/panel-clean-room-2-layout`, stacked on T1. Test runner: `claude plugin test plugins/construct` and `node --test tests/` (3 mod tests fail on clean HEAD from an AskUserQuestion permission denial; memory #9).
 
 ## Clean-room rule (every writer task)
 
@@ -55,8 +55,9 @@ The writer never reads `plugins/construct/hooks/panel/draw.js`, `layout.js`, or 
 | ID | Specs | Task | Route | Risk | Status | Commit |
 |---|---|---|---|---|---|---|
 | T1 | S1, S2, S3, S4, S6 | Clean-room rewrite of `state.js`; `panel-state.test.ts` and `panel.test.ts` green. Same slice, for S6's state.js part: delete `LICENSE-gentle-agent-state`, drop its NOTICE entry and its README:410 mention, drop it from `tests/skills.test.mjs:82` and the `PORTS` list in `tests/panel-license.test.mjs`, and drop `state.js` from the flightdeck header test and from the NOTICE flightdeck line | worker | 1-3 | done (L9 fixes, mod 183/3 env; verified 5c33324: mask corpus 0 weaker of 3,241; fuzz 0 beyond L3; mod 180/3 env; node --test 969/0) | c19feda + next |
-| T2 | S1, S2, S5, S7 | Clean-room rewrite of `draw.js` and `layout.js`; `panel-draw.test.ts`, `panel-layout.test.ts`, `panel.test.ts` green | worker | 3, 6 | pending | — |
-| T3 | S6 | Remove the flightdeck attribution: `LICENSE-flightdeck`, NOTICE entry, `tests/panel-license.test.mjs` flightdeck part, `tests/skills.test.mjs`, README 246/265/410 (move to ideas-only credits), CONTRIBUTING 91, `flightdeck` wording in panel test titles and fixtures | worker | 6 | pending | — |
+| T2 | S1, S2, S5, S6, S7 | Clean-room rewrite of `draw.js` and `layout.js` with the S7 personality; `panel-draw.test.ts`, `panel-layout.test.ts`, `panel.test.ts` green; and all of T3 (the flightdeck headers go with the files, so the license test must change in the same slice) | worker | 3, 6 | pending | — |
+| T4 | S4 | Follow-ups from the T1 re-review (L10): mask secret names longer than 32 characters after the secret word (cap only the scan before it); loosen the 200 ms timing test to a scaling check; test that a main-thread spawn with a mode sets `main.mode`; `open()` repairs a damaged v3 value too | worker | 2 | pending (decision: fold into T2 slice) | — |
+| T3 | S6 | Remove the flightdeck attribution: `LICENSE-flightdeck`, NOTICE entry, `tests/panel-license.test.mjs` flightdeck part, `tests/skills.test.mjs`, README 246/265/410 (move to ideas-only credits), CONTRIBUTING 91, `flightdeck` wording in panel test titles and fixtures | worker | 6 | dropped (merged into T2, L11) | — |
 
 ## Log
 
@@ -70,5 +71,11 @@ The writer never reads `plugins/construct/hooks/panel/draw.js`, `layout.js`, or 
 - **L7 (2026-10-22):** User chose "Regla amplia (Recommended)": mask when the name contains a secret word anywhere, as baseline did, plus nested pairs and `ghp_` from 16; false positives such as `MAX_TOKENS=***` come back. One more correction batch and recheck.
 - **L8 (2026-10-22):** "Aprovecha para darle mas personalidad al panel". Choice: "Voz + glifos (Recommended)". Added S7, folded into T2.
 - **L9 (2026-10-22, parent):** Lenses on 5d2e9ce..: risk, resilience, reliability all approved (WARNINGs only). Applying the warnings: risk found masking weaker than baseline (32+ runs with `-`/`_`/`+`, a `?` cutting an unquoted value); resilience and reliability found negative counts on damaged state, unguarded `agentsView` entries, and `isOutsideTasks` with no cwd. A slow-regex warning on the name rule (unanchored `[\w.-]*` runs) is fixed by bounding the scan. Re-review after the fix commit.
+- **L10 (2026-10-22, parent):** Re-review of 9669a70 (subject 5d2e9ce..HEAD): risk, resilience, reliability approved. Advisories become T4. `open()` skipping merge for v3 is unreachable today (register.js merges stored state before each reducer, verified in L4) but cheap to close. T1 slice ready for publication; the user decides delivery.
+- **L11 (2026-10-22):** "dale, publica el PR de T1". PR #54 opened. T3 merged into T2: removing the flightdeck headers breaks `tests/panel-license.test.mjs` unless the attribution goes in the same slice.
+
+Next step: T2 worker, then T4, on `feat/panel-clean-room-2-layout`.
+
+Next step (superseded): user publishes the T1 PR; then T2 (+T4) on a branch stacked on T1.
 
 Next step (superseded): review lenses for T1 (risk, resilience, reliability), then T2 on a branch stacked on T1.
