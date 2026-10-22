@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+git init -q
 printf '{ "type": "module", "scripts": { "test": "node --test" } }\n' > package.json
 printf 'script-shell=/bin/sh\n' > .npmrc
 cat > paginate.js <<'JS'
@@ -24,3 +25,5 @@ test('paginate returns the short last page', () => {
   assert.deepEqual(paginate(items, 3, 2), ['e'])
 })
 JS
+git add -A
+git -c user.email=eval@example.com -c user.name=eval commit -qm "chore: initial files"

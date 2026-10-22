@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+git init -q
 printf '{ "type": "module", "scripts": { "test": "node --test" } }\n' > package.json
 printf 'script-shell=/bin/sh\n' > .npmrc
 cat > money.js <<'JS'
@@ -19,3 +20,5 @@ test('roundCents rounds to two decimals', () => {
   assert.equal(roundCents(1.005), 1)
 })
 JS
+git add -A
+git -c user.email=eval@example.com -c user.name=eval commit -qm "chore: initial files"
