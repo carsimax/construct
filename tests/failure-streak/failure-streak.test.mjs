@@ -2,14 +2,14 @@
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, readFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { existsSync, readFileSync, readdirSync, utimesSync } from 'node:fs'
 import { join } from 'node:path'
+import { scratchDir } from '../helpers/repo.mjs'
 
 const PLUGIN = new URL('../../plugins/construct/', import.meta.url).pathname
 const HOOK = join(PLUGIN, 'hooks/scripts/failure-streak.mjs')
 
-const fresh = () => mkdtempSync(join(tmpdir(), 'failure-streak-'))
+const fresh = () => scratchDir('failure-streak-')
 
 function fail(data, fields = {}, { now, input } = {}) {
   const result = spawnSync('node', [HOOK], {
@@ -85,6 +85,29 @@ describe('failure streak (S3)', () => {
   test('bad input prints nothing and exits 0', () => {
     const data = fresh()
     for (const input of ['not json', '{}', '[]', 'null']) assert.deepEqual(fail(data, {}, { input }), { status: 0, stdout: '' })
+  })
+})
+
+describe('state location (S3)', () => {
+  test('state lands in one directory per session, one file per agent and tool', () => {
+    const data = fresh()
+    fail(data, { session_id: 's/1', agent_id: 'a1', tool_name: 'Bash' })
+    assert.deepEqual(readdirSync(join(data, 'failure-streak')), ['s_1'])
+    assert.deepEqual(readdirSync(join(data, 'failure-streak', 's_1')), ['a1-Bash'])
+  })
+
+  test('pruneState removes an idle failure-streak session directory and keeps a fresh one', () => {
+    const data = fresh()
+    fail(data, { session_id: 'old' })
+    fail(data, { session_id: 'new' })
+    const old = join(data, 'failure-streak', 'old')
+    const week = new Date(Date.now() - 8 * 24 * 3600 * 1000)
+    utimesSync(old, week, week)
+    const hookIo = join(PLUGIN, 'hooks/scripts/hook-io.mjs')
+    const r = spawnSync('node', ['-e', `import(${JSON.stringify(hookIo)}).then((m) => m.pruneState())`], { env: { ...process.env, CLAUDE_PLUGIN_DATA: data } })
+    assert.equal(r.status, 0)
+    assert.equal(existsSync(old), false)
+    assert.equal(existsSync(join(data, 'failure-streak', 'new')), true)
   })
 })
 
