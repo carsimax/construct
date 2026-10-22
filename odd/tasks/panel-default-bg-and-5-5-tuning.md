@@ -10,6 +10,7 @@ Objective: a batch of small changes: drop the panel's fixed background, then Cla
 - **S4 — Subagent contract 5.5 lines (P2).** `hooks/contract/subagent.md` states, in the contract's voice and rewriting overlapping lines in place: work continues until everything the prompt asked for is done, stopping only when blocked or before a risky step; no features, tests, files, docs, or refactors the prompt did not ask for; a change is done only after a real check ran, and a syntax-only check does not count. Source: platform.claude.com prompting guides for Sonnet 5.5 and Haiku 5.5.
 - **S5 — Session contract names the early stop (P3).** `hooks/contract/session.md` names the early stops to avoid inside an authorized outcome: ending the turn with a text-only progress report, a "Next, I'll…" line, or "Shall I apply this?" while steps remain. Waiting for background agents' notifications stays allowed. Injected text stays at or under 8,000 characters. Source: Opus 5.5 and Fable 5.1 prompting guides.
 - **S6 — prettyModel covers new ids (P6).** Tests assert `claude-fable-5-1` → `Fable 5.1` and `claude-haiku-5-5` → `Haiku 5.5`.
+- **S7 — Release 5.1.0.** "dale al release". Bump per CONTRIBUTING.md "Releases": plugin.json version, `install.sh` header URL and `CONSTRUCT_REF`, README badge, URLs, pinned ref and Status, and the install tests (current version, newer-than-current fixture, old/new pinned-ref pair). Tag `v5.1.0` after the release PR merges.
 
 ## Tasks
 
@@ -19,6 +20,7 @@ Objective: a batch of small changes: drop the panel's fixed background, then Cla
 | T2 | S2 | Research and proposal list | odd-general + odd-explorer (parallel with T1) | none (read-only) | done (proposals in L4) | — |
 | T3 | S3, S6 | Panel `weight` and prettyModel tests | odd-worker (parallel with T4) | none | done (RED 3 new fail → GREEN 3 known fail; node --test 726/0) | 3e22991 |
 | T4 | S4, S5 | Contract 5.5 lines | odd-worker (parallel with T3) | item 6 (prompt behavior no test catches) | done (RED 2 fail → GREEN; node --test 726/0; session 7622/8000, subagent 2905/3000); S4 fix after verify | c71c899, 33853ed |
+| T5 | S7 | Release 5.1.0 bump | odd-worker | item 5 (release) | done (RED 3 fail → GREEN; node --test 726/0; validate --strict both pass) | ed7f7bd |
 
 ## Log
 
@@ -35,3 +37,4 @@ Objective: a batch of small changes: drop the panel's fixed background, then Cla
 - **L5 (2026-10-21, user):** "si vamos con la primera tanda" (P1, P2, P3, P6 → S3–S6, T3–T4; P4 and P5 out of this batch).
 - **L6 (2026-10-21):** Review at 20219d4 (base 7210afd): `review-reliability` approved, no findings. `odd-verify`: S1, S3, S5, S6 pass; S4 fail: `subagent.md:15` "A change is done only after a real check ran" contradicts `agents/odd-worker.md:31,51` (docs-only exception); source scopes it to code that can be run, built, or type-checked, with an exit. T4 reopened for that fix. Follow-ups (advisory, not in this batch): "the prompt did not ask for" relies on the parent passing the Test-first section; the source's "mention it at the end instead of doing it" route is missing for features/docs/refactors; "stops only when blocked" vs the worker's two-attempt `partial` rule. Subagent text margin is ~95 chars.
 - **L7 (2026-10-21):** `review-reliability` re-run at 564471e (base 7210afd): approved, no findings (one earlier run hit maxTurns with a 63-char hash; relaunched). S4 fix 33853ed. Batch done; next step is the user's delivery decision.
+- **L8 (2026-10-21, user):** "Listo" (PR #41 merged as f0f392a), then "dale al release". Branch chore/release-5.1.0.
