@@ -228,6 +228,38 @@ test('maskSecrets masks credential-like values and keeps plain text', () => {
   expect(maskSecrets(undefined as any)).toBe('')
 })
 
+test('maskSecrets masks secret words mid-name, short auth tokens, provider tokens and quoted mysql passwords', () => {
+  const secrets: [string, string][] = [
+    ['curl -H "Authorization: Bearer abc123" u', 'abc123'],
+    ['Authorization: Bearer x', 'Bearer x'],
+    ['Authorization: Basic dXNlcjpw', 'dXNlcjpw'],
+    ['SECRET_KEY_BASE=abc', 'abc'],
+    ['DB_PASSWORD_PROD=pw1', 'pw1'],
+    ['GITHUB_TOKEN_RW=abc', 'abc'],
+    ['TOKEN_VALUE=abc', 'abc'],
+    ['APP_SECRET_V2=abc', 'abc'],
+    ['client_secret_id=abc', 'abc'],
+    ['SECRET_ACCESS=abc', 'abc'],
+    ['API_KEY_ID=abc', 'abc'],
+    ['KEY_FILE=/k.pem', '/k.pem'],
+    ['echo npm_Ab3dEf6hIj9kLm2nOp5qRs8tUv1wXy4zAb3dEf > ~/.npmrc', 'Ab3dEf6hIj9k'],
+    ['//registry.npmjs.org/:_authToken=npm_Ab3dEf6hIj9kLm2nOp5qRs8t', 'Ab3dEf6hIj9k'],
+    ['whsec_abcdefghijklmnop1234', 'abcdefghijklmnop'],
+    ['SG.abcdefghijklmnop.qrstuvwx', 'qrstuvwx'],
+    ['xoxb-1234-5678-abcdefghijkl', 'abcdefghijkl'],
+    ['glpat-abcdefghijklmnop1234', 'abcdefghijklmnop'],
+    ['mysql -p"S3 cret" db', 'cret'],
+  ]
+  for (const [input, secret] of secrets) {
+    const out = maskSecrets(input)
+    expect(out).toContain('***')
+    expect(out).not.toContain(secret)
+  }
+  for (const plain of ['MAX_TOKENS=4096', 'max_tokens: 1024', 'keys=3', 'tokenizer=bpe', 'git commit -m "fix token parsing"', '123e4567-e89b-12d3-a456-426614174000']) {
+    expect(maskSecrets(plain)).toBe(plain)
+  }
+})
+
 test('maskSecrets masks Basic auth, URL userinfo, CLI passwords, cloud keys and glpat tokens', () => {
   const cases: [string, string][] = [
     ['Authorization: Basic dXNlcjpwYXNzd29yZA==', 'dXNlcjpwYXNzd29yZA'],
