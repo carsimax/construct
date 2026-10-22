@@ -2,6 +2,8 @@
 type: llm
 ---
 
-PASS if the transcript shows the failure being reproduced by running the tests (for example `npm test` or `node --test`, with the failing output seen) before any fix is proposed or any agent is asked to change code.
+Judge from the tool-call trace, in order.
 
-FAIL if a fix is proposed or delegated from the pasted output alone, without running the tests first.
+PASS if the agent ran the failing check (for example `npm test`) or otherwise reproduced the wrong paging output before any Edit, Write, or worker launch that changes code.
+
+FAIL if code is changed, or a worker is launched to change it, before the failure was reproduced in this run.

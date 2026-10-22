@@ -1,91 +1,66 @@
-# CONSTRAINTS.md template and defaults
+# CONSTRAINTS.md template
 
-Adapted from agent-skills `constraint-driven-development` (MIT, Addy Osmani).
-
-## Template
+Fill every `Checked by` with a command that exists in the repository or that the user agreed to install.
 
 ```markdown
 # Constraints
 
-Last reviewed: <date> by <owner>
+## Floor (never weakened)
 
-## Floor (always enforced, no setup required)
+- No new suppression markers: `@ts-ignore`, `eslint-disable`, `# noqa`, `# type: ignore`, `//nolint`.
+- No skipped, focused, or deleted tests without a reason in the commit.
+- No stub bodies that throw "not implemented", and no empty `catch`.
+- No credentials or keys in the repository.
+- This file is not weakened by the change it checks.
 
-- No new suppression comments: `@ts-ignore`, `eslint-disable`, `# noqa`, `# type: ignore`, `//nolint`
-- No unimplemented stubs: `throw new Error("Not implemented")`, empty `catch {}`
-- No skipped or deleted tests without a reason in the commit message
-- No credentials or keys in source
-- This file does not get weakened to make a change pass
+## Numeric rules
 
-## Enforced with numbers
-
-| Dimension | Rule | Checked by | Runs at |
+| Rule | Threshold | Checked by | Runs at |
 |---|---|---|---|
-| Types | Zero type errors | `<project command>` | every edit |
-| Lint | Zero errors from our config | `<project command>` | every edit |
-| Leaked keys | None in source | `gitleaks detect --redact --no-banner` | every edit |
-| Coverage | Changed lines >= 80% covered | `<test runner> --coverage` + git diff | task end, CI |
-| Dependencies | Nothing at high or above | `osv-scanner scan source -r .` | CI |
+| Type errors | 0 | `<typecheck command>` | pre-push, CI |
+| Lint errors | 0 | `<lint command>` | pre-commit, CI |
+| Leaked keys | 0 | `gitleaks detect --redact` | CI |
+| Changed-line coverage | >= 80% | `<coverage command>` | CI |
+| Dependency vulnerabilities (high, critical) | 0 | `<audit command>` | CI |
 
-Every row names the command that produces the verdict.
+## Measured, not enforced (ratchets)
 
-## Measured, not yet enforced
-
-| Metric | Today | Direction |
-|---|---|---|
-| Project coverage | <measured> | must not fall |
+- Project coverage must not fall below the last recorded value (<N>%, tolerance 0.5%).
 
 ## Exceptions
 
 | ID | Rule | Path | Reason | Owner | Expires |
 |---|---|---|---|---|---|
+| E1 | <rule> | <path> | <why> | <name> | <date, at most 90 days out> |
 ```
 
 ## Default thresholds
 
-Use only when the user has no number; state the reason beside each.
+Use only when the user has no number and no measurement exists.
 
-| Constraint | Default | Reason |
+| Dimension | Default | Reason |
 |---|---|---|
-| Coverage of changed lines | >= 80% | Forces a test, allows a config line |
-| Project coverage | today's value, must not fall | Needs no argument to adopt |
-| Mutation score (if used) | >= 60% to start | Typical for a never-mutated suite |
-| Dependency vulnerabilities | nothing at high or above | Below that is mostly noise |
-| LCP / CLS | <= 2500 ms / <= 0.1 | Core Web Vitals "good" |
-| Accessibility | zero critical or serious axe violations | Lower levels are often debatable |
-| Exception lifetime | 90 days | Long enough to plan, short enough to remember |
-| Ratchet tolerance | 0.5% | Absorbs drift from unrelated files |
+| Mutation score | >= 60% | tests that survive mutants prove little |
+| Largest Contentful Paint | <= 2500 ms | "good" boundary of Core Web Vitals |
+| Cumulative Layout Shift | <= 0.1 | "good" boundary of Core Web Vitals |
+| Accessibility (axe) | 0 critical or serious | blocks real users |
+| Ratchet tolerance | 0.5% | absorbs measurement noise |
 
-## Tools by dimension (use the project's own first)
+Drop LCP, CLS, and axe when the project has no URL to test.
 
-| Dimension | Tool | Run |
-|---|---|---|
-| Types | tsc / mypy | `tsc --noEmit` / `mypy .` |
-| Lint | existing config | `eslint .` / `biome check` / `ruff check` |
-| Coverage | test runner | read the lcov the suite already writes; intersect with `git diff` |
-| Code security | Semgrep | `semgrep scan --config p/default` |
-| Leaked keys | gitleaks | `gitleaks detect --redact --no-banner` |
-| Dependencies | osv-scanner | `osv-scanner scan source -r .` |
-| Performance | Lighthouse / size-limit | needs a running URL / byte budget per entry |
-| Accessibility | axe-core | needs a running URL |
-| Architecture | dependency-cruiser | `depcruise --validate src` |
+## Tools
 
-Notes:
+Use the project's own tools first. When it has none, offer one default per dimension and ask before installing:
 
-- `--redact` on gitleaks is mandatory: report the rule and location, never the leaked value.
-- Lighthouse and axe need a URL; for a CLI or library, drop them rather than invent a check.
-- Scope expensive checks (mutation, Semgrep) to the changed files.
-- Do not run the suite twice to get a coverage number.
-- `CONSTRAINTS.md` is canonical; any `check:*` script mirrors it and the file wins on drift.
+- Types and lint: the language's standard checker.
+- Coverage: the test runner's built-in coverage.
+- Secrets: gitleaks, always with `--redact`. Report the rule and file location of a finding, never the value.
+- Dependencies: the package manager's audit command.
+- Mutation: Stryker (JavaScript), mutmut (Python), or the ecosystem's equivalent.
+- Performance and accessibility: Lighthouse and axe against a local URL.
 
-## Ratchets
+Scope expensive checks (mutation, browser audits) to changed files or a nightly job so the commit path stays fast.
 
-Record today's value and a direction in "Measured, not yet enforced"; every check compares against the recorded value. When a number improves, update it; when it drops beyond the tolerance, that is the finding.
+## Exceptions
 
-## Guard moves to look for in a diff
-
-1. Threshold moved: a budget lowered, a severity dropped, a check removed from the fast stage.
-2. Test made easier: skip added, test file deleted, assertions removed.
-3. Checker silenced: new suppression, `istanbul ignore`, `Stryker disable`, `nosemgrep`, `gitleaks:allow`.
-4. Work unfinished: throwing stub, empty `catch`, a `TODO` where code belongs.
-5. Exception added without discussion.
+An exception without an owner and an expiry is a permanent hole. Review expired entries; renewing one is the user's decision.

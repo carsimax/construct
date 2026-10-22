@@ -1,50 +1,34 @@
 ---
 name: migration
-description: "Plan and verify risky migrations and removals: expand, migrate, contract for schemas and persisted data, deprecation notices with a removal condition, compatibility windows, reversible backfills, per-phase verification, and rollback. Trigger: schema or stored-data migration, removing or renaming a public API, flag, config format, or export, replacing a system, or Risk item 1 or 3."
-license: MIT
-metadata:
-  author: Construct
-  version: "1.0"
+description: Plan and verify risky migrations and removals. Use when changing a schema or stored data, removing or renaming a public API, flag, config format, or export, replacing a system, or when the task's Risk names item 1 or 3.
 ---
 
-## Activation Contract
+# Migration
 
-Load this skill when a change migrates or deletes stored data, changes a persisted format, or removes, renames, or replaces something other code or users consume (`construct:workflow` items 1 and 3). Adapted from addyosmani/agent-skills (MIT); see NOTICE.
+A migration changes something other code or stored data depends on. Old and new consumers stay valid at every phase, so any phase can stop or roll back.
 
-## Hard Rules
+## Rules
 
-- Never change a column, field, format, or public name in place. Old and new consumers must both be valid at every phase.
-- Additive first; destructive last and alone. A drop, rename, or removal is its own work unit, after nothing references the old shape.
-- Every phase has a verifier (test, query, or usage check) and a rollback. A migration with no tested down path is not ready.
-- A backfill is reversible or backed up first, runs in bounded batches, and can be re-run safely.
-- Do not deprecate without a working replacement. Do not remove while usage is unproven.
-- The parent plans and reads only; every write goes to `construct:worker`, one phase per unit, test-first.
-- Ask at most one blocking question (default: advisory deprecation with no hard date).
+- Never change a column, field, format, or public name in place. Add the new shape beside the old one.
+- Additive steps first. The destructive step comes last, alone, in its own unit, after nothing references the old shape.
+- Every phase has a verifier and a rollback that was actually run. A down path that was only written means the phase is not ready.
+- Backfills are reversible or backed up, run in bounded batches, and are safe to run twice.
+- Deprecate only with a working replacement. Remove only when usage is proven zero (search results, logs, or metrics; say which).
+- Internal consumers migrate in the same plan. External or unknown consumers get an advisory deprecation. If the down path cannot be proven, removal stops.
 
-## Decision Gates
+## Flow
 
-| Situation | Action |
-|---|---|
-| Stored data or schema changes | Expand, migrate, contract; see `references/phases.md` |
-| Public API, flag, config, or export removed | Deprecate with a notice and removal condition, then remove after zero usage |
-| Replacement does not exist | Build it first; stop the removal |
-| Consumers are internal and all in the repo | Migrate them in the same plan; no compatibility window |
-| Consumers are external or unknown | Advisory by default; compulsory only for security or unsustainable cost, with tooling |
-| Down path or backup cannot be proven | Stop and report; do not proceed to the destructive phase |
+1. **Classify.** Stored data or schema, public name, or a whole system. This work is Risk item 1 or 3, so it is tracked in `odd/tasks/` and its units are reviewed (below).
+2. **Ask at most one blocking question**, only when the answer changes the plan. Without an answer, default to an advisory deprecation with no hard date.
+3. **Plan the phases** from `references/phases.md`: pattern, per-phase verifier and rollback, removal condition. The parent writes the plan; it does not edit code itself.
+4. **Save the plan** with `construct-memory save` (type `decision`) under `topic_key` `migration/<name>`. A notice updates the same entry.
+5. **One phase per unit.** Delegate each phase to `construct:worker`, test-first, with the phase's rollback as an acceptance check. A contract step never shares a unit with an earlier phase.
+6. **Review.** Each unit is Risk item 1 or 3, so it gets `construct:review` before it counts as done, and the publication gate denies `git push`, `gh pr create`, and `gh release create` until the lenses approve. command-guard denies `--no-verify`, and the Risk-line gate blocks added skipped or stub tests, so neither is a way around a failing phase.
 
-## Execution Steps
+## Report
 
-1. Inventory every touchpoint of the old shape (code, data, config, docs, external consumers) with read-only searches.
-2. Pick the pattern (expand/contract, adapter, flag, strangler) and write the phases with their verifier and rollback (`references/phases.md`). Save the chosen plan with `construct-memory save` under `topic_key` `migration/<name>`.
-3. Write the deprecation notice: status, replacement, removal condition (an observable fact, such as zero usage, or a date), migration steps.
-4. Hand each phase to a worker as its own unit; give risky phases their own commit and an independent `construct:verifier`.
-5. Before the contract phase, prove zero remaining use (grep, logs, metrics), then remove code, tests, docs, config, and the notice together.
+Close with, per phase: what changed, its verifier result, its rollback and whether it ran, the removal condition, and the zero-usage evidence for any removal. End the reply with the Risk line naming item 1 or 3.
 
-## Output Contract
+## Reference
 
-Return the phase plan: for each phase its change, verifier, rollback, and removal condition, plus the evidence of zero usage before contraction. Close code changes with the Risk line (`Risk: item 1` or `item 3`).
-
-## References
-
-- `references/phases.md`: phase templates, backfill rules, deprecation notice, and rationalizations.
-- `construct:workflow`: the high-risk items this skill serves.
+- `references/phases.md`: expand-migrate-contract, code patterns, deprecation notice, removal, rejected shortcuts.

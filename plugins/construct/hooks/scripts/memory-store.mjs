@@ -37,7 +37,7 @@ const CANDIDATES_MAX = 3
 const JUDGE_MANY_MAX = 32
 export const RELATIONS = ['related', 'compatible', 'scoped', 'conflicts_with', 'supersedes', 'not_conflict']
 // Initial review prompts in months per type, not deadlines; other types have none.
-const REVIEW_MONTHS = { decision: 6, policy: 12, preference: 3, config: 3, discovery: 6, pattern: 6, architecture: 12, bugfix: 12 }
+export const REVIEW_MONTHS = { decision: 6, policy: 12, preference: 3, config: 3, discovery: 6, pattern: 6, architecture: 12, bugfix: 12 }
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS observations (

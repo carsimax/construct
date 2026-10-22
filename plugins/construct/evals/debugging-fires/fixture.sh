@@ -1,21 +1,26 @@
 #!/usr/bin/env bash
 set -euo pipefail
-git init -q
-cat > last.js <<'JS'
-export function lastItem(items) {
-  return items[items.length]
-}
-JS
-cat > last.test.js <<'JS'
-import { test } from 'node:test'
-import assert from 'node:assert/strict'
-import { lastItem } from './last.js'
-
-test('lastItem returns the final element', () => {
-  assert.equal(lastItem([1, 2, 3]), 3)
-})
-JS
 printf '{ "type": "module", "scripts": { "test": "node --test" } }\n' > package.json
 printf 'script-shell=/bin/sh\n' > .npmrc
-git add -A
-git -c user.email=eval@example.com -c user.name=eval commit -qm "chore: initial last module"
+cat > paginate.js <<'JS'
+// Pages are 1-based: page 1 is the first `size` items.
+export function paginate(items, page, size) {
+  const start = page * size
+  return items.slice(start, start + size)
+}
+JS
+cat > paginate.test.js <<'JS'
+import { test } from 'node:test'
+import assert from 'node:assert/strict'
+import { paginate } from './paginate.js'
+
+const items = ['a', 'b', 'c', 'd', 'e']
+
+test('paginate returns the first page for page 1', () => {
+  assert.deepEqual(paginate(items, 1, 2), ['a', 'b'])
+})
+
+test('paginate returns the short last page', () => {
+  assert.deepEqual(paginate(items, 3, 2), ['e'])
+})
+JS

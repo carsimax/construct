@@ -71,7 +71,7 @@ Many tests cross-check text against code, so a change in one place usually needs
 
 - `main` is protected. Work on a feature branch and open a pull request.
 - Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/). Do not add AI attribution lines.
-- Keep a pull request to about 400 changed lines. Split larger work into chained pull requests (see the `construct:chained-pr` skill).
+- Keep a pull request to about 400 changed lines. Split larger work into chained pull requests (see the `construct:delivery` skill).
 - Technical artifacts (code, comments, docs, commit messages) are written in English.
 - Commit, push, pull request, and merge are the maintainer's decisions.
 
