@@ -1,6 +1,6 @@
 ---
 name: workflow
-description: The ODD protocol for every implementation request, feature plan, resume, task sizing, and the closing Risk line. Use it to authorize, explore, classify small or large, track large work in odd/tasks/<feature>.md, implement test-first, and close with evidence.
+description: The ODD protocol for every implementation request, feature plan, resume, task sizing, and the closing Risk line.
 ---
 
 # Workflow
@@ -11,7 +11,7 @@ Order for every request. The parent orchestrates; `construct:delegation` says wh
 2. **Explore.** Start with `construct-memory search <feature or area>`, proportionately. Stop once the worker's edit surfaces and handoff can be written. More than one bounded batch goes to `construct:explorer`.
 3. **Resolve uncertainty.** Research only a named uncertainty ([research](references/research.md)). A real open product decision gets one question, then the turn stops.
 4. **Classify.** Print `Size: small | large (reason)`.
-5. **Track.** Large work gets `odd/tasks/<feature>.md` before the first source write ([feature document](references/feature-document.md)). Say in one line which document exists and its task count.
+5. **Track.** Large work gets `odd/tasks/<feature>.md` before the first source write ([feature document](references/feature-document.md)). Say which document exists and its task count.
 6. **Implement** task by task, test-first ([testing](references/testing.md)). Hand off by reference (document, task, `S#`), never paraphrase. Any changed command, option, or message changes its help text and docs in the same unit. Commits, branches, and pull requests: `construct:delivery`.
 7. **Review.** A unit whose Risk names an item gets `construct:review` before publication; the publication gate denies `git push`, `gh pr create`, and `gh release create` until the lenses approve.
 8. **Close.** Save what was learned (`construct-memory save`; large work also saves the session summary), then one report: what was verified, each check that failed, was skipped, or stayed unverified, the next step, and the Risk line (last). Close reports and never starts another verification loop. On large work, converge first: compare the code to every `S#`, append each gap as a new `T#` row, never rewrite or delete rows; a gap reopens work. Converge is not a verification run.
@@ -24,14 +24,14 @@ Small means all three hold:
 - No high-risk item applies.
 - Resumable from the request plus `git diff` alone (the resume test).
 
-Large means failing the resume test: the work spans several sessions, waits on outside parties, has separate deliverables, or has requirements that would not survive compaction. Never decide size from file counts, command counts, or a requested todo list.
+Large means failing the resume test: several sessions, outside parties, separate deliverables, or requirements that would not survive compaction. Never size by file counts, command counts, or a requested todo list.
 
 - Small: one `construct:worker`, no feature document, no commits unless asked.
 - Large: feature document first, then work-unit commits on a feature branch.
 
 ## Risk
 
-A change is high risk when a mistake would be hard to notice, hard to reverse, or would spread past the change itself:
+A change is high risk when a mistake would be hard to notice or reverse, or would spread past the change:
 
 1. Data or irreversible effects: migrations, stored-data changes, persisted formats.
 2. Security: auth, permissions, credentials, secrets, guards, sandbox.
@@ -40,7 +40,7 @@ A change is high risk when a mistake would be hard to notice, hard to reverse, o
 5. Delivery or environment: installers, release, CI, deploy, dependencies.
 6. Places where no test would catch a regression.
 
-Writing `Risk: none` requires first asking whether the diff touches code that other behavior shares; if it does, that is item 3.
+Before `Risk: none`, ask whether the diff touches code other behavior shares; if so, that is item 3.
 
 Every code change closes with `Risk: item N (reason)`, `Risk: items 2, 5 (reason)` for several items, or `Risk: none`. The Risk-line hook blocks a reply once when paths outside `odd/tasks/` changed and no Risk line exists, or when the diff adds skipped, focused, or stub test markers. The admission hook reads the same line before it admits a verifier. In the Tasks table, the Risk cell holds the item numbers (`2, 5`, `2-3`) or `none`; the publication gate reads them to require lenses.
 

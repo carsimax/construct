@@ -2,29 +2,19 @@ Construct's agents, skills, contracts, hooks, and evals are its own text.
 
 Adapted code
 ------------
-The status-panel drawing code in hooks/panel/ is adapted from claude-flightdeck
-(https://github.com/scasella/claude-flightdeck) by Stephen Casella, MIT License.
-Its copyright and permission notice are in LICENSE-flightdeck and in the header
-of each adapted file (tests/panel-license.test.mjs checks both).
+Code adapted from MIT-licensed projects. Each project's copyright and permission
+notice is in its LICENSE file and in the header of each adapted file
+(tests/panel-license.test.mjs checks both).
 
-Acknowledgements
-----------------
-Ideas, no text, from these projects:
+- claude-flightdeck (https://github.com/scasella/claude-flightdeck), Stephen
+  Casella: the status-panel drawing code in hooks/panel/ (draw.js, layout.js,
+  state.js). See LICENSE-flightdeck.
+- gentle-shell (https://github.com/Gentleman-Programming/gentle-shell), Mario
+  Zechner: hooks/scripts/delegation-admission.mjs and
+  hooks/scripts/delivery-signals.mjs. See LICENSE-gentle-shell.
+- gentle-agent-state (https://github.com/Gentleman-Programming/gentle-agent-state),
+  Alan Buscaglia: the blocked-state part of hooks/panel/state.js. See
+  LICENSE-gentle-agent-state.
 
-- Gentle AI, https://github.com/Gentleman-Programming/gentle-ai: orchestrator
-  and delegation routing, review lenses and dual review, ledger-style review.
-- agent-skills, https://github.com/addyosmani/agent-skills: root-cause
-  debugging, the written quality bar, source-grounded code, migrations, the
-  security checklist, and the Definition of Done.
-- engram, https://github.com/Gentleman-Programming/engram: memory behavior
-  (write rules, search ranking, context format, passive capture) and the export
-  format the import command reads.
-- BMAD-METHOD, https://github.com/bmad-code-org/BMAD-METHOD: verification-gap
-  shapes, evidence rules, claim and deletion checks, the Baseline field.
-- get-shit-done, https://github.com/gsd-build/get-shit-done: wiring levels,
-  orphaned-code checks, scope-reduction checks, the failed-install rule.
-- gstack, https://github.com/garrytan/gstack: the test value bar.
-- compound-engineering-plugin, https://github.com/EveryInc/compound-engineering-plugin:
-  the durable-memory bar and stale-memory classification.
-- spec-kit, https://github.com/github/spec-kit: Given/When/Then lines, converge at close.
-- ECC, https://github.com/affaan-m/ECC: the pressure-prompt eval idea.
+The projects that gave Construct ideas, with no text or code copied, are credited
+in the README.

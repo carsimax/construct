@@ -3,8 +3,7 @@ name: judge-a
 description: >
   Adversarial code reviewer — blind judge A for the dual review mode of
   construct:review. Launched by the orchestrator when the user asks for a dual or
-  adversarial review. Reviews code for correctness, edge cases, security,
-  performance, and project standards.
+  adversarial review.
 model: opus
 effort: medium
 tools: Read, Glob, Grep, LSP

@@ -84,7 +84,7 @@ describe('check', () => {
   for (const line of ['risk: none', 'Risk: item 7 (x)', 'Risk: maybe', 'The Risk: none holds',
     'Risk: None', 'Risk: item 10', '> Risk: none', '## Risk: none',
     'Risk: none-ish', 'Risk: nonexistent', 'Risk: item 2x', 'Risk: item 2-ish', 'Risk: none.',
-    'Risk: items', 'Risk: items 7', 'Risk: item 2,', 'Risk: items 2, 7', 'Risk: items 2,']) {
+    'Risk: items', 'Risk: items 7', 'Risk: item 2,', 'Risk: items 2, 7', 'Risk: items 2,', 'Risk: items 2, 5, 7']) {
     test(`rejects ${JSON.stringify(line)}`, () => {
       const { repo, e } = changed()
       assert.equal(check(repo, e, line).json?.decision, 'block')

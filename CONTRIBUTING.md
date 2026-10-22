@@ -88,8 +88,8 @@ Many tests cross-check text against code, so a change in one place usually needs
 
 ## Third-party material
 
-Adapted code keeps its license in a `plugins/construct/LICENSE-<project>` file and in the header of each adapted file (see `LICENSE-flightdeck`). Ideas from another project, with no text or code copied, get one acknowledgement line in [`plugins/construct/NOTICE`](plugins/construct/NOTICE); NOTICE carries no license text.
+Adapted code keeps its license in a `plugins/construct/LICENSE-<project>` file and in the header of each adapted file (see `LICENSE-flightdeck`), and is listed in [`plugins/construct/NOTICE`](plugins/construct/NOTICE), which carries no license text. Ideas from another project, with no text or code copied, get one credit line in the README's Credits section.
 
 ## License
 
-Contributions are accepted under the same [MIT License](LICENSE) as the project (inbound = outbound). Adapted third-party code keeps its license in a `LICENSE-<project>` file; ideas are credited in [`plugins/construct/NOTICE`](plugins/construct/NOTICE).
+Contributions are accepted under the same [MIT License](LICENSE) as the project (inbound = outbound). Adapted third-party code keeps its license in a `LICENSE-<project>` file; adapted code is listed in [`plugins/construct/NOTICE`](plugins/construct/NOTICE) and ideas are credited in the README's Credits section.

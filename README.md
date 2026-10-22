@@ -185,7 +185,7 @@ Memory is per repository: one SQLite database at `<git common dir>/construct-mem
 
 ### Quality and recovery skills
 
-Four skills load on demand (ideas from [addyosmani/agent-skills](https://github.com/addyosmani/agent-skills); see the acknowledgements in `plugins/construct/NOTICE`). The session contract names `debugging` and `constraints`; the other two load from the skills that link to them.
+Four skills load on demand (ideas from [addyosmani/agent-skills](https://github.com/addyosmani/agent-skills); see [Credits](#credits)). The session contract names `debugging` and `constraints`; the other two load from the skills that link to them.
 
 | Skill | Use it for |
 |---|---|
@@ -257,7 +257,7 @@ The mod draws one thing: a docked **panel** (a `Pane` with id `construct`) laid 
 2. **ODD card** (only with an active feature): the feature (newest `odd/tasks/*.md` with an unfinished task, the rule of `feature-state.mjs`), the current task, one checkpoint per task (done filled, current highlighted) and the open count.
 3. **GATE card**: a stacked bar of permission verdicts, allowed / asked (`you`, or `classifier` in `auto` mode) / pending / denied counts, `file`, `shell` and `other` bucket counts, the last denied tool with credential-like values masked, and the inline-write alert (a main-thread `Edit`, `Write`, `MultiEdit` or `NotebookEdit` outside `odd/tasks/`: the count and last path, error color). It only observes and never blocks.
    - **MEMORY card** (after GATE; a dim reason line when memory is off, `no memories yet` when empty): `N memories`, `<n> to review` (amber above 0), `<n> pinned`, `<n> pending` relations, `last save <age> ago` and `+<n> this session`, from `construct-memory stats --json`; left out when that run fails.
-4. **agents card**: titled `agents`, with `N running · M total` on the right, one row per subagent (up to 6, then `+N earlier`): a status mark, a short name (the construct role without the `odd_` prefix, as in `worker` or `review-risk`; the subagent type when there is no construct role), the routed model with its effort meter (for example `Sonnet 5.5 ▮▮▮▯`), and the elapsed time as static text.
+4. **agents card**: titled `agents`, with `N running · M total` on the right, one row per subagent (up to 6, then `+N earlier`): a status mark, a short name (the construct role, as in `worker` or `review-risk`; the subagent type when there is no construct role), the routed model with its effort meter (for example `Sonnet 5.5 ▮▮▮▯`), and the elapsed time as static text.
 5. **changes card** (only with something to show): round card titled with the branch, `↑N` (commits to push) and `↓N` (commits to pull) on the right, each shown only when above 0. One row per changed file, biggest change first: the path (long paths keep their basename: `…/dir/name`) and `+added` / `-removed` lines (`bin` for a binary file). Changes are the working tree against `HEAD`, staged and unstaged; an untracked file shows `+lines` (counted for the first 20 untracked files) or `new` when it is a directory, past the first 20, or not countable. Rows fit the pane height; when some are cut the last row is `+N more`. The card is hidden when the repository is clean and in sync.
 
 **Refresh and fail-open.** Git (status, `diff --numstat HEAD` and a line count per untracked file) and the feature documents are read only on `session.start` and after each main-thread `turn.complete`, in the background with a timeout, never on a redraw. Context and the plan limits are read from the session usage on each redraw. Nothing is animated: the agents' elapsed times are static text computed at each redraw, which happens on the events below, not on a timer. The panel's own state is kept in a versioned `atom` fed from engine events (`agent.spawn`, `turn.start`, `turn.step`, `tool.call`, `tool.check`, `turn.complete`, and `session.compact`); the panel redraws on those events, not per token. These hooks only observe: each passes its event on unchanged and swallows its own failures, and the model and effort routing is untouched. Any error leaves out the affected card and never blocks or delays a turn.
@@ -284,6 +284,38 @@ The mod draws one thing: a docked **panel** (a `Pane` with id `construct`) laid 
 ## Contributing
 
 Setup, checks, and pull request rules are in [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Upgrading to 6.0
+
+Draft for the 6.0 release. Agents, skills, and options get Construct-native names; behavior stays or gets stricter.
+
+Agents (the `construct:` prefix stays; the `review-*` lenses keep their names):
+
+| 5.x | 6.0 |
+|---|---|
+| `odd-worker` | `worker` |
+| `odd-explorer` | `explorer` |
+| `odd-verify` | `verifier` |
+| `odd-general` | `general` |
+| `jd-judge-a`, `jd-judge-b` | `judge-a`, `judge-b` |
+| `jd-fix-agent` | removed: dual-review fixes go to `construct:worker` |
+
+Skills:
+
+| 5.x | 6.0 |
+|---|---|
+| `odd-workflow`, `task-size-risk` | `workflow` |
+| `odd-delegation`, `lossless-prompts` | `delegation` |
+| `rdd-review`, `judgment-day` | `review` (dual review is in `references/dual-review.md`) |
+| `branch-pr`, `chained-pr`, `work-unit-commits` | `delivery` |
+| `constraint-driven` | `constraints` |
+| `source-driven` | `sources` |
+| `memory`, `debugging`, `migration` | unchanged |
+| `go-testing`, `comment-writer`, `cognitive-doc-design`, `skill-creator`, `skill-improver` | removed |
+
+Options: each role has `model_<role>` and `effort_<role>`, where the role is the agent name with dashes turned into underscores (`model_worker`, `effort_review_risk`). Both default to `inherit`, which defers to the deprecated 5.x option of the same role (`model_odd_*`, `effort_odd_*`, `model_jd_*`, `effort_jd_*`) and then to the agent's own setting. The deprecated options still apply through 6.x; set the new ones and drop the old. The `jd_fix_agent` options are gone.
+
+Risk line: one reply can name several items, `Risk: items 2, 5 (reason)`; the Risk-line gate and the verifier admission both accept it. `Risk: item N` and `Risk: none` are unchanged, and a trailing comma or an item outside 1-6 is still rejected.
 
 ## Status
 
@@ -355,8 +387,22 @@ Upgrading from 1.1.0:
 - `rm -r` and `git push` now ask for confirmation on the main thread and are denied inside subagents.
 - The main thread can no longer edit repository files outside `odd/tasks/`.
 
+## Credits
+
+Ideas, with no text or code copied, from these projects:
+
+- Gentle AI, https://github.com/Gentleman-Programming/gentle-ai: orchestrator and delegation routing, review lenses and dual review, ledger-style review.
+- agent-skills, https://github.com/addyosmani/agent-skills: root-cause debugging, the written quality bar, source-grounded code, migrations, the security checklist, and the Definition of Done.
+- engram, https://github.com/Gentleman-Programming/engram: memory behavior (write rules, search ranking, context format, passive capture) and the export format the import command reads.
+- BMAD-METHOD, https://github.com/bmad-code-org/BMAD-METHOD: verification-gap shapes, evidence rules, claim and deletion checks, the Baseline field.
+- get-shit-done, https://github.com/gsd-build/get-shit-done: wiring levels, orphaned-code checks, scope-reduction checks, the failed-install rule.
+- gstack, https://github.com/garrytan/gstack: the test value bar.
+- compound-engineering-plugin, https://github.com/EveryInc/compound-engineering-plugin: the durable-memory bar and stale-memory classification.
+- spec-kit, https://github.com/github/spec-kit: Given/When/Then lines, converge at close.
+- ECC, https://github.com/affaan-m/ECC: the pressure-prompt eval idea.
+
 ## License
 
 Construct is released under the MIT License; see [`LICENSE`](LICENSE).
 
-The agents, skills, contracts, hooks, and evals are Construct's own text. Only the panel drawing code is adapted (claude-flightdeck, MIT; notice in [`plugins/construct/LICENSE-flightdeck`](plugins/construct/LICENSE-flightdeck)). The ideas Construct draws on from other projects are credited in the acknowledgements of [`plugins/construct/NOTICE`](plugins/construct/NOTICE).
+The agents, skills, contracts, and evals are Construct's own text. Adapted MIT code (the panel drawing code, the delegation admission and delivery signals hooks, the blocked state) is listed in [`plugins/construct/NOTICE`](plugins/construct/NOTICE), with each project's license in `plugins/construct/LICENSE-flightdeck`, `LICENSE-gentle-shell`, and `LICENSE-gentle-agent-state`. The ideas Construct draws on from other projects are in [Credits](#credits).
