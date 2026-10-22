@@ -8,7 +8,7 @@ The writer never reads `plugins/construct/hooks/panel/draw.js`, `layout.js`, or 
 
 ## Specs
 
-- **S1 — Panel is Construct's own code.** "me gustaria que atacamos la parte del sidepanel, reconstruirlo a nuestra manera para quitar claude-flightdeck". Assumption: "a nuestra manera" means our own code and structure; the observable panel (cards, rows, wording, colors) stays as it is today, so the existing tests are the verifier. A visual redesign is out of scope unless the user asks.
+- **S1 — Panel is Construct's own code.** "me gustaria que atacamos la parte del sidepanel, reconstruirlo a nuestra manera para quitar claude-flightdeck". Assumption: "a nuestra manera" means our own code and structure; the observable panel (cards, rows, wording, colors) stays as it is today, so the existing tests are the verifier. A visual redesign is out of scope unless the user asks; S7 (L8) is that ask, and S7 overrides S5 where they differ.
 - **S2 — Public surface unchanged.** Same exports and signatures, so `hooks/register.js` and the tests keep working:
   - `draw.js`: `PALETTE`, `fmtResetIn(resetsAt, nowMs)`, `gauge(pct, width) -> {on, off}`, `effortMeter(effort) -> {on, off}` (four slots), `CHANGES_FRAME_ROWS = 3`, `MAX_CHANGE_ROWS = 10`, `changeRows(bodyRows, used)` (-1 = card does not fit), `stackBar(counts[], width) -> number[]` (largest-remainder split), `panelBox`, `card({title, status, color, children, width, dim, marginTop})`; elements are `{type, props, children}`.
   - `layout.js`: `PANEL_COLUMNS = 66`, `clock(ms)`, `prettyModel(model)`, `buildPanel({panel, usage, odd, memory, nowMs, columns, rows, model, effort, git, changes})`.
@@ -42,12 +42,20 @@ The writer never reads `plugins/construct/hooks/panel/draw.js`, `layout.js`, or 
   - Palette roles → theme keys: main `claude`, agent `suggestion`, gate `success`, cleared `permission`, odd `merged`, git `remember`, amber `warning`, warn `error`, dim `inactive`, faint `subtle`.
 - **S6 — Attribution removed.** No file carries the claude-flightdeck or gentle-agent-state MIT header or `adapted from` line; `LICENSE-flightdeck` and `LICENSE-gentle-agent-state` are deleted; NOTICE lists only gentle-shell; claude-flightdeck moves to the README's ideas-only credits (the card-panel idea came from it); `tests/panel-license.test.mjs` and `tests/skills.test.mjs` assert the new state (no header in the panel files, the two LICENSE files absent); README and CONTRIBUTING references and the `flightdeck` wording in panel test titles and fixtures are updated. Assumption: removing gentle-agent-state follows from rewriting `state.js` whole.
 
+- **S7 — Panel personality: voice and glyphs.** "Aprovecha para darle mas personalidad al panel"; the user chose "Voz + glifos" (same card structure, a glyph and verb per agent role, statuses with voice, empty states with character, no emoji). UI text stays English. Assumptions marked (A):
+  - Agent rows: role glyph, name, verb, dim model, effort meter, clock. Glyphs (A): explorer `⌕`, worker `⚒`, verifier `⊨`, general `◇`, judge-a/judge-b `⚖`, review-* `◎`, other `•`. Verbs running/done (A): explorer mapping/mapped, worker building/built, verifier verifying/verified, judge judging/judged, review reviewing/reviewed, general and other working/done. Running rows use the role's agent color; done rows dim with the success-colored glyph. All glyphs single-width.
+  - Agents card status: `N at work · T` (was `R running · T total`); `all done · T` when none run.
+  - Main card: branch, effort, and request count share one row: `⎇ <branch> · <meter> <effort> · N req` (mode appended as `· <mode>` when known). Status: `● <phase verb>` while a main turn is open (phase from `phaseOf`, e.g. `building`), `◆ waiting on you` (amber) when blocked, `○ ready` (dim) when idle.
+  - GATE card: status `all clear` when nothing is pending or denied, `N waiting on you` when asks are pending, else `N checks`; with no checks the body reads `nothing waiting on you`.
+  - Empty and quiet states (A): MEMORY with zero memories `nothing remembered yet`; changes card in sync with no files stays hidden.
+  - Tests in `panel-layout.test.ts` and `panel.test.ts` that pin the old wording change to S7's wording in T2; nothing else in them changes.
+
 ## Tasks
 
 | ID | Specs | Task | Route | Risk | Status | Commit |
 |---|---|---|---|---|---|---|
-| T1 | S1, S2, S3, S4, S6 | Clean-room rewrite of `state.js`; `panel-state.test.ts` and `panel.test.ts` green. Same slice, for S6's state.js part: delete `LICENSE-gentle-agent-state`, drop its NOTICE entry and its README:410 mention, drop it from `tests/skills.test.mjs:82` and the `PORTS` list in `tests/panel-license.test.mjs`, and drop `state.js` from the flightdeck header test and from the NOTICE flightdeck line | worker | 1, 3 | third correction (L7) | c19feda + next |
-| T2 | S1, S2, S5 | Clean-room rewrite of `draw.js` and `layout.js`; `panel-draw.test.ts`, `panel-layout.test.ts`, `panel.test.ts` green | worker | 3, 6 | pending | — |
+| T1 | S1, S2, S3, S4, S6 | Clean-room rewrite of `state.js`; `panel-state.test.ts` and `panel.test.ts` green. Same slice, for S6's state.js part: delete `LICENSE-gentle-agent-state`, drop its NOTICE entry and its README:410 mention, drop it from `tests/skills.test.mjs:82` and the `PORTS` list in `tests/panel-license.test.mjs`, and drop `state.js` from the flightdeck header test and from the NOTICE flightdeck line | worker | 1-3 | done (verified 5c33324: mask corpus 0 weaker of 3,241; fuzz 0 beyond L3; mod 180/3 env; node --test 969/0) | c19feda + next |
+| T2 | S1, S2, S5, S7 | Clean-room rewrite of `draw.js` and `layout.js`; `panel-draw.test.ts`, `panel-layout.test.ts`, `panel.test.ts` green | worker | 3, 6 | pending | — |
 | T3 | S6 | Remove the flightdeck attribution: `LICENSE-flightdeck`, NOTICE entry, `tests/panel-license.test.mjs` flightdeck part, `tests/skills.test.mjs`, README 246/265/410 (move to ideas-only credits), CONTRIBUTING 91, `flightdeck` wording in panel test titles and fixtures | worker | 6 | pending | — |
 
 ## Log
@@ -60,5 +68,6 @@ The writer never reads `plugins/construct/hooks/panel/draw.js`, `layout.js`, or 
 - **L5 (2026-10-22, parent):** Recheck of 3b6e1d2: earlier blockers fixed, fuzz 0 divergences beyond L3, merge repair holds. Masking still weaker than baseline (short Bearer tokens, secret words mid-name such as `SECRET_KEY_BASE`, `npm_` tokens); same blocker as L4, so one more correction batch. S4 masking rule rewritten (segment match, Bearer/Basic, more prefixes, quoted mysql password); `bucketOf` wording fixed to match baseline. Left for the user (gaps in baseline too): webhook URLs, `redis://:pw@`, `--access-token value` with a space, JSON bodies, `docker login -p`, `redis-cli -a`.
 - **L6 (2026-10-22, parent):** Final recheck of 8c97d85: S1-S3, S6 pass (fuzz 0 divergences beyond L3; mod 179/3 env; node --test 969/0). S4 still fails on masking against a 3,241-input template corpus: secret words joined into a name (`PGPASSWORD`, `dbPassword`, `keyStorePassword`), pairs nested in a flag value (`--from-literal=password=abc`, `-Dpassword=abc`), `ghp_` + 16-19 chars; new false positive `npm_config_cache=`. Correction rounds exhausted; needs the user's decision.
 - **L7 (2026-10-22):** User chose "Regla amplia (Recommended)": mask when the name contains a secret word anywhere, as baseline did, plus nested pairs and `ghp_` from 16; false positives such as `MAX_TOKENS=***` come back. One more correction batch and recheck.
+- **L8 (2026-10-22):** "Aprovecha para darle mas personalidad al panel". Choice: "Voz + glifos (Recommended)". Added S7, folded into T2.
 
-Next step (superseded): verifier for the T1 slice with a differential probe (old vs new reducers on the same event sequences), then review lenses for Risk 1, 3.
+Next step: review lenses for T1 (risk, resilience, reliability), then T2 on a branch stacked on T1.
