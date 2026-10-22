@@ -1,7 +1,7 @@
 # Construct
 
 [![Claude Code](https://img.shields.io/badge/Claude_Code-2.1.304%2B-blue)](#requirements)
-[![Plugin version](https://img.shields.io/badge/version-5.0.0-informational)](plugins/construct/.claude-plugin/plugin.json)
+[![Plugin version](https://img.shields.io/badge/version-5.0.1-informational)](plugins/construct/.claude-plugin/plugin.json)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 Construct is a Claude Code plugin that makes every request follow Organic Driven Development (ODD): authorize, explore, size, track, implement test-first, and close with evidence and a Risk line.
@@ -30,7 +30,7 @@ Construct is a Claude Code plugin that makes every request follow Organic Driven
 ### One command
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v5.0.0/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v5.0.1/install.sh | bash
 ```
 
 The installer checks the requirements above and stops before changing anything if one is missing, or if `~/.claude` or `~/.claude/settings.json` is not writable, or if `settings.json` is a directory. Then it runs the manual steps below for you:
@@ -48,7 +48,7 @@ If engram or codegraph is installed, the installer says Construct no longer need
 Pass options after `bash -s --`, for example `curl -fsSL <url> | bash -s -- --no-mcp`. To read the script before running it:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v5.0.0/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v5.0.1/install.sh -o install.sh
 less install.sh
 bash install.sh
 ```
@@ -64,7 +64,7 @@ The manual steps the installer runs, for when you want to run them yourself:
    claude plugin install construct@construct
    ```
 
-   The installer (`install.sh`) pins this marketplace to the release tag (`carsimax/construct#v5.0.0`); the command above follows the default branch.
+   The installer (`install.sh`) pins this marketplace to the release tag (`carsimax/construct#v5.0.1`); the command above follows the default branch.
 
 2. Optional: inside Claude Code, in `/config`, set each role's model and effort (rows such as `ODD Worker model`).
 
@@ -285,9 +285,14 @@ Setup, checks, and pull request rules are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Status
 
-Current version: 5.0.0 (`plugins/construct/.claude-plugin/plugin.json`); CodeGraph is removed and Construct has no third-party dependency. Breaking. Releases are tagged `vX.Y.Z`.
+Current version: 5.0.1 (`plugins/construct/.claude-plugin/plugin.json`); a patch release with no breaking change. Releases are tagged `vX.Y.Z`.
 
-Upgrading from 4.0.1:
+Fixes in 5.0.1:
+
+- The publication gate no longer denies commands whose single-quoted text contains a backtick span or `$(...)`; bash treats them as literal there.
+- Substitutions are scanned on the raw word text.
+
+5.0.0 was a breaking release: CodeGraph is removed and Construct has no third-party dependency. Upgrading from 4.0.1:
 
 - Breaking: the `construct:codegraph` skill, the `codegraph_auto_index` option, the codegraph MCP tool in the agents, and the installer's npm and MCP steps are removed.
 - Structural questions (architecture, call flow, references, impact) use the native `LSP` tool when a language server is available, and Grep, Glob, and Read otherwise.
