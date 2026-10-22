@@ -77,7 +77,7 @@ describe('schema (S2)', () => {
   test('has the tables, columns, and trigram FTS tables', () => {
     const { store } = open()
     const names = raw(store, "SELECT name FROM sqlite_master WHERE type IN ('table')").map((r) => r.name)
-    for (const n of ['observations', 'observation_versions', 'sessions', 'user_prompts', 'observations_fts', 'prompts_fts']) {
+    for (const n of ['observations', 'observation_versions', 'sessions', 'user_prompts', 'observations_fts', 'prompts_fts', 'prompt_tombstones']) {
       assert.ok(names.includes(n), n)
     }
     const columns = raw(store, 'PRAGMA table_info(observations)').map((r) => r.name)
@@ -85,6 +85,7 @@ describe('schema (S2)', () => {
       'id', 'session_id', 'type', 'title', 'content', 'topic_key', 'normalized_hash', 'revision_count',
       'duplicate_count', 'last_seen_at', 'review_after', 'created_at', 'updated_at', 'deleted_at', 'import_id',
     ])
+    assert.deepEqual(raw(store, 'PRAGMA table_info(prompt_tombstones)').map((r) => r.name), ['import_id', 'deleted_at'])
     assert.match(raw(store, "SELECT sql FROM sqlite_master WHERE name = 'observations_fts'")[0].sql, /trigram/)
     assert.match(raw(store, "SELECT sql FROM sqlite_master WHERE name = 'prompts_fts'")[0].sql, /trigram/)
     store.close()
@@ -108,6 +109,35 @@ describe('schema (S2)', () => {
     const { store } = open()
     store.addPrompt('s1', 'please refactor the parser')
     assert.equal(raw(store, "SELECT rowid FROM prompts_fts WHERE prompts_fts MATCH '\"parser\"'").length, 1)
+    store.close()
+  })
+  test('prompts lists newest first with a limit (default 20, max 100)', () => {
+    const { store } = open()
+    for (let i = 1; i <= 25; i++) store.addPrompt('s1', `prompt ${i}`)
+    const rows = store.prompts()
+    assert.equal(rows.length, 20)
+    assert.deepEqual(Object.keys(rows[0]), ['id', 'session_id', 'created_at', 'content'])
+    assert.equal(rows[0].content, 'prompt 25')
+    assert.equal(rows[19].content, 'prompt 6')
+    assert.deepEqual(store.prompts({ limit: 2 }).map((r) => r.content), ['prompt 25', 'prompt 24'])
+    for (let i = 26; i <= 120; i++) store.addPrompt('s1', `prompt ${i}`)
+    assert.equal(store.prompts({ limit: 500 }).length, 100)
+    store.close()
+  })
+
+  test('deletePrompt removes the row, the FTS match, and the context line', () => {
+    const { store } = open()
+    store.addPrompt('s1', 'my password is hunter2parser')
+    store.addPrompt('s1', 'keep this one')
+    const [, secret] = store.prompts()
+    assert.match(secret.content, /hunter2/)
+    assert.match(store.context(), /hunter2/)
+    assert.equal(store.deletePrompt(secret.id), true)
+    assert.deepEqual(store.prompts().map((r) => r.content), ['keep this one'])
+    assert.equal(raw(store, "SELECT rowid FROM prompts_fts WHERE prompts_fts MATCH '\"hunter2\"'").length, 0)
+    assert.doesNotMatch(store.context(), /hunter2/)
+    assert.equal(store.deletePrompt(secret.id), false)
+    assert.equal(store.deletePrompt(99999), false)
     store.close()
   })
 })

@@ -46,7 +46,7 @@ describe('construct-memory', () => {
     const repo = makeRepo()
     for (const args of [[], ['help']]) {
       const out = ok(cli(repo, args))
-      for (const word of ['save', 'search', 'get', 'context', 'update', 'delete', 'summary', 'review', 'import']) assert.match(out, new RegExp(word))
+      for (const word of ['save', 'search', 'get', 'context', 'update', 'delete', 'summary', 'review', 'import', 'prompts']) assert.match(out, new RegExp(word))
     }
   })
 
@@ -226,6 +226,30 @@ describe('construct-memory', () => {
     for (const [args, input] of [[['context'], ''], [['search', 'x'], ''], [['get', '1'], ''], [['save'], '{"title":"a","content":"b"}'], [['review', 'list'], '']]) {
       fails(cli(dir, args, input), /memory is off/i)
     }
+  })
+
+  test('prompts lists newest first, one line each, and prompts delete removes one', () => {
+    const repo = makeRepo()
+    assert.equal(ok(cli(repo, ['prompts'])), 'no prompts stored\n')
+    const store = openMemory(repo)
+    store.addPrompt('s1', 'first prompt')
+    store.addPrompt('s1', `line one\n\n  line two ${'x'.repeat(200)}`)
+    store.addPrompt('s1', `${'😀'.repeat(130)}`)
+    store.close()
+    const lines = ok(cli(repo, ['prompts'])).trimEnd().split('\n')
+    assert.equal(lines.length, 3)
+    assert.match(lines[0], /^#3 \d{4}-\d\d-\d\dT\S+ 😀+$/u)
+    assert.equal([...lines[0].split(' ')[2]].length, 120)
+    assert.match(lines[1], /^#2 \S+ line one line two x+$/)
+    assert.equal([...lines[1].split(' ').slice(2).join(' ')].length, 120)
+    assert.match(lines[2], /^#1 \S+ first prompt$/)
+    assert.equal(ok(cli(repo, ['prompts', '--limit', '1'])).trimEnd().split('\n').length, 1)
+    assert.equal(ok(cli(repo, ['prompts', 'delete', '2'])), 'deleted prompt #2\n')
+    assert.deepEqual(ok(cli(repo, ['prompts'])).trimEnd().split('\n').map((l) => l.split(' ')[0]), ['#3', '#1'])
+    fails(cli(repo, ['prompts', 'delete', '2']), /prompt #2 not found/)
+    fails(cli(repo, ['prompts', 'delete', 'abc']), /a prompt id \(a number\) is required/)
+    fails(cli(repo, ['prompts', 'delete']), /a prompt id \(a number\) is required/)
+    fails(cli(repo, ['prompts', 'frob']), /prompts needs/)
   })
 
   test('without node:sqlite a store command fails with one line and help still works', () => {

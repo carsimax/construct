@@ -76,6 +76,10 @@ CREATE TABLE IF NOT EXISTS user_prompts (
   import_id TEXT
 );
 CREATE UNIQUE INDEX IF NOT EXISTS prompts_import ON user_prompts(import_id) WHERE import_id IS NOT NULL;
+CREATE TABLE IF NOT EXISTS prompt_tombstones (
+  import_id TEXT PRIMARY KEY,
+  deleted_at TEXT NOT NULL
+);
 CREATE VIRTUAL TABLE IF NOT EXISTS observations_fts USING fts5(
   title, content, type, topic_key, content='observations', content_rowid='id', tokenize='trigram'
 );
@@ -368,6 +372,24 @@ function makeStore(db, path, now) {
       write(() => run('INSERT INTO user_prompts (session_id, content, created_at) VALUES (?, ?, ?)', sessionId, stripPrivate(content), stamp()))
     },
 
+    // prompts lists stored prompts, newest first (limit default 20, max 100).
+    prompts({ limit } = {}) {
+      const n = Math.min(100, Math.max(1, Math.floor(Number(limit)) || 20))
+      return all('SELECT id, session_id, created_at, content FROM user_prompts ORDER BY id DESC LIMIT ?', n)
+    },
+
+    // deletePrompt hard-deletes one prompt (the trigger drops its FTS entry); an imported one leaves a
+    // tombstone of its import key so a re-import does not bring it back. False for an unknown id.
+    deletePrompt(id) {
+      return write(() => {
+        const row = one('SELECT import_id FROM user_prompts WHERE id = ?', id)
+        if (!row) return false
+        if (row.import_id) run('INSERT OR IGNORE INTO prompt_tombstones (import_id, deleted_at) VALUES (?, ?)', row.import_id, stamp())
+        run('DELETE FROM user_prompts WHERE id = ?', id)
+        return true
+      })
+    },
+
     // needingReview lists live observations whose review_after has passed, oldest first.
     needingReview() {
       return all('SELECT * FROM observations WHERE deleted_at IS NULL AND review_after IS NOT NULL AND review_after <= ? ORDER BY review_after, id', stamp()).map(present)
@@ -437,7 +459,7 @@ function makeStore(db, path, now) {
         }
         for (const p of prompts.filter((r) => projectOf(r) === chosen)) {
           const importId = idOf('prompt', p)
-          if (one('SELECT 1 AS found FROM user_prompts WHERE import_id = ?', importId)) {
+          if (one('SELECT 1 AS found FROM user_prompts WHERE import_id = ? UNION SELECT 1 FROM prompt_tombstones WHERE import_id = ?', importId, importId)) {
             counts.skipped++
             continue
           }

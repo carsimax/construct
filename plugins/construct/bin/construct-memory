@@ -13,6 +13,8 @@ const USAGE = `usage: construct-memory <command> [options]
   delete <id>
   summary --session <id>            summary on stdin; stores it and ends the session
   review list | review done <id>
+  prompts [--limit N]               list stored prompts (id, date, preview), newest first
+  prompts delete <id>               remove one stored prompt for good
   import <file> [--project <name>]  load one project of an engram export JSON file (versions 0.1.0, 0.2.0)
   help`
 
@@ -34,6 +36,11 @@ function stdinJson() {
 
 function idArg(text) {
   if (!/^\d+$/.test(text ?? '')) fail('an observation id (a number) is required')
+  return Number(text)
+}
+
+function promptId(text) {
+  if (!/^\d+$/.test(text ?? '')) fail('a prompt id (a number) is required')
   return Number(text)
 }
 
@@ -68,10 +75,11 @@ async function main(argv) {
     allowPositionals: true,
     options: { type: { type: 'string' }, limit: { type: 'string' }, any: { type: 'boolean' }, history: { type: 'boolean' }, session: { type: 'string' }, project: { type: 'string' } },
   })
-  const known = ['save', 'search', 'get', 'context', 'update', 'delete', 'summary', 'review', 'import']
+  const known = ['save', 'search', 'get', 'context', 'update', 'delete', 'summary', 'review', 'import', 'prompts']
   if (!known.includes(command)) fail(`unknown command: ${command} (run construct-memory help)`)
   if (command === 'review' && !['list', 'done'].includes(positionals[0])) fail('review needs list or done <id>')
 
+  if (command === 'prompts' && positionals.length && positionals[0] !== 'delete') fail('prompts needs nothing, or delete <id>')
   if (command === 'import' && !positionals[0]) fail('import needs a file: construct-memory import <file> [--project <name>]')
 
   // Loaded here, not at the top: the store needs node:sqlite, and help and usage errors must work without it.
@@ -136,6 +144,15 @@ async function main(argv) {
         }
         const n = store.importExport(data, { project: values.project })
         return `imported ${n.observations} observations, ${n.sessions} sessions, ${n.prompts} prompts; skipped ${n.skipped} already imported, ${n.deleted} deleted\n`
+      }
+      case 'prompts': {
+        if (positionals[0] === 'delete') {
+          const id = promptId(positionals[1])
+          if (!store.deletePrompt(id)) fail(`prompt #${id} not found`)
+          return `deleted prompt #${id}\n`
+        }
+        const rows = store.prompts({ limit: values.limit })
+        return rows.length ? `${rows.map((r) => `#${r.id} ${r.created_at} ${[...oneLine(r.content)].slice(0, 120).join('')}`).join('\n')}\n` : 'no prompts stored\n'
       }
       case 'review': {
         if (positionals[0] === 'list') {

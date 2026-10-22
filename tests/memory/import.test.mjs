@@ -240,3 +240,31 @@ describe('construct-memory import', () => {
     assert.match(cli(makeRepo(), ['help']).stdout, /import <file>/)
   })
 })
+
+describe('deleted imported prompts (S12)', () => {
+  test('a deleted imported prompt is tombstoned and not re-imported; a typed prompt leaves no tombstone', () =>
+    withStore((store) => {
+      store.importExport(data(), { project: 'alpha' })
+      store.addPrompt('typed', 'typed by hand')
+      const [typed, imported] = store.prompts()
+      assert.equal(store.deletePrompt(typed.id), true)
+      assert.equal(rows(store, 'SELECT count(*) AS n FROM prompt_tombstones')[0].n, 0)
+      assert.equal(store.deletePrompt(imported.id), true)
+      const tomb = rows(store, 'SELECT import_id, deleted_at FROM prompt_tombstones')
+      assert.equal(tomb.length, 1)
+      assert.match(tomb[0].import_id, /^(prompt:alpha:|[^:]+)/)
+      assert.match(tomb[0].deleted_at, /^\d{4}-\d\d-\d\dT/)
+      assert.deepEqual(store.importExport(data(), { project: 'alpha' }), { observations: 0, sessions: 0, prompts: 0, skipped: 7, deleted: 1 })
+      assert.equal(rows(store, 'SELECT count(*) AS n FROM user_prompts WHERE import_id IS NOT NULL')[0].n, 1)
+    }))
+
+  test('a tombstoned prompt is skipped on a first import into a store that already has the tombstone', () =>
+    withStore((store) => {
+      store.importExport(data(), { project: 'alpha' })
+      for (const p of store.prompts()) store.deletePrompt(p.id)
+      assert.equal(store.prompts().length, 0)
+      const n = store.importExport(data(), { project: 'alpha' })
+      assert.equal(n.prompts, 0)
+      assert.equal(store.prompts().length, 0)
+    }))
+})

@@ -187,6 +187,7 @@ Memory is per repository: one SQLite database at `<git common dir>/construct-mem
 
 - **Commands.** `save`, `search`, `get`, `context`, `update`, `delete`, `summary --session <id>`, `review list|done <id>`, and `import <file>`. `construct-memory help` lists the flags.
 - **Hooks.** At session start the recent memory is injected (after a compaction, with an instruction to save a summary first). Each prompt is stored, a subagent's `## Key Learnings:` section is captured as memories, and a one-line reminder appears after 15 minutes without a save. `<private>...</private>` text is never stored.
+- **Stored prompts.** `construct-memory prompts [--limit N]` lists them with their ids and `construct-memory prompts delete <id>` removes one for good; `<private>` keeps text out in the first place.
 - **Import from engram.** Run `engram export` once, then `construct-memory import <file> --project <name>` (`--project` is required when the file holds several). Re-running it inserts nothing new, and it never reads `~/.engram`.
 - **Uninstalling `engram@engram` is optional.** Construct no longer uses it.
 

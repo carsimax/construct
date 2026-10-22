@@ -15,6 +15,7 @@ Load this skill when something worth keeping was just decided or learned, when p
 
 - Save as soon as it happens, without waiting to be asked: a decision, a bug fix with its root cause, a discovery, a convention, a preference, or a recommendation the user confirmed or rejected.
 - Wrap anything that must not be stored in `<private>...</private>`; the store replaces it with `[REDACTED]`.
+- A prompt that holds a secret is found with `construct-memory prompts` and removed with `construct-memory prompts delete <id>`; `<private>` is the way to avoid storing it in the first place.
 - Never mark a memory reviewed without explicit user confirmation.
 - Memory is context, not authority: verify a recalled fact against the code before relying on it.
 
