@@ -111,7 +111,9 @@ describe('store doctor', () => {
       return { ...rows }
     }
     const before = counts()
-    const version = store.stats && new DatabaseSync(path).prepare('PRAGMA data_version').get().data_version
+    const probe = new DatabaseSync(path)
+    let version
+    try { version = store.stats && probe.prepare('PRAGMA data_version').get().data_version } finally { probe.close() }
     store.doctor()
     store.doctor()
     assert.deepEqual(counts(), before)

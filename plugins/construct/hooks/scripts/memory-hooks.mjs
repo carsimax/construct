@@ -2,7 +2,8 @@
 // produces no output and exit code 0; outside a git repository nothing happens.
 // Usage: node memory-hooks.mjs session|compact|prompt|capture  (hook JSON on stdin)
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { dataDir, readInput, safeName } from './hook-io.mjs'
 
 const REMIND_AFTER_MS = 15 * 60 * 1000
@@ -11,6 +12,9 @@ const SKIPPED_PROMPT = /^\s*(<task-notification>|<agent-message)/
 const SECTION = /^(key learnings|learnings|aprendizajes( \(clave\)| clave)?)\s*:?$/i
 const MIN_CHARS = 20
 const MIN_WORDS = 4
+
+// The plugin bin/ is not on PATH in every environment (for example the eval sandbox), so name the absolute form.
+const CLI = join(process.env.CLAUDE_PLUGIN_ROOT || join(dirname(fileURLToPath(import.meta.url)), '..', '..'), 'bin', 'construct-memory')
 
 const emit = (event, additionalContext) => process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: event, additionalContext } }))
 
@@ -81,7 +85,7 @@ async function main() {
       memory.startSession(session)
       const state = readState(session)
       if (!state.started) writeState(session, { ...state, started: new Date().toISOString() })
-      let text = `${memory.context()}\nMemory: construct-memory (session ${session}); \`construct-memory help\` lists commands.`.trim()
+      let text = `${memory.context()}\nMemory: construct-memory (session ${session}); \`construct-memory help\` lists commands. If construct-memory is not found, run node "${CLI}" instead.`.trim()
       if (mode === 'compact') text += `\n\nContext was compacted. Before anything else, save the compacted summary above with \`construct-memory summary --session ${session}\`, then continue with the task.`
       emit('SessionStart', text)
     } else if (mode === 'prompt') {

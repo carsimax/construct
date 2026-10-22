@@ -8,12 +8,15 @@ export const GIT_VALUE_FLAGS = new Set(['-C', '-c', '--git-dir', '--work-tree', 
 
 // splitCommands is a small shell-word splitter: quotes and backslashes group a word,
 // unquoted ; | & ( ) ` newline end a command, and < > are dropped as separators so
-// `cat <.env` yields the word `.env`. Each returned word keeps whether it was quoted.
+// `cat <.env` yields the word `.env`. A bare digit word glued to < or > is the redirection's
+// file descriptor and is dropped (`2>&1`), and `&>` / `&>>` redirect instead of ending the
+// command. Each returned word keeps whether it was quoted.
 export function splitCommands(input) {
   const commands = []
   let words = []
   let cur = ''
   let has = false
+  let plain = true // no quote or backslash went into the current word
   let redir = false
   let piped = false
   const endWord = () => {
@@ -21,6 +24,7 @@ export function splitCommands(input) {
     if (has) redir = false
     cur = ''
     has = false
+    plain = true
   }
   const endCommand = () => {
     endWord()
@@ -39,9 +43,11 @@ export function splitCommands(input) {
       const stop = end === -1 ? input.length : end
       cur += input.slice(i + 1, stop)
       has = true
+      plain = false
       i = stop
     } else if (c === '"') {
       has = true
+      plain = false
       for (i++; i < input.length && input[i] !== '"'; i++) {
         // Inside double quotes bash drops a backslash only before $ ` " \ or newline.
         if (input[i] === '\\' && input[i + 1] === '\n') { i++; continue }
@@ -53,9 +59,10 @@ export function splitCommands(input) {
     } else if (c === '\\' && i + 1 < input.length) {
       cur += input[++i]
       has = true
+      plain = false
     } else if (/\s/.test(c) && c !== '\n') {
       endWord()
-    } else if (';|&()`\n'.includes(c)) {
+    } else if (';|&()`\n'.includes(c) && !(c === '&' && input[i + 1] === '>')) {
       endCommand()
       // `|` and `|&` feed the next command; `||` does not.
       if (c === '|') {
@@ -66,10 +73,11 @@ export function splitCommands(input) {
           piped = true
         }
       }
-    } else if (c === '<' || c === '>') {
+    } else if (c === '<' || c === '>' || c === '&') {
+      if (c !== '&' && plain && /^[0-9]+$/.test(cur)) { cur = ''; has = false }
       endWord()
-      // Operators: >> >| >&N <<EOF; a here-string (<<<) takes data, not a file.
-      const op = /^(<<<|<<-?|>>|>\||>&[0-9-]*|<&[0-9-]*|[<>])/.exec(input.slice(i))[0]
+      // Operators: >> >| >&N &>> &> <<EOF; a here-string (<<<) takes data, not a file.
+      const op = /^(<<<|<<-?|>>|>\||>&[0-9-]*|<&[0-9-]*|&>>|&>|[<>])/.exec(input.slice(i))[0]
       i += op.length - 1
       redir = op !== '<<<' && !/&[0-9-]*$/.test(op) || /^[<>]&$/.test(op)
     } else {

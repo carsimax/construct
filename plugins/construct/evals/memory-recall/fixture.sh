@@ -16,6 +16,7 @@ test('today returns the UTC calendar day', () => {
 })
 JS
 printf '{ "type": "module", "scripts": { "test": "node --test" } }\n' > package.json
+printf 'script-shell=/bin/sh\n' > .npmrc
 git add -A
 git -c user.email=eval@example.com -c user.name=eval commit -qm "chore: initial dates module"
 

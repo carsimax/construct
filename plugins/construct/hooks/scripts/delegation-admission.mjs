@@ -134,16 +134,19 @@ function normalizeEntry(entry) {
   return segments.join('/').toLowerCase()
 }
 
-function uninterpretable(entry) {
-  if (/[[\]()\\]/.test(entry)) return true
-  return entry.split('/').some((segment) => {
-    let depth = 0
-    for (const char of segment) {
-      if (char === '{' && ++depth > 1) return true
-      if (char === '}' && --depth < 0) return true
-    }
-    return depth !== 0
-  })
+// Extglobs (and a nested, unbalanced, or escaped segment) cannot be reasoned
+// about; a bracket class may match anything at its own position. Parentheses
+// elsewhere are literal (Next.js route groups such as `(dashboard)`).
+const EXTGLOB = /[@!+*?]\(/
+
+function uninterpretable(segment) {
+  if (/[[\]\\]/.test(segment)) return true
+  let depth = 0
+  for (const char of segment) {
+    if (char === '{' && ++depth > 1) return true
+    if (char === '}' && --depth < 0) return true
+  }
+  return depth !== 0
 }
 
 function segmentRegExp(pattern) {
@@ -179,6 +182,7 @@ function affixesCompatible(a, b) {
 }
 
 function segmentsCompatible(a, b) {
+  if (uninterpretable(a) || uninterpretable(b)) return true
   const aGlob = SPECIAL.test(a)
   const bGlob = SPECIAL.test(b)
   if (!aGlob && !bGlob) return a === b
@@ -190,14 +194,17 @@ function segmentsCompatible(a, b) {
   return affixesCompatible(a, b)
 }
 
+// A brace group that spans '/' cannot be compared position by position (its branches differ in depth), so such an entry overlaps everything.
+const spansSlash = (entry) => entry.split('/').some((segment) => (segment.match(/{/g) ?? []).length !== (segment.match(/}/g) ?? []).length)
+
 export function surfacesOverlap(a, b) {
   const left = normalizeEntry(a)
   const right = normalizeEntry(b)
-  if (left === undefined || right === undefined || uninterpretable(left) || uninterpretable(right)) return true
+  if (left === undefined || right === undefined || spansSlash(left) || spansSlash(right)) return true
   const as = left.split('/')
   const bs = right.split('/')
   for (let i = 0; i < Math.min(as.length, bs.length); i++) {
-    if (as[i] === '**' || bs[i] === '**') return true
+    if (as[i] === '**' || bs[i] === '**' || EXTGLOB.test(as[i]) || EXTGLOB.test(bs[i])) return true
     if (!segmentsCompatible(as[i], bs[i])) return false
   }
   return true
