@@ -173,3 +173,15 @@ test('the session skill map lists every skill directory with a trigger', () => {
   const session = read('hooks/contract/session.md')
   for (const d of readdirSync(join(pluginRoot, 'skills'))) assert.match(session, new RegExp(`^- \`construct:${d}\`: \\S.+`, 'm'), d)
 })
+
+test('verifier done check names untrusted input, auth, data handling, and committed credentials', () => {
+  assert.match(read('agents/verifier.md'), /untrusted input, auth, and data handling were reviewed and no credential is committed/i)
+})
+
+test('verifier probes point HOME and TMPDIR inside the scratch copy', () => {
+  assert.match(read('agents/verifier.md'), /fresh `mktemp -d` copy[^\n]*`HOME` and `TMPDIR` pointed inside it/i)
+})
+
+test('worker keeps HOME, TMPDIR, and tool caches outside the worktree', () => {
+  assert.match(read('agents/worker.md'), /`HOME`, `TMPDIR`, and tool caches under a `mktemp -d` path beyond the worktree/i)
+})

@@ -147,3 +147,8 @@ test('S5: worker reviews its own diff before reporting', () => {
   assert.match(t, /review your own diff/)
   assert.match(t, /missing test/)
 })
+
+test('testing.md verifier-weakening list names skipped tests, deleted assertions, suppressed errors, widened types, and committed credentials', () => {
+  const t = readFileSync(join(skillsRoot, 'workflow/references/testing.md'), 'utf8')
+  assert.match(t, /Never: skip a test, delete an assertion, suppress an error, widen a type, or commit a real credential or a fixture holding one/i)
+})

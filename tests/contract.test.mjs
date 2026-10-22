@@ -197,3 +197,8 @@ test('S5: the session contract names the text-only progress report as an early s
   assert.match(flat, /text-only progress report[^.]*"Next, I'll[^.]*"Shall I apply this\?"[^.]*not a stop/i)
   assert.match(flat, /completion notifications/i)
 })
+
+test('the subagent contract keeps HOME, TMPDIR, and tool caches outside the worktree', () => {
+  const text = context('subagent', { hook_event_name: 'SubagentStart' }).additionalContext
+  assert.match(text, /`HOME`, `TMPDIR`, and tool caches, lives in a `mktemp -d` directory outside the worktree/i)
+})
