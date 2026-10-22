@@ -75,10 +75,15 @@ test('review (dual review) names the plugin-namespaced agents', () => {
   }
 })
 
-test('the MIT notice for the ported material ships with the plugin', () => {
+test('NOTICE credits the adapted panel code and carries no license text', () => {
   const notice = readFileSync(join(pluginRoot, 'NOTICE'), 'utf8')
-  assert.match(notice, /MIT License/)
-  assert.match(notice, /Copyright \(c\) 2025 Gentleman Programming/)
+  assert.match(notice, /claude-flightdeck/)
+  assert.match(notice, /LICENSE-flightdeck/)
+  assert.doesNotMatch(notice, /Permission is hereby granted/)
+  assert.ok(notice.trimEnd().split('\n').length < 40, 'NOTICE stays under 40 lines')
+  const license = join(pluginRoot, 'LICENSE-flightdeck')
+  assert.ok(existsSync(license))
+  assert.match(readFileSync(license, 'utf8'), /Permission is hereby granted/)
 })
 
 test('review quotes the lens mapping of review-lenses.mjs', () => {

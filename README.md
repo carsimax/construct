@@ -10,7 +10,7 @@ Construct is a Claude Code plugin that makes every request follow Organic Driven
 
 - **ODD workflow.** A session contract, injected by hooks, that Claude follows on every request without being asked.
 - **Role agents with model routing.** 11 agents (explorer, worker, verifier, judges, review lenses). You choose each role's model and effort in `/config`.
-- **Skills.** Procedures that load on demand: workflow (sizing included), delegation, debugging, quality bar, migrations, branches and pull requests, and more.
+- **Skills.** Procedures that load on demand: workflow (sizing included), delegation, debugging, quality bar, migrations, branches, commits and pull requests (`delivery`), review, memory, and more.
 - **Mandatory review.** Work whose Risk names a high-risk item is reviewed by lens agents before it can be published. Hooks build the evidence, record the verdicts, and gate `git push`, `gh pr create`, and `gh release create`.
 - **Status panel.** A docked panel with the model, context, plan limits, active feature, permission gate, agents, and changes. Open it with `/construct`.
 - **Output style.** The `Principal Engineer` output style.
@@ -66,7 +66,7 @@ The manual steps the installer runs, for when you want to run them yourself:
 
    The installer (`install.sh`) pins this marketplace to the release tag (`carsimax/construct#v5.2.0`); the command above follows the default branch.
 
-2. Optional: inside Claude Code, in `/config`, set each role's model and effort (rows such as `ODD Worker model`).
+2. Optional: inside Claude Code, in `/config`, set each role's model and effort (rows such as `Worker model`).
 
 3. Check that it works. Open a session in any git repository:
 
@@ -105,31 +105,32 @@ Options are plugin settings, edited in `/config`:
 
 | Option | Effect |
 |---|---|
-| Model and effort per role | See the routing table below |
+| Model and effort per role | See the routing table below. Each option defaults to `inherit`: use the deprecated key of the same role if it is set, else the agent's own frontmatter |
 | `panel_open_on_start` (boolean, default `true`) | Open the panel at every session start |
 
 ### Agents and model routing
 
-The plugin ships 11 agents. Each role's model and effort can be changed in `/config`, where every option appears as a row such as `ODD Worker model` or `RDD Risk effort`.
+The plugin ships 11 agents. Each role's model and effort can be changed in `/config`, where every option appears as a row such as `Worker model` or `Review risk effort`.
 
 | Role | Agent | Model | Effort |
 |---|---|---|---|
-| ODD Explorer | `construct:explorer` | haiku | medium |
-| ODD Worker | `construct:worker` | sonnet | medium |
-| ODD Verify | `construct:verifier` | opus | medium |
-| JD Judge A | `construct:judge-a` | opus | medium |
-| JD Judge B | `construct:judge-b` | sonnet | medium |
-| RDD Risk | `construct:review-risk` | opus | medium |
-| RDD Readability | `construct:review-readability` | sonnet | medium |
-| RDD Reliability | `construct:review-reliability` | sonnet | medium |
-| RDD Resilience | `construct:review-resilience` | sonnet | medium |
-| General delegation | `construct:general` and the built-in `general-purpose` | sonnet | medium |
+| Explorer | `construct:explorer` | haiku | medium |
+| Worker | `construct:worker` | sonnet | medium |
+| Verifier | `construct:verifier` | opus | medium |
+| Judge A | `construct:judge-a` | opus | medium |
+| Judge B | `construct:judge-b` | sonnet | medium |
+| Review risk | `construct:review-risk` | opus | medium |
+| Review readability | `construct:review-readability` | sonnet | medium |
+| Review reliability | `construct:review-reliability` | sonnet | medium |
+| Review resilience | `construct:review-resilience` | sonnet | medium |
+| General | `construct:general` and the built-in `general-purpose` | sonnet | medium |
 
 How the routing works:
 
 - The plugin's mod (`hooks/register.js`) applies the configured model when a subagent spawns and the configured effort on each of its requests.
 - A model passed explicitly on the Agent call wins; the configured model applies only when the call names none.
 - An effort of `default` keeps the model's own effort.
+- The 5.x options `model_odd_*`, `effort_odd_*`, `model_jd_*`, and `effort_jd_*` are deprecated and still read while the matching `model_<role>` / `effort_<role>` is `inherit` (for example `model_odd_worker` for `model_worker`); set the new keys instead.
 - If the mod cannot run, each agent keeps the model and effort in its own frontmatter.
 
 ## Reference
@@ -184,7 +185,7 @@ Memory is per repository: one SQLite database at `<git common dir>/construct-mem
 
 ### Quality and recovery skills
 
-Four skills adapted from [addyosmani/agent-skills](https://github.com/addyosmani/agent-skills) (MIT) load on demand. The session contract names `debugging` and `constraints`; the other two load from the skills that link to them.
+Four skills load on demand (ideas from [addyosmani/agent-skills](https://github.com/addyosmani/agent-skills); see the acknowledgements in `plugins/construct/NOTICE`). The session contract names `debugging` and `constraints`; the other two load from the skills that link to them.
 
 | Skill | Use it for |
 |---|---|
@@ -275,7 +276,7 @@ The mod draws one thing: a docked **panel** (a `Pane` with id `construct`) laid 
 | `plugins/construct/hooks/` | `hooks.json`, the mod (`register.js`), its routing helpers, the status modules (`status/`), the panel modules (`panel/`), and the command hooks (`scripts/`: contract, feature state, the `shell-words` tokenizer, delivery signals, publication gate, review store guard, command and surface guards, Risk line gate, subagent count, delegation admission, review context and capture, and the memory store `memory-store.mjs` with its hooks `memory-hooks.mjs`) |
 | `plugins/construct/bin/construct-memory` | The memory command line (on the Bash tool's PATH) |
 | `plugins/construct/hooks/contract/` | Session and subagent contract texts injected by hooks |
-| `plugins/construct/evals/` | Behavior eval cases run by `claude plugin eval` |
+| `plugins/construct/evals/` | Behavior eval cases run by `claude plugin eval` (`scripts/eval.sh`; `scripts/probe-review.sh` stands in for `review-fires` where the eval sandbox has no working git) |
 | `plugins/construct/tests/` | Mod tests run by `claude plugin test` |
 | `tests/` | Repository tests run by `node --test` |
 | `odd/tasks/` | ODD feature documents (specs, tasks, log) |
@@ -358,4 +359,4 @@ Upgrading from 1.1.0:
 
 Construct is released under the MIT License; see [`LICENSE`](LICENSE).
 
-Part of the agents and skills are adapted from MIT-licensed material (Gentle AI, agent-skills, and engram); see [`plugins/construct/NOTICE`](plugins/construct/NOTICE).
+The agents, skills, contracts, hooks, and evals are Construct's own text. Only the panel drawing code is adapted (claude-flightdeck, MIT; notice in [`plugins/construct/LICENSE-flightdeck`](plugins/construct/LICENSE-flightdeck)). The ideas Construct draws on from other projects are credited in the acknowledgements of [`plugins/construct/NOTICE`](plugins/construct/NOTICE).
