@@ -1,5 +1,5 @@
 import { expect, test } from 'claude-code/testing'
-import { PANEL_COLUMNS, buildPanel } from '../hooks/panel/layout.js'
+import { PANEL_COLUMNS, buildPanel, prettyModel } from '../hooks/panel/layout.js'
 import { initialState } from '../hooks/panel/state.js'
 import { stackBar } from '../hooks/panel/draw.js'
 import { activeWork } from '../hooks/status/tasks.js'
@@ -186,8 +186,8 @@ test('ODD card shows the feature, open count, current task and one checkpoint pe
   expect(rows[i]).toBe('ODD · flightdeck-panel 3 open')
   expect(rows[i + 1]).toBe('T4  Card layout')
   expect(rows[i + 2]).toBe('●━●━●━◆━○')
-  expect(leaves(buildPanel(args())).find((l) => l.text === 'T4')?.props.bold).toBe(true)
-  expect(find(buildPanel(args()), '◆')?.props.bold).toBe(true)
+  expect(leaves(buildPanel(args())).find((l) => l.text === 'T4')?.props.weight).toBe('semibold')
+  expect(find(buildPanel(args()), '◆')?.props.weight).toBe('semibold')
   // without per-task rows only the title row and the task show
   const bare = rowsOf({ odd: { feature: 'x', open: 1 } })
   expect(bare[idx(bare, 'ODD · x')]).toBe('ODD · x 1 open')
@@ -301,7 +301,7 @@ test('changes card: branch title, ↑N ↓N on the right, rows sorted by changed
 
 test('changes card colors: branch git color, + success, - error; round card', async () => {
   const tree = buildPanel(args())
-  expect(leaves(tree).findLast((l) => l.text.includes('feat/x'))?.props).toMatchObject({ bold: true, color: 'remember' })
+  expect(leaves(tree).findLast((l) => l.text.includes('feat/x'))?.props).toMatchObject({ weight: 'semibold', color: 'remember' })
   expect(leaves(tree).find((l) => l.text === '+120')?.props.color).toBe('success')
   expect(leaves(tree).find((l) => l.text === '-80')?.props.color).toBe('error')
   expect(leaves(tree).find((l) => l.text === 'bin')?.props.dimColor ?? leaves(tree).find((l) => l.text === 'bin')?.props.dim).toBeTruthy()
@@ -524,4 +524,9 @@ test('MEMORY card clips at the narrowest width', async () => {
   const i = idx(rows, 'MEMORY')
   expect(rows[i]).toBe('MEMORY 123456 memories')
   expect(rows.slice(i, i + 3).every((r) => r.length <= 36)).toBe(true)
+})
+
+test('prettyModel names the new 5.x ids', () => {
+  expect(prettyModel('claude-fable-5-1')).toBe('Fable 5.1')
+  expect(prettyModel('claude-haiku-5-5')).toBe('Haiku 5.5')
 })

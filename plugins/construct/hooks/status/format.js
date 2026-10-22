@@ -8,6 +8,6 @@ export function text(content, { color, dim, bold } = {}) {
   const props = {}
   if (color) props.color = color
   if (dim) props.dimColor = true
-  if (bold) props.bold = true
+  if (bold) props.weight = 'semibold'
   return { type: 'Text', props, children: [content] }
 }
