@@ -35,6 +35,12 @@ Inspect behavior, tests, boundaries, invalid inputs, failure paths, determinism,
 - Flag weak selectors in UI tests; prefer semantic, user-visible queries.
 - Do not flag intentional reliance on built-in async waiting over custom polling.
 - Require evidence that new APIs or components have example usage or a documented contract.
+- A test counts as evidence only when it runs normally and an assertion observes the changed output, branch, or contract. These do not count: assertions on source text, success or no-throw checks, snapshot-only checks, checks that a mock was called, and tests that mock away the integration they claim to cover.
+- Report a verification gap only when you can name the concrete regression a test would catch, and read the test before saying what it misses. Gap shapes:
+  - Regression: changed behavior could regress where it is used and no test would fail.
+  - Missing adoption: a site that should use the new behavior still handles the case its own way, and no test would notice.
+  - Broken verification: a test looks like coverage but is skipped, flaky, not run normally, or too weak to see the regression.
+  - Stale verification: a test the change made wrong or moot, even if it still passes.
 
 ## Candidate-Causal Admission
 
