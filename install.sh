@@ -189,8 +189,12 @@ const path = require('node:path')
 const [mode, file] = process.argv.slice(2)
 // Earlier versions set this theme; it is removed, and any other theme stays.
 const OLD_THEME = 'custom:construct:construct'
-// Lets the plugin's bin/construct-memory run without a prompt (a trailing ` *` also matches the bare command).
-const ALLOW = ['Bash(construct-memory *)']
+// One rule per non-destructive construct-memory command; delete, prompts delete, consolidate, import, export, and review done keep asking.
+// Rule syntax (code.claude.com/docs/en/permissions, Bash): a trailing ` *` matches the bare command and any arguments; a rule without it matches only that exact command.
+const ALLOW = [
+  ...['search', 'get', 'context', 'timeline', 'stats', 'doctor', 'suggest-topic-key', 'save', 'update', 'summary', 'review list', 'prompts --search', 'prompts --limit', 'pin', 'unpin', 'judge', 'judge-many', 'compare', 'help'].map((c) => `Bash(construct-memory ${c} *)`),
+  'Bash(construct-memory prompts)',
+]
 
 let text = null
 try {

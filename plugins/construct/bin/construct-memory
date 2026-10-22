@@ -106,7 +106,18 @@ async function main(argv) {
   if (!known.includes(command)) fail(`unknown command: ${command} (run construct-memory help)`)
   if (command === 'review' && !['list', 'done'].includes(positionals[0])) fail('review needs list or done <id>')
 
-  if (command === 'prompts' && positionals.length && positionals[0] !== 'delete') fail('prompts needs nothing, or delete <id>')
+  // Pre-approved prefixes (install.sh) end in `*`, so trailing words or options must never reach a destructive form:
+  // each command takes only its own options, and delete, prompts delete, and review done run only in their exact shape.
+  const options = Object.keys(values)
+  const takes = { search: ['type', 'limit', 'any'], get: ['history'], timeline: ['before', 'after'], stats: ['json', 'session'], doctor: ['json'], summary: ['session'], delete: ['hard'], import: ['project'], prompts: ['limit', 'search'], judge: ['reason', 'evidence', 'confidence'], compare: ['confidence', 'reasoning'], consolidate: ['title', 'type', 'topic-key', 'confirm'] }[command] ?? []
+  const stray = options.find((o) => !takes.includes(o))
+  if (stray) fail(`${command} does not take --${stray}`)
+  const sub = positionals[0]
+  if (command === 'delete' && positionals.length > 1) fail('delete takes one id')
+  if (command === 'prompts' && sub === 'delete' && (options.length || positionals.length > 2)) fail('prompts delete takes one id and no options')
+  if (command === 'review' && sub === 'done' && (options.length || positionals.length > 2)) fail('review done takes one id and no options')
+  if (command === 'review' && sub === 'list' && (options.length || positionals.length > 1)) fail('review list takes nothing else')
+  if (command === 'prompts' && positionals.length && sub !== 'delete') fail('prompts needs nothing, or delete <id>')
   if (command === 'import' && !positionals[0]) fail('import needs a file: construct-memory import <file> [--project <name>]')
 
   // Loaded here, not at the top: the store needs node:sqlite, and help and usage errors must work without it.

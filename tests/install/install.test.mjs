@@ -11,6 +11,38 @@ import { scratchDir } from '../helpers/repo.mjs'
 
 const INSTALLER = new URL('../../install.sh', import.meta.url).pathname
 
+// One rule per non-destructive construct-memory command (S21 d).
+const MEMORY_RULES = [
+  'Bash(construct-memory search *)',
+  'Bash(construct-memory get *)',
+  'Bash(construct-memory context *)',
+  'Bash(construct-memory timeline *)',
+  'Bash(construct-memory stats *)',
+  'Bash(construct-memory doctor *)',
+  'Bash(construct-memory suggest-topic-key *)',
+  'Bash(construct-memory save *)',
+  'Bash(construct-memory update *)',
+  'Bash(construct-memory summary *)',
+  'Bash(construct-memory review list *)',
+  'Bash(construct-memory prompts --search *)',
+  'Bash(construct-memory prompts --limit *)',
+  'Bash(construct-memory pin *)',
+  'Bash(construct-memory unpin *)',
+  'Bash(construct-memory judge *)',
+  'Bash(construct-memory judge-many *)',
+  'Bash(construct-memory compare *)',
+  'Bash(construct-memory help *)',
+  'Bash(construct-memory prompts)',
+]
+
+// Permission rule semantics (code.claude.com/docs/en/permissions, Bash): a rule ending in ` *`
+// matches the bare command and any arguments; any other rule matches only the exact command.
+const allows = (rules, command) =>
+  rules.some((rule) => {
+    const body = rule.slice('Bash('.length, -1)
+    return body.endsWith(' *') ? command === body.slice(0, -2) || command.startsWith(body.slice(0, -1)) : command === body
+  })
+
 const STUBS = {
   claude: `
 if [ "$1" = "--version" ]; then echo "\${STUB_CLAUDE_VERSION:-2.1.304} (Claude Code)"; exit 0; fi
@@ -95,7 +127,7 @@ test('a clean machine gets every tool, in order, and the Construct settings', ()
   ])
   assert.ok(!run.calls.some((c) => /context7/.test(c)), 'context7 is never registered')
   assert.deepEqual(readSettings(box), {
-    permissions: { allow: ['Bash(construct-memory *)'] },
+    permissions: { allow: MEMORY_RULES },
   })
   assert.ok(!('theme' in readSettings(box)), 'a clean machine never gets a theme')
   assert.deepEqual(backups(box), [], 'no backup when there was no file')
@@ -114,7 +146,7 @@ test('existing settings are merged, never overwritten, and backed up first', () 
   assert.equal(run.status, 0, run.stderr)
   assert.deepEqual(readSettings(box), {
     ...before,
-    permissions: { allow: ['Bash(ls *)', 'mcp__engram', 'Bash(construct-memory *)'], deny: ['Bash(rm *)'] },
+    permissions: { allow: ['Bash(ls *)', 'mcp__engram', ...MEMORY_RULES], deny: ['Bash(rm *)'] },
   })
   const [backup] = backups(box)
   assert.ok(backup, 'a backup exists')
@@ -133,7 +165,7 @@ test('a symlinked settings.json stays a link and its target gets the merge', () 
   assert.ok(lstatSync(settingsPath(box)).isSymbolicLink(), 'still a symlink')
   assert.equal(JSON.parse(readFileSync(target, 'utf8')).theme, undefined)
   assert.equal(JSON.parse(readFileSync(target, 'utf8')).model, 'opus')
-  assert.deepEqual(JSON.parse(readFileSync(target, 'utf8')).permissions.allow, ['Bash(construct-memory *)'])
+  assert.deepEqual(JSON.parse(readFileSync(target, 'utf8')).permissions.allow, MEMORY_RULES)
 })
 
 test('the merge keeps the file mode of settings.json', () => {
@@ -159,7 +191,7 @@ test('a failed MCP registration warns and still merges the settings and prints t
   const run = install(box, [], { STUB_MCP_FAIL: '1' })
   assert.equal(run.status, 0, run.stderr)
   assert.match(run.stderr, /for the codegraph MCP server failed/)
-  assert.deepEqual(readSettings(box).permissions.allow, ['Bash(construct-memory *)'])
+  assert.deepEqual(readSettings(box).permissions.allow, MEMORY_RULES)
   assert.match(run.stdout, /codegraph CLI/)
 })
 
@@ -336,7 +368,7 @@ test('an empty or whitespace-only settings.json is treated as an empty object', 
     const run = install(box)
     assert.equal(run.status, 0, run.stderr)
     assert.deepEqual(readSettings(box), {
-      permissions: { allow: ['Bash(construct-memory *)'] },
+      permissions: { allow: MEMORY_RULES },
     })
     assert.equal(statSync(settingsPath(box)).mode & 0o777, 0o600)
   }
@@ -440,7 +472,7 @@ test('settings.local.json is never touched, even with the old theme in it', () =
 
 test('--force with another theme leaves settings.json unchanged and makes no backup', () => {
   const box = sandbox()
-  const before = JSON.stringify({ theme: 'dark', permissions: { allow: ['Bash(construct-memory *)'] } }, null, 2)
+  const before = JSON.stringify({ theme: 'dark', permissions: { allow: MEMORY_RULES } }, null, 2)
   writeSettings(box, before)
   const run = install(box, ['--force'])
   assert.equal(run.status, 0, run.stderr)
@@ -521,7 +553,7 @@ test('engram is never installed, set up, uninstalled, or given permission rules;
   assert.equal(run.status, 0, run.stderr)
   assert.deepEqual(run.calls.filter((c) => /engram|brew/i.test(c)), [])
   assert.equal(run.stdout.split('\n').filter((l) => /no longer needs? engram|engram.*no longer/i.test(l)).length, 1)
-  assert.deepEqual(readSettings(box).permissions.allow, ['mcp__engram', 'mcp__plugin_engram_engram', 'Bash(construct-memory *)'], 'the user keeps their rules')
+  assert.deepEqual(readSettings(box).permissions.allow, ['mcp__engram', 'mcp__plugin_engram_engram', ...MEMORY_RULES], 'the user keeps their rules')
 })
 
 test('without engram nothing about it is printed, and no engram rule or marketplace is added', () => {
@@ -537,5 +569,18 @@ test('the construct-memory rule is merged once; a second run keeps it a single e
   const box = sandbox()
   assert.equal(install(box).status, 0)
   assert.equal(install(box).status, 0)
-  assert.deepEqual(readSettings(box).permissions.allow, ['Bash(construct-memory *)'])
+  assert.deepEqual(readSettings(box).permissions.allow, MEMORY_RULES)
+})
+
+test('the merged rules pre-approve reads and saves and never a destructive construct-memory command', () => {
+  const box = sandbox()
+  assert.equal(install(box).status, 0)
+  const rules = readSettings(box).permissions.allow
+  assert.deepEqual(rules, MEMORY_RULES)
+  // These prefixes are only safe because the CLI refuses trailing options and words that reach a destructive form
+  // (tests/memory/cli.test.mjs, 'a pre-approved prefix plus a destructive suffix'); the rules alone would match `prompts --limit 5 delete 1`.
+  for (const ok of ['search auth bug', 'prompts', 'prompts --search x', 'prompts --limit 5', 'review list', 'review list --limit 5', 'doctor --json', 'help'])
+    assert.ok(allows(rules, `construct-memory ${ok}`), ok)
+  for (const bad of ['delete 1 --hard', 'delete 1', 'prompts delete 1', 'export x.json', 'consolidate 1 2', 'import x.json', 'review done 1'])
+    assert.ok(!allows(rules, `construct-memory ${bad}`), bad)
 })
