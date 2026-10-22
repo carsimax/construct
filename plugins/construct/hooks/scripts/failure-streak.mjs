@@ -17,7 +17,7 @@ function main() {
   if (!input || typeof input.tool_name !== 'string' || input.is_interrupt === true) return
   const dir = join(dataDir(), 'failure-streak', safeName(input.session_id))
   mkdirSync(dir, { recursive: true })
-  const key = [input.agent_id || 'main', input.tool_name].map(safeName).join('-')
+  const key = [input.agent_id || 'main', input.tool_name].map((v) => Buffer.from(String(v)).toString('base64url')).join('.') // '.' is outside base64url, so distinct pairs never share a file
   const file = join(dir, key)
   const now = Number(process.env.FAILURE_STREAK_NOW) || Date.now() // env only for tests
   let times = []
@@ -29,7 +29,7 @@ function main() {
   times.push(now)
   if (times.length >= LIMIT) {
     rmSync(file, { force: true })
-    const additionalContext = `${input.tool_name} failed ${LIMIT} times in a row. Stop repeating the same approach: read the error, change strategy or report the blocker.`
+    const additionalContext = `${input.tool_name} failed ${LIMIT} times in the last 10 minutes. Stop repeating the same approach: read the error, change strategy or report the blocker.`
     process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PostToolUseFailure', additionalContext } })}\n`)
     return
   }

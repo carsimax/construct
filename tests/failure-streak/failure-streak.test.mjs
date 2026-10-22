@@ -23,6 +23,14 @@ function fail(data, fields = {}, { now, input } = {}) {
 const repeat = (data, n, fields, opts) => Array.from({ length: n }, () => fail(data, fields, opts))
 
 describe('failure streak (S3)', () => {
+  test('agent a-b with tool c and agent a with tool b-c keep separate counters', () => {
+    const data = fresh()
+    for (let i = 0; i < 4; i++) {
+      assert.equal(fail(data, { agent_id: 'a-b', tool_name: 'c' }).stdout, '')
+      assert.equal(fail(data, { agent_id: 'a', tool_name: 'b-c' }).stdout, '')
+    }
+  })
+
   test('four failures print nothing, the fifth emits the exact shape', () => {
     const data = fresh()
     for (const r of repeat(data, 4)) assert.deepEqual(r, { status: 0, stdout: '' })
@@ -32,7 +40,8 @@ describe('failure streak (S3)', () => {
     assert.deepEqual(Object.keys(out), ['hookSpecificOutput'])
     assert.deepEqual(Object.keys(out.hookSpecificOutput), ['hookEventName', 'additionalContext'])
     assert.equal(out.hookSpecificOutput.hookEventName, 'PostToolUseFailure')
-    assert.match(out.hookSpecificOutput.additionalContext, /Bash failed 5 times/)
+    assert.match(out.hookSpecificOutput.additionalContext, /Bash failed 5 times in the last 10 minutes/)
+    assert.doesNotMatch(out.hookSpecificOutput.additionalContext, /in a row/)
     assert.match(out.hookSpecificOutput.additionalContext, /change strategy or report the blocker/)
     assert.equal(r.stdout.trim().split('\n').length, 1)
   })
@@ -93,7 +102,7 @@ describe('state location (S3)', () => {
     const data = fresh()
     fail(data, { session_id: 's/1', agent_id: 'a1', tool_name: 'Bash' })
     assert.deepEqual(readdirSync(join(data, 'failure-streak')), ['s_1'])
-    assert.deepEqual(readdirSync(join(data, 'failure-streak', 's_1')), ['a1-Bash'])
+    assert.deepEqual(readdirSync(join(data, 'failure-streak', 's_1')), ['YTE.QmFzaA'])
   })
 
   test('pruneState removes an idle failure-streak session directory and keeps a fresh one', () => {
