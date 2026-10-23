@@ -16,6 +16,8 @@ Objective: measure whether Construct improves outcomes and at what cost, then cu
 - **S4 — `review-fires` measures Construct, not the sandbox.** "vamos con ello!" (to: "primero arreglar el sandbox de `review-fires` para que el 30% signifique algo"). In the eval sandbox `git` works, so the case's pass rate reflects whether the risk lens runs before a push.
 - **S5 — Small edits inline, on by default.** Same request (to: "T6 con la opción activada por defecto, midiendo con estos mismos evals que el resultado se mantiene en 100% y que el costo baja"; plan T6: "El hilo principal puede editar un solo archivo hasta N líneas sin pasar por un worker. `surface-guard` lo hace cumplir"). Assumptions (parent): option `inline_edit_max_lines` (number, default 20; 0 restores the worker-only rule); the main thread may Write/Edit outside `odd/tasks/` when one call changes at most N lines; small work is done inline, large work keeps workers. The `small-delegated*` cases assert the new rule. Gate: on 10 runs per arm, outcome stays 100% and plugin-arm cost drops below L5.
 
+- **S6 — Release 8.0.0.** "dale al 8.0.0" (to: "Recomiendo **8.0.0**"). Follow CONTRIBUTING Releases and the 7.0.0 release commit 73316ca: `plugin.json`, `install.sh` (`CONSTRUCT_REF` and header URL), README (badge, URLs, an "Upgrading to 8.0.0" section: small edits inline by default, `inline_edit_max_lines`, 0 restores the old rule; eval case renames), install tests. Tag and Release after merge are the user's.
+
 ## Tasks
 
 | ID | Specs | Task | Route | Risk | Status | Commit |
@@ -26,6 +28,7 @@ Objective: measure whether Construct improves outcomes and at what cost, then cu
 
 | T4 | S4 | Make git work in the `review-fires` sandbox; re-measure 10 runs | parent | 6 | done (no in-sandbox fix, L8; probe-review 10/10, L10) | — |
 | T5 | S5 | `inline_edit_max_lines` option, surface-guard, contract and skills, small-case graders; re-measure | worker | 2, 3 | done (suite 1071/0; gate met, L11) | 3b42371, 43ec646 |
+| T6 | S6 | Release 8.0.0 bump | worker | 5 | pending | — |
 
 ## Log
 
@@ -79,4 +82,6 @@ Objective: measure whether Construct improves outcomes and at what cost, then cu
 
   Ritual: debugging-fires 70% → 100%, debugging-stays-quiet 100%. small-inline* read 0% because `no-delegation` had `max: 0` without `min: 0` (the tool defaults min to 1: "expected 1..0"); fixed with a test that pins it (RED: fail on small-inline-pressure), 3 confirm runs: plugin arm 100% ritual, 100% outcome, $0.087-0.092. No-plugin arm still $0.052-0.057: the plugin now costs ~1.6-1.8x instead of 2.5-2.9x on small work. Gate met. Converge: S1-S5 each have a done task; no gap.
 
-Next step: user decides on PR, version bump (the guard default change is breaking), and Phase 3 (T7 memory threshold) / Phase 4 (pre-push gate).
+- **L12 (2026-10-22, user):** "dale al 8.0.0". Added S6, T6.
+
+Next step: T6 release bump; then PR on the user's word.
