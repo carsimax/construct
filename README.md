@@ -1,7 +1,7 @@
 # Construct
 
 [![Claude Code](https://img.shields.io/badge/Claude_Code-2.1.304%2B-blue)](#requirements)
-[![Plugin version](https://img.shields.io/badge/version-7.0.0-informational)](plugins/construct/.claude-plugin/plugin.json)
+[![Plugin version](https://img.shields.io/badge/version-8.0.0-informational)](plugins/construct/.claude-plugin/plugin.json)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 Construct is a Claude Code plugin that makes every request follow Organic Driven Development (ODD): authorize, explore, size, track, implement test-first, and close with evidence and a Risk line.
@@ -30,7 +30,7 @@ Construct is a Claude Code plugin that makes every request follow Organic Driven
 ### One command
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v7.0.0/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v8.0.0/install.sh | bash
 ```
 
 The installer checks the requirements above and stops before changing anything if one is missing, or if `~/.claude` or `~/.claude/settings.json` is not writable, or if `settings.json` is a directory. Then it runs the manual steps below for you:
@@ -48,7 +48,7 @@ If engram or codegraph is installed, the installer says Construct no longer need
 Pass options after `bash -s --`, for example `curl -fsSL <url> | bash -s -- --no-mcp`. To read the script before running it:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v7.0.0/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v8.0.0/install.sh -o install.sh
 less install.sh
 bash install.sh
 ```
@@ -64,7 +64,7 @@ The manual steps the installer runs, for when you want to run them yourself:
    claude plugin install construct@construct
    ```
 
-   The installer (`install.sh`) pins this marketplace to the release tag (`carsimax/construct#v7.0.0`); the command above follows the default branch.
+   The installer (`install.sh`) pins this marketplace to the release tag (`carsimax/construct#v8.0.0`); the command above follows the default branch.
 
 2. Optional: inside Claude Code, in `/config`, set each role's model and effort (rows such as `Worker model`).
 
@@ -107,6 +107,7 @@ Options are plugin settings, edited in `/config`:
 |---|---|
 | Model and effort per role | See the routing table below. Each option defaults to `inherit`: use the deprecated key of the same role if it is set, else the agent's own frontmatter |
 | `panel_open_on_start` (boolean, default `true`) | Open the panel at every session start |
+| `inline_edit_max_lines` (number, default `20`) | Let the main thread edit repository files directly when one Write, Edit, MultiEdit, or NotebookEdit call changes at most this many lines; `surface-guard` sends bigger changes to `construct:worker`. `0` restores the old rule: the main thread writes only `odd/tasks/` |
 | `command_guard_asks` (boolean, default `false`) | Let `command-guard` ask before destructive commands (`rm -rf`, force push, `reset --hard`, and the rest). Denies of verifier bypasses always apply |
 
 ### Agents and model routing
@@ -229,7 +230,7 @@ Review is a mandatory ODD phase for high-risk work. A work unit whose task's Ris
 
 **Publication gate.** The `PreToolUse` hook on `Bash` (`hooks/scripts/publication-gate.mjs`) denies `git push`, `gh pr create`, and `gh release create` (also through `sh -c`, `eval`, `$(...)`, backticks, wrappers, heredocs, and the `gh pr new` and `gh release new` aliases) until the required lenses approve the published ref. It judges every ref being published (push sources, `gh pr create --head`, `gh release create --target`, the default branch when none; `HEAD` when none is named). It finds the feature documents changed from the merge-base with the default branch, reads every Risk number at the ref and at the merge-base, and requires each required lens to approve one subject from the merge-base tree to the ref tree. The default branch itself with no remote-tracking default to compare with is denied. A Risk cell that is neither `none` nor readable denies, and so does any internal error. The denial names the missing lenses and the `construct:review` skill. The hook entry sets `onFailure: "block"`.
 
-**Command and surface guards.** Two more `PreToolUse` hooks fail open. `command-guard.mjs` on `Bash` denies commands that bypass the verifier (such as `git commit --no-verify`) and, with `command_guard_asks` on, asks before destructive ones. `surface-guard.mjs` on `Write`, `Edit`, `MultiEdit`, and `NotebookEdit` keeps a writer inside its allowed edit surfaces and lets the main thread write only under `odd/tasks/`. The Risk-line gate also blocks a turn that adds skipped, focused, or stub test markers. `failure-streak.mjs` on `PostToolUseFailure` tells the model to change strategy when one tool fails five times within ten minutes.
+**Command and surface guards.** Two more `PreToolUse` hooks fail open. `command-guard.mjs` on `Bash` denies commands that bypass the verifier (such as `git commit --no-verify`) and, with `command_guard_asks` on, asks before destructive ones. `surface-guard.mjs` on `Write`, `Edit`, `MultiEdit`, and `NotebookEdit` keeps a writer inside its allowed edit surfaces and lets the main thread write under `odd/tasks/` freely and elsewhere only when one call changes at most `inline_edit_max_lines` lines (default 20); bigger changes are denied and go to `construct:worker`. The Risk-line gate also blocks a turn that adds skipped, focused, or stub test markers. `failure-streak.mjs` on `PostToolUseFailure` tells the model to change strategy when one tool fails five times within ten minutes.
 
 An approval never authorizes delivery. Commit, push, pull request, and merge stay your decisions.
 
@@ -277,7 +278,7 @@ The mod draws one thing: a docked **panel** (a `Pane` with id `construct`) drawn
 | `plugins/construct/hooks/` | `hooks.json`, the mod (`register.js`), its routing helpers, the status modules (`status/`), the panel modules (`panel/`), and the command hooks (`scripts/`: contract, feature state, the `shell-words` tokenizer, delivery signals, publication gate, review store guard, command and surface guards, Risk line gate, subagent count, delegation admission, review context and capture, and the memory store `memory-store.mjs` with its hooks `memory-hooks.mjs`) |
 | `plugins/construct/bin/construct-memory` | The memory command line (on the Bash tool's PATH) |
 | `plugins/construct/hooks/contract/` | Session and subagent contract texts injected by hooks |
-| `plugins/construct/evals/` | Behavior eval cases run by `claude plugin eval` (`scripts/eval.sh`; `scripts/probe-review.sh` stands in for `review-fires` where the eval sandbox has no working git) |
+| `plugins/construct/evals/` | Behavior eval cases run by `claude plugin eval` (`scripts/eval.sh` also writes `summary.json` with ritual and outcome pass rates, cost, duration, and turns, and keeps the run dirs under /private/tmp; `scripts/probe-review.sh` stands in for `review-fires` where the eval sandbox has no working git) |
 | `plugins/construct/tests/` | Mod tests run by `claude plugin test` |
 | `tests/` | Repository tests run by `node --test` |
 | `odd/tasks/` | ODD feature documents (specs, tasks, log) |
@@ -285,6 +286,10 @@ The mod draws one thing: a docked **panel** (a `Pane` with id `construct`) drawn
 ## Contributing
 
 Setup, checks, and pull request rules are in [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Upgrading to 8.0
+
+The main thread now makes small edits inline: each edit call may change up to `inline_edit_max_lines` lines (default 20); bigger ones go to `construct:worker`. Set `inline_edit_max_lines` to `0` to restore the 7.x rule (the main thread writes only `odd/tasks/`). The evals `small-delegated*` were renamed `small-inline*`, and `scripts/eval.sh` now writes `summary.json` with outcome and cost.
 
 ## Upgrading to 7.0
 
@@ -324,14 +329,15 @@ Risk line: one reply can name several items, `Risk: items 2, 5 (reason)`; the Ri
 
 ## Status
 
-Current version: 7.0.0 (`plugins/construct/.claude-plugin/plugin.json`); a major release with one breaking change: `command-guard` no longer asks before destructive commands unless the new `command_guard_asks` option is `true`, and its denies always apply (see "Upgrading to 7.0"). Releases are tagged `vX.Y.Z`.
+Current version: 8.0.0 (`plugins/construct/.claude-plugin/plugin.json`); a major release with one breaking change: the main thread makes small inline edits (up to `inline_edit_max_lines` lines per call, default 20; `0` restores the 7.x rule), see "Upgrading to 8.0". Releases are tagged `vX.Y.Z`.
 
-Changes in 7.0.0:
+Changes in 8.0.0:
 
-- BREAKING: `command_guard_asks` (boolean, default `false`). `command-guard` asks before destructive commands only when it is on; denies of verifier bypasses always apply.
-- `command-guard` covers `find -delete`, `find -exec` and `-execdir` (the executed command gets the same checks as a direct one, including `sudo`, `/bin/rm`, and `sh -c`), and `xargs rm -rf`. A fix to how `xargs` flags are unwrapped also closes `xargs -i git push` publication-gate bypasses.
-- The panel measures width by grapheme cluster (ZWJ emoji, combining marks, skin tones, keycaps).
-- The mod test suite runs green: the fake test world no longer conflicts with the harness's own permission check.
+- BREAKING: `inline_edit_max_lines` (number, default 20). `surface-guard` lets the main thread make edit calls of at most that many changed lines; `0` keeps the main thread to `odd/tasks/`.
+- `scripts/eval.sh` writes `summary.json` (ritual and outcome pass rates, cost, duration, turns); the `small-delegated*` evals are now `small-inline*`.
+- Each case can ship an `outcome.sh` that checks the result in a clean directory; the `review-fires` number comes from `scripts/probe-review.sh`, because the eval sandbox has no working git.
+
+7.0.0 was a major release with one breaking change: `command-guard` no longer asks before destructive commands unless `command_guard_asks` is `true`, and its denies always apply (see "Upgrading to 7.0"). It also covered `find -delete`, `find -exec`, and `xargs rm -rf`, measured panel width by grapheme cluster, and made the mod test suite run green.
 
 6.1.0 was a minor release: the panel clean-room (#54-#56) and wide-character widths, `command-guard` asks before `git restore ./` and `git restore :/` and denies hooks-path config set through `export`, `declare`, `typeset`, `readonly`, `local`, or a bare assignment, the Risk-line gate flags trailing `// TODO` and `# TODO` comments, and subagents name unrequested work in their report.
 

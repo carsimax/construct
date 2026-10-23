@@ -1,7 +1,7 @@
 {
   "name": "construct",
   "displayName": "Construct",
-  "version": "7.0.0",
+  "version": "8.0.0",
   "license": "MIT",
   "description": "Organic Driven Development orchestration, review lenses, and delivery skills for Claude Code",
   "author": {
@@ -463,6 +463,12 @@
       "title": "Ask before destructive commands",
       "description": "Let command-guard ask before destructive commands (rm -rf, force push, reset --hard, and the rest); off by default. Denies of verifier bypasses such as git commit --no-verify always apply",
       "default": false
+    },
+    "inline_edit_max_lines": {
+      "type": "number",
+      "title": "Inline edit limit (lines)",
+      "description": "Let the main thread edit repository files directly when one Write, Edit, MultiEdit, or NotebookEdit call changes at most this many lines; surface-guard sends bigger changes to construct:worker. 0 restores the old rule: the main thread writes only odd/tasks/",
+      "default": 20
     }
   }
 }

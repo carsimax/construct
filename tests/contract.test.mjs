@@ -83,17 +83,22 @@ test('the session contract scales autonomy to the verifier and closes with check
   assert.ok(text.includes('Risk: item N (reason)') && text.includes('Risk: none'))
 })
 
-test('code writes go to the worker while reads and answers stay with the parent', () => {
+test('small work is inline up to inline_edit_max_lines and bigger edits go to the worker (S5)', () => {
   const text = context('session', SESSION).additionalContext
-  assert.ok(text.includes('Every write to repository code, tests, or docs goes to `construct:worker`'))
-  assert.ok(!text.includes('works inline by default'))
+  assert.ok(text.includes('Small work is done inline: each edit call changes up to `inline_edit_max_lines` (20) lines'))
+  assert.ok(text.includes('Large work writes through `construct:worker`'))
+  assert.ok(!text.includes('routing defect'))
   const delegation = readFileSync(join(pluginRoot, 'skills/delegation/SKILL.md'), 'utf8')
-  assert.ok(delegation.includes('Every write to repository code, tests, or docs goes to `construct:worker`'))
-  assert.ok(!delegation.includes('When in doubt, work inline.'))
+  assert.ok(delegation.includes('Small work is done inline'))
+  assert.ok(!delegation.includes('Every write to repository code, tests, or docs goes to `construct:worker`'))
   const sizing = readFileSync(join(pluginRoot, 'skills/workflow/SKILL.md'), 'utf8')
-  assert.match(sizing, /- Small: one `construct:worker`, no feature document/)
-  const grader = readFileSync(join(pluginRoot, 'evals/small-delegated/graders/worker-delegated.md'), 'utf8')
-  assert.match(grader, /tool: Agent\nmin: 1/)
+  assert.match(sizing, /- Small: done inline \(edit calls up to `inline_edit_max_lines` lines/)
+  const grader = readFileSync(join(pluginRoot, 'evals/small-inline/graders/no-delegation.md'), 'utf8')
+  assert.match(grader, /tool: Agent\nmin: 0\nmax: 0/)
+  assert.doesNotMatch(grader, /arm: both/)
+  const option = JSON.parse(readFileSync(join(pluginRoot, '.claude-plugin/plugin.json'), 'utf8')).userConfig.inline_edit_max_lines
+  assert.equal(option.type, 'number')
+  assert.equal(option.default, 20)
 })
 
 test('SubagentStart gives worker agents the subagent contract', () => {

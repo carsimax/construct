@@ -7,7 +7,7 @@ description: The ODD protocol for every implementation request, feature plan, re
 
 Order for every request. The parent orchestrates; `construct:delegation` says who writes.
 
-1. **Authorize.** Investigation, explanation, review, comparison, and planning stay read-only. Files change only when the user asks for a change. Ambiguous intent: one question, read-only until answered. The surface-guard hook denies a main-thread write outside `odd/tasks/`.
+1. **Authorize.** Investigation, explanation, review, comparison, and planning stay read-only. Files change only when the user asks for a change. Ambiguous intent: one question, read-only. surface-guard denies oversized main-thread edits.
 2. **Explore.** Start with `construct-memory search <feature or area>`, proportionately. Stop once the worker's edit surfaces and handoff can be written. More than one bounded batch goes to `construct:explorer`.
 3. **Resolve uncertainty.** Research only a named uncertainty ([research](references/research.md)). A real open product decision gets one question, then the turn stops.
 4. **Classify.** Print `Size: small | large (reason)`.
@@ -26,7 +26,7 @@ Small means all three hold:
 
 Large means failing the resume test: several sessions, outside parties, separate deliverables, or requirements that would not survive compaction. Never size by file counts, command counts, or a requested todo list.
 
-- Small: one `construct:worker`, no feature document, no commits unless asked.
+- Small: done inline (edit calls up to `inline_edit_max_lines` lines, default 20; bigger ones go to `construct:worker`), no feature document, no commits unless asked.
 - Large: feature document first, then work-unit commits on a feature branch.
 
 ## Risk
