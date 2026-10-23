@@ -1,15 +1,15 @@
-// PostToolUse hook: delivery signals (S7, gentle-parity). Port of gentle-shell
+// PostToolUse and PostToolBatch hook: delivery signals (S7, gentle-parity). Port of gentle-shell
 // lib/commit-slice-signal.ts and lib/context-backstop.ts. Notices only: the hook never blocks,
 // fails open (no output, exit 0), and writes nothing but a one-line marker per session.
 // adapted from gentle-shell (https://github.com/Gentleman-Programming/gentle-shell), MIT, Copyright (c) 2025 Mario Zechner, see LICENSE-gentle-shell
 //   (a) Commit slice: after a successful `git commit` (main thread or subagent) on a branch
-//       other than the default branch, the branch's authored changed lines against the default
+//       other than the default branch (PostToolUse, registered for Bash git calls only), the branch's authored changed lines against the default
 //       branch (merge base to HEAD, lock files, minified and generated files excluded) and, past
 //       400, a notice to apply the delivery strategy.
 //   (b) Context backstop: when the latest transcript usage reaches 150k tokens (the window is
-//       unknown to a hook, so the absolute cap stands, as upstream), one notice to delegate. Main thread only (no agent_id). It re-arms when usage
+//       unknown to a hook, so the absolute cap stands, as upstream), one notice to delegate (PostToolBatch, once per batch of tool calls). Main thread only (no agent_id). It re-arms when usage
 //       falls below the threshold again (compaction), as upstream does.
-// Usage: node delivery-signals.mjs post   (hook JSON on stdin)
+// Usage: node delivery-signals.mjs post | batch   (hook JSON on stdin)
 import { spawnSync } from 'node:child_process'
 import { closeSync, mkdirSync, openSync, readSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
@@ -164,24 +164,19 @@ function backstopSignal(input) {
   return backstopNotice(usage.tokens)
 }
 
+// Each mode runs one signal: `post` the commit slice per tool call, `batch` the backstop per batch.
+const MODES = { post: ['PostToolUse', commitSignal], batch: ['PostToolBatch', backstopSignal] }
+
 function main() {
+  const mode = MODES[process.argv[2]]
   const input = readInput()
-  if (!input || typeof input !== 'object' || Array.isArray(input) || input.hook_event_name !== 'PostToolUse') return
-  const notices = []
-  for (const signal of [commitSignal, backstopSignal]) {
-    try {
-      const notice = signal(input)
-      if (notice) notices.push(notice)
-    } catch {
-      // Fail open per signal.
-    }
-  }
-  if (notices.length > 0) {
-    process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: notices.join('\n') } })}\n`)
-  }
+  if (!mode || !input || typeof input !== 'object' || Array.isArray(input) || input.hook_event_name !== mode[0]) return
+  const [event, signal] = mode
+  const notice = signal(input)
+  if (notice) process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: event, additionalContext: notice } })}\n`)
 }
 
-if (process.argv[2] === 'post') {
+if (Object.hasOwn(MODES, process.argv[2])) {
   try {
     main()
   } catch {

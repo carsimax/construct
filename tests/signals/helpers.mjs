@@ -7,9 +7,11 @@ export const SCRIPT = `${PLUGIN}hooks/scripts/delivery-signals.mjs`
 
 export const lines = (n, tag = 'x') => Array.from({ length: n }, (_, i) => `${tag}${i}\n`).join('')
 
-export function hook(event, env = {}) {
-  const result = spawnSync('node', [SCRIPT, 'post'], {
-    input: JSON.stringify({ hook_event_name: 'PostToolUse', session_id: 's1', ...event }),
+// mode 'post' feeds PostToolUse (commit slice), mode 'batch' feeds PostToolBatch (context backstop).
+export function hook(event, env = {}, mode = 'post') {
+  const hook_event_name = mode === 'batch' ? 'PostToolBatch' : 'PostToolUse'
+  const result = spawnSync('node', [SCRIPT, mode], {
+    input: JSON.stringify({ hook_event_name, session_id: 's1', ...event }),
     encoding: 'utf8',
     env: { ...process.env, CLAUDE_PLUGIN_DATA: scratchDir('odd-sig-data-'), ...env },
   })

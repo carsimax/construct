@@ -15,7 +15,7 @@ function transcript(...rows) {
   return file
 }
 
-const post = (transcript_path, extra = {}, env = {}) => hook({ cwd: '/', tool_name: 'Read', tool_input: {}, tool_response: {}, transcript_path, ...extra }, env)
+const post = (transcript_path, extra = {}, env = {}) => hook({ cwd: '/', tool_calls: [{ tool_name: 'Read', tool_input: {}, tool_use_id: 't1', tool_response: '' }], transcript_path, ...extra }, env, 'batch')
 
 describe('context backstop', () => {
   test('below the 150k cap stays silent, whatever the model id says', () => {
@@ -31,7 +31,7 @@ describe('context backstop', () => {
   test('at the 150k cap it notifies, without guessing a window', () => {
     for (const model of ['claude-opus-5-5', 'claude-opus-4-7[1m]']) {
       const r = post(transcript(row(150_000, model)))
-      assert.equal(r.json.hookSpecificOutput.hookEventName, 'PostToolUse')
+      assert.equal(r.json.hookSpecificOutput.hookEventName, 'PostToolBatch')
       assert.match(r.context, /Context backstop: the parent context measures 150,000 tokens, at or past the 150,000-token backstop/)
       assert.doesNotMatch(r.context, /context window|%/)
       assert.match(r.context, /construct:worker/)
@@ -87,10 +87,17 @@ describe('context backstop', () => {
     assert.match(post(transcript(row(150_000), 'not json\n', synthetic)).context, /150,000 tokens/)
   })
 
-  test('both signals can share one reply', () => {
+  test('the per-tool PostToolUse run never reports the backstop', () => {
+    const r = hook({ cwd: '/', tool_name: 'Read', tool_input: {}, tool_response: {}, transcript_path: transcript(row(150_000)) })
+    assert.equal(r.status, 0)
+    assert.equal(r.stdout, '')
+  })
+
+  test('the batch run never reports a commit slice', () => {
     const repo = featureRepo({ 'src/b.js': lines(3) })
-    const r = hook({ cwd: repo, tool_name: 'Bash', tool_input: { command: 'git commit -m x' }, tool_response: { stdout: 'ok' }, transcript_path: transcript(row(150_000)) })
-    assert.match(r.context, /Commit slice: 3 authored/)
-    assert.match(r.context, /Context backstop/)
+    const call = { tool_name: 'Bash', tool_input: { command: 'git commit -m x' }, tool_use_id: 't1', tool_response: 'ok' }
+    const r = hook({ cwd: repo, tool_calls: [call], transcript_path: transcript(row(1_000)) }, {}, 'batch')
+    assert.equal(r.status, 0)
+    assert.equal(r.stdout, '')
   })
 })
