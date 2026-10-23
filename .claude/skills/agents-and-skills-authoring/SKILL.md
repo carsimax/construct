@@ -76,4 +76,4 @@ Sources (read 2026-10-23): [sub-agents](https://code.claude.com/docs/en/sub-agen
 
 ## Checks for a change here
 
-`node --test tests/` (agents and skills tests), `claude plugin validate --strict ./plugins/construct`, and, for delegation behavior, an eval case (see `plugin-evals`).
+`node --test 'tests/**/*.test.mjs'` (agents and skills tests), `claude plugin validate --strict ./plugins/construct`, and, for delegation behavior, an eval case (see `plugin-evals`).
