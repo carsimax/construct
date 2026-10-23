@@ -11,7 +11,8 @@ import { fileURLToPath } from 'node:url'
 const ROOT = process.env.CLAUDE_PLUGIN_ROOT || join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const CLI = join(ROOT, 'bin', 'construct-memory')
 const DEFAULT_VERSION = '2025-06-18'
-const TIMEOUT_MS = 10_000
+// CONSTRUCT_MEMORY_MCP_TIMEOUT_MS is a test hook, not a user option.
+const TIMEOUT_MS = Number.isInteger(Number(process.env.CONSTRUCT_MEMORY_MCP_TIMEOUT_MS)) && Number(process.env.CONSTRUCT_MEMORY_MCP_TIMEOUT_MS) > 0 ? Number(process.env.CONSTRUCT_MEMORY_MCP_TIMEOUT_MS) : 10_000
 
 const str = (description) => ({ type: 'string', description })
 const int = (description) => ({ type: 'integer', description })
@@ -114,6 +115,7 @@ function runCli({ argv, stdin }) {
     const child = execFile(process.execPath, [CLI, ...argv], { cwd: process.env.CLAUDE_PROJECT_DIR || process.cwd(), timeout: TIMEOUT_MS, maxBuffer: 16 * 1024 * 1024, encoding: 'utf8' }, (error, stdout, stderr) => {
       const reply = (text, isError) => resolve({ content: [{ type: 'text', text }], ...(isError ? { isError: true } : {}) })
       if (!error) return reply(stdout, false)
+      if (error.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') return reply('construct-memory output exceeded 16 MiB', true)
       if (error.killed) return reply('construct-memory timed out', true)
       reply(stderr.trim() || `construct-memory failed: ${error.message.split('\n')[0]}`, true)
     })
@@ -170,5 +172,5 @@ async function onLine(line) {
 // Lines are handled one at a time, so replies keep the request order; the process ends once stdin is closed and the queue is empty.
 let queue = Promise.resolve()
 createInterface({ input: process.stdin }).on('line', (line) => {
-  if (line.trim() !== '') queue = queue.then(() => onLine(line))
+  if (line.trim() !== '') queue = queue.then(() => onLine(line)).catch(() => {})
 })
