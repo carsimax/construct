@@ -230,6 +230,16 @@ Review is a mandatory ODD phase for high-risk work. A work unit whose task's Ris
 
 **Publication gate.** The `PreToolUse` hook on `Bash` (`hooks/scripts/publication-gate.mjs`) denies `git push`, `gh pr create`, and `gh release create` (also through `sh -c`, `eval`, `$(...)`, backticks, wrappers, heredocs, and the `gh pr new` and `gh release new` aliases) until the required lenses approve the published ref. It judges every ref being published (push sources, `gh pr create --head`, `gh release create --target`, the default branch when none; `HEAD` when none is named). It finds the feature documents changed from the merge-base with the default branch, reads every Risk number at the ref and at the merge-base, and requires each required lens to approve one subject from the merge-base tree to the ref tree. The default branch itself with no remote-tracking default to compare with is denied. A Risk cell that is neither `none` nor readable denies, and so does any internal error. The denial names the missing lenses and the `construct:review` skill. The hook entry sets `onFailure: "block"`.
 
+**What each layer guarantees.** The `PreToolUse` gate is an early discipline check inside Claude Code sessions, not a security boundary: pushes from other hosts, other tools, and indirect commands are not seen. `construct-gate install` adds a git `pre-push` hook (`hooks/scripts/pre-push.mjs`) that judges every push from that clone with the same verdict, from any host. Risk cells are classified by the agent itself, so a wrong `none` is not caught. CI cannot check reviews: verdicts stay in the clone's local store.
+
+```bash
+construct-gate install     # write the pre-push hook into the repository's hooks directory
+construct-gate uninstall   # remove it (only Construct's own hook)
+construct-gate status      # installed or not, and the resolved script path
+```
+
+The installer is opt-in and never runs on its own. It writes to the effective hooks directory (`core.hooksPath` is honored) and refuses to overwrite a hook that is not Construct's. The hook uses the newest installed Construct version; if the plugin is gone it warns on stderr and allows the push. Like the gate, it denies on any internal error. `construct-gate` is on the Bash tool's PATH inside Claude Code sessions; from another terminal run it by path, for example `node ~/.claude/plugins/cache/construct/construct/<version>/bin/construct-gate install`. Lens verdicts are recorded only by Construct's hooks in a Claude Code session, so with the hook installed, review there before pushing from any host.
+
 **Command and surface guards.** Two more `PreToolUse` hooks fail open. `command-guard.mjs` on `Bash` denies commands that bypass the verifier (such as `git commit --no-verify`) and, with `command_guard_asks` on, asks before destructive ones. `surface-guard.mjs` on `Write`, `Edit`, `MultiEdit`, and `NotebookEdit` keeps a writer inside its allowed edit surfaces and lets the main thread write under `odd/tasks/` freely and elsewhere only when one call changes at most `inline_edit_max_lines` lines (default 20); bigger changes are denied and go to `construct:worker`. The Risk-line gate also blocks a turn that adds skipped, focused, or stub test markers. `failure-streak.mjs` on `PostToolUseFailure` tells the model to change strategy when one tool fails five times within ten minutes.
 
 An approval never authorizes delivery. Commit, push, pull request, and merge stay your decisions.
@@ -277,6 +287,7 @@ The mod draws one thing: a docked **panel** (a `Pane` with id `construct`) drawn
 | `plugins/construct/skills/` | Delivery and review skills (`delivery`, `review`, `debugging`, `constraints`, ...) |
 | `plugins/construct/hooks/` | `hooks.json`, the mod (`register.js`), its routing helpers, the status modules (`status/`), the panel modules (`panel/`), and the command hooks (`scripts/`: contract, feature state, the `shell-words` tokenizer, delivery signals, publication gate, review store guard, command and surface guards, Risk line gate, subagent count, delegation admission, review context and capture, and the memory store `memory-store.mjs` with its hooks `memory-hooks.mjs`) |
 | `plugins/construct/bin/construct-memory` | The memory command line (on the Bash tool's PATH) |
+| `plugins/construct/bin/construct-gate` | Installs, removes, or reports the git pre-push hook (`hooks/scripts/pre-push.mjs`) |
 | `plugins/construct/hooks/contract/` | Session and subagent contract texts injected by hooks |
 | `plugins/construct/evals/` | Behavior eval cases run by `claude plugin eval` (`scripts/eval.sh` also writes `summary.json` with ritual and outcome pass rates, cost, duration, and turns, and keeps the run dirs under /private/tmp; `scripts/probe-review.sh` stands in for `review-fires` where the eval sandbox has no working git) |
 | `plugins/construct/tests/` | Mod tests run by `claude plugin test` |
