@@ -1,7 +1,7 @@
 # Construct
 
 [![Claude Code](https://img.shields.io/badge/Claude_Code-2.1.304%2B-blue)](#requirements)
-[![Plugin version](https://img.shields.io/badge/version-8.4.0-informational)](plugins/construct/.claude-plugin/plugin.json)
+[![Plugin version](https://img.shields.io/badge/version-8.5.0-informational)](plugins/construct/.claude-plugin/plugin.json)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 Construct is a Claude Code plugin that makes every request follow Organic Driven Development (ODD): authorize, explore, size, track, implement test-first, and close with evidence and a Risk line.
@@ -30,7 +30,7 @@ Construct is a Claude Code plugin that makes every request follow Organic Driven
 ### One command
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v8.4.0/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v8.5.0/install.sh | bash
 ```
 
 The installer checks the requirements above and stops before changing anything if one is missing, or if `~/.claude` or `~/.claude/settings.json` is not writable, or if `settings.json` is a directory. Then it runs the manual steps below for you:
@@ -48,7 +48,7 @@ If engram or codegraph is installed, the installer says Construct no longer need
 Pass options after `bash -s --`, for example `curl -fsSL <url> | bash -s -- --no-mcp`. To read the script before running it:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v8.4.0/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v8.5.0/install.sh -o install.sh
 less install.sh
 bash install.sh
 ```
@@ -64,7 +64,7 @@ The manual steps the installer runs, for when you want to run them yourself:
    claude plugin install construct@construct
    ```
 
-   The installer (`install.sh`) pins this marketplace to the release tag (`carsimax/construct#v8.4.0`); the command above follows the default branch.
+   The installer (`install.sh`) pins this marketplace to the release tag (`carsimax/construct#v8.5.0`); the command above follows the default branch.
 
 2. Optional: inside Claude Code, in `/config`, set each role's model and effort (rows such as `Worker model`).
 
@@ -171,13 +171,15 @@ The hook fails open on unreadable input or any internal error; a well-formed lau
 
 ### MCP servers
 
-Construct needs no MCP server and ships none. Structural questions (architecture, call flow, references, impact) use the native `LSP` tool when a language server is available, and Grep, Glob, and Read otherwise.
+Construct ships one MCP server, its own `memory` server (`plugins/construct/.mcp.json`, started with `node`, no dependencies; see [Memory](#memory)), and no third-party server. Structural questions (architecture, call flow, references, impact) use the native `LSP` tool when a language server is available, and Grep, Glob, and Read otherwise.
 
 The installer no longer registers context7 or codegraph. Earlier registrations can be removed with `claude mcp remove --scope user context7` and `claude mcp remove --scope user codegraph` (the codegraph CLI itself, if you installed it with npm, is `npm uninstall -g @colbymchenry/codegraph`).
 
 ### Memory
 
-Memory is per repository: one SQLite database at `<git common dir>/construct-memory/memory.db`, shared by every worktree of the clone and never committed. It needs Node 22.16 or later and is off outside a git repository. There is no MCP server; Claude uses the `construct-memory` command (on the Bash tool's PATH) and the `construct:memory` skill.
+Memory is per repository: one SQLite database at `<git common dir>/construct-memory/memory.db`, shared by every worktree of the clone and never committed. It needs Node 22.16 or later and is off outside a git repository. Claude reaches it through the plugin's MCP server or the `construct-memory` command (on the Bash tool's PATH), and the `construct:memory` skill.
+
+- **MCP tools.** The `memory` server exposes `mem_save`, `mem_search`, `mem_context`, `mem_get_observation`, `mem_update`, `mem_timeline`, `mem_session_summary`, `mem_judge`, `mem_suggest_topic_key`, and `mem_relations_pending` (Claude Code names them `mcp__plugin_construct_memory__<tool>`). Each call runs the CLI once, so the CLI stays the single implementation and the fallback; a CLI failure comes back as an error result and a call that takes over 10 seconds as `construct-memory timed out`. The server works in `CLAUDE_PROJECT_DIR` when set, else its working directory. `install.sh` pre-approves these ten tools by exact name. `delete`, `prompts delete`, `consolidate`, `import`, `export`, and `review done` have no tool: they are CLI-only and keep asking. `construct:explorer` has a fixed tool list without the MCP tools and uses the CLI.
 
 - **Commands.** `save`, `search`, `get`, `context`, `update`, `delete`, `summary --session <id>`, `review list|done <id>`, `review stale [--json]` (read-only: live memories whose `Where:` names repository paths that no longer exist), `import <file>`, `export [file]`, `suggest-topic-key` (prints a key from a JSON `type`, `title`, `content` on stdin), `timeline <id>`, `pin <id>` / `unpin <id>` (pinned memories load in every session context and rank higher in search), `stats`, `doctor [--json]` (read-only health checks, exit 1 when one fails), `prompts --search <query>`, `consolidate <id> <id>... --title T` (merge several memories into one: content on stdin, a preview and fingerprint first, then `--confirm <fingerprint>`), and `judge`, `judge-many`, `compare` (verdicts on related memories), and `relations pending [--limit N] [--json]` (lists the pending relation candidates). `construct-memory help` lists the flags.
 - **Related memories.** After a save, `construct-memory` prints up to 3 similar memories as candidates; judging them is optional; the session context counts pending relations and `relations pending` lists them; and `search` and `get` mark judged `conflicts_with` and `supersedes` relations. Export and import carry relations between exported memories.
@@ -347,11 +349,13 @@ Risk line: one reply can name several items, `Risk: items 2, 5 (reason)`; the Ri
 
 ## Status
 
-Current version: 8.4.0 (`plugins/construct/.claude-plugin/plugin.json`); a minor release. Releases are tagged `vX.Y.Z`.
+Current version: 8.5.0 (`plugins/construct/.claude-plugin/plugin.json`); a minor release. Releases are tagged `vX.Y.Z`.
 
-Changes in 8.4.0:
+Changes in 8.5.0:
 
-- Memory closer to engram: the session context lists passive learnings apart (the 3 newest) and only sessions with a summary or memories, and search ranks passive learnings below agent saves. Passive capture skips an item whose words mostly match an earlier learning and titles it by its first sentence. Subagent and background-job notices are no longer stored as prompts, a `SessionEnd` hook marks the session closed, and `construct-memory relations pending` lists unjudged relation candidates, which the session context counts.
+- Memory MCP server: the plugin ships its own server, `memory` (`plugins/construct/.mcp.json`, Node only), with ten engram-style tools (`mem_save`, `mem_search`, `mem_context`, `mem_get_observation`, `mem_update`, `mem_timeline`, `mem_session_summary`, `mem_judge`, `mem_suggest_topic_key`, `mem_relations_pending`). Each call runs the `construct-memory` CLI, which stays the fallback; destructive commands remain CLI-only. The installer pre-approves the ten tools.
+
+8.4.0 brought memory closer to engram: passive learnings load apart and rank lower, near-duplicate learnings are skipped, harness notices are not stored as prompts, a `SessionEnd` hook closes the session, and `construct-memory relations pending` lists unjudged candidates.
 
 8.3.0 made `delegation-admission` also run on `PreToolUse` for `Workflow`: a workflow script is admitted only when every `agent()` call names a literal read-only `agentType`, so writes go through `construct:worker` with the `Agent` tool.
 
