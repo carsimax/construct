@@ -1,7 +1,7 @@
 # Construct
 
 [![Claude Code](https://img.shields.io/badge/Claude_Code-2.1.304%2B-blue)](#requirements)
-[![Plugin version](https://img.shields.io/badge/version-8.0.0-informational)](plugins/construct/.claude-plugin/plugin.json)
+[![Plugin version](https://img.shields.io/badge/version-8.1.0-informational)](plugins/construct/.claude-plugin/plugin.json)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 Construct is a Claude Code plugin that makes every request follow Organic Driven Development (ODD): authorize, explore, size, track, implement test-first, and close with evidence and a Risk line.
@@ -30,7 +30,7 @@ Construct is a Claude Code plugin that makes every request follow Organic Driven
 ### One command
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v8.0.0/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v8.1.0/install.sh | bash
 ```
 
 The installer checks the requirements above and stops before changing anything if one is missing, or if `~/.claude` or `~/.claude/settings.json` is not writable, or if `settings.json` is a directory. Then it runs the manual steps below for you:
@@ -48,7 +48,7 @@ If engram or codegraph is installed, the installer says Construct no longer need
 Pass options after `bash -s --`, for example `curl -fsSL <url> | bash -s -- --no-mcp`. To read the script before running it:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v8.0.0/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v8.1.0/install.sh -o install.sh
 less install.sh
 bash install.sh
 ```
@@ -64,7 +64,7 @@ The manual steps the installer runs, for when you want to run them yourself:
    claude plugin install construct@construct
    ```
 
-   The installer (`install.sh`) pins this marketplace to the release tag (`carsimax/construct#v8.0.0`); the command above follows the default branch.
+   The installer (`install.sh`) pins this marketplace to the release tag (`carsimax/construct#v8.1.0`); the command above follows the default branch.
 
 2. Optional: inside Claude Code, in `/config`, set each role's model and effort (rows such as `Worker model`).
 
@@ -340,13 +340,14 @@ Risk line: one reply can name several items, `Risk: items 2, 5 (reason)`; the Ri
 
 ## Status
 
-Current version: 8.0.0 (`plugins/construct/.claude-plugin/plugin.json`); a major release with one breaking change: the main thread makes small inline edits (up to `inline_edit_max_lines` lines per call, default 20; `0` restores the 7.x rule), see "Upgrading to 8.0". Releases are tagged `vX.Y.Z`.
+Current version: 8.1.0 (`plugins/construct/.claude-plugin/plugin.json`); a minor release, nothing breaks. Releases are tagged `vX.Y.Z`.
 
-Changes in 8.0.0:
+Changes in 8.1.0:
 
-- BREAKING: `inline_edit_max_lines` (number, default 20). `surface-guard` lets the main thread make edit calls of at most that many changed lines; `0` keeps the main thread to `odd/tasks/`.
-- `scripts/eval.sh` writes `summary.json` (ritual and outcome pass rates, cost, duration, turns); the `small-delegated*` evals are now `small-inline*`.
-- Each case can ship an `outcome.sh` that checks the result in a clean directory; the `review-fires` number comes from `scripts/probe-review.sh`, because the eval sandbox has no working git.
+- `construct-gate install | uninstall | status` adds an opt-in git pre-push hook (`hooks/scripts/pre-push.mjs`) that applies the publication gate's verdict to every push from the clone, from any host. It is a discipline layer: `git push --no-verify` skips it, it needs node on PATH, and it allows the push with a warning when the plugin is gone.
+- The README states what each gate layer guarantees.
+
+8.0.0 was a major release with one breaking change: the main thread makes small inline edits (up to `inline_edit_max_lines` lines per call, default 20; `0` restores the 7.x rule), see "Upgrading to 8.0". It also made `scripts/eval.sh` write `summary.json` (pass rates, cost, duration, turns), renamed the `small-delegated*` evals to `small-inline*`, and let each eval case ship an `outcome.sh` that checks the result in a clean directory.
 
 7.0.0 was a major release with one breaking change: `command-guard` no longer asks before destructive commands unless `command_guard_asks` is `true`, and its denies always apply (see "Upgrading to 7.0"). It also covered `find -delete`, `find -exec`, and `xargs rm -rf`, measured panel width by grapheme cluster, and made the mod test suite run green.
 
