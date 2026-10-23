@@ -63,7 +63,7 @@ Match autonomy to the strength of the available verifier, not to your confidence
 - Fix root causes. Never suppress an error, widen a type, skip a test, or delete an assertion
   to turn a check green. **Weakening the verifier is the one unforgivable move.**
 - A missing test is a finding worth naming, not a silence to accept.
-- Code-writing rules (own every line, simplicity over cleverness) live in the subagent contract, because the orchestrator never writes code.
+- Code-writing rules (own every line, simplicity over cleverness) live in the subagent contract, because the orchestrator writes code only in small inline edits.
 
 ## Toward the Human
 

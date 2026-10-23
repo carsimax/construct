@@ -1,6 +1,6 @@
 # Harness evidence
 
-Objective: measure whether Construct improves outcomes and at what cost, before adding features. Branch: feat/harness-evidence. Baseline: bffdf50. Delivery strategy: single-pr. Test runner: `node --test tests/`.
+Objective: measure whether Construct improves outcomes and at what cost, then cut the cost the data shows buys nothing. Branch: feat/harness-evidence. Baseline: bffdf50. Delivery strategy: single-pr. Test runner: `node --test tests/`.
 
 ## Specs
 
@@ -13,6 +13,9 @@ Objective: measure whether Construct improves outcomes and at what cost, before 
   - The summary shows ritual pass rate (the eval's `passed`) and outcome pass rate (blank without `outcome.sh`) side by side.
 - **S3 — Baseline.** Plan T3: "7 casos × 10 corridas × 2 brazos sobre `bffdf50`, registrado en el Log". Estimated cost $15–20, unverified. Phase stop: "**punto de parada:** te presento la tabla".
 
+- **S4 — `review-fires` measures Construct, not the sandbox.** "vamos con ello!" (to: "primero arreglar el sandbox de `review-fires` para que el 30% signifique algo"). In the eval sandbox `git` works, so the case's pass rate reflects whether the risk lens runs before a push.
+- **S5 — Small edits inline, on by default.** Same request (to: "T6 con la opción activada por defecto, midiendo con estos mismos evals que el resultado se mantiene en 100% y que el costo baja"; plan T6: "El hilo principal puede editar un solo archivo hasta N líneas sin pasar por un worker. `surface-guard` lo hace cumplir"). Assumptions (parent): option `inline_edit_max_lines` (number, default 20; 0 restores the worker-only rule); the main thread may Write/Edit outside `odd/tasks/` when one call changes at most N lines; small work is done inline, large work keeps workers. The `small-delegated*` cases assert the new rule. Gate: on 10 runs per arm, outcome stays 100% and plugin-arm cost drops below L5.
+
 ## Tasks
 
 | ID | Specs | Task | Route | Risk | Status | Commit |
@@ -20,6 +23,9 @@ Objective: measure whether Construct improves outcomes and at what cost, before 
 | T1 | S1 | Summary of cost, duration, turns, pass rates per case and arm from `aggregate-result.json` | worker | none | done (RED 6 fail; evals 9/9; suite 1061/0) | 54476a1 |
 | T2 | S2 | `outcome.sh` per outcome-bearing case, run by `scripts/eval.sh` on kept workspaces; outcome vs ritual rates in the summary | worker | 6 | done (fixture right/untouched/wrong per case; real eval L4) | 54476a1 |
 | T3 | S3 | Baseline run, 10 runs per case and arm, table in the Log | parent | none | done (160 runs, $16.42 + $0.31 judge; L5) | 9297e6f |
+
+| T4 | S4 | Make git work in the `review-fires` sandbox; re-measure 10 runs | worker | 6 | pending | — |
+| T5 | S5 | `inline_edit_max_lines` option, surface-guard, contract and skills, small-case graders; re-measure | worker | 2, 3 | pending | — |
 
 ## Log
 
@@ -53,4 +59,9 @@ Objective: measure whether Construct improves outcomes and at what cost, before 
 
   Plugin-arm grader failures /10: debugging-fires regression-test 3; memory-recall follows-decision 1, iso-utc 1; review-fires review-risk-launched 7, reports-verdict 7, no-push-before-lens 3. `debugging` skill fired 10/10 (was 0/3 in construct-native L7). Reading: outcome equal (100%/100%) on the three code cases, plugin +40 pp only on memory-recall (a plugin-only capability); plugin arm costs 1.6-3.0x and takes 1.1-3.6x the time; review-fires launches the risk lens 3/10, and its sandbox has no working git (construct-native L16), so that case is not yet trustworthy.
 
-Next step: present the table to the user (phase stop); Phase 2 per the plan only after their decision.
+- **L6 (2026-10-22, user):** "vamos con ello!" (to the reordered Phase 2: review-fires sandbox first, then T6 on by default). Added S4, S5, T4, T5.
+- **L7 (2026-10-22, parent):** `review-fires` 3 runs: every `git` call exits 72 with "xcode-select: Failed to locate 'git', and no install could be requested" (the /usr/bin/git shim cannot resolve the developer dir in the sandbox); agents look for git then give up, one tried `git push` twice. Host: `/Library/Developer/CommandLineTools/usr/bin/git` exists. Probing `execution.env: DEVELOPER_DIR`.
+
+- **L8 (2026-10-22, parent):** `execution.env: DEVELOPER_DIR` is rejected ("only EVAL_* keys can be set from case.yaml. Anything else must come from the operator's shell"); exporting it in the operator shell does not reach the agent (2 runs, same xcode-select error, review-risk 0/2). No in-sandbox fix: the review-firing number comes from `scripts/probe-review.sh` (same fixture and prompt, outside the sandbox). S4 assumption revised: the `review-fires` eval row is environment-bound; measure with `probe-review.sh --runs 10`.
+
+Next step: probe-review 10 runs; T5 worker running.

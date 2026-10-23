@@ -50,7 +50,7 @@ test('the eval runner grants only the commands the cases need', () => {
 })
 
 test('the Risk-line grader accepts plain and bold Risk lines', () => {
-  const grader = readFileSync(join(pluginRoot, 'evals/small-delegated/graders/risk-line.md'), 'utf8')
+  const grader = readFileSync(join(pluginRoot, 'evals/small-inline/graders/risk-line.md'), 'utf8')
   const pattern = new RegExp(grader.match(/^pattern: '(.+)'$/m)[1])
   for (const ok of ['Risk: none', 'Risk: item 2 (auth)', '**Risk:** none', '**Risk: item 3 (shared parser)**']) {
     assert.match(ok, pattern, ok)

@@ -13,7 +13,7 @@ The parent orchestrates; agents do the work. Handoff templates are in `reference
 
 ## Mapping
 
-Every write to repository code, tests, or docs goes to `construct:worker`; reads, answers, and `odd/tasks/` stay with the parent (surface-guard denies any other main-thread write).
+Small work is done inline: the parent edits directly when each call changes at most `inline_edit_max_lines` lines (default 20; 0 restores worker-only). Large work and any bigger edit go to `construct:worker` (surface-guard denies a main-thread edit over the limit); reads, answers, and `odd/tasks/` stay with the parent.
 
 - Worker: one per independent unit, code, tests, and docs together. Disjoint units launch in one message; dependent ones in order. Never launch a second agent of the same role and task in one turn.
 - `construct:explorer`: mapping beyond one batch or about 5 sequential lookups, one per front, at most 3 per message; dependents wait.

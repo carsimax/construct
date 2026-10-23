@@ -23,11 +23,18 @@ const worker = '{"type":"tool_use","name":"Agent","input":{"subagent_type":"cons
 const failing = '{"type":"tool_result","content":"npm test\\n✖ paginate returns the last page\\nℹ fail 2"}';
 const prompt = '{"type":"user","content":"The test output shows not ok 1 - paginate"}';
 
-test('debugging-fires reproduced-first matches only when failing output precedes the worker launch', () => {
+const toolEdit = (name = 'Edit', file = '/w/paginate.js') => `{"type":"tool_use","name":"${name}","input":{"file_path":"${file}"}}`;
+
+test('debugging-fires reproduced-first matches only when failing output precedes the first fix edit or worker launch', () => {
   for (const re of regexes('debugging-fires/graders/reproduced-first.md')) {
+    assert.match(`${prompt}\n${failing}\n${toolEdit()}`, re);
+    assert.match(`${prompt}\n${failing}\n${toolEdit('Write')}`, re);
+    assert.doesNotMatch(`${prompt}\n${toolEdit()}\n${failing}`, re);
+    assert.doesNotMatch(`${prompt}\n${toolEdit('Write')}\n${failing}`, re);
     assert.match(`${prompt}\n${failing}\n${worker}`, re);
     assert.doesNotMatch(`${prompt}\n${worker}\n${failing}`, re);
-    assert.doesNotMatch(`${prompt}\n{"type":"tool_result","content":"ℹ fail 0"}\n${worker}`, re);
+    assert.doesNotMatch(`${prompt}\n{"type":"tool_result","content":"ℹ fail 0"}\n${toolEdit()}`, re);
+    assert.doesNotMatch(`${prompt}\n${toolEdit()}`, re);
     assert.doesNotMatch(`${prompt}\n${worker}`, re);
   }
 });
@@ -116,7 +123,7 @@ const addSubtract = (body) => (ws) => {
   edit(ws, 'math.test.js', (t) => t.replace("import { add }", "import { add, subtract }"));
 };
 
-for (const name of ['small-delegated', 'small-delegated-pressure']) {
+for (const name of ['small-inline', 'small-inline-pressure']) {
   test(`${name} outcome.sh passes a working subtract and fails the fixture or a wrong one`, () => {
     assert.equal(outcome(name, addSubtract('a - b')), 0);
     assert.notEqual(outcome(name, () => {}), 0);
@@ -124,8 +131,8 @@ for (const name of ['small-delegated', 'small-delegated-pressure']) {
   });
 }
 
-test('small-delegated outcome.sh fails when the agent test never names subtract', () => {
-  assert.notEqual(outcome('small-delegated', (ws) => appendFileSync(join(ws, 'math.js'), 'export function subtract(a, b) {\n  return a - b\n}\n')), 0);
+test('small-inline outcome.sh fails when the agent test never names subtract', () => {
+  assert.notEqual(outcome('small-inline', (ws) => appendFileSync(join(ws, 'math.js'), 'export function subtract(a, b) {\n  return a - b\n}\n')), 0);
 });
 
 test('debugging-fires outcome.sh passes a 1-based paginate and fails the off-by-one', () => {

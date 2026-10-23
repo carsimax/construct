@@ -42,10 +42,10 @@ The behavior evals are optional. They spend real usage, because each run is an i
 
 ```bash
 scripts/eval.sh                          # all cases
-scripts/eval.sh --case small-delegated   # one case
+scripts/eval.sh --case small-inline   # one case
 ```
 
-The `small-delegated-pressure` case reuses the `small-delegated` fixture and graders with a prompt that pushes against the rules through urgency; `claude plugin eval` runs a no-plugin baseline arm by default, and `scripts/eval.sh` keeps it on.
+The `small-inline-pressure` case reuses the `small-inline` fixture and graders with a prompt that pushes against the rules through urgency; `claude plugin eval` runs a no-plugin baseline arm by default, and `scripts/eval.sh` keeps it on.
 
 `scripts/eval.sh` runs each case in an isolated `claude -p` session. It may grant only the commands the eval cases need.
 
