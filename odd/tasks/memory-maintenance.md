@@ -11,6 +11,7 @@ Objective: less noise in relations and prompts, a read signal on memories, a lis
 - **S5 — The MCP timeout path is tested.** Review follow-up "the 10 s timeout path is untested". `memory-mcp.mjs` reads its timeout from `CONSTRUCT_MEMORY_MCP_TIMEOUT_MS` when it is a positive integer (a test hook, named in a comment, not documented as a user option), else 10000. A test points `CLAUDE_PLUGIN_ROOT` at a scratch plugin whose `bin/construct-memory` hangs and gets `isError: true` with `construct-memory timed out`, and the server keeps answering later requests.
 - **S6 — Output past the buffer says so.** Review follow-up "output past `maxBuffer` reports a generic error". When the CLI output exceeds the 16 MiB buffer, the result is `isError: true` with `construct-memory output exceeded 16 MiB`. Tested with a scratch CLI that prints more than that.
 - **S7 — One failed reply never stops the queue.** Review follow-up "a rejected promise in the line queue would stop later replies". The line queue catches a rejection so later lines are still handled.
+- **S8 — Release 8.6.0 and PR.** "Dale ya!". Bump as in 8.5.0, push the branch, open the PR.
 
 ## Tasks
 
@@ -19,6 +20,7 @@ Objective: less noise in relations and prompts, a read signal on memories, a lis
 | T1 | S1, S2, S3, S4 | Store, hooks, CLI, install.sh, skill, README, tests | gentle-ai-worker | 1, 5 | done (RED 15 fail; suite 1172/0; migration L3) | see L3 |
 | T2 | S5, S6, S7 | memory-mcp.mjs follow-ups and tests | gentle-ai-worker | 3 | done (S5 387 ms, S6 183 ms; suite 1172/0) | see L3 |
 | T3 | S3, S4 | Review follow-ups: best-effort counting in get, --days upper bound | parent | 1 | done (RED 2 fail) | see L5 |
+| T4 | S8 | Release 8.6.0 bump, push, PR | parent | 5 | done (suite green) | release |
 
 ## Log
 
@@ -27,3 +29,4 @@ Objective: less noise in relations and prompts, a read signal on memories, a lis
 - **L3 (2026-10-23, workers + parent, T1-T2):** Two workers in parallel on disjoint surfaces. T1 RED: 15 fail (7 new memory tests, 8 install tests for the new rule); GREEN. T2: S5 passed before the change only after the full 10 s (10083 ms), so its RED was the ignored hook; GREEN 387 ms, the hung child gone (ESRCH), a later ping answers. S6 GREEN 183 ms. S7 fixed without a test (only `send` can reject; no deterministic way to make stdout.write throw). One cross-unit failure: the MCP S3 test compared an MCP `get` with a later CLI `get`, now one read apart; the parent made it expect N+1. Suite 1172/0; `claude plugin validate --strict ./plugins/construct` passed. Migration on a copy of this clone's store: 456 rows kept, user_version 1, both columns added, doctor ok, `get` counts 1 then 2; the 8.5.0 CLI (git archive ae23af7) on the migrated copy: doctor ok, get, save, and search work. Not covered: `--days -1` as two words fails in parseArgs with its own message (still exit 1, one stderr line); `--days=-1` gives the spec message.
 - **L4 (2026-10-23, review):** Native review (RDD) of ae23af7..0f7c7ad, lenses risk, resilience, reliability: approved, acknowledged (lineage review-1a9508201baa6508). Non-blocking, each from two lenses: `get` became a write, so a failing counter write failed the read (memory-store.mjs ~495); a huge `--days` overflows the date math (~830); the MCP queue catch is silent (memory-mcp.mjs ~175). The first two are taken up in T3; the third is kept on purpose (only a failed stdout write reaches it, and there is nowhere to report that).
 - **L5 (2026-10-23, parent, T3):** RED: 2 fail (get with a trigger that aborts the counter update threw; `--days 36501` was accepted). GREEN: get falls back to a plain read when the counting write fails (a busy store still waits out the retries first, noted as a shortcut); `--days` above 36500 fails with its own message. The S4 spec gains that message.
+- **L6 (2026-10-23, user):** "Dale ya!". Release 8.6.0 bumped like 8.5.0.

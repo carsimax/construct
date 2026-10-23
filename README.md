@@ -1,7 +1,7 @@
 # Construct
 
 [![Claude Code](https://img.shields.io/badge/Claude_Code-2.1.304%2B-blue)](#requirements)
-[![Plugin version](https://img.shields.io/badge/version-8.5.0-informational)](plugins/construct/.claude-plugin/plugin.json)
+[![Plugin version](https://img.shields.io/badge/version-8.6.0-informational)](plugins/construct/.claude-plugin/plugin.json)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 Construct is a Claude Code plugin that makes every request follow Organic Driven Development (ODD): authorize, explore, size, track, implement test-first, and close with evidence and a Risk line.
@@ -30,7 +30,7 @@ Construct is a Claude Code plugin that makes every request follow Organic Driven
 ### One command
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v8.5.0/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v8.6.0/install.sh | bash
 ```
 
 The installer checks the requirements above and stops before changing anything if one is missing, or if `~/.claude` or `~/.claude/settings.json` is not writable, or if `settings.json` is a directory. Then it runs the manual steps below for you:
@@ -48,7 +48,7 @@ If engram or codegraph is installed, the installer says Construct no longer need
 Pass options after `bash -s --`, for example `curl -fsSL <url> | bash -s -- --no-mcp`. To read the script before running it:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v8.5.0/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v8.6.0/install.sh -o install.sh
 less install.sh
 bash install.sh
 ```
@@ -64,7 +64,7 @@ The manual steps the installer runs, for when you want to run them yourself:
    claude plugin install construct@construct
    ```
 
-   The installer (`install.sh`) pins this marketplace to the release tag (`carsimax/construct#v8.5.0`); the command above follows the default branch.
+   The installer (`install.sh`) pins this marketplace to the release tag (`carsimax/construct#v8.6.0`); the command above follows the default branch.
 
 2. Optional: inside Claude Code, in `/config`, set each role's model and effort (rows such as `Worker model`).
 
@@ -349,11 +349,13 @@ Risk line: one reply can name several items, `Risk: items 2, 5 (reason)`; the Ri
 
 ## Status
 
-Current version: 8.5.0 (`plugins/construct/.claude-plugin/plugin.json`); a minor release. Releases are tagged `vX.Y.Z`.
+Current version: 8.6.0 (`plugins/construct/.claude-plugin/plugin.json`); a minor release. Releases are tagged `vX.Y.Z`.
 
-Changes in 8.5.0:
+Changes in 8.6.0:
 
-- Memory MCP server: the plugin ships its own server, `memory` (`plugins/construct/.mcp.json`, Node only), with ten engram-style tools (`mem_save`, `mem_search`, `mem_context`, `mem_get_observation`, `mem_update`, `mem_timeline`, `mem_session_summary`, `mem_judge`, `mem_suggest_topic_key`, `mem_relations_pending`). Each call runs the `construct-memory` CLI, which stays the fallback; destructive commands remain CLI-only. The installer pre-approves the ten tools.
+- Memory maintenance: passive learnings are never relation candidates, and more harness notices (review bindings, todo reminders, Stop hook feedback) are not stored as prompts. `get` counts reads (`accessed: N`, a small search boost); the two columns are added to existing stores without a schema version bump, so older construct versions on other worktrees keep working. `construct-memory review passive [--days N] [--json]` lists passive learnings never read, as input for `consolidate` or `delete`. The memory MCP server names a buffer overflow and survives a failed reply.
+
+8.5.0 added the plugin's own memory MCP server, `memory`, with ten engram-style `mem_*` tools over the `construct-memory` CLI.
 
 8.4.0 brought memory closer to engram: passive learnings load apart and rank lower, near-duplicate learnings are skipped, harness notices are not stored as prompts, a `SessionEnd` hook closes the session, and `construct-memory relations pending` lists unjudged candidates.
 
