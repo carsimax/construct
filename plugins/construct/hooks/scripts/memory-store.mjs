@@ -30,6 +30,9 @@ const CONTEXT_MARKER = '\n[truncated]\n'
 const BUSY_RETRIES = 5
 const PINNED_MAX = 20
 const PINNED_BOOST = 0.1
+const PASSIVE_WEIGHT = 0.5
+const LEARNINGS_MAX = 3
+const PASSIVE_SIMILAR = 0.8
 const TIMELINE_DEFAULT = 5
 const PROMPTS_DEFAULT = 20
 const PROMPTS_MAX = 100
@@ -188,6 +191,8 @@ const SEARCH_COLUMNS = 'o.id, o.type, o.title, o.topic_key, o.pinned, o.created_
 const queryTerms = (text) => String(text ?? '').trim().split(/\s+/).map((t) => t.replace(/^"+|"+$/g, '')).filter(Boolean)
 const hasShortTerm = (terms) => terms.some((t) => [...t].length < 3)
 const ftsQuoted = (terms, any) => terms.map((t) => `"${t.replaceAll('"', '""')}"`).join(any ? ' OR ' : ' AND ')
+// wordSet is the lowercase words of 3+ letters or digits, the unit of passive near-duplicate checks.
+const wordSet = (text) => new Set(String(text).toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) ?? [])
 const likePattern = (term) => `%${term.replace(/[\\%_]/g, '\\$&')}%`
 
 // suggestTopicKey ports engram's SuggestTopicKey: a family from the type (or, for an untyped note, from
@@ -501,10 +506,11 @@ function makeStore(db, path, now, repoName) {
         if (hasShortTerm(terms)) {
           const group = "(o.title LIKE ? ESCAPE '\\' OR o.content LIKE ? ESCAPE '\\' OR o.type LIKE ? ESCAPE '\\' OR o.topic_key LIKE ? ESCAPE '\\')"
           const patterns = terms.flatMap((t) => Array(4).fill(likePattern(t)))
-          found = all(`SELECT ${columns} FROM observations o WHERE o.deleted_at IS NULL AND (${terms.map(() => group).join(any ? ' OR ' : ' AND ')})${typeSql} ORDER BY o.updated_at DESC, o.id DESC LIMIT ?`, ...patterns, ...typeArgs, SEARCH_MAX)
+          found = all(`SELECT ${columns} FROM observations o WHERE o.deleted_at IS NULL AND (${terms.map(() => group).join(any ? ' OR ' : ' AND ')})${typeSql} ORDER BY o.type = 'passive', o.updated_at DESC, o.id DESC LIMIT ?`, ...patterns, ...typeArgs, SEARCH_MAX)
         } else {
           const match = ftsQuoted(terms, any)
-          const rank = `bm25(observations_fts, 5.0, 1.0, 0.0, 3.0) * (1.0 + ${PINNED_BOOST} * o.pinned + 0.06 * (1.0 / (1.0 + MAX(0.0, julianday(?) - julianday(o.last_seen_at)) / 30.0)) + 0.04 * ((o.revision_count + o.duplicate_count) / (o.revision_count + o.duplicate_count + 4.0)))`
+          // bm25 is negative (lower ranks first), so the passive weight below 1 pushes passive rows down.
+          const rank = `bm25(observations_fts, 5.0, 1.0, 0.0, 3.0) * (CASE o.type WHEN 'passive' THEN ${PASSIVE_WEIGHT} ELSE 1.0 END) * (1.0 + ${PINNED_BOOST} * o.pinned + 0.06 * (1.0 / (1.0 + MAX(0.0, julianday(?) - julianday(o.last_seen_at)) / 30.0)) + 0.04 * ((o.revision_count + o.duplicate_count) / (o.revision_count + o.duplicate_count + 4.0)))`
           found = all(`SELECT ${columns} FROM observations_fts f JOIN observations o ON o.id = f.rowid WHERE observations_fts MATCH ? AND o.deleted_at IS NULL${typeSql} ORDER BY ${rank} ASC, o.id ASC LIMIT ?`, match, ...typeArgs, stamp(), SEARCH_MAX)
         }
         rows = rows.concat(found.filter((r) => !seen.has(r.id)))
@@ -604,11 +610,14 @@ function makeStore(db, path, now, repoName) {
 
     // context renders the session-start text: recent sessions, prompts, and observations.
     context() {
-      const sessions = all('SELECT s.id, s.started_at, s.summary, (SELECT count(*) FROM observations o WHERE o.session_id = s.id AND o.deleted_at IS NULL) AS n FROM sessions s ORDER BY s.started_at DESC, s.rowid DESC LIMIT 5').map((s) => (injects(s.summary) ? { ...s, summary: null } : s))
+      const sessions = all('SELECT s.id, s.started_at, s.summary, (SELECT count(*) FROM observations o WHERE o.session_id = s.id AND o.deleted_at IS NULL) AS n FROM sessions s WHERE s.summary IS NOT NULL OR EXISTS (SELECT 1 FROM observations o WHERE o.session_id = s.id AND o.deleted_at IS NULL) ORDER BY s.started_at DESC, s.rowid DESC LIMIT 5').map((s) => (injects(s.summary) ? { ...s, summary: null } : s))
       const prompts = all('SELECT content, created_at FROM user_prompts ORDER BY id DESC LIMIT 10').filter((p) => !injects(p.content))
       const pinned = all('SELECT type, title, content FROM observations WHERE deleted_at IS NULL AND pinned = 1 ORDER BY created_at DESC, id DESC LIMIT ?', PINNED_MAX).filter((o) => !injects(o.title) && !injects(o.content))
-      const observations = all('SELECT type, title, content FROM observations WHERE deleted_at IS NULL AND pinned = 0 ORDER BY updated_at DESC, id DESC LIMIT 20').filter((o) => !injects(o.title) && !injects(o.content))
-      if (sessions.length + prompts.length + pinned.length + observations.length === 0) return ''
+      // Passive rows are capped apart so agent saves are not crowded out (S1 of odd/tasks/memory-engram-parity.md).
+      const recent = (passive, n) => all(`SELECT type, title, content FROM observations WHERE deleted_at IS NULL AND pinned = 0 AND type ${passive ? '=' : '!='} 'passive' ORDER BY updated_at DESC, id DESC LIMIT ?`, n).filter((o) => !injects(o.title) && !injects(o.content))
+      const observations = recent(false, 20)
+      const learnings = recent(true, LEARNINGS_MAX)
+      if (sessions.length + prompts.length + pinned.length + observations.length + learnings.length === 0) return ''
       let out = '## Memory from Previous Sessions\n\n'
       if (sessions.length) {
         out += '### Recent Sessions\n'
@@ -630,6 +639,13 @@ function makeStore(db, path, now, repoName) {
         for (const o of observations) out += `- [${o.type}] **${flat(o.title, Infinity)}**\n`
         out += '\n'
       }
+      if (learnings.length) {
+        out += '### Recent Learnings\n'
+        for (const o of learnings) out += `- [${o.type}] **${flat(o.title, Infinity)}**\n`
+        out += '\n'
+      }
+      const pending = one(`SELECT count(*) AS n FROM memory_relations r JOIN observations s ON s.id = r.source_id AND s.deleted_at IS NULL JOIN observations t ON t.id = r.target_id AND t.deleted_at IS NULL WHERE r.status = 'pending'`).n
+      if (pending > 0) out += `Relations: ${pending} pending judgment; list them with construct-memory relations pending.\n`
       if (Buffer.byteLength(out) <= CONTEXT_MAX_BYTES) return out
       return cutBytes(out, CONTEXT_MAX_BYTES - Buffer.byteLength(CONTEXT_MARKER)) + CONTEXT_MARKER
     },
@@ -646,8 +662,23 @@ function makeStore(db, path, now, repoName) {
       })
     },
 
+    // closeSession sets ended_at once and leaves the summary alone (the SessionEnd hook).
+    closeSession(id) {
+      write(() => {
+        const at = stamp()
+        run('INSERT OR IGNORE INTO sessions (id, started_at) VALUES (?, ?)', id, at)
+        run('UPDATE sessions SET ended_at = ? WHERE id = ? AND ended_at IS NULL', at, id)
+      })
+    },
+
     addPrompt(sessionId, content) {
       write(() => run('INSERT INTO user_prompts (session_id, content, created_at) VALUES (?, ?, ?)', sessionId, filterLines(stripPrivate(content)), stamp()))
+    },
+
+    // pendingRelations lists pending relations whose two observations are live, newest first (limit default 20, max 100).
+    pendingRelations({ limit } = {}) {
+      const n = Math.min(PROMPTS_MAX, Math.max(1, Math.floor(Number(limit)) || PROMPTS_DEFAULT))
+      return all(`SELECT r.id AS judgment_id, s.id AS sid, s.type AS stype, s.title AS stitle, t.id AS tid, t.type AS ttype, t.title AS ttitle, r.created_at FROM memory_relations r JOIN observations s ON s.id = r.source_id AND s.deleted_at IS NULL JOIN observations t ON t.id = r.target_id AND t.deleted_at IS NULL WHERE r.status = 'pending' ORDER BY r.created_at DESC, r.rowid DESC LIMIT ?`, n).map((r) => ({ judgment_id: r.judgment_id, source: { id: r.sid, type: r.stype, title: r.stitle }, target: { id: r.tid, type: r.ttype, title: r.ttitle }, created_at: r.created_at }))
     },
 
     // prompts lists stored prompts, newest first (limit default 20, max 100).
@@ -791,6 +822,20 @@ function makeStore(db, path, now, repoName) {
 
     // lastSaveAt is the time of the newest save or update, or null.
     lastSaveAt: () => one('SELECT max(updated_at) AS t FROM observations').t,
+
+    // similarPassive is true when a live passive observation shares at least PASSIVE_SIMILAR of the words
+    // (Jaccard) of text (S4 of odd/tasks/memory-engram-parity.md). Candidates come from FTS, the best 50.
+    similarPassive(text) {
+      const words = wordSet(text)
+      if (words.size === 0) return false
+      const rows = all(`SELECT o.content FROM observations_fts f JOIN observations o ON o.id = f.rowid WHERE observations_fts MATCH ? AND o.deleted_at IS NULL AND o.type = 'passive'
+        ORDER BY bm25(observations_fts) LIMIT 50`, ftsQuoted([...words], true))
+      return rows.some(({ content }) => {
+        const other = wordSet(content)
+        const shared = [...words].filter((w) => other.has(w)).length
+        return shared / (words.size + other.size - shared) >= PASSIVE_SIMILAR
+      })
+    },
 
     // hasHash is true when a live (not soft-deleted) observation has this normalized_hash.
     hasHash: (hash) => Boolean(one('SELECT 1 AS found FROM observations WHERE normalized_hash = ? AND deleted_at IS NULL', hash)),

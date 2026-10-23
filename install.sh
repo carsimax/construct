@@ -2,7 +2,7 @@
 # Construct installer: sets up the Construct plugin and merges the Construct
 # settings into ~/.claude/settings.json. Safe to run again; a second run changes nothing.
 #
-#   curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v8.3.0/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v8.4.0/install.sh | bash
 #
 # Runs under the macOS system bash (3.2): no associative arrays, no ${x,,}.
 set -euo pipefail
@@ -10,7 +10,7 @@ set -euo pipefail
 MIN_CLAUDE=2.1.304
 MIN_NODE=22.16
 CONSTRUCT_REPO=carsimax/construct
-CONSTRUCT_REF=v8.3.0 # the release this script belongs to; keep in step with the URL above
+CONSTRUCT_REF=v8.4.0 # the release this script belongs to; keep in step with the URL above
 CONSTRUCT_PLUGIN=construct@construct
 
 INSTALLED=""
@@ -157,7 +157,7 @@ const OLD_THEME = 'custom:construct:construct'
 // One rule per non-destructive construct-memory command; delete, prompts delete, consolidate, import, export, and review done keep asking.
 // Rule syntax (code.claude.com/docs/en/permissions, Bash): a trailing ` *` matches the bare command and any arguments; a rule without it matches only that exact command.
 const ALLOW = [
-  ...['search', 'get', 'context', 'timeline', 'stats', 'doctor', 'suggest-topic-key', 'save', 'update', 'summary', 'review list', 'review stale', 'prompts --search', 'prompts --limit', 'pin', 'unpin', 'judge', 'judge-many', 'compare', 'help'].map((c) => `Bash(construct-memory ${c} *)`),
+  ...['search', 'get', 'context', 'timeline', 'stats', 'doctor', 'suggest-topic-key', 'save', 'update', 'summary', 'review list', 'review stale', 'prompts --search', 'prompts --limit', 'pin', 'unpin', 'judge', 'judge-many', 'compare', 'relations pending', 'help'].map((c) => `Bash(construct-memory ${c} *)`),
   'Bash(construct-memory prompts)',
 ]
 

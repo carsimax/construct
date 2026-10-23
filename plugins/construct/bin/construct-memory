@@ -26,6 +26,7 @@ const USAGE = `usage: construct-memory <command> [options]
   doctor [--json]                   read-only health checks (schema, integrity, search indexes, WAL, writable); exit 1 when one fails
   judge <judgment-id> <relation> [--reason T] [--evidence T] [--confidence 0..1]  record a verdict on a candidate printed after save (re-judging overwrites)
   judge-many                        JSON array on stdin (1-32 of judgment_id, relation, reason, evidence, confidence); all or nothing
+  relations pending [--limit N] [--json]  pending relation candidates between live memories, newest first (default 20), to judge with judge or judge-many
   compare <id-a> <id-b> <relation> --confidence 0..1 [--reasoning T]  record a verdict for any pair (a supersedes b)
                                     relations: related, compatible, scoped, conflicts_with, supersedes, not_conflict
   consolidate <id> <id>... --title T [--type T] [--topic-key K]  merge memories into one (content on stdin); prints a preview and a fingerprint, writes nothing
@@ -103,14 +104,14 @@ async function main(argv) {
     allowPositionals: true,
     options: { type: { type: 'string' }, limit: { type: 'string' }, any: { type: 'boolean' }, history: { type: 'boolean' }, before: { type: 'string' }, after: { type: 'string' }, search: { type: 'string' }, hard: { type: 'boolean' }, json: { type: 'boolean' }, session: { type: 'string' }, project: { type: 'string' }, reason: { type: 'string' }, evidence: { type: 'string' }, confidence: { type: 'string' }, reasoning: { type: 'string' }, title: { type: 'string' }, 'topic-key': { type: 'string' }, confirm: { type: 'string' } },
   })
-  const known = ['save', 'search', 'get', 'context', 'update', 'delete', 'summary', 'review', 'import', 'prompts', 'export', 'suggest-topic-key', 'timeline', 'pin', 'unpin', 'stats', 'doctor', 'judge', 'judge-many', 'compare', 'consolidate']
+  const known = ['save', 'search', 'get', 'context', 'update', 'delete', 'summary', 'review', 'import', 'prompts', 'export', 'suggest-topic-key', 'timeline', 'pin', 'unpin', 'stats', 'doctor', 'judge', 'judge-many', 'compare', 'relations', 'consolidate']
   if (!known.includes(command)) fail(`unknown command: ${command} (run construct-memory help)`)
   if (command === 'review' && !['list', 'done', 'stale'].includes(positionals[0])) fail('review needs list, stale, or done <id>')
 
   // Pre-approved prefixes (install.sh) end in `*`, so trailing words or options must never reach a destructive form:
   // each command takes only its own options, and delete, prompts delete, and review done run only in their exact shape.
   const options = Object.keys(values)
-  const takes = { search: ['type', 'limit', 'any'], get: ['history'], timeline: ['before', 'after'], stats: ['json', 'session'], doctor: ['json'], review: ['json'], summary: ['session'], delete: ['hard'], import: ['project'], prompts: ['limit', 'search'], judge: ['reason', 'evidence', 'confidence'], compare: ['confidence', 'reasoning'], consolidate: ['title', 'type', 'topic-key', 'confirm'] }[command] ?? []
+  const takes = { search: ['type', 'limit', 'any'], get: ['history'], timeline: ['before', 'after'], stats: ['json', 'session'], doctor: ['json'], review: ['json'], summary: ['session'], delete: ['hard'], import: ['project'], prompts: ['limit', 'search'], judge: ['reason', 'evidence', 'confidence'], compare: ['confidence', 'reasoning'], relations: ['limit', 'json'], consolidate: ['title', 'type', 'topic-key', 'confirm'] }[command] ?? []
   const stray = options.find((o) => !takes.includes(o))
   if (stray) fail(`${command} does not take --${stray}`)
   const sub = positionals[0]
@@ -120,6 +121,8 @@ async function main(argv) {
   if (command === 'review' && sub === 'stale' && positionals.length > 1) fail('review stale takes only --json')
   if (command === 'review' && sub === 'list' && (options.length || positionals.length > 1)) fail('review list takes nothing else')
   if (command === 'prompts' && positionals.length && sub !== 'delete') fail('prompts needs nothing, or delete <id>')
+  if (command === 'relations' && sub !== 'pending') fail('relations needs pending')
+  if (command === 'relations' && positionals.length > 1) fail('relations pending takes only --limit and --json')
   if (command === 'import' && !positionals[0]) fail('import needs a file: construct-memory import <file> [--project <name>]')
 
   // Loaded here, not at the top: the store needs node:sqlite, and help and usage errors must work without it.
@@ -257,6 +260,11 @@ async function main(argv) {
         if (!positionals[0] || !positionals[1]) fail('judge needs <judgment-id> <relation>')
         store.judge(positionals[0], positionals[1], { reason: values.reason, evidence: values.evidence, confidence: values.confidence })
         return `judged ${positionals[0]} ${positionals[1]}\n`
+      }
+      case 'relations': {
+        const rows = store.pendingRelations({ limit: values.limit })
+        if (values.json) return `${JSON.stringify(rows)}\n`
+        return rows.length ? `${rows.map((r) => `${r.judgment_id} #${r.source.id} [${r.source.type}] ${oneLine(r.source.title)} <-> #${r.target.id} [${r.target.type}] ${oneLine(r.target.title)}`).join('\n')}\n` : 'no pending relations\n'
       }
       case 'judge-many':
         return `judged ${store.judgeMany(stdinArray())} relations\n`
