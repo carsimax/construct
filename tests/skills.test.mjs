@@ -44,6 +44,16 @@ test('every skill has frontmatter whose name matches its directory and a descrip
   }
 })
 
+// S5 (deterministic-signals): skills only the orchestrator applies stay out of the / menu.
+test('model-only skills are hidden from the / menu, the rest stay user-invocable', () => {
+  const MODEL_ONLY = ['delegation', 'review', 'workflow']
+  for (const dir of skillDirs()) {
+    const block = readFileSync(join(skillsRoot, dir, 'SKILL.md'), 'utf8').split('---')[1] ?? ''
+    const value = block.match(/^user-invocable: *(\S+)/m)?.[1]
+    assert.equal(value, MODEL_ONLY.includes(dir) ? 'false' : undefined, dir)
+  }
+})
+
 test('no skill references gentle-ai, the skill registry, or skill resolution reporting', () => {
   for (const dir of skillDirs()) {
     for (const file of filesUnder(join(skillsRoot, dir))) {
@@ -155,4 +165,22 @@ test('S5: worker reviews its own diff before reporting', () => {
 test('testing.md verifier-weakening list names skipped tests, deleted assertions, suppressed errors, widened types, and committed credentials', () => {
   const t = readFileSync(join(skillsRoot, 'workflow/references/testing.md'), 'utf8')
   assert.match(t, /Never: skip a test, delete an assertion, suppress an error, widen a type, or commit a real credential or a fixture holding one/i)
+})
+
+// S2 (deterministic-signals T4): three skills inject real repository state through one dynamic-context line.
+test('workflow, review, and delivery inject skill-context.mjs at column 0; no other skill injects anything', () => {
+  const CMD = 'node "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/skill-context.mjs"'
+  for (const dir of skillDirs()) {
+    const text = readFileSync(join(skillsRoot, dir, 'SKILL.md'), 'utf8')
+    const block = text.split('---')[1] ?? ''
+    const injected = text.split('\n').filter((line) => line.startsWith('!`'))
+    if (['workflow', 'review', 'delivery'].includes(dir)) {
+      assert.deepEqual(injected, [`!\`${CMD} ${dir}\``], dir)
+      assert.ok(block.split('\n').includes(`allowed-tools: Bash(${CMD} *)`), `${dir} allowed-tools`)
+      assert.match(text, /^## Current state\n\n!`/m, `${dir} section`)
+    } else {
+      assert.deepEqual(injected, [], dir)
+      assert.doesNotMatch(block, /skill-context/, `${dir} allowed-tools`)
+    }
+  }
 })

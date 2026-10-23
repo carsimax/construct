@@ -1,19 +1,25 @@
 ---
 name: workflow
+user-invocable: false
+allowed-tools: Bash(node "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/skill-context.mjs" *)
 description: The ODD protocol for every implementation request, feature plan, resume, task sizing, and the closing Risk line.
 ---
 
 # Workflow
 
+## Current state
+
+!`node "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/skill-context.mjs" workflow`
+
 Order for every request. The parent orchestrates; `construct:delegation` says who writes.
 
-1. **Authorize.** Investigation, explanation, review, comparison, and planning stay read-only. Files change only when the user asks for a change. Ambiguous intent: one question, read-only. surface-guard denies oversized main-thread edits.
+1. **Authorize.** Investigation, explanation, review, comparison, and planning stay read-only. Files change only when the user asks for a change. Ambiguous intent: one question, read-only.
 2. **Explore.** Start with `construct-memory search <feature or area>`, proportionately. Stop once the worker's edit surfaces and handoff can be written. More than one bounded batch goes to `construct:explorer`.
 3. **Resolve uncertainty.** Research only a named uncertainty ([research](references/research.md)). A real open product decision gets one question, then the turn stops.
 4. **Classify.** Print `Size: small | large (reason)`.
 5. **Track.** Large work gets `odd/tasks/<feature>.md` before the first source write ([feature document](references/feature-document.md)). Say which document exists and its task count.
 6. **Implement** task by task, test-first ([testing](references/testing.md)). Hand off by reference (document, task, `S#`), never paraphrase. Any changed command, option, or message changes its help text and docs in the same unit. Commits, branches, and pull requests: `construct:delivery`.
-7. **Review.** A unit whose Risk names an item gets `construct:review` before publication; the publication gate denies `git push`, `gh pr create`, and `gh release create` until the lenses approve.
+7. **Review.** A unit whose Risk names an item gets `construct:review` before publication; the publication gate denies publishing until the lenses approve.
 8. **Close.** Save what was learned (`construct-memory save`; large work also saves the session summary), then one report: what was verified, each check that failed, was skipped, or stayed unverified, the next step, and the Risk line (last). Close reports and never starts another verification loop. On large work, converge first: compare the code to every `S#`, append each gap as a new `T#` row, never rewrite or delete rows; a gap reopens work. Converge is not a verification run.
 
 ## Size

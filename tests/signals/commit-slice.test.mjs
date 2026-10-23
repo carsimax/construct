@@ -104,10 +104,24 @@ describe('commit slice', () => {
 })
 
 describe('registration', () => {
-  test('hooks.json registers delivery-signals post on PostToolUse in exec form', () => {
+  // S3: the commit signal spawns only for Bash calls that run git (`Bash(git commit *)` would miss
+  // `git -C dir commit`); the backstop runs once per tool batch.
+  const handlersOf = (hooks, event) =>
+    hooks.hooks[event].filter((group) => group.hooks.some((h) => h.args?.[0]?.endsWith('delivery-signals.mjs')))
+
+  test('hooks.json registers delivery-signals post on Bash git calls in exec form', () => {
     const hooks = JSON.parse(readFileSync(`${PLUGIN}hooks/hooks.json`, 'utf8'))
-    const handlers = hooks.hooks.PostToolUse.flatMap((e) => e.hooks).filter((h) => h.args?.[0]?.endsWith('delivery-signals.mjs'))
-    assert.equal(handlers.length, 1)
-    assert.deepEqual(handlers[0], { type: 'command', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/hooks/scripts/delivery-signals.mjs', 'post'], timeout: 10 })
+    const groups = handlersOf(hooks, 'PostToolUse')
+    assert.equal(groups.length, 1)
+    assert.equal(groups[0].matcher, 'Bash')
+    assert.deepEqual(groups[0].hooks, [{ type: 'command', if: 'Bash(git *)', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/hooks/scripts/delivery-signals.mjs', 'post'], timeout: 10 }])
+  })
+
+  test('hooks.json registers delivery-signals batch on PostToolBatch in exec form', () => {
+    const hooks = JSON.parse(readFileSync(`${PLUGIN}hooks/hooks.json`, 'utf8'))
+    const groups = handlersOf(hooks, 'PostToolBatch')
+    assert.equal(groups.length, 1)
+    assert.equal(groups[0].matcher, undefined)
+    assert.deepEqual(groups[0].hooks, [{ type: 'command', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/hooks/scripts/delivery-signals.mjs', 'batch'], timeout: 10 }])
   })
 })

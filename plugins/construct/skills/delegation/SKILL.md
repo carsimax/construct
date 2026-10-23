@@ -1,5 +1,6 @@
 ---
 name: delegation
+user-invocable: false
 description: "When and how the ODD orchestrator delegates to construct agents: role mapping, allowed edit surfaces, parallel writers, verifier timing, handoff prompts, and relaying a subagent's blocking question or choice menu. Trigger: deciding to delegate, launching an agent, writing a handoff, or a subagent or tool returns a question, menu, or consent request."
 license: MIT
 metadata:

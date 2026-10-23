@@ -1,11 +1,16 @@
 ---
 name: delivery
+allowed-tools: Bash(node "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/skill-context.mjs" *)
 description: Plan commits, branches, and pull requests as reviewable units. Use when deciding commit contents, opening or preparing a PR, judging PR size, splitting work into chained or stacked PRs, choosing a delivery strategy, or preparing a release.
 ---
 
 # Delivery
 
 Work reaches the remote as small, reviewable units. The publication gate and the delivery-signals hook enforce the edges; this skill covers the judgment between them.
+
+## Current state
+
+!`node "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/skill-context.mjs" delivery`
 
 ## Authority
 
