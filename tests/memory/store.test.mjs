@@ -84,6 +84,7 @@ describe('schema (S2)', () => {
     assert.deepEqual(columns, [
       'id', 'session_id', 'type', 'title', 'content', 'topic_key', 'normalized_hash', 'revision_count',
       'duplicate_count', 'last_seen_at', 'review_after', 'created_at', 'updated_at', 'deleted_at', 'import_id', 'pinned',
+      'access_count', 'last_accessed_at',
     ])
     assert.deepEqual(raw(store, 'PRAGMA table_info(import_tombstones)').map((r) => r.name), ['import_id', 'deleted_at'])
     assert.deepEqual(raw(store, 'SELECT key FROM meta').map((r) => r.key), ['db_id'])
@@ -706,6 +707,95 @@ describe('engram-parity context and ranking (S1-S3 of odd/tasks/memory-engram-pa
     clock.t += DAY
     const passive = store.save({ title: 'qz learning', content: 'about qz too', type: 'passive' }).id
     assert.deepEqual(store.search('qz').map((r) => r.id), [agent, passive])
+    store.close()
+  })
+})
+
+describe('access counter (S3 of odd/tasks/memory-maintenance.md)', () => {
+  const cols = (store) => raw(store, 'PRAGMA table_info(observations)').map((c) => c.name)
+  const row = (store, id) => raw(store, 'SELECT access_count, last_accessed_at FROM observations WHERE id = ?', id)[0]
+
+  test('an old-schema v1 store opens, gains both columns, keeps its rows and user_version 1; doctor passes before and after', () => {
+    const repo = makeRepo()
+    const first = openMemory(repo)
+    const path = first.path
+    const strip = () => {
+      const db = new DatabaseSync(path)
+      db.exec('ALTER TABLE observations DROP COLUMN access_count')
+      db.exec('ALTER TABLE observations DROP COLUMN last_accessed_at')
+      db.close()
+    }
+    const names = () => {
+      const d = new DatabaseSync(path)
+      try {
+        return d.prepare('PRAGMA table_info(observations)').all().map((c) => c.name)
+      } finally {
+        d.close()
+      }
+    }
+    const { id } = first.save(obs('legacy row'))
+    strip()
+    assert.ok(!names().includes('access_count'))
+    assert.ok(first.doctor().every((c) => c.ok), 'doctor before the next init')
+    first.close()
+    const store = openMemory(repo)
+    assert.ok(names().includes('access_count') && names().includes('last_accessed_at'))
+    assert.equal(store.get(id).title, 'legacy row')
+    assert.equal(raw(store, 'PRAGMA user_version')[0].user_version, 1)
+    assert.ok(store.doctor().every((c) => c.ok), 'doctor after')
+    store.close()
+    strip()
+    const again = openMemory(repo)
+    assert.ok(names().includes('access_count'))
+    again.close()
+  })
+
+  test('get counts live rows only; search, context, and timeline do not; a missing id writes nothing; export has no new field', () => {
+    const { store, clock } = open()
+    const { id } = store.save(obs('counted fact'))
+    const gone = store.save(obs('gone fact')).id
+    store.remove(gone)
+    assert.deepEqual({ ...row(store, id) }, { access_count: 0, last_accessed_at: null })
+    store.search('counted')
+    store.context()
+    store.timeline(id)
+    assert.equal(row(store, id).access_count, 0)
+    clock.t += MIN
+    assert.equal(store.get(id).access_count, 1)
+    clock.t += MIN
+    store.get(id)
+    assert.deepEqual({ ...row(store, id) }, { access_count: 2, last_accessed_at: new Date(clock.t).toISOString() })
+    const before = JSON.stringify(raw(store, 'SELECT * FROM observations ORDER BY id'))
+    assert.equal(store.get(999), null)
+    assert.equal(store.get(gone), null)
+    assert.equal(JSON.stringify(raw(store, 'SELECT * FROM observations ORDER BY id')), before)
+    for (const o of store.exportData().observations) assert.ok(!('access_count' in o) && !('last_accessed_at' in o))
+    store.close()
+  })
+})
+
+describe('passive review list (S4 of odd/tasks/memory-maintenance.md)', () => {
+  test('lists live unread passive rows at least N days old, oldest first', () => {
+    const { store, clock } = open()
+    const p = (title) => store.save(obs(title, { type: 'passive' })).id
+    const oldest = p('passive oldest')
+    clock.t += DAY
+    const exact = p('passive exact')
+    clock.t += DAY
+    const readRow = p('passive read')
+    const deleted = p('passive deleted')
+    const agent = store.save(obs('agent decision', { type: 'decision' })).id
+    clock.t += DAY
+    const young = p('passive young')
+    store.get(readRow)
+    store.remove(deleted)
+    clock.t = Date.parse('2026-01-15T12:00:00Z') + 10 * DAY
+    assert.deepEqual(store.passiveUnread({ days: 10 }).map((r) => r.id), [oldest])
+    assert.deepEqual(store.passiveUnread({ days: 9 }).map((r) => r.id), [oldest, exact])
+    assert.deepEqual(store.passiveUnread({ days: 7 }).map((r) => r.id), [oldest, exact, young])
+    assert.deepEqual(store.passiveUnread({ days: 8 }).map((r) => r.id), [oldest, exact])
+    assert.equal(store.passiveUnread({ days: 30 }).length, 0)
+    assert.ok(![readRow, deleted, agent].some((i) => store.passiveUnread({ days: 1 }).some((r) => r.id === i)))
     store.close()
   })
 })

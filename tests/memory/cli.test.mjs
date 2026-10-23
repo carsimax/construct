@@ -377,3 +377,66 @@ describe('construct-memory', () => {
     assert.equal(ok(cli(repo, ['review', 'done', '2'])), 'reviewed #2\n')
   })
 })
+
+describe('access counter and passive review (S3, S4 of odd/tasks/memory-maintenance.md)', () => {
+  const setCreated = (repo, id, daysAgo) => {
+    const store = openMemory(repo)
+    const db = new DatabaseSync(store.path)
+    db.prepare('UPDATE observations SET created_at = ? WHERE id = ?').run(new Date(Date.now() - daysAgo * 86400000 - 60000).toISOString(), id)
+    db.close()
+    store.close()
+  }
+  const passiveRow = (repo, title) => {
+    const store = openMemory(repo)
+    const { id } = store.save({ title, content: `${title} body`, type: 'passive' })
+    store.close()
+    return id
+  }
+
+  test('get prints an accessed line that counts each read', () => {
+    const repo = makeRepo()
+    saveJson(repo, { title: 'One', content: 'first memory' })
+    assert.match(ok(cli(repo, ['get', '1'])), /\naccessed: 1\n/)
+    assert.match(ok(cli(repo, ['get', '1'])), /\naccessed: 2\n/)
+    assert.match(ok(cli(repo, ['get', '1', '--history'])), /\naccessed: 3\n/)
+    fails(cli(repo, ['get', '9']), /observation #9 not found/)
+  })
+
+  test('review passive lists unread passive rows at least N days old, oldest first, as hit lines', () => {
+    const repo = makeRepo()
+    const young = passiveRow(repo, 'young learning')
+    const exact = passiveRow(repo, 'exact learning')
+    const oldest = passiveRow(repo, 'oldest learning')
+    const read = passiveRow(repo, 'read learning')
+    const gone = passiveRow(repo, 'gone learning')
+    saveJson(repo, { title: 'agent decision', content: 'x', type: 'decision' })
+    setCreated(repo, young, 5)
+    setCreated(repo, exact, 30)
+    setCreated(repo, oldest, 60)
+    setCreated(repo, read, 90)
+    setCreated(repo, gone, 90)
+    setCreated(repo, 6, 90)
+    ok(cli(repo, ['get', String(read)]))
+    ok(cli(repo, ['delete', String(gone)]))
+    const out = ok(cli(repo, ['review', 'passive']))
+    assert.deepEqual(out.trim().split('\n'), [`#${oldest} [passive] oldest learning - oldest learning body`, `#${exact} [passive] exact learning - exact learning body`])
+    assert.deepEqual(ok(cli(repo, ['review', 'passive', '--days', '5'])).trim().split('\n').map((l) => l.split(' ')[0]), [`#${oldest}`, `#${exact}`, `#${young}`])
+    assert.deepEqual(JSON.parse(ok(cli(repo, ['review', 'passive', '--days', '50', '--json']))).map((r) => r.id), [oldest])
+    assert.equal(ok(cli(repo, ['review', 'passive', '--days', '100'])), 'no passive rows to review\n')
+  })
+
+  test('review passive --days rejects anything but a positive whole number and changes nothing', () => {
+    const repo = makeRepo()
+    passiveRow(repo, 'some learning')
+    const dump = () => JSON.stringify(JSON.parse(ok(cli(repo, ['export']))).observations)
+    const before = dump()
+    for (const days of ['0', '=-1', '1.5', 'abc']) fails(cli(repo, days.startsWith('=') ? ['review', 'passive', `--days${days}`] : ['review', 'passive', '--days', days]), /^construct-memory: review passive --days needs a positive whole number$/m)
+    assert.equal(cli(repo, ['review', 'passive', '--days', '-1']).status, 1)
+    fails(cli(repo, ['review', 'passive', 'extra']), /review passive takes only --days and --json/)
+    fails(cli(repo, ['review', 'stale', '--days', '3']), /review stale does not take --days/)
+    fails(cli(repo, ['review', 'list', '--days', '3']), /review list does not take --days/)
+    fails(cli(repo, ['search', 'x', '--days', '3']), /search does not take --days/)
+    assert.equal(dump(), before)
+    assert.match(cli(repo, ['help']).stdout, /review passive \[--days N\] \[--json\]/)
+  })
+})

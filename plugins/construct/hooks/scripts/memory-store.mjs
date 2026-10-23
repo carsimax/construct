@@ -59,7 +59,9 @@ CREATE TABLE IF NOT EXISTS observations (
   updated_at TEXT NOT NULL,
   deleted_at TEXT,
   import_id TEXT,
-  pinned INTEGER NOT NULL DEFAULT 0
+  pinned INTEGER NOT NULL DEFAULT 0,
+  access_count INTEGER NOT NULL DEFAULT 0,
+  last_accessed_at TEXT
 );
 CREATE UNIQUE INDEX IF NOT EXISTS observations_import ON observations(import_id) WHERE import_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS observations_topic ON observations(topic_key) WHERE deleted_at IS NULL;
@@ -349,7 +351,7 @@ function makeStore(db, path, now, repoName) {
   function candidatesFor(id, title, at) {
     const terms = queryTerms(title).filter((t) => [...t].length >= 3)
     if (terms.length === 0) return []
-    const rows = all(`SELECT o.id, o.title FROM observations_fts f JOIN observations o ON o.id = f.rowid WHERE observations_fts MATCH ? AND o.deleted_at IS NULL AND o.id != ?
+    const rows = all(`SELECT o.id, o.title FROM observations_fts f JOIN observations o ON o.id = f.rowid WHERE observations_fts MATCH ? AND o.deleted_at IS NULL AND o.type != 'passive' AND o.id != ?
       AND NOT EXISTS (SELECT 1 FROM memory_relations r WHERE min(r.source_id, r.target_id) = min(o.id, ?) AND max(r.source_id, r.target_id) = max(o.id, ?))
       ORDER BY bm25(observations_fts, 5.0, 1.0, 0.0, 3.0), o.id LIMIT ?`, ftsQuoted(terms, true), id, id, id, CANDIDATES_MAX)
     return rows.map((r) => {
@@ -400,6 +402,15 @@ function makeStore(db, path, now, repoName) {
         if (version < SCHEMA_VERSION) {
           db.exec(SCHEMA)
           db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`)
+        }
+        // Columns added after the first v1 stores shipped: no user_version bump, so an older construct still opens the store.
+        for (const [name, ddl] of [['access_count', 'INTEGER NOT NULL DEFAULT 0'], ['last_accessed_at', 'TEXT']]) {
+          if (all('PRAGMA table_info(observations)').some((c) => c.name === name)) continue
+          try {
+            db.exec(`ALTER TABLE observations ADD COLUMN ${name} ${ddl}`)
+          } catch (error) {
+            if (!/duplicate column name/i.test(error.message)) throw error
+          }
         }
         run("INSERT OR IGNORE INTO meta (key, value) VALUES ('db_id', ?)", randomUUID().replaceAll('-', ''))
         api.dbId = one("SELECT value FROM meta WHERE key = 'db_id'").value
@@ -479,8 +490,12 @@ function makeStore(db, path, now, repoName) {
       return write(() => run('UPDATE observations SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL', stamp(), id).changes > 0)
     },
 
+    // get counts the read (access_count, last_accessed_at) of a live row, so it is a write.
     get(id, { history = false } = {}) {
-      const row = present(one('SELECT * FROM observations WHERE id = ? AND deleted_at IS NULL', id))
+      const row = present(write(() => {
+        if (run('UPDATE observations SET access_count = access_count + 1, last_accessed_at = ? WHERE id = ? AND deleted_at IS NULL', stamp(), id).changes === 0) return null
+        return one('SELECT * FROM observations WHERE id = ?', id)
+      }))
       if (row) row.marks = marksFor([id]).get(id)
       if (row && history) row.versions = all('SELECT * FROM observation_versions WHERE observation_id = ? ORDER BY id', id)
       return row
@@ -510,7 +525,7 @@ function makeStore(db, path, now, repoName) {
         } else {
           const match = ftsQuoted(terms, any)
           // bm25 is negative (lower ranks first), so the passive weight below 1 pushes passive rows down.
-          const rank = `bm25(observations_fts, 5.0, 1.0, 0.0, 3.0) * (CASE o.type WHEN 'passive' THEN ${PASSIVE_WEIGHT} ELSE 1.0 END) * (1.0 + ${PINNED_BOOST} * o.pinned + 0.06 * (1.0 / (1.0 + MAX(0.0, julianday(?) - julianday(o.last_seen_at)) / 30.0)) + 0.04 * ((o.revision_count + o.duplicate_count) / (o.revision_count + o.duplicate_count + 4.0)))`
+          const rank = `bm25(observations_fts, 5.0, 1.0, 0.0, 3.0) * (CASE o.type WHEN 'passive' THEN ${PASSIVE_WEIGHT} ELSE 1.0 END) * (1.0 + ${PINNED_BOOST} * o.pinned + 0.06 * (1.0 / (1.0 + MAX(0.0, julianday(?) - julianday(o.last_seen_at)) / 30.0)) + 0.04 * ((o.revision_count + o.duplicate_count + o.access_count) / (o.revision_count + o.duplicate_count + o.access_count + 4.0)))`
           found = all(`SELECT ${columns} FROM observations_fts f JOIN observations o ON o.id = f.rowid WHERE observations_fts MATCH ? AND o.deleted_at IS NULL${typeSql} ORDER BY ${rank} ASC, o.id ASC LIMIT ?`, match, ...typeArgs, stamp(), SEARCH_MAX)
         }
         rows = rows.concat(found.filter((r) => !seen.has(r.id)))
@@ -808,6 +823,13 @@ function makeStore(db, path, now, repoName) {
     // needingReview lists live observations whose review_after has passed, oldest first.
     needingReview() {
       return all('SELECT * FROM observations WHERE deleted_at IS NULL AND review_after IS NOT NULL AND review_after <= ? ORDER BY review_after, id', stamp()).map(present)
+    },
+
+    // passiveUnread lists live passive rows never read through get whose created_at is at least `days` days old, oldest first; read-only.
+    passiveUnread({ days = 30 } = {}) {
+      const cutoff = new Date(now().getTime() - days * 24 * 60 * 60 * 1000).toISOString()
+      const shape = ({ review_after, truncated, pinned, ...rest }) => present({ ...rest, pinned: Boolean(pinned), truncated: Boolean(truncated), review_after })
+      return all(`SELECT ${SEARCH_COLUMNS} FROM observations o WHERE o.deleted_at IS NULL AND o.type = 'passive' AND o.access_count = 0 AND o.created_at <= ? ORDER BY o.created_at, o.id`, cutoff).map(shape)
     },
 
     // markReviewed pushes review_after out by the type's period; true when a live row exists.

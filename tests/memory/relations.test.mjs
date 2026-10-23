@@ -485,3 +485,17 @@ describe('pending relations (S8 of odd/tasks/memory-engram-parity.md)', () => {
     assert.match(cli(scratchDir('mem-help-'), ['help']).stdout, /relations pending \[--limit N\] \[--json\]/)
   })
 })
+
+describe('passive rows are not candidates (S1 of odd/tasks/memory-maintenance.md)', () => {
+  test('a save matching only passive rows gets no candidates and no relation row; an agent row still matches', () => {
+    const { store } = fresh()
+    store.save({ title: 'Parser quirk in lexer', content: 'passive body one', type: 'passive' })
+    store.save({ title: 'Parser quirk in tokenizer', content: 'passive body two', type: 'passive' })
+    const none = note(store, 'Parser quirk summary')
+    assert.deepEqual(none.candidates, [])
+    assert.equal(rels(store).length, 0)
+    const agent = note(store, 'Parser quirk decision', 'agent body', { type: 'decision' })
+    assert.deepEqual(agent.candidates.map((c) => c.id), [none.id])
+    assert.equal(rels(store).length, 1)
+  })
+})
