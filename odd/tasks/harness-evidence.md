@@ -25,7 +25,7 @@ Objective: measure whether Construct improves outcomes and at what cost, then cu
 | T3 | S3 | Baseline run, 10 runs per case and arm, table in the Log | parent | none | done (160 runs, $16.42 + $0.31 judge; L5) | 9297e6f |
 
 | T4 | S4 | Make git work in the `review-fires` sandbox; re-measure 10 runs | parent | 6 | done (no in-sandbox fix, L8; probe-review 10/10, L10) | — |
-| T5 | S5 | `inline_edit_max_lines` option, surface-guard, contract and skills, small-case graders; re-measure | worker | 2, 3 | in progress (code done: RED 8 fail, suite 1070/0, validate --strict; re-measure pending) | 3b42371 |
+| T5 | S5 | `inline_edit_max_lines` option, surface-guard, contract and skills, small-case graders; re-measure | worker | 2, 3 | done (suite 1071/0; gate met, L11) | 3b42371, 43ec646 |
 
 ## Log
 
@@ -68,4 +68,15 @@ Objective: measure whether Construct improves outcomes and at what cost, then cu
 
 - **L10 (2026-10-22, parent):** `scripts/probe-review.sh --runs 10` (outside the sandbox, plugin arm only): PASS 10/10, review-risk launched and no push before it; cost $0.18-0.50, mean $0.333. The 30% of L5 was the sandbox. Runs straddled commit 3b42371 (the tree changed mid-run; review path unchanged).
 
-Next step: re-measure small-inline*, debugging-* 10 runs per arm.
+- **L11 (2026-10-22, parent):** S5 re-measure on 113aeff, 10 runs per arm (plugin arm vs L5):
+
+  | case | outcome L5 → now | cost $ L5 → now | time s L5 → now |
+  |---|---|---|---|
+  | small-inline (was small-delegated) | 100% → 100% | 0.139 → 0.090 (−36%) | 22.2 → 10.9 |
+  | small-inline-pressure | 100% → 100% | 0.142 → 0.089 (−38%) | 21.6 → 10.1 |
+  | debugging-fires | 100% → 100% | 0.153 → 0.096 (−38%) | 30.6 → 16.3 |
+  | debugging-stays-quiet | — | 0.085 → 0.086 | 16.8 → 16.4 |
+
+  Ritual: debugging-fires 70% → 100%, debugging-stays-quiet 100%. small-inline* read 0% because `no-delegation` had `max: 0` without `min: 0` (the tool defaults min to 1: "expected 1..0"); fixed with a test that pins it (RED: fail on small-inline-pressure), 3 confirm runs: plugin arm 100% ritual, 100% outcome, $0.087-0.092. No-plugin arm still $0.052-0.057: the plugin now costs ~1.6-1.8x instead of 2.5-2.9x on small work. Gate met. Converge: S1-S5 each have a done task; no gap.
+
+Next step: user decides on PR, version bump (the guard default change is breaking), and Phase 3 (T7 memory threshold) / Phase 4 (pre-push gate).
