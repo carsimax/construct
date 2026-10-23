@@ -1,6 +1,10 @@
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, appendFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 // Reads the `pattern: '...'` frontmatter line of a regex grader (YAML single quotes: '' is ').
 const patternOf = (grader) => {
@@ -33,4 +37,106 @@ test('large-tracked document-sections matches a feature document with all sectio
     assert.match('Write odd/tasks/feat.md\n## Specs\nx\n## Tasks\ny\n## Log\n', re);
     assert.doesNotMatch('Write odd/tasks/feat.md\n## Specs\nx\n## Tasks\n', re);
   }
+});
+
+// --- harness evidence: summary and outcome checks ---
+
+const root = fileURLToPath(new URL('..', import.meta.url));
+const tmp = () => mkdtempSync(join(tmpdir(), 'evals-test-'));
+const cleanups = [];
+const scratch = () => { const d = tmp(); cleanups.push(d); return d; };
+after(() => cleanups.forEach((d) => rmSync(d, { recursive: true, force: true })));
+
+const run = (file, args, opts = {}) =>
+  spawnSync(file, args, { encoding: 'utf8', ...opts });
+
+test('eval-summary writes summary.json and prints one row per case and arm', () => {
+  const dir = scratch();
+  const arm = (runs) => runs;
+  const r = (o) => ({ score: 1, passed: true, turns: 2, costUsd: 0.1, judgeCostUsd: 0.01, durationSeconds: 10, error: null, ...o });
+  const aggregate = {
+    cases: [
+      { name: 'alpha', arms: {
+        with: arm([r({}), r({ score: 0, passed: false, turns: 4, costUsd: null, durationSeconds: 20 })]),
+        without: arm([r({ passed: false, score: 0.5, costUsd: 0.3, judgeCostUsd: 0.02, error: 'boom' })]),
+      } },
+      { name: 'beta', arms: { with: arm([r({ turns: 6 })]), without: [] } },
+    ],
+  };
+  const outcomes = { cases: [{ name: 'alpha', arms: { with: [{ passed: true }, { passed: false }], without: [{ passed: false, error: 'no workspace' }] } }] };
+  writeFileSync(join(dir, 'aggregate-result.json'), JSON.stringify(aggregate));
+  writeFileSync(join(dir, 'outcomes.json'), JSON.stringify(outcomes));
+
+  const res = run('node', [join(root, 'scripts/eval-summary.mjs'), join(dir, 'aggregate-result.json'), join(dir, 'outcomes.json')]);
+  assert.equal(res.status, 0, res.stderr);
+  assert.equal(res.stderr, '');
+  assert.equal(res.stdout, [
+    '| case | arm | runs | ritual pass | outcome pass | mean score | mean cost USD | mean duration s | mean turns | errored |',
+    '|---|---|---|---|---|---|---|---|---|---|',
+    '| alpha | with | 2 | 50% | 50% | 0.50 | 0.1000 | 15.0 | 3.0 | 0 |',
+    '| alpha | without | 1 | 0% | 0% | 0.50 | 0.3000 | 10.0 | 2.0 | 1 |',
+    '| beta | with | 1 | 100% |  | 1.00 | 0.1000 | 10.0 | 6.0 | 0 |',
+    '',
+    'Total: 4 runs, agent cost $0.5000, judge cost $0.0500, duration 50s',
+    '',
+  ].join('\n'));
+
+  const summary = JSON.parse(readFileSync(join(dir, 'summary.json'), 'utf8'));
+  const alphaWith = summary.rows.find((x) => x.case === 'alpha' && x.arm === 'with');
+  assert.deepEqual(alphaWith, { case: 'alpha', arm: 'with', runs: 2, ritualPassRate: 0.5, outcomePassRate: 0.5, meanScore: 0.5, meanCostUsd: 0.1, meanDurationSeconds: 15, meanTurns: 3, erroredRuns: 0 });
+  assert.equal(summary.rows.find((x) => x.case === 'beta').outcomePassRate, null);
+  assert.equal(summary.rows.length, 3);
+  assert.deepEqual(summary.totals, { runs: 4, costUsd: 0.5, judgeCostUsd: 0.05, durationSeconds: 50 });
+});
+
+test('eval-summary exits non-zero with one stderr line for a missing or unparsable file', () => {
+  const dir = scratch();
+  const missing = run('node', [join(root, 'scripts/eval-summary.mjs'), join(dir, 'nope.json')]);
+  assert.notEqual(missing.status, 0);
+  assert.equal(missing.stdout, '');
+  assert.match(missing.stderr, /^eval-summary: .*nope\.json.*\n$/);
+  writeFileSync(join(dir, 'bad.json'), '{');
+  const bad = run('node', [join(root, 'scripts/eval-summary.mjs'), join(dir, 'bad.json')]);
+  assert.notEqual(bad.status, 0);
+  assert.equal(bad.stderr.trim().split('\n').length, 1);
+});
+
+// Builds a workspace from the case's own fixture.sh, lets `change` edit it, and returns outcome.sh's exit status.
+const outcome = (name, change) => {
+  const ws = scratch();
+  const fx = run('bash', [join(root, 'plugins/construct/evals', name, 'fixture.sh')], { cwd: ws });
+  assert.equal(fx.status, 0, fx.stderr);
+  change(ws);
+  return run('bash', [join(root, 'plugins/construct/evals', name, 'outcome.sh'), ws], { cwd: scratch(), env: { ...process.env, TZ: 'UTC', NODE_TEST_CONTEXT: undefined } }).status;
+};
+const edit = (ws, file, fn) => writeFileSync(join(ws, file), fn(readFileSync(join(ws, file), 'utf8')));
+const addSubtract = (body) => (ws) => {
+  appendFileSync(join(ws, 'math.js'), `export function subtract(a, b) {\n  return ${body}\n}\n`);
+  appendFileSync(join(ws, 'math.test.js'), "test('subtract', () => { assert.equal(subtract(5, 3), 2) })\n");
+  edit(ws, 'math.test.js', (t) => t.replace("import { add }", "import { add, subtract }"));
+};
+
+for (const name of ['small-delegated', 'small-delegated-pressure']) {
+  test(`${name} outcome.sh passes a working subtract and fails the fixture or a wrong one`, () => {
+    assert.equal(outcome(name, addSubtract('a - b')), 0);
+    assert.notEqual(outcome(name, () => {}), 0);
+    assert.notEqual(outcome(name, addSubtract('a + b')), 0);
+  });
+}
+
+test('small-delegated outcome.sh fails when the agent test never names subtract', () => {
+  assert.notEqual(outcome('small-delegated', (ws) => appendFileSync(join(ws, 'math.js'), 'export function subtract(a, b) {\n  return a - b\n}\n')), 0);
+});
+
+test('debugging-fires outcome.sh passes a 1-based paginate and fails the off-by-one', () => {
+  assert.equal(outcome('debugging-fires', (ws) => edit(ws, 'paginate.js', (t) => t.replace('page * size', '(page - 1) * size'))), 0);
+  assert.notEqual(outcome('debugging-fires', () => {}), 0);
+});
+
+test('memory-recall outcome.sh passes UTC formatLogTime and fails local time', () => {
+  const add = (body) => (ws) => appendFileSync(join(ws, 'dates.js'), `export function formatLogTime(date) {\n  return ${body}\n}\n`);
+  assert.equal(outcome('memory-recall', add('date.toISOString()')), 0);
+  assert.notEqual(outcome('memory-recall', () => {}), 0);
+  const local = '`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}T${String(date.getHours()).padStart(2, "0")}:04:05`';
+  assert.notEqual(outcome('memory-recall', add(local)), 0);
 });

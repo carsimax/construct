@@ -277,7 +277,7 @@ The mod draws one thing: a docked **panel** (a `Pane` with id `construct`) drawn
 | `plugins/construct/hooks/` | `hooks.json`, the mod (`register.js`), its routing helpers, the status modules (`status/`), the panel modules (`panel/`), and the command hooks (`scripts/`: contract, feature state, the `shell-words` tokenizer, delivery signals, publication gate, review store guard, command and surface guards, Risk line gate, subagent count, delegation admission, review context and capture, and the memory store `memory-store.mjs` with its hooks `memory-hooks.mjs`) |
 | `plugins/construct/bin/construct-memory` | The memory command line (on the Bash tool's PATH) |
 | `plugins/construct/hooks/contract/` | Session and subagent contract texts injected by hooks |
-| `plugins/construct/evals/` | Behavior eval cases run by `claude plugin eval` (`scripts/eval.sh`; `scripts/probe-review.sh` stands in for `review-fires` where the eval sandbox has no working git) |
+| `plugins/construct/evals/` | Behavior eval cases run by `claude plugin eval` (`scripts/eval.sh` also writes `summary.json` with ritual and outcome pass rates, cost, duration, and turns, and keeps the run dirs under /private/tmp; `scripts/probe-review.sh` stands in for `review-fires` where the eval sandbox has no working git) |
 | `plugins/construct/tests/` | Mod tests run by `claude plugin test` |
 | `tests/` | Repository tests run by `node --test` |
 | `odd/tasks/` | ODD feature documents (specs, tasks, log) |
