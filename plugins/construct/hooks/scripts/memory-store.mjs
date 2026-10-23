@@ -491,11 +491,19 @@ function makeStore(db, path, now, repoName) {
     },
 
     // get counts the read (access_count, last_accessed_at) of a live row, so it is a write.
+    // Counting is best effort: when that write fails, the row is still read and returned uncounted.
     get(id, { history = false } = {}) {
-      const row = present(write(() => {
-        if (run('UPDATE observations SET access_count = access_count + 1, last_accessed_at = ? WHERE id = ? AND deleted_at IS NULL', stamp(), id).changes === 0) return null
-        return one('SELECT * FROM observations WHERE id = ?', id)
-      }))
+      let found
+      try {
+        found = write(() => {
+          if (run('UPDATE observations SET access_count = access_count + 1, last_accessed_at = ? WHERE id = ? AND deleted_at IS NULL', stamp(), id).changes === 0) return null
+          return one('SELECT * FROM observations WHERE id = ?', id)
+        })
+      } catch {
+        // shortcut: a store busy past the retries makes get wait for them before this fallback, upgrade to a non-blocking count if that shows up
+        found = one('SELECT * FROM observations WHERE id = ? AND deleted_at IS NULL', id) ?? null
+      }
+      const row = present(found)
       if (row) row.marks = marksFor([id]).get(id)
       if (row && history) row.versions = all('SELECT * FROM observation_versions WHERE observation_id = ? ORDER BY id', id)
       return row

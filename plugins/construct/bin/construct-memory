@@ -304,6 +304,7 @@ async function main(argv) {
         }
         if (positionals[0] === 'passive') {
           if (values.days !== undefined && !/^[1-9]\d*$/.test(values.days)) fail('review passive --days needs a positive whole number')
+          if (values.days !== undefined && Number(values.days) > 36500) fail('review passive --days must be at most 36500')
           const rows = store.passiveUnread({ days: values.days === undefined ? 30 : Number(values.days) })
           if (values.json) return `${JSON.stringify(rows, null, 2)}\n`
           return rows.length ? `${rows.map(hit).join('\n')}\n` : 'no passive rows to review\n'

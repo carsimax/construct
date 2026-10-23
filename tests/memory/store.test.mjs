@@ -799,3 +799,25 @@ describe('passive review list (S4 of odd/tasks/memory-maintenance.md)', () => {
     store.close()
   })
 })
+
+describe('access counter failure paths (review follow-ups of odd/tasks/memory-maintenance.md)', () => {
+  test('get still returns the row when counting the read fails', () => {
+    const { store } = open()
+    const { id } = store.save(obs('still readable'))
+    const db = new DatabaseSync(store.path)
+    db.exec("CREATE TRIGGER block_count BEFORE UPDATE OF access_count ON observations BEGIN SELECT RAISE(ABORT, 'blocked'); END")
+    db.close()
+    const row = store.get(id)
+    assert.equal(row.title, 'still readable')
+    assert.equal(row.access_count, 0)
+    assert.equal(store.get(999), null)
+    store.close()
+  })
+
+  test('passiveUnread accepts the largest allowed day count', () => {
+    const { store } = open()
+    store.save(obs('old passive', { type: 'passive' }))
+    assert.deepEqual(store.passiveUnread({ days: 36500 }), [])
+    store.close()
+  })
+})
