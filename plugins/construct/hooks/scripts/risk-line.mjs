@@ -3,6 +3,7 @@
 // context. `check` (Stop) blocks the stop once per turn when paths outside
 // odd/tasks/ changed and the final message has no Risk line. It fails open: any
 // error, and every uncertain state, means no output and exit 0.
+// The marker scan flags weakened-verifier markers and TODO comments, whole-line or trailing after code.
 // Usage: node risk-line.mjs mark|check   (hook JSON on stdin)
 import { mkdirSync, readFileSync, realpathSync } from 'node:fs'
 import { join } from 'node:path'
@@ -10,8 +11,9 @@ import { fileURLToPath } from 'node:url'
 import { dataDir, hasOpenSubagents, pruneState, readInput, safeName } from './hook-io.mjs'
 
 const MAX_PATHS = 3
-// Code-shaped markers of a weakened verifier, matched on one added line. Anchored to the line
-// start (TODO: a comment opener at the line start) so a string literal in a fixture does not match.
+// Code-shaped markers of a weakened verifier, matched on one added line. The test markers and a
+// whole-line TODO are anchored to the line start, so a string literal in a fixture does not match them;
+// a trailing TODO is not anchored, so a string literal containing ` // TODO` can match (see the TODO shortcut).
 // shortcut: a template-literal fixture whose line starts with a marker still matches, upgrade with a real parser if it bites.
 const MARKERS = [
   /^\s*(?:it|test|describe|context)\.(?:skip|only|todo)\(/,
@@ -22,7 +24,9 @@ const MARKERS = [
   /^\s*raise NotImplementedError/,
   /^\s*throw new Error\(['"`]Not implemented/,
 ]
-const TODO = /^\s*(?:\/\/|#|\/\*|\*|--)\s*TODO\b/
+// A comment-line TODO, or a trailing one: code, whitespace, `//` or `#`, then TODO (so `http://x`, `a#TODO` stay silent).
+// shortcut: a string literal containing ` // TODO` may match, upgrade with a real parser if it bites.
+const TODO = /^\s*(?:\/\/|#|\/\*|\*|--)\s*TODO\b|\S\s+(?:\/\/|#)\s*TODO\b/
 // Optional list marker (-, *, +, 1., 1)) and emphasis around the label and the
 // value, then `none`, `item 1-6`, or `items 2, 5` that ends the line or is followed by
 // whitespace or `(`; the space after the colon is optional.

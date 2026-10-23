@@ -190,6 +190,7 @@ test('S4: the subagent contract finishes the asked work, adds nothing unasked, a
   assert.match(text, /If no check can run, state which and why/)
   assert.match(text, /until the prompt's whole request is done/i)
   assert.match(text, /nothing the prompt did not request: no features, tests, files, docs, or refactors/i)
+  assert.match(text, /name (it|such work) in your report instead of doing it/i)
 })
 
 test('S5: the session contract names the text-only progress report as an early stop', () => {

@@ -1,7 +1,7 @@
 # Construct
 
 [![Claude Code](https://img.shields.io/badge/Claude_Code-2.1.304%2B-blue)](#requirements)
-[![Plugin version](https://img.shields.io/badge/version-6.0.0-informational)](plugins/construct/.claude-plugin/plugin.json)
+[![Plugin version](https://img.shields.io/badge/version-6.1.0-informational)](plugins/construct/.claude-plugin/plugin.json)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 Construct is a Claude Code plugin that makes every request follow Organic Driven Development (ODD): authorize, explore, size, track, implement test-first, and close with evidence and a Risk line.
@@ -30,7 +30,7 @@ Construct is a Claude Code plugin that makes every request follow Organic Driven
 ### One command
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v6.0.0/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v6.1.0/install.sh | bash
 ```
 
 The installer checks the requirements above and stops before changing anything if one is missing, or if `~/.claude` or `~/.claude/settings.json` is not writable, or if `settings.json` is a directory. Then it runs the manual steps below for you:
@@ -48,7 +48,7 @@ If engram or codegraph is installed, the installer says Construct no longer need
 Pass options after `bash -s --`, for example `curl -fsSL <url> | bash -s -- --no-mcp`. To read the script before running it:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v6.0.0/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v6.1.0/install.sh -o install.sh
 less install.sh
 bash install.sh
 ```
@@ -64,7 +64,7 @@ The manual steps the installer runs, for when you want to run them yourself:
    claude plugin install construct@construct
    ```
 
-   The installer (`install.sh`) pins this marketplace to the release tag (`carsimax/construct#v6.0.0`); the command above follows the default branch.
+   The installer (`install.sh`) pins this marketplace to the release tag (`carsimax/construct#v6.1.0`); the command above follows the default branch.
 
 2. Optional: inside Claude Code, in `/config`, set each role's model and effort (rows such as `Worker model`).
 
@@ -319,18 +319,17 @@ Risk line: one reply can name several items, `Risk: items 2, 5 (reason)`; the Ri
 
 ## Status
 
-Current version: 6.0.0 (`plugins/construct/.claude-plugin/plugin.json`); a major release with breaking changes: agents and skills are renamed, `jd-fix-agent` and the merged or removed skills are gone; the deprecated `odd_*`/`jd_*` options still apply through 6.x (see "Upgrading to 6.0"). Releases are tagged `vX.Y.Z`.
+Current version: 6.1.0 (`plugins/construct/.claude-plugin/plugin.json`); a minor release with no breaking change. Releases are tagged `vX.Y.Z`.
 
-Changes in 6.0.0:
+Changes in 6.1.0:
 
-- Role registry and Construct-native names for agents, skills, and options.
-- Rewritten contracts, skills, and agents, with a skill map.
-- 19 skills became 9, and the skill text went from about 26k to about 12k words.
-- Multi-item Risk line: `Risk: items 2, 5 (reason)`.
-- New `review-fires` eval and `scripts/probe-review.sh`.
-- NOTICE reduced to adapted code, with LICENSE files for gentle-shell and gentle-agent-state.
-- Safety rules restored and pinned by tests.
-- Evals against 5.2.0: debugging-fires, memory-recall, and large-tracked went from 1/3 to 5/5, and debugging skill loading from 0/3 to 5/5.
+- Panel clean-room (#54-#56): the panel state is rewritten, the cards get voice and role glyphs, the gentle-agent-state and claude-flightdeck attribution is dropped, a lone denial is shown, and clipping no longer mutates its input.
+- `command-guard` asks before `git restore ./` and `git restore :/`, and denies hooks-path config set through `export`, `declare`, `typeset`, `readonly`, `local`, or a bare assignment.
+- The Risk-line gate flags trailing `// TODO` and `# TODO` comments after code.
+- The panel counts wide characters (CJK, fullwidth, emoji) as two columns, so rows stay inside the card.
+- Subagents name unrequested work in their report instead of doing it.
+
+6.0.0 was a major release with breaking changes: agents, skills, and options got Construct-native names, `jd-fix-agent` and the merged or removed skills are gone, and the deprecated `odd_*`/`jd_*` options still apply through 6.x (see "Upgrading to 6.0"). It added the role registry, multi-item Risk lines, rewritten contracts, skills, and agents (19 skills became 9), the `review-fires` eval, and `scripts/probe-review.sh`.
 
 5.2.0 made `surface-guard` keep writers inside their allowed edit surfaces (the main thread writes only under `odd/tasks/`), added `command-guard`, the Risk-line gate's test-marker check, memory injection filtering, sharper evidence rules, spec and task coverage warnings, and review-lens learning hints.
 
