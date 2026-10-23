@@ -35,6 +35,7 @@ const MEMORY_RULES = [
   'Bash(construct-memory relations pending *)',
   'Bash(construct-memory help *)',
   'Bash(construct-memory prompts)',
+  ...['mem_save', 'mem_search', 'mem_context', 'mem_get_observation', 'mem_update', 'mem_timeline', 'mem_session_summary', 'mem_judge', 'mem_suggest_topic_key', 'mem_relations_pending'].map((t) => `mcp__plugin_construct_memory__${t}`),
 ]
 
 // Permission rule semantics (code.claude.com/docs/en/permissions, Bash): a rule ending in ` *`

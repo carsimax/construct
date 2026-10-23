@@ -154,11 +154,13 @@ const path = require('node:path')
 const [mode, file] = process.argv.slice(2)
 // Earlier versions set this theme; it is removed, and any other theme stays.
 const OLD_THEME = 'custom:construct:construct'
-// One rule per non-destructive construct-memory command; delete, prompts delete, consolidate, import, export, and review done keep asking.
+// One rule per non-destructive construct-memory command and memory MCP tool; delete, prompts delete, consolidate, import, export, and review done keep asking.
 // Rule syntax (code.claude.com/docs/en/permissions, Bash): a trailing ` *` matches the bare command and any arguments; a rule without it matches only that exact command.
 const ALLOW = [
   ...['search', 'get', 'context', 'timeline', 'stats', 'doctor', 'suggest-topic-key', 'save', 'update', 'summary', 'review list', 'review stale', 'prompts --search', 'prompts --limit', 'pin', 'unpin', 'judge', 'judge-many', 'compare', 'relations pending', 'help'].map((c) => `Bash(construct-memory ${c} *)`),
   'Bash(construct-memory prompts)',
+  // The memory MCP server (plugins/construct/.mcp.json) has no destructive tool, so every tool is pre-approved by exact name.
+  ...['mem_save', 'mem_search', 'mem_context', 'mem_get_observation', 'mem_update', 'mem_timeline', 'mem_session_summary', 'mem_judge', 'mem_suggest_topic_key', 'mem_relations_pending'].map((t) => `mcp__plugin_construct_memory__${t}`),
 ]
 
 let text = null
@@ -206,7 +208,7 @@ if (missing.length) {
   changed = true
   lines.push(`+ permissions.allow gained ${missing.join(', ')}`)
 } else {
-  lines.push('= permissions.allow has the construct-memory CLI')
+  lines.push('= permissions.allow has the construct-memory CLI and MCP tools')
 }
 
 if (changed) {

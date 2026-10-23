@@ -11,7 +11,7 @@ import { makeRepo, scratchDir } from '../helpers/repo.mjs'
 const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..', '..')
 const SCRIPT = join(ROOT, 'plugins/construct/hooks/scripts/memory-hooks.mjs')
 const BIN = join(ROOT, 'plugins/construct/bin/construct-memory')
-const LINE = `Memory: construct-memory (session sess-1); \`construct-memory help\` lists commands. If construct-memory is not found, run node "${BIN}" instead.`
+const LINE = `Memory: the construct memory MCP tools (mem_search, mem_save, mem_context, ...) or \`construct-memory\` (session sess-1); \`construct-memory help\` lists commands. If construct-memory is not found, run node "${BIN}" instead.`
 const { openMemory } = await import(join(ROOT, 'plugins/construct/hooks/scripts/memory-store.mjs'))
 
 function setup() {
