@@ -16,8 +16,8 @@ Objective: move state the model now reconstructs into code (workflow scripts, in
 | ID | Specs | Task | Route | Risk | Status | Commit |
 |---|---|---|---|---|---|---|
 | T1 | S1 | Workflow hook probe (scratch, nothing committed) | parent | none | done (L2) | |
-| T2 | S3 | delivery-signals split, hooks.json, tests | parent | 3 | done (RED 9 fail; tests/signals 24/0; suite 1099/0; live L4) | pending-commit |
-| T3 | S4, S5 | Agent and skill frontmatter, tests | parent | none | pending | |
+| T2 | S3 | delivery-signals split, hooks.json, tests | parent | 3 | done (RED 9 fail; tests/signals 24/0; suite 1099/0; live L4) | d1e5e78 |
+| T3 | S4, S5 | Agent and skill frontmatter, tests | parent | none | done (RED 2 fail; suite 1101/0; validate --strict) | pending-commit |
 | T4 | S2 | Dynamic context in workflow, review, delivery skills, tests | parent | 6 | pending | |
 | T5 | S6 | Review workflow, if S1 allows | parent | 2, 3 | dropped (L2) | |
 

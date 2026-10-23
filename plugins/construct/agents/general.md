@@ -6,6 +6,7 @@ description: >
   self-contained jobs the parent wants out of its context.
 model: sonnet
 effort: medium
+background: true
 disallowedTools: Agent
 ---
 

@@ -17,7 +17,7 @@ function frontmatter(name) {
   const block = read('agents', `${name}.md`).split('---')[1]
   const field = (key) => block.match(new RegExp(`^${key}: *(.*)$`, 'm'))?.[1]?.trim()
   const list = (key) => (field(key) ?? '').replace(/^\[|\]$/g, '').split(',').map((s) => s.trim()).filter(Boolean)
-  return { name: field('name'), tools: field('tools') === undefined ? null : list('tools'), disallowed: list('disallowedTools'), omitClaudeMd: field('omitClaudeMd'), maxTurns: field('maxTurns') }
+  return { name: field('name'), tools: field('tools') === undefined ? null : list('tools'), disallowed: list('disallowedTools'), omitClaudeMd: field('omitClaudeMd'), maxTurns: field('maxTurns'), background: field('background') }
 }
 
 test('the registry names exactly the agent files, each with one kind', () => {
@@ -67,6 +67,14 @@ test('frontmatter by kind: lenses have no tools, a two-turn budget, no CLAUDE.md
     assert.equal(fm.omitClaudeMd, 'true', n)
     assert.equal(fm.maxTurns, '2', n)
   }
+})
+
+// S4 (deterministic-signals): bounded turn budgets for the reader and the verifier; the runner stays in the background.
+test('frontmatter caps: explorer and verifier have a turn budget, general runs in the background', () => {
+  assert.equal(frontmatter('explorer').maxTurns, '30')
+  assert.equal(frontmatter('verifier').maxTurns, '50')
+  assert.equal(frontmatter('general').background, 'true')
+  for (const n of ['worker', 'general', 'judge-a', 'judge-b']) assert.equal(frontmatter(n).maxTurns, undefined, n)
 })
 
 test('frontmatter by kind: judges read only, writers write, reader and verifier never write (V52)', () => {

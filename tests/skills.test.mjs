@@ -44,6 +44,16 @@ test('every skill has frontmatter whose name matches its directory and a descrip
   }
 })
 
+// S5 (deterministic-signals): skills only the orchestrator applies stay out of the / menu.
+test('model-only skills are hidden from the / menu, the rest stay user-invocable', () => {
+  const MODEL_ONLY = ['delegation', 'review', 'workflow']
+  for (const dir of skillDirs()) {
+    const block = readFileSync(join(skillsRoot, dir, 'SKILL.md'), 'utf8').split('---')[1] ?? ''
+    const value = block.match(/^user-invocable: *(\S+)/m)?.[1]
+    assert.equal(value, MODEL_ONLY.includes(dir) ? 'false' : undefined, dir)
+  }
+})
+
 test('no skill references gentle-ai, the skill registry, or skill resolution reporting', () => {
   for (const dir of skillDirs()) {
     for (const file of filesUnder(join(skillsRoot, dir))) {

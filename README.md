@@ -132,6 +132,8 @@ How the routing works:
 - The plugin's mod (`hooks/register.js`) applies the configured model when a subagent spawns and the configured effort on each of its requests.
 - A model passed explicitly on the Agent call wins; the configured model applies only when the call names none.
 - An effort of `default` keeps the model's own effort.
+- Turn budgets: `construct:explorer` stops after 30 turns, `construct:verifier` after 50, and each lens after 2. A capped agent returns its output marked partial, and it can be resumed. `construct:general` always runs in the background.
+- The `delegation`, `review`, and `workflow` skills are model-only (`user-invocable: false`): the orchestrator loads them, and they do not appear in the `/` menu. Ask for a review in plain words.
 - The 5.x options `model_odd_*`, `effort_odd_*`, `model_jd_*`, and `effort_jd_*` are deprecated and still read while the matching `model_<role>` / `effort_<role>` is `inherit` (for example `model_odd_worker` for `model_worker`); set the new keys instead.
 - If the mod cannot run, each agent keeps the model and effort in its own frontmatter.
 

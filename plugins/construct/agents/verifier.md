@@ -6,6 +6,7 @@ description: >
   and probe command forms, and returns a verdict per spec.
 model: opus
 effort: medium
+maxTurns: 50
 disallowedTools: Edit, Write, NotebookEdit, Agent
 ---
 

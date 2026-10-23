@@ -1,5 +1,6 @@
 ---
 name: workflow
+user-invocable: false
 description: The ODD protocol for every implementation request, feature plan, resume, task sizing, and the closing Risk line.
 ---
 

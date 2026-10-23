@@ -6,6 +6,7 @@ description: >
   so the parent can decide or route without filling its own context.
 model: haiku
 effort: medium
+maxTurns: 30
 tools: Read, Glob, Grep, Bash, LSP
 disallowedTools: Edit, Write, NotebookEdit, Agent
 ---

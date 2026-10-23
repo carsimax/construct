@@ -1,5 +1,6 @@
 ---
 name: review
+user-invocable: false
 description: "Mandatory outside review of high-risk work units, by lens agents the hooks feed and record, plus the dual blind review on request. Trigger: a unit whose Risk names an item is committed and ready to publish, the publication gate denied a push, PR, or release, or the user asks for a review, a dual review, or an adversarial review."
 license: MIT
 metadata:
