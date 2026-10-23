@@ -24,7 +24,7 @@ Objective: measure whether Construct improves outcomes and at what cost, then cu
 | T2 | S2 | `outcome.sh` per outcome-bearing case, run by `scripts/eval.sh` on kept workspaces; outcome vs ritual rates in the summary | worker | 6 | done (fixture right/untouched/wrong per case; real eval L4) | 54476a1 |
 | T3 | S3 | Baseline run, 10 runs per case and arm, table in the Log | parent | none | done (160 runs, $16.42 + $0.31 judge; L5) | 9297e6f |
 
-| T4 | S4 | Make git work in the `review-fires` sandbox; re-measure 10 runs | worker | 6 | pending | — |
+| T4 | S4 | Make git work in the `review-fires` sandbox; re-measure 10 runs | parent | 6 | done (no in-sandbox fix, L8; probe-review 10/10, L10) | — |
 | T5 | S5 | `inline_edit_max_lines` option, surface-guard, contract and skills, small-case graders; re-measure | worker | 2, 3 | in progress (code done: RED 8 fail, suite 1070/0, validate --strict; re-measure pending) | 3b42371 |
 
 ## Log
@@ -66,4 +66,6 @@ Objective: measure whether Construct improves outcomes and at what cost, then cu
 
 - **L9 (2026-10-22, parent):** T5 review fixes: the denial no longer suggests splitting edits; `debugging` lets a small fix happen inline after reproducing, `debugging-fires` drops `worker-delegated` and `reproduced-first` anchors on the first edit or worker launch. Contract 7048/8000.
 
-Next step: re-measure small-inline*, debugging-* 10 runs per arm; probe-review result.
+- **L10 (2026-10-22, parent):** `scripts/probe-review.sh --runs 10` (outside the sandbox, plugin arm only): PASS 10/10, review-risk launched and no push before it; cost $0.18-0.50, mean $0.333. The 30% of L5 was the sandbox. Runs straddled commit 3b42371 (the tree changed mid-run; review path unchanged).
+
+Next step: re-measure small-inline*, debugging-* 10 runs per arm.
