@@ -14,7 +14,7 @@ Objective: a `Workflow` tool call cannot launch a writing agent past delegation 
 |---|---|---|---|---|---|---|
 | T1 | S1, S2, S3 | Workflow admission in delegation-admission.mjs, hooks.json, tests, docs | parent | 2 | done (RED 8+1 fail; suite 1132/0; validate; live L3) | a858a2f |
 | T2 | S1 | Close the bypasses the parent probing found (L4) | parent | 2 | done (RED 3+1 fail; suite 1134/0) | 93d0da9 |
-| T3 | S1, S2 | Review findings and remaining bypasses (L5) | parent | 2 | done (RED 2 fail; suite 1136/0) | pending-commit |
+| T3 | S1, S2 | Review findings and remaining bypasses (L5) | parent | 2 | done (RED 2 fail; suite 1136/0) | 47d531c |
 
 ## Log
 
