@@ -12,7 +12,7 @@ Objective: a `Workflow` tool call cannot launch a writing agent past delegation 
 
 | ID | Specs | Task | Route | Risk | Status | Commit |
 |---|---|---|---|---|---|---|
-| T1 | S1, S2, S3 | Workflow admission in delegation-admission.mjs, hooks.json, tests, docs | parent | 2 | done (RED 8+1 fail; suite 1132/0; validate; live L3) | pending-commit |
+| T1 | S1, S2, S3 | Workflow admission in delegation-admission.mjs, hooks.json, tests, docs | parent | 2 | done (RED 8+1 fail; suite 1132/0; validate; live L3) | a858a2f |
 
 ## Log
 
