@@ -48,7 +48,7 @@ function world($, on, o: any = {}) {
   on('turn.start', (_$, e) => ((seen.start = e), { turnId: e.turnId }))
   on('turn.complete', ($, e) => ({ text: e.answer }))
   on('tool.call', async (_$, e) => ((seen.call = e), await o.hold?.(), { ref: 'r', result: {}, text: 'ok', ...(o.isError ? { isError: true } : {}) }))
-  on('tool.check', (_$, e) => ((seen.check = e), { decision: o.decision ?? 'allow' }))
+  on('tool.check', (_$, e) => ((seen.check = e), { decision: (typeof o.decision === 'function' ? o.decision() : o.decision) ?? 'allow' }))
   on('agent.spawn', (_$, e) => ({ model: e.model, agentId: 'ag-1' }))
   on('turn.step', async function* (_$, e) {
     return { turnId: e.turnId, index: e.index, answer: 'ok', toolUses: [], stopReason: 'end_turn', usage: null }
@@ -57,6 +57,19 @@ function world($, on, o: any = {}) {
   // The engine's own ui.open / ui.close: record what the mod asked for
   on('ui.open', (_$, e) => (open.add(e.id), opens.push(e), value({ isPlaced: true })))
   on('ui.close', (_$, e) => (open.delete(e.id), value(undefined)))
+}
+
+// The harness's $.tool.call runs its own permission check first, and a non-interactive ask denies the
+// call before the tool.call handler runs. A gate answers ask only for the explicit check under test.
+const gate = { ask: false }
+const askingGate = () => (gate.ask ? 'ask' : 'allow')
+async function checkAsk($, call) {
+  gate.ask = true
+  try {
+    return await $.tool.check(call)
+  } finally {
+    gate.ask = false
+  }
 }
 
 const open = new Set<string>()
@@ -268,10 +281,10 @@ test('spawn makes a card and passes the spawn result through', async ($, on) => 
 test('new hooks pass events through unchanged', async ($, on) => {
   const seen: any = {}
   open.clear()
-  world($, on, { seen, decision: 'ask' })
+  world($, on, { seen, decision: askingGate })
   await $.session.start({ cwd: '/home/me/proj', source: 'startup' })
   await $.turn.start({ text: 'go', turnId: 't9' })
-  const check = await $.tool.check({ tool: 'Bash', input: { command: 'ls' } })
+  const check = await checkAsk($, { tool: 'Bash', input: { command: 'ls' } })
   await $.tool.call({ tool: 'Bash', command: 'ls' })
   await $.session.compact({ trigger: 'manual', messages: [{ role: 'user', text: 's', toolUses: [] }] })
   expect(check.decision).toBe('ask')
@@ -334,8 +347,8 @@ test('a spawn from main sets the permission mode; a nested spawn does not', asyn
 
 test('a tool.call after an ask settles it as cleared', async ($, on) => {
   const seen: any = {}
-  await start($, on, { decision: 'ask', seen })
-  await $.tool.check({ tool: 'Bash', input: { command: 'ls' }, tool_use_id: 'tu-1' })
+  await start($, on, { decision: askingGate, seen })
+  await checkAsk($, { tool: 'Bash', input: { command: 'ls' }, tool_use_id: 'tu-1' })
   await $.tool.call({ tool: 'Bash', command: 'ls', tool_use_id: 'tu-1' } as any)
   await $.tool.call({ tool: 'Write', file_path: '/home/me/proj/src/a.js', content: 'x' })
   await settle()
@@ -518,8 +531,8 @@ test('turn.start and turn.complete clear a block', async ($, on) => {
 })
 
 test('the blocked-state wiring passes tool.check and tool.call results through unchanged', async ($, on) => {
-  await start($, on, { decision: 'ask' })
-  expect((await $.tool.check(CALL)).decision).toBe('ask')
+  await start($, on, { decision: askingGate })
+  expect((await checkAsk($, CALL)).decision).toBe('ask')
   const r = await $.tool.call({ tool: 'AskUserQuestion' })
   expect(r.text).toBe('ok')
 })
