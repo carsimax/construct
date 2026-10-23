@@ -1,0 +1,87 @@
+#!/usr/bin/env node
+// construct-gate: installs the pre-push hook that runs the publication gate for every git push (S2 of odd/tasks/pre-push-gate.md).
+import { spawnSync } from 'node:child_process'
+import { chmodSync, existsSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const USAGE = `usage: construct-gate <install|uninstall|status>   (run inside a repository)
+
+  install     write a pre-push hook into the repository's hooks directory (core.hooksPath is honored); refuses a hook that is not Construct's
+  uninstall   remove the pre-push hook if it is Construct's
+  status      print whether the hook is installed and which pre-push.mjs it runs`
+
+const MARKER = '# construct-gate: Construct pre-push hook'
+const RECORDED = /^recorded='(.*)'$/m
+const SELF = fileURLToPath(new URL('../hooks/scripts/pre-push.mjs', import.meta.url))
+const cacheRoot = () => join(process.env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude'), 'plugins/cache/construct/construct')
+
+// The newest installed plugin version that has pre-push.mjs, else null (the installed hook's sh loop does the same).
+function cached() {
+  let names
+  try {
+    names = readdirSync(cacheRoot())
+  } catch {
+    return null
+  }
+  const found = names.sort((a, b) => a.localeCompare(b, undefined, { numeric: true })).map((v) => join(cacheRoot(), v, 'hooks/scripts/pre-push.mjs')).filter((f) => existsSync(f))
+  return found.at(-1) ?? null
+}
+
+const quote = (text) => text.replace(/'/g, `'\\''`)
+
+const hookText = () => `#!/bin/sh
+${MARKER}
+recorded='${quote(SELF)}'
+root="\${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/cache/construct/construct"
+script=
+for v in $(ls "$root" 2>/dev/null | sort -V); do
+  [ -f "$root/$v/hooks/scripts/pre-push.mjs" ] && script="$root/$v/hooks/scripts/pre-push.mjs"
+done
+[ -n "$script" ] || script="$recorded"
+if [ ! -f "$script" ]; then
+  echo "construct-gate: the Construct plugin was not found, so this push was not checked (construct-gate uninstall removes this hook)" >&2
+  exit 0
+fi
+exec node "$script" "$@"
+`
+
+function hookFile() {
+  const top = spawnSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' })
+  if (top.status !== 0) throw new Error('not inside a git repository')
+  const root = top.stdout.trim()
+  const path = spawnSync('git', ['-C', root, 'rev-parse', '--git-path', 'hooks'], { encoding: 'utf8' })
+  if (path.status !== 0) throw new Error(`cannot find the hooks directory: ${path.stderr.trim()}`)
+  return join(resolve(root, path.stdout.trim()), 'pre-push')
+}
+
+const read = (file) => (existsSync(file) ? readFileSync(file, 'utf8') : null)
+const ours = (text) => text !== null && text.includes(MARKER)
+
+function run(command) {
+  if (command === undefined || command === 'help' || command === '--help' || command === '-h') return USAGE
+  if (!['install', 'uninstall', 'status'].includes(command)) throw new Error(`unknown command: ${command} (run construct-gate help)`)
+  const file = hookFile()
+  const text = read(file)
+  if (command === 'status') {
+    if (!ours(text)) return text === null ? 'not installed' : `not installed (${file} is not Construct's)`
+    return `installed: ${file}\nscript: ${cached() ?? RECORDED.exec(text)?.[1].replace(/'\\''/g, "'") ?? SELF}`
+  }
+  if (text !== null && !ours(text)) throw new Error(`${file} is not Construct's hook; refusing to ${command === 'install' ? 'overwrite' : 'remove'} it`)
+  if (command === 'uninstall') {
+    if (text === null) return 'not installed'
+    unlinkSync(file)
+    return `removed ${file}`
+  }
+  writeFileSync(file, hookText())
+  chmodSync(file, 0o755)
+  return `installed ${file}`
+}
+
+try {
+  process.stdout.write(`${run(process.argv[2])}\n`)
+} catch (error) {
+  process.stderr.write(`construct-gate: ${error.message}\n`)
+  process.exitCode = 1
+}
