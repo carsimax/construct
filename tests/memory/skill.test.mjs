@@ -49,5 +49,5 @@ test('the skill intro maps every MCP tool to its CLI command and says to call th
   const intro = skill.split('\n').find((l) => l.startsWith('One SQLite store'))
   const pairs = [['mem_save', 'save'], ['mem_search', 'search'], ['mem_context', 'context'], ['mem_get_observation', 'get'], ['mem_update', 'update'], ['mem_timeline', 'timeline'], ['mem_session_summary', 'summary'], ['mem_judge', 'judge'], ['mem_suggest_topic_key', 'suggest-topic-key'], ['mem_relations_pending', 'relations pending']]
   for (const [tool, command] of pairs) assert.ok(intro.includes(`\`${tool}\` (\`${command}\`)`), `${tool} (${command})`)
-  assert.match(intro, /Call the tool; run the CLI only when the tool is missing or the command is CLI-only/)
+  assert.match(intro, /Call the tool; run the CLI when the tool is missing or fails, or the command is CLI-only/)
 })

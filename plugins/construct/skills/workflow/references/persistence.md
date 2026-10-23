@@ -4,7 +4,7 @@ The feature document is the only record of large work: The feature-state hook re
 
 ## Resume
 
-1. Read the memory context the session injected, then `construct-memory search <feature>`.
+1. Read the memory context the session injected, then `mem_search` (else `construct-memory search <feature>`).
 2. Read `odd/tasks/<feature>.md` fully.
 3. Reconcile document, code, and tests (`git log`, `git status`, the test run). Observed code wins; fix the document.
 4. Continue from the first unfinished task, or run the converge step when all are done.
@@ -13,4 +13,4 @@ The feature document is the only record of large work: The feature-state hook re
 
 - A task is `done` only after its outcome and checks were observed. Record failed, skipped, and pending honestly, with the evidence in the Status cell.
 - Write the document safely: an interrupted or unsafe write must preserve the prior state. Irreconcilable concurrent edits keep both versions and ask the user.
-- Save decisions, root causes, and conventions with `construct-memory save`; close a session with `construct-memory summary --session <id>`.
+- Save decisions, root causes, and conventions with `mem_save` (else `construct-memory save`); close a session with `mem_session_summary` (else `construct-memory summary --session <id>`).
