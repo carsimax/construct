@@ -10,6 +10,8 @@ Objective: enforce the publication gate in git itself, so a push from any host o
 - **S2 — Opt-in installer.** Plan T8: "`bin/construct-gate install` lo instala en el repo del usuario". `construct-gate install | uninstall | status`, run inside a repository: install writes the pre-push hook into the effective hooks dir (`git rev-parse --git-path hooks`, which honors `core.hooksPath`), marked as Construct's; it refuses to overwrite a hook that is not Construct's (exit non-zero, message naming the file). The installed hook finds `pre-push.mjs` in the newest installed Construct version at run time (plugin cache), else the path recorded at install; if neither exists (plugin removed) it warns on stderr and allows the push. uninstall removes only Construct's hook; status prints installed or not and the resolved script path.
 - **S3 — Docs say what each layer guarantees.** Plan T9: "en el README y en `CLAUDE.md` queda escrito que el gate PreToolUse es un aviso temprano de disciplina, no un límite de seguridad, que la garantía real es `pre-push`/CI y que la celda Risk es autoclasificada". Assumption (L2): CI is out of scope because verdicts live only in the local store; docs say so.
 
+- **S4 — Release 8.1.0 and PR.** "ok" (to: "¿Abro el PR como **8.1.0**? Es funcionalidad nueva y no rompe nada."). Bump as in c804382 (plugin.json, install.sh ref and URL, README badge/URLs/status with a "Changes in 8.1.0" list, install tests); no Upgrading section (nothing breaks). PR title carries (8.1.0).
+
 ## Tasks
 
 | ID | Specs | Task | Route | Risk | Status | Commit |
@@ -17,6 +19,7 @@ Objective: enforce the publication gate in git itself, so a push from any host o
 | T1 | S1, S2 | `pre-push.mjs`, exported verdict, `bin/construct-gate`, tests | worker | 2, 5 | done (RED by parent: empty hook fails 2 tests; suite 1083/0) | b5c9c3f |
 | T3 | S1, S2, S3 | Fix the L4 review findings | worker | 1, 2, 5 | done (RED 9 fail on T1 code; tests/pre-push 21/21; suite 1092/0) | 89a77da |
 | T4 | S1, S2, S3 | Fix the L6 round-2 findings | parent | 2, 5 | done (RED 5 fail; tests/pre-push 26/26; suite 1097/0) | 9ff0a12 |
+| T5 | S4 | Release 8.1.0 bump | worker | 5 | pending | — |
 | T2 | S3 | README, CLAUDE.md, CONTRIBUTING table if it names the gate | worker | none | done (CONTRIBUTING table does not name the gate) | 46a9ce8 |
 
 ## Log
@@ -47,4 +50,6 @@ Objective: enforce the publication gate in git itself, so a push from any host o
   - Accepted, not fixed: A-N4 (CRLF-converted hook reads as foreign; a copied hook with the marker on line 2 is overwritten on install, by design).
   Parent fixes inline (small edits): RED 5 new tests fail, GREEN tests/pre-push 26/26, suite 1097/0.
 
-Next step: PR on the user's word.
+- **L7 (2026-10-22, user):** "ok". Added S4, T5.
+
+Next step: T5 bump, then push and PR.
