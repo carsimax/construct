@@ -644,6 +644,8 @@ function makeStore(db, path, now, repoName) {
         for (const o of learnings) out += `- [${o.type}] **${flat(o.title, Infinity)}**\n`
         out += '\n'
       }
+      const pending = one(`SELECT count(*) AS n FROM memory_relations r JOIN observations s ON s.id = r.source_id AND s.deleted_at IS NULL JOIN observations t ON t.id = r.target_id AND t.deleted_at IS NULL WHERE r.status = 'pending'`).n
+      if (pending > 0) out += `Relations: ${pending} pending judgment; list them with construct-memory relations pending.\n`
       if (Buffer.byteLength(out) <= CONTEXT_MAX_BYTES) return out
       return cutBytes(out, CONTEXT_MAX_BYTES - Buffer.byteLength(CONTEXT_MARKER)) + CONTEXT_MARKER
     },
@@ -671,6 +673,12 @@ function makeStore(db, path, now, repoName) {
 
     addPrompt(sessionId, content) {
       write(() => run('INSERT INTO user_prompts (session_id, content, created_at) VALUES (?, ?, ?)', sessionId, filterLines(stripPrivate(content)), stamp()))
+    },
+
+    // pendingRelations lists pending relations whose two observations are live, newest first (limit default 20, max 100).
+    pendingRelations({ limit } = {}) {
+      const n = Math.min(PROMPTS_MAX, Math.max(1, Math.floor(Number(limit)) || PROMPTS_DEFAULT))
+      return all(`SELECT r.id AS judgment_id, s.id AS sid, s.type AS stype, s.title AS stitle, t.id AS tid, t.type AS ttype, t.title AS ttitle, r.created_at FROM memory_relations r JOIN observations s ON s.id = r.source_id AND s.deleted_at IS NULL JOIN observations t ON t.id = r.target_id AND t.deleted_at IS NULL WHERE r.status = 'pending' ORDER BY r.created_at DESC, r.rowid DESC LIMIT ?`, n).map((r) => ({ judgment_id: r.judgment_id, source: { id: r.sid, type: r.stype, title: r.stitle }, target: { id: r.tid, type: r.ttype, title: r.ttitle }, created_at: r.created_at }))
     },
 
     // prompts lists stored prompts, newest first (limit default 20, max 100).

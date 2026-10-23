@@ -32,6 +32,7 @@ const MEMORY_RULES = [
   'Bash(construct-memory judge *)',
   'Bash(construct-memory judge-many *)',
   'Bash(construct-memory compare *)',
+  'Bash(construct-memory relations pending *)',
   'Bash(construct-memory help *)',
   'Bash(construct-memory prompts)',
 ]

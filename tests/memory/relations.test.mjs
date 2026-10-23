@@ -417,3 +417,71 @@ describe('CLI', () => {
     assert.match(cli(repo, ['search', 'plain']).stdout, /^#1 \[manual\] Plain note one - body Plain note one\n$/)
   })
 })
+
+describe('pending relations (S8 of odd/tasks/memory-engram-parity.md)', () => {
+  // seed: three notes sharing title terms; the 2nd save gets 1 candidate, the 3rd gets 2, all pending.
+  const seed = (store) => [note(store, 'parser cache alpha'), note(store, 'parser cache beta'), note(store, 'parser cache gamma')]
+
+  test('the store lists pending relations between live rows, newest first, with a limit', () => {
+    const { store } = fresh()
+    const [a, b, c] = seed(store)
+    const list = store.pendingRelations()
+    assert.deepEqual(list.map((r) => [r.judgment_id, r.source.id, r.target.id]), [...c.candidates.reverse(), ...b.candidates].map((x) => [x.judgment_id, x.judgment_id === b.candidates[0]?.judgment_id ? b.id : c.id, x.id]))
+    assert.deepEqual(list[0].source, { id: c.id, type: 'manual', title: 'parser cache gamma' })
+    assert.equal(store.pendingRelations({ limit: 1 }).length, 1)
+    store.judge(b.candidates[0].judgment_id, 'compatible')
+    assert.equal(store.pendingRelations().length, 2)
+    store.remove(a.id)
+    assert.deepEqual(store.pendingRelations().map((r) => r.target.id), [b.id])
+    store.close()
+  })
+
+  test('the context ends with the pending count line only when some are pending', () => {
+    const { store } = fresh()
+    note(store, 'lonely note')
+    assert.doesNotMatch(store.context(), /Relations:/)
+    seed(store)
+    assert.ok(store.context().endsWith('\nRelations: 3 pending judgment; list them with construct-memory relations pending.\n'))
+    store.close()
+  })
+
+  test('relations pending prints one line per relation, --json the same rows, --limit caps them', () => {
+    const { repo, store } = fresh()
+    const [, b, c] = seed(store)
+    store.close()
+    const r = cli(repo, ['relations', 'pending'])
+    assert.equal(r.status, 0, r.stderr)
+    assert.equal(r.stderr, '')
+    const lines = r.stdout.trim().split('\n')
+    assert.equal(lines.length, 3)
+    assert.equal(lines[2], `${b.candidates[0].judgment_id} #${b.id} [manual] parser cache beta <-> #${b.candidates[0].id} [manual] parser cache alpha`)
+    const json = JSON.parse(cli(repo, ['relations', 'pending', '--json', '--limit', '2']).stdout)
+    assert.equal(json.length, 2)
+    assert.deepEqual(Object.keys(json[0]).sort(), ['created_at', 'judgment_id', 'source', 'target'])
+    assert.equal(json[0].source.id, c.id)
+    assert.equal(cli(repo, ['relations', 'pending', '--limit', '0']).stdout.trim().split('\n').length, 3, 'invalid limit falls back to the default')
+  })
+
+  test('relations pending with none says so; bad shapes fail with one line and exit 1', () => {
+    const { repo, store } = fresh()
+    store.close()
+    const none = cli(repo, ['relations', 'pending'])
+    assert.deepEqual([none.status, none.stdout, none.stderr], [0, 'no pending relations\n', ''])
+    for (const [args, message] of [
+      [['relations'], /relations needs pending/],
+      [['relations', 'list'], /relations needs pending/],
+      [['relations', 'pending', 'extra'], /relations pending takes only --limit and --json/],
+      [['relations', 'pending', '--type', 'x'], /relations does not take --type/],
+    ]) {
+      const r = cli(repo, args)
+      assert.equal(r.status, 1, args.join(' '))
+      assert.equal(r.stdout, '')
+      assert.match(r.stderr, message)
+      assert.equal(r.stderr.trim().split('\n').length, 1)
+    }
+  })
+
+  test('help names relations pending and its flags', () => {
+    assert.match(cli(scratchDir('mem-help-'), ['help']).stdout, /relations pending \[--limit N\] \[--json\]/)
+  })
+})

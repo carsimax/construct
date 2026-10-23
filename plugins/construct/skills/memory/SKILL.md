@@ -39,7 +39,7 @@ Pin with `construct-memory pin <id>` (undo: `construct-memory unpin <id>`) only 
 
 ## Relations
 
-After `save`, the CLI prints candidate rows with a judgment id. Judge only real conflict or supersession: `construct-memory judge <judgment-id> <relation>` with `--reason`, `--evidence`, `--confidence`. `construct-memory judge-many` takes a JSON array. `construct-memory compare <id-a> <id-b> <relation> --confidence 0.8` records a verdict on any two rows (a replaces b, or the reverse).
+After `save`, the CLI prints candidates with a judgment id; judge them right away (real conflict or supersession only): `construct-memory judge <judgment-id> <relation>` with `--reason`, `--evidence`, `--confidence`. `construct-memory relations pending` lists the rest (the context counts them) for `construct-memory judge-many` (JSON array). `construct-memory compare <id-a> <id-b> <relation> --confidence 0.8` judges any two rows (a replaces b).
 
 Relations: `related`, `compatible`, `scoped`, `conflicts_with`, `supersedes`, `not_conflict`.
 
