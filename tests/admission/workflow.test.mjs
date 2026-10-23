@@ -68,11 +68,32 @@ describe('workflow script', () => {
   })
 
   test('the global object, a computed agent key, and dynamic code are denied', () => {
-    denied(workflow({ script: `${META}await globalThis.agent('x', { agentType: 'construct:worker' })` }), 'agent is used other than as a direct call (line 2)')
-    denied(workflow({ script: `${META}await this.agent('x')` }), 'agent is used other than as a direct call (line 2)')
-    denied(workflow({ script: `${META}await globalThis['agent']('x')` }), 'agent is used other than as a direct call (line 2)')
+    denied(workflow({ script: `${META}await globalThis.agent('x', { agentType: 'construct:worker' })` }), 'the global object cannot be referenced (line 2)')
+    denied(workflow({ script: `${META}await this.agent('x')` }), 'the global object cannot be referenced (line 2)')
+    denied(workflow({ script: `${META}await globalThis['agent']('x')` }), 'the global object cannot be referenced (line 2)')
     denied(workflow({ script: `${META}\nawait eval("agent('x')")` }), 'dynamic code (eval or Function) cannot be admitted (line 3)')
     denied(workflow({ script: `${META}await new Function('return agent')()('x')` }), 'dynamic code (eval or Function) cannot be admitted (line 2)')
+  })
+
+  // Bypasses found probing the first version: each one launched a writer past the check.
+  test('every agentType key counts, a spread in the options or a destructured agent is denied', () => {
+    denied(workflow({ script: `${META}await agent('x', { agentType: 'Explore', agentType: 'construct:worker' })` }), 'agent() call 1 names agentType "construct:worker"')
+    denied(workflow({ script: `${META}await agent({ agentType: 'Explore' }, { agentType: 'construct:worker' })` }), 'agent() call 1 names agentType "construct:worker"')
+    denied(workflow({ script: `${META}const o = {}\nawait agent('x', { agentType: 'Explore', ...o })` }), 'agent() call 1 has no literal agentType')
+    denied(workflow({ script: `${META}const { agent: a } = x\nawait a('x')` }), 'agent is used other than as a direct call (line 2)')
+    denied(workflow({ script: `${META}await agent('x', { agentType: 'Explore', ['agentType']: 'construct:worker' })` }), 'agent() call 1 has no literal agentType')
+    denied(workflow({ script: `${META}const k = 'agentType'\nawait agent('x', { agentType: 'Explore', [k]: 'construct:worker' })` }), 'agent() call 1 has no literal agentType')
+    denied(workflow({ script: `${META}await agent('x', { agentType: 'Explore', "agentType": 'construct:worker' })` }), 'agent() call 1 has no literal agentType')
+    allowed(workflow({ script: `${META}await agent('x', { agentType: 'Explore', schema: { type: 'object', required: ['files'] } })` }))
+  })
+
+  test('an escaped identifier, a regex literal, and a global object reference cannot hide a call', () => {
+    denied(workflow({ script: `${META}await \\u0061gent('x')` }), 'an escape outside a string cannot be admitted (line 2)')
+    denied(workflow({ script: `${META}const r = /\`/\nawait agent('x')` }), 'agent() call 1 has no literal agentType')
+    denied(workflow({ script: `${META}const r = /[/]\`/g\nawait agent('x')` }), 'agent() call 1 has no literal agentType')
+    denied(workflow({ script: `${META}await globalThis['ag' + 'ent']('x')` }), 'the global object cannot be referenced (line 2)')
+    denied(workflow({ script: `${META}const g = globalThis\nawait g.agent('x')` }), 'the global object cannot be referenced (line 2)')
+    allowed(workflow({ script: `${META}const half = 4 / 2 / 1\nconst o = { agent: 1 }\nawait agent(\`x\${half / 2}\`, { agentType: 'Explore' })` }))
   })
 
   test('strings, template text, comments, and properties are not calls; code inside ${} is', () => {

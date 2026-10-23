@@ -342,8 +342,12 @@ const readOnlyType = (type) => READ_ONLY_BUILTINS.includes(type) || READ_ONLY_KI
 
 // tokenize reads a workflow script into identifiers, string literals, and punctuation, skipping comments
 // and template text while still reading the code inside `${...}`. A template with an expression is never
-// a literal. shortcut: a regex literal is read as punctuation and strings, which may misread its contents;
-// upgrade to a real parser if workflow scripts need regexes the scan gets wrong.
+// a literal. A `/` that cannot end a value starts a regex literal, read up to its closing `/` (a class
+// `[...]` may hold `/`). shortcut: `}` is taken as ending a value, so a regex right after a block is read
+// as division; upgrade to a real parser if a script needs that.
+const KEYWORDS = new Set(['return', 'typeof', 'instanceof', 'in', 'of', 'new', 'delete', 'void', 'throw', 'case', 'do', 'else', 'yield', 'await'])
+const endsValue = (token) =>
+  token !== undefined && (token.kind === 'str' || (token.kind === 'id' && !KEYWORDS.has(token.value)) || (token.kind === 'p' && /[\w)\]}$]/.test(token.value)))
 function tokenize(src) {
   const tokens = []
   const templates = [] // open `${` expressions: { depth, token }
@@ -378,6 +382,18 @@ function tokenize(src) {
       const stop = end === -1 ? src.length : end + 2
       line += src.slice(i, stop).split('\n').length - 1
       i = stop
+    } else if (c === '/' && !endsValue(tokens.at(-1))) {
+      let inClass = false
+      i++
+      while (i < src.length && src[i] !== '\n' && (inClass || src[i] !== '/')) {
+        if (src[i] === '\\') i++
+        else if (src[i] === '[') inClass = true
+        else if (src[i] === ']') inClass = false
+        i++
+      }
+      i++
+      while (/[a-z]/i.test(src[i] ?? '')) i++
+      tokens.push({ kind: 're', value: '', line })
     } else if (c === "'" || c === '"') {
       let value = ''
       i++
@@ -414,35 +430,50 @@ const GLOBALS = new Set(['globalThis', 'this', 'self', 'window', 'global'])
 export function workflowProblem(src) {
   const tokens = tokenize(src)
   const is = (k, value) => tokens[k]?.kind === 'p' && tokens[k].value === value
+  const at = (k) => `(line ${tokens[k].line})`
+  // closing returns the index of the bracket that closes the one opened before k.
+  const closing = (k) => {
+    for (let depth = 1, j = k; j < tokens.length; j++) {
+      if (is(j, '(') || is(j, '[') || is(j, '{')) depth++
+      else if ((is(j, ')') || is(j, ']') || is(j, '}')) && --depth === 0) return j
+    }
+    return tokens.length
+  }
   let calls = 0
   for (let k = 0; k < tokens.length; k++) {
-    if (tokens[k].kind === 'id' && (tokens[k].value === 'eval' || tokens[k].value === 'Function') && !is(k - 1, '.')) {
-      return `dynamic code (eval or Function) cannot be admitted (line ${tokens[k].line})`
+    const { kind, value } = tokens[k]
+    if (kind === 'p' && value === '\\') return `an escape outside a string cannot be admitted ${at(k)}`
+    if (kind !== 'id' || is(k - 1, '.')) continue
+    if (value === 'eval' || value === 'Function') return `dynamic code (eval or Function) cannot be admitted ${at(k)}`
+    if (GLOBALS.has(value)) return `the global object cannot be referenced ${at(k)}`
+    if (value !== 'agent') continue
+    // An object key (`{ agent: 1 }`) is not the workflow's agent(), unless the object is a destructuring pattern.
+    if (is(k + 1, ':') && (is(k - 1, '{') || is(k - 1, ','))) {
+      const end = closing(k)
+      if (is(end + 1, '=') && !is(end + 2, '=') && !is(end + 2, '>')) return `agent is used other than as a direct call ${at(k)}`
+      continue
     }
-    // A computed key (`globalThis['agent']`) reaches agent() without naming it as an identifier.
-    if (tokens[k].kind === 'str' && tokens[k].literal && tokens[k].value === 'agent' && is(k - 1, '[') && is(k + 1, ']')) {
-      return `agent is used other than as a direct call (line ${tokens[k].line})`
-    }
-    if (tokens[k].kind !== 'id' || tokens[k].value !== 'agent') continue
-    // A property (`o.agent`) or an object key (`{ agent: 1 }`) is not the workflow's agent(), unless the object is the global one.
-    const global = is(k - 1, '.') && tokens[k - 2]?.kind === 'id' && GLOBALS.has(tokens[k - 2].value)
-    if (global) return `agent is used other than as a direct call (line ${tokens[k].line})`
-    if (is(k - 1, '.') || (is(k + 1, ':') && (is(k - 1, '{') || is(k - 1, ',')))) continue
-    if (!is(k + 1, '(')) return `agent is used other than as a direct call (line ${tokens[k].line})`
+    if (!is(k + 1, '(')) return `agent is used other than as a direct call ${at(k)}`
     calls++
-    let depth = 0
-    let type
-    for (let j = k + 1; j < tokens.length; j++) {
+    // Every agentType key of an argument object counts (the last one wins in JavaScript), and a spread there could add one.
+    const types = []
+    let literal = true
+    for (let depth = 0, j = k + 1; j < tokens.length; j++) {
+      // A computed key (`[k]: ...`) or a quoted agentType key at an argument object's level could set the type.
+      if (depth === 2 && ((is(j, '[') && (is(j - 1, '{') || is(j - 1, ','))) || (tokens[j].kind === 'str' && tokens[j].value === 'agentType' && is(j + 1, ':')))) literal = false
       if (is(j, '(') || is(j, '[') || is(j, '{')) depth++
       else if (is(j, ')') || is(j, ']') || is(j, '}')) {
         if (--depth === 0) break
-      } else if (type === undefined && depth === 2 && tokens[j].kind === 'id' && tokens[j].value === 'agentType' && is(j + 1, ':')) {
-        const value = tokens[j + 2]
-        type = value?.kind === 'str' && value.literal && (is(j + 3, ',') || is(j + 3, '}')) ? value.value : null
+      } else if (depth === 2 && is(j, '.') && is(j + 1, '.') && is(j + 2, '.')) literal = false
+      else if (depth === 2 && tokens[j].kind === 'id' && tokens[j].value === 'agentType' && is(j + 1, ':') && !is(j - 1, '.')) {
+        const v = tokens[j + 2]
+        if (v?.kind === 'str' && v.literal && (is(j + 3, ',') || is(j + 3, '}'))) types.push(v.value)
+        else literal = false
       }
     }
-    if (typeof type !== 'string') return `agent() call ${calls} has no literal agentType`
-    if (!readOnlyType(type)) return `agent() call ${calls} names agentType ${JSON.stringify(type)}`
+    if (!literal || types.length === 0) return `agent() call ${calls} has no literal agentType`
+    const bad = types.find((type) => !readOnlyType(type))
+    if (bad !== undefined) return `agent() call ${calls} names agentType ${JSON.stringify(bad)}`
   }
   return null
 }
