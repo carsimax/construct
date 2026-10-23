@@ -28,7 +28,7 @@ Objective: measure whether Construct improves outcomes and at what cost, then cu
 
 | T4 | S4 | Make git work in the `review-fires` sandbox; re-measure 10 runs | parent | 6 | done (no in-sandbox fix, L8; probe-review 10/10, L10) | — |
 | T5 | S5 | `inline_edit_max_lines` option, surface-guard, contract and skills, small-case graders; re-measure | worker | 2, 3 | done (suite 1071/0; gate met, L11) | 3b42371, 43ec646 |
-| T6 | S6 | Release 8.0.0 bump | worker | 5 | pending | — |
+| T6 | S6 | Release 8.0.0 bump | worker | 5 | done (RED 3 install; suite 1071/0; validate --strict both) | c804382 |
 
 ## Log
 
@@ -84,4 +84,4 @@ Objective: measure whether Construct improves outcomes and at what cost, then cu
 
 - **L12 (2026-10-22, user):** "dale al 8.0.0". Added S6, T6.
 
-Next step: T6 release bump; then PR on the user's word.
+Next step: PR with (8.0.0) in the title on the user's word (gate needs lenses for Risk 2, 3, 5); tag v8.0.0 and Release after merge.
