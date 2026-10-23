@@ -1,7 +1,7 @@
 # Construct
 
 [![Claude Code](https://img.shields.io/badge/Claude_Code-2.1.304%2B-blue)](#requirements)
-[![Plugin version](https://img.shields.io/badge/version-8.5.0-informational)](plugins/construct/.claude-plugin/plugin.json)
+[![Plugin version](https://img.shields.io/badge/version-8.6.0-informational)](plugins/construct/.claude-plugin/plugin.json)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 Construct is a Claude Code plugin that makes every request follow Organic Driven Development (ODD): authorize, explore, size, track, implement test-first, and close with evidence and a Risk line.
@@ -30,13 +30,13 @@ Construct is a Claude Code plugin that makes every request follow Organic Driven
 ### One command
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v8.5.0/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v8.6.0/install.sh | bash
 ```
 
 The installer checks the requirements above and stops before changing anything if one is missing, or if `~/.claude` or `~/.claude/settings.json` is not writable, or if `settings.json` is a directory. Then it runs the manual steps below for you:
 
 - Adds the construct marketplace and installs `construct@construct`.
-- Merges into `~/.claude/settings.json`: one `permissions.allow` rule per non-destructive `construct-memory` command (`search`, `get`, `context`, `timeline`, `stats`, `doctor`, `suggest-topic-key`, `save`, `update`, `summary`, `review list`, `review stale`, `prompts`, `prompts --limit`, `prompts --search`, `pin`, `unpin`, `judge`, `judge-many`, `compare`, `help`; `delete`, `prompts delete`, `consolidate`, `import`, `export`, and `review done` still ask), and removes a `theme` of `custom:construct:construct` left by earlier versions (any other theme is left alone). Destructive commands run only in their exact form: any extra option or word is refused, which keeps the pre-approved prefixes from reaching them. An empty `settings.json` counts as `{}`. Other keys stay as they are, a symlinked file (even a dangling one, whose target is then created) is written through to its target with its mode kept, and the previous file is saved as `settings.json.bak-<timestamp>`.
+- Merges into `~/.claude/settings.json`: one `permissions.allow` rule per non-destructive `construct-memory` command (`search`, `get`, `context`, `timeline`, `stats`, `doctor`, `suggest-topic-key`, `save`, `update`, `summary`, `review list`, `review stale`, `review passive`, `prompts`, `prompts --limit`, `prompts --search`, `pin`, `unpin`, `judge`, `judge-many`, `compare`, `help`; `delete`, `prompts delete`, `consolidate`, `import`, `export`, and `review done` still ask), and removes a `theme` of `custom:construct:construct` left by earlier versions (any other theme is left alone). Destructive commands run only in their exact form: any extra option or word is refused, which keeps the pre-approved prefixes from reaching them. An empty `settings.json` counts as `{}`. Other keys stay as they are, a symlinked file (even a dangling one, whose target is then created) is written through to its target with its mode kept, and the previous file is saved as `settings.json.bak-<timestamp>`.
 
 If engram or codegraph is installed, the installer says Construct no longer needs it and removes nothing. Every step is skipped when it is already done, so running the installer again changes nothing. It never changes other permissions or your permission mode. The output style needs no setting: the plugin forces `Principal Engineer`, and an `outputStyle` you already have stays in the file but has no effect while construct is enabled.
 
@@ -48,7 +48,7 @@ If engram or codegraph is installed, the installer says Construct no longer need
 Pass options after `bash -s --`, for example `curl -fsSL <url> | bash -s -- --no-mcp`. To read the script before running it:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v8.5.0/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v8.6.0/install.sh -o install.sh
 less install.sh
 bash install.sh
 ```
@@ -64,7 +64,7 @@ The manual steps the installer runs, for when you want to run them yourself:
    claude plugin install construct@construct
    ```
 
-   The installer (`install.sh`) pins this marketplace to the release tag (`carsimax/construct#v8.5.0`); the command above follows the default branch.
+   The installer (`install.sh`) pins this marketplace to the release tag (`carsimax/construct#v8.6.0`); the command above follows the default branch.
 
 2. Optional: inside Claude Code, in `/config`, set each role's model and effort (rows such as `Worker model`).
 
@@ -181,7 +181,7 @@ Memory is per repository: one SQLite database at `<git common dir>/construct-mem
 
 - **MCP tools.** The `memory` server exposes `mem_save`, `mem_search`, `mem_context`, `mem_get_observation`, `mem_update`, `mem_timeline`, `mem_session_summary`, `mem_judge`, `mem_suggest_topic_key`, and `mem_relations_pending` (Claude Code names them `mcp__plugin_construct_memory__<tool>`). Each call runs the CLI once, so the CLI stays the single implementation and the fallback; a CLI failure comes back as an error result and a call that takes over 10 seconds as `construct-memory timed out`. The server works in `CLAUDE_PROJECT_DIR` when set, else its working directory. `install.sh` pre-approves these ten tools by exact name. `delete`, `prompts delete`, `consolidate`, `import`, `export`, and `review done` have no tool: they are CLI-only and keep asking. `construct:explorer` has a fixed tool list without the MCP tools and uses the CLI.
 
-- **Commands.** `save`, `search`, `get`, `context`, `update`, `delete`, `summary --session <id>`, `review list|done <id>`, `review stale [--json]` (read-only: live memories whose `Where:` names repository paths that no longer exist), `import <file>`, `export [file]`, `suggest-topic-key` (prints a key from a JSON `type`, `title`, `content` on stdin), `timeline <id>`, `pin <id>` / `unpin <id>` (pinned memories load in every session context and rank higher in search), `stats`, `doctor [--json]` (read-only health checks, exit 1 when one fails), `prompts --search <query>`, `consolidate <id> <id>... --title T` (merge several memories into one: content on stdin, a preview and fingerprint first, then `--confirm <fingerprint>`), and `judge`, `judge-many`, `compare` (verdicts on related memories), and `relations pending [--limit N] [--json]` (lists the pending relation candidates). `construct-memory help` lists the flags.
+- **Commands.** `save`, `search`, `get`, `context`, `update`, `delete`, `summary --session <id>`, `review list|done <id>`, `review stale [--json]` (read-only: live memories whose `Where:` names repository paths that no longer exist), `review passive [--days N] [--json]` (read-only: live `passive` memories never read with `get` and at least N days old, default 30, oldest first, to consolidate or delete), `import <file>`, `export [file]`, `suggest-topic-key` (prints a key from a JSON `type`, `title`, `content` on stdin), `timeline <id>`, `pin <id>` / `unpin <id>` (pinned memories load in every session context and rank higher in search), `stats`, `doctor [--json]` (read-only health checks, exit 1 when one fails), `prompts --search <query>`, `consolidate <id> <id>... --title T` (merge several memories into one: content on stdin, a preview and fingerprint first, then `--confirm <fingerprint>`), and `judge`, `judge-many`, `compare` (verdicts on related memories), and `relations pending [--limit N] [--json]` (lists the pending relation candidates). `construct-memory help` lists the flags. `get` counts each read of a live memory (`accessed: N`, columns `access_count` and `last_accessed_at`; `search`, `context`, and `timeline` do not count) and a read memory ranks slightly higher in search.
 - **Related memories.** After a save, `construct-memory` prints up to 3 similar memories as candidates; judging them is optional; the session context counts pending relations and `relations pending` lists them; and `search` and `get` mark judged `conflicts_with` and `supersedes` relations. Export and import carry relations between exported memories.
 - **Hooks.** At session start the recent memory is injected: sessions that have a summary or memories, recent prompts, pinned memories, the 20 newest agent saves, and the 3 newest passive learnings apart (after a compaction, with an instruction to save a summary first). Search ranks passive learnings below agent saves of equal relevance. Each prompt is stored (harness notices such as subagent and background-job completions are skipped), a subagent's `## Key Learnings:` section is captured as memories (an item whose words mostly match an earlier learning is skipped), session end marks the session closed, and a one-line reminder appears after 15 minutes without a save. `<private>...</private>` text is never stored, and text that looks like prompt injection is rejected, dropped, or filtered before it is stored.
 - **Erasing a memory.** `construct-memory delete <id>` hides it; `delete <id> --hard` erases it and its earlier versions for good, and an imported one is not re-imported.
@@ -349,11 +349,13 @@ Risk line: one reply can name several items, `Risk: items 2, 5 (reason)`; the Ri
 
 ## Status
 
-Current version: 8.5.0 (`plugins/construct/.claude-plugin/plugin.json`); a minor release. Releases are tagged `vX.Y.Z`.
+Current version: 8.6.0 (`plugins/construct/.claude-plugin/plugin.json`); a minor release. Releases are tagged `vX.Y.Z`.
 
-Changes in 8.5.0:
+Changes in 8.6.0:
 
-- Memory MCP server: the plugin ships its own server, `memory` (`plugins/construct/.mcp.json`, Node only), with ten engram-style tools (`mem_save`, `mem_search`, `mem_context`, `mem_get_observation`, `mem_update`, `mem_timeline`, `mem_session_summary`, `mem_judge`, `mem_suggest_topic_key`, `mem_relations_pending`). Each call runs the `construct-memory` CLI, which stays the fallback; destructive commands remain CLI-only. The installer pre-approves the ten tools.
+- Memory maintenance: passive learnings are never relation candidates, and more harness notices (review bindings, todo reminders, Stop hook feedback) are not stored as prompts. `get` counts reads (`accessed: N`, a small search boost); the two columns are added to existing stores without a schema version bump, so older construct versions on other worktrees keep working. `construct-memory review passive [--days N] [--json]` lists passive learnings never read, as input for `consolidate` or `delete`. The memory MCP server names a buffer overflow and survives a failed reply.
+
+8.5.0 added the plugin's own memory MCP server, `memory`, with ten engram-style `mem_*` tools over the `construct-memory` CLI.
 
 8.4.0 brought memory closer to engram: passive learnings load apart and rank lower, near-duplicate learnings are skipped, harness notices are not stored as prompts, a `SessionEnd` hook closes the session, and `construct-memory relations pending` lists unjudged candidates.
 

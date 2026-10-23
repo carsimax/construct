@@ -25,6 +25,7 @@ const MEMORY_RULES = [
   'Bash(construct-memory summary *)',
   'Bash(construct-memory review list *)',
   'Bash(construct-memory review stale *)',
+  'Bash(construct-memory review passive *)',
   'Bash(construct-memory prompts --search *)',
   'Bash(construct-memory prompts --limit *)',
   'Bash(construct-memory pin *)',
@@ -117,7 +118,7 @@ test('a clean machine gets every tool, in order, and the Construct settings', ()
   const run = install(box)
   assert.equal(run.status, 0, run.stderr)
   assert.deepEqual(run.calls.filter((c) => !/--version|list/.test(c)), [
-    'claude plugin marketplace add carsimax/construct#v8.5.0',
+    'claude plugin marketplace add carsimax/construct#v8.6.0',
     'claude plugin install construct@construct',
   ])
   assert.ok(!run.calls.some((c) => /context7/.test(c)), 'context7 is never registered')
@@ -482,13 +483,13 @@ test('an installed construct at another version warns and names the update comma
   writeFileSync(join(box.state, 'plugins'), PLUGIN_LIST('2.1.0'))
   const run = install(box)
   assert.equal(run.status, 0, run.stderr)
-  assert.match(run.stderr, /construct@construct 2\.1\.0 is installed.*8\.5\.0.*claude plugin update construct@construct/)
+  assert.match(run.stderr, /construct@construct 2\.1\.0 is installed.*8\.6\.0.*claude plugin update construct@construct/)
   assert.match(run.stdout, /Warnings:/)
   assert.ok(!run.calls.some((c) => /^claude plugin (install|update)/.test(c)), 'the install is never modified')
 })
 
 test('an installed construct at this version, a newer one, or with no readable version, gets the plain skip', () => {
-  for (const version of ['8.5.0', '8.6.0', '']) {
+  for (const version of ['8.6.0', '8.7.0', '']) {
     const box = sandbox()
     writeFileSync(join(box.state, 'plugins'), PLUGIN_LIST(version))
     const run = install(box)
@@ -499,12 +500,12 @@ test('an installed construct at this version, a newer one, or with no readable v
 })
 
 test('a marketplace pinned to another ref warns; the same ref skips quietly', () => {
-  for (const [ref, warns] of [['v8.4.0', true], ['v8.5.0', false]]) {
+  for (const [ref, warns] of [['v8.5.0', true], ['v8.6.0', false]]) {
     const box = sandbox()
     writeFileSync(join(box.state, 'marketplaces'), `  ❯ construct\n    Source: GitHub (carsimax/construct#${ref})\n`)
     const run = install(box)
     assert.equal(run.status, 0, run.stderr)
-    assert.equal(/pinned to v8\.4\.0, not v8\.5\.0/.test(run.stderr), warns)
+    assert.equal(/pinned to v8\.5\.0, not v8\.6\.0/.test(run.stderr), warns)
   }
 })
 
@@ -574,7 +575,7 @@ test('the merged rules pre-approve reads and saves and never a destructive const
   assert.deepEqual(rules, MEMORY_RULES)
   // These prefixes are only safe because the CLI refuses trailing options and words that reach a destructive form
   // (tests/memory/cli.test.mjs, 'a pre-approved prefix plus a destructive suffix'); the rules alone would match `prompts --limit 5 delete 1`.
-  for (const ok of ['search auth bug', 'prompts', 'prompts --search x', 'prompts --limit 5', 'review list', 'review list --limit 5', 'review stale', 'review stale --json', 'doctor --json', 'help'])
+  for (const ok of ['search auth bug', 'prompts', 'prompts --search x', 'prompts --limit 5', 'review list', 'review list --limit 5', 'review stale', 'review stale --json', 'review passive', 'review passive --days 7 --json', 'doctor --json', 'help'])
     assert.ok(allows(rules, `construct-memory ${ok}`), ok)
   for (const bad of ['delete 1 --hard', 'delete 1', 'prompts delete 1', 'export x.json', 'consolidate 1 2', 'import x.json', 'review done 1'])
     assert.ok(!allows(rules, `construct-memory ${bad}`), bad)

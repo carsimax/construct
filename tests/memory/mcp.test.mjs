@@ -2,9 +2,9 @@
 // through JSON-RPC lines on a throwaway git repository.
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { spawnSync } from 'node:child_process'
-import { readFileSync } from 'node:fs'
-import { makeRepo, scratchDir } from '../helpers/repo.mjs'
+import { spawn, spawnSync } from 'node:child_process'
+import { existsSync, readFileSync } from 'node:fs'
+import { makeRepo, scratchDir, write } from '../helpers/repo.mjs'
 
 const plugin = new URL('../../plugins/construct/', import.meta.url).pathname
 const SERVER = `${plugin}hooks/scripts/memory-mcp.mjs`
@@ -73,8 +73,10 @@ describe('construct memory MCP server', () => {
     const repo = makeRepo()
     const saved = tool(repo, 'mem_save', { title: 'Cache decision', content: 'What: use LRU. Why: bounded memory.', type: 'decision', topic_key: 'cache/policy' })
     assert.deepEqual(saved.result, { content: [{ type: 'text', text: 'saved #1 (inserted)\n' }] })
-    assert.equal(text(tool(repo, 'mem_get_observation', { id: 1 })), cli(repo, ['get', '1']).stdout)
-    assert.equal(text(tool(repo, 'mem_get_observation', { id: 1, history: true })), cli(repo, ['get', '--history', '1']).stdout)
+    // Each get counts a read (S3 of odd/tasks/memory-maintenance.md), so the CLI read right after shows one more.
+    const bump = (out) => out.replace(/^accessed: (\d+)$/m, (_, n) => `accessed: ${Number(n) + 1}`)
+    assert.equal(bump(text(tool(repo, 'mem_get_observation', { id: 1 }))), cli(repo, ['get', '1']).stdout)
+    assert.equal(bump(text(tool(repo, 'mem_get_observation', { id: 1, history: true }))), cli(repo, ['get', '--history', '1']).stdout)
     const updated = tool(repo, 'mem_update', { id: 1, content: 'What: use LRU with 100 entries. Why: bounded memory.' })
     assert.match(text(updated), /^\S+ #1\n$/)
     assert.match(text(tool(repo, 'mem_get_observation', { id: 1 })), /100 entries/)
@@ -169,5 +171,51 @@ describe('construct memory MCP server', () => {
   test('S2: replies keep the request order and ids', () => {
     const replies = serve(makeRepo(), [call('x', 'mem_context'), { jsonrpc: '2.0', id: 2, method: 'ping' }, call(3, 'mem_context')])
     assert.deepEqual(replies.map((r) => r.id), ['x', 2, 3])
+  })
+
+  // fakePlugin is a scratch plugin whose bin/construct-memory runs the given script body.
+  function fakePlugin(body) {
+    const root = scratchDir('construct-mcp-fake-')
+    write(root, '.claude-plugin/plugin.json', JSON.stringify({ name: 'fake', version: '0.0.1' }))
+    write(root, 'bin/construct-memory', body, { executable: true })
+    return root
+  }
+
+  // serveAsync keeps stdin open: it sends each message after the previous reply, then closes stdin.
+  async function serveAsync(root, messages, env = {}) {
+    const child = spawn('node', [SERVER], { env: { ...process.env, CLAUDE_PLUGIN_ROOT: root, ...env }, stdio: ['pipe', 'pipe', 'pipe'] })
+    let buffer = ''
+    let wake
+    child.stdout.setEncoding('utf8').on('data', (d) => { buffer += d; wake?.() })
+    const replies = []
+    for (const m of messages) {
+      child.stdin.write(`${JSON.stringify(m)}\n`)
+      while (!buffer.includes('\n')) await new Promise((r) => { wake = r })
+      const i = buffer.indexOf('\n')
+      replies.push(JSON.parse(buffer.slice(0, i)))
+      buffer = buffer.slice(i + 1)
+    }
+    const closed = new Promise((r) => child.on('close', r))
+    child.stdin.end()
+    assert.equal(await closed, 0, 'exits 0 when stdin closes')
+    return replies
+  }
+
+  test('S5: a hung CLI times out with isError, is killed, and the server keeps answering', async () => {
+    const pidFile = `${scratchDir('construct-mcp-pid-')}/pid`
+    const root = fakePlugin(`require('node:fs').writeFileSync(${JSON.stringify(pidFile)}, String(process.pid))\nsetTimeout(() => {}, 600000)\n`)
+    const [timedOut, pong] = await serveAsync(root, [call(1, 'mem_context'), { jsonrpc: '2.0', id: 2, method: 'ping' }], { CONSTRUCT_MEMORY_MCP_TIMEOUT_MS: '300' })
+    assert.deepEqual(timedOut, { jsonrpc: '2.0', id: 1, result: { content: [{ type: 'text', text: 'construct-memory timed out' }], isError: true } })
+    assert.deepEqual(pong, { jsonrpc: '2.0', id: 2, result: {} })
+    assert.ok(existsSync(pidFile), 'the hung CLI started')
+    const pid = Number(readFileSync(pidFile, 'utf8'))
+    assert.throws(() => process.kill(pid, 0), { code: 'ESRCH' }, 'the timeout killed the hung child')
+  })
+
+  test('S6: output past the 16 MiB buffer says so', async () => {
+    const root = fakePlugin(`const chunk = 'x'.repeat(1 << 20)\nfor (let i = 0; i < 20; i++) process.stdout.write(chunk)\n`)
+    const [big, pong] = await serveAsync(root, [call(1, 'mem_context'), { jsonrpc: '2.0', id: 2, method: 'ping' }])
+    assert.deepEqual(big, { jsonrpc: '2.0', id: 1, result: { content: [{ type: 'text', text: 'construct-memory output exceeded 16 MiB' }], isError: true } })
+    assert.deepEqual(pong, { jsonrpc: '2.0', id: 2, result: {} })
   })
 })

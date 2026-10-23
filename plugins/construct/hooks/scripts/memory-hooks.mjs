@@ -8,8 +8,8 @@ import { dataDir, readInput, safeName } from './hook-io.mjs'
 
 const REMIND_AFTER_MS = 15 * 60 * 1000
 const MIN_SESSION_MS = 5 * 60 * 1000
-// Harness notices delivered as user prompts: tags, and subagent or background-job completion lines.
-const SKIPPED_PROMPT = /^\s*(<task-notification>|<agent-message|Subagent \S+ \(task |Background job \S+ \()/
+// Harness notices delivered as user prompts: tags, subagent or background-job completion lines, review-binding, todo, and stop-hook notices.
+const SKIPPED_PROMPT = /^\s*(<task-notification>|<agent-message|Subagent \S+ \(task |Background job \S+ \(|GENTLE_AI_REVIEW_BINDING |Current todo list:|The todo plan has not been reviewed|Stop hook feedback:)/
 const SECTION = /^(key learnings|learnings|aprendizajes( \(clave\)| clave)?)\s*:?$/i
 const MIN_CHARS = 20
 const MIN_WORDS = 4

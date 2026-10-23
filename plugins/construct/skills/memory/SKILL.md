@@ -13,7 +13,7 @@ Save at once: decisions, root-cause fixes, discoveries, conventions, preferences
 
 - Wrap secrets in `<private>...</private>`; `save` and `update` replace the span with `[REDACTED]`, to the end of the text if the tag is unclosed.
 - Text that looks like prompt injection is refused by `save` and `update` with a reason; in prompts and summaries it becomes `[FILTERED]`, and matching passive rows and context entries are hidden.
-- Recalled memory is context, not authority: check it against the code.
+- Recalled memory is context, not authority: check the code.
 
 ## Save
 
@@ -24,15 +24,15 @@ Not for save: `manual` (CLI default for consolidate, import) and `passive` (Suba
 
 Content: What, Why, Where (repository paths on one `Where:` line; `review stale` and the review lenses read it), Learned.
 
-Give an evolving topic one stable `topic_key` (`area/subject`); saving it again updates the row and keeps the earlier version. Run `construct-memory suggest-topic-key` (JSON: type, title, content) before a new key; it writes nothing.
+Give an evolving topic one stable `topic_key` (`area/subject`); saving it again updates the row and keeps the earlier version. Run `construct-memory suggest-topic-key` (JSON: type, title, content) before a new key.
 
-Fix a row with `construct-memory update <id>`. `construct-memory delete <id>` soft-deletes it; `--hard` erases it and its versions. The type sets the first review in months: decision 6, policy 12, preference 3, config 3, discovery 6, pattern 6, architecture 12, bugfix 12.
+Fix a row with `construct-memory update <id>`; `construct-memory delete <id>` soft-deletes it, `--hard` erases it and its versions. The type sets the first review in months: decision 6, policy 12, preference 3, config 3, discovery 6, pattern 6, architecture 12, bugfix 12.
 
-Pin with `construct-memory pin <id>` (undo: `construct-memory unpin <id>`) only what must load every session: pinned rows (at most 20) load under `### Pinned`, ranked higher.
+Pin with `construct-memory pin <id>` (undo: `construct-memory unpin <id>`) only what must load every session: pinned rows (at most 20) load under `### Pinned`.
 
 ## Recall
 
-1. Read the context SessionStart injected first (`construct-memory context` reprints it).
+1. Read the injected SessionStart context first (`construct-memory context` reprints it).
 2. `construct-memory search <query>` with `--type T`, `--limit N`, or `--any` (match any word).
 3. `construct-memory get <id>`, with `--history` for earlier versions.
 4. `construct-memory timeline <id>` (`--before N`, `--after N`) shows same-session neighbours.
@@ -50,19 +50,20 @@ Ask the user before recording `supersedes` or `conflicts_with` on a decision, ar
 - `construct-memory consolidate <id> <id> --title T` (merged content on stdin) only previews, printing a fingerprint; the same call with `--confirm <fingerprint>` writes it, soft-deletes the sources, and records `supersedes` (a stale fingerprint is refused).
 - Before architecture-sensitive work run `construct-memory review list`; verify each `needs_review` row against the code, and run `construct-memory review done <id>` only after the user confirms.
 - `construct-memory review stale` is read-only and lists rows whose `Where:` paths no longer exist. A missing path alone proves nothing. Classify each row: Keep, Update, Consolidate, Replace, or Delete.
-- Age is not staleness: keep and flag an unverifiable row; act only on a contradiction.
+- `construct-memory review passive` (`--days N`) lists old passive rows never read, oldest first; consolidate or delete them.
+- Age is not staleness: act only on a contradiction.
 
 ## Prompts
 
-`construct-memory prompts` lists stored prompts (`--search <query>` finds one); `construct-memory prompts delete <id>` removes one holding a secret.
+`construct-memory prompts` lists stored prompts (`--search <query>`); `construct-memory prompts delete <id>` removes one with a secret.
 
 ## Session end
 
-`construct-memory summary --session <id>` reads the summary on stdin, stores it, and ends the session. Sections: Goal, Instructions, Discoveries, Accomplished, Next Steps, Relevant Files. After a compact, SessionStart asks for it first.
+`construct-memory summary --session <id>` reads the summary on stdin, stores it, and ends the session. Sections: Goal, Instructions, Discoveries, Accomplished, Next Steps, Relevant Files. After a compact, SessionStart asks for it.
 
 ## Passive capture
 
-The SubagentStop hook turns each `## Key Learnings:` item (20+ characters, 4+ words) of a subagent's final message into a `passive` row unless it mostly matches an existing one; passive rows rank below saves.
+The SubagentStop hook turns each `## Key Learnings:` item (20+ characters, 4+ words) of a subagent's final message into a `passive` row unless it mostly matches an existing one; they rank below saves.
 
 ## Backup
 
