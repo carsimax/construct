@@ -5,7 +5,10 @@
 //     odd/tasks/<f>.md, T<n>` line naming an existing regular file when an
 //     unfinished feature document exists, and surfaces that do not overlap those
 //     of a writer still open;
-//   - construct:verifier needs a `Risk: item N` or `Risk: items 2, 5` line (1-6, the whole list valid).
+//   - construct:verifier needs a `Risk: item N` or `Risk: items 2, 5` line (1-6, the whole list valid);
+//   - a Workflow script (PreToolUse on Workflow) may launch only read-only agents: every agent() call
+//     names a literal agentType of the reader, lens, or judge kind, or the built-in Explore or Plan
+//     (a workflow's agent() never reaches PreToolUse on Agent, so the writer rules above cannot apply).
 // Other agents pass untouched, and an admitted launch prints nothing, so it never
 // conflicts with review-context.mjs (the hooks run in parallel; deny wins).
 // `stop` (SubagentStop) clears the stopped writer's record: it hashes the first
@@ -21,10 +24,11 @@
 // Usage: node delegation-admission.mjs [stop]   (hook JSON on stdin)
 import { createHash } from 'node:crypto'
 import { lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { activeDocuments, projectRoot } from './feature-state.mjs'
-import { namesOf, qualified } from './roles.mjs'
+import { kindOf, namesOf, qualified } from './roles.mjs'
 import { dataDir, readInput, safeName, SUBAGENT_MAX_IDLE_MS } from './hook-io.mjs'
 
 export const WRITERS = new Set(namesOf('writer').map(qualified))
@@ -329,9 +333,161 @@ function withLock(session, fn) {
   }
 }
 
+// The agent types a workflow may launch: none of them can edit files.
+const READ_ONLY_KINDS = new Set(['reader', 'lens', 'judge'])
+const READ_ONLY_BUILTINS = ['Explore', 'Plan']
+const WORKFLOW_TYPES = [...[...READ_ONLY_KINDS].flatMap((kind) => namesOf(kind)).map(qualified).sort(), ...READ_ONLY_BUILTINS]
+const WORKFLOW_FORM = 'Writes go through construct:worker with the Agent tool, where edit surfaces are admitted.'
+const readOnlyType = (type) => READ_ONLY_BUILTINS.includes(type) || READ_ONLY_KINDS.has(kindOf(type))
+
+// tokenize reads a workflow script into identifiers, string literals, and punctuation, skipping comments
+// and template text while still reading the code inside `${...}`. A template with an expression is never
+// a literal. shortcut: a regex literal is read as punctuation and strings, which may misread its contents;
+// upgrade to a real parser if workflow scripts need regexes the scan gets wrong.
+function tokenize(src) {
+  const tokens = []
+  const templates = [] // open `${` expressions: { depth, token }
+  let i = 0
+  let line = 1
+  const template = (token) => {
+    // Reads template text from i up to the closing backtick or a `${`.
+    while (i < src.length) {
+      const c = src[i]
+      if (c === '\\') i += 2
+      else if (c === '`') return void i++
+      else if (c === '$' && src[i + 1] === '{') {
+        token.literal = false
+        templates.push({ depth: 0, token })
+        return void (i += 2)
+      } else {
+        if (c === '\n') line++
+        token.value += c
+        i++
+      }
+    }
+  }
+  while (i < src.length) {
+    const c = src[i]
+    if (c === '\n') {
+      line++
+      i++
+    } else if (/\s/.test(c)) i++
+    else if (c === '/' && src[i + 1] === '/') while (i < src.length && src[i] !== '\n') i++
+    else if (c === '/' && src[i + 1] === '*') {
+      const end = src.indexOf('*/', i + 2)
+      const stop = end === -1 ? src.length : end + 2
+      line += src.slice(i, stop).split('\n').length - 1
+      i = stop
+    } else if (c === "'" || c === '"') {
+      let value = ''
+      i++
+      while (i < src.length && src[i] !== c && src[i] !== '\n') value += src[i] === '\\' ? src[(i += 1)] : src[i], i++
+      i++
+      tokens.push({ kind: 'str', value, literal: true, line })
+    } else if (c === '`') {
+      const token = { kind: 'str', value: '', literal: true, line }
+      tokens.push(token)
+      i++
+      template(token)
+    } else if (c === '}' && templates.length > 0 && templates.at(-1).depth === 0) {
+      i++
+      template(templates.pop().token)
+    } else {
+      const id = /^[A-Za-z_$][\w$]*/.exec(src.slice(i, i + 256))?.[0]
+      if (id) {
+        tokens.push({ kind: 'id', value: id, line })
+        i += id.length
+      } else {
+        if (templates.length > 0 && c === '{') templates.at(-1).depth++
+        if (templates.length > 0 && c === '}') templates.at(-1).depth--
+        tokens.push({ kind: 'p', value: c, line })
+        i++
+      }
+    }
+  }
+  return tokens
+}
+
+const GLOBALS = new Set(['globalThis', 'this', 'self', 'window', 'global'])
+
+// workflowProblem returns why a workflow script could launch an agent that writes, or null.
+export function workflowProblem(src) {
+  const tokens = tokenize(src)
+  const is = (k, value) => tokens[k]?.kind === 'p' && tokens[k].value === value
+  let calls = 0
+  for (let k = 0; k < tokens.length; k++) {
+    if (tokens[k].kind === 'id' && (tokens[k].value === 'eval' || tokens[k].value === 'Function') && !is(k - 1, '.')) {
+      return `dynamic code (eval or Function) cannot be admitted (line ${tokens[k].line})`
+    }
+    // A computed key (`globalThis['agent']`) reaches agent() without naming it as an identifier.
+    if (tokens[k].kind === 'str' && tokens[k].literal && tokens[k].value === 'agent' && is(k - 1, '[') && is(k + 1, ']')) {
+      return `agent is used other than as a direct call (line ${tokens[k].line})`
+    }
+    if (tokens[k].kind !== 'id' || tokens[k].value !== 'agent') continue
+    // A property (`o.agent`) or an object key (`{ agent: 1 }`) is not the workflow's agent(), unless the object is the global one.
+    const global = is(k - 1, '.') && tokens[k - 2]?.kind === 'id' && GLOBALS.has(tokens[k - 2].value)
+    if (global) return `agent is used other than as a direct call (line ${tokens[k].line})`
+    if (is(k - 1, '.') || (is(k + 1, ':') && (is(k - 1, '{') || is(k - 1, ',')))) continue
+    if (!is(k + 1, '(')) return `agent is used other than as a direct call (line ${tokens[k].line})`
+    calls++
+    let depth = 0
+    let type
+    for (let j = k + 1; j < tokens.length; j++) {
+      if (is(j, '(') || is(j, '[') || is(j, '{')) depth++
+      else if (is(j, ')') || is(j, ']') || is(j, '}')) {
+        if (--depth === 0) break
+      } else if (type === undefined && depth === 2 && tokens[j].kind === 'id' && tokens[j].value === 'agentType' && is(j + 1, ':')) {
+        const value = tokens[j + 2]
+        type = value?.kind === 'str' && value.literal && (is(j + 3, ',') || is(j + 3, '}')) ? value.value : null
+      }
+    }
+    if (typeof type !== 'string') return `agent() call ${calls} has no literal agentType`
+    if (!readOnlyType(type)) return `agent() call ${calls} names agentType ${JSON.stringify(type)}`
+  }
+  return null
+}
+
+// savedWorkflow finds a saved workflow's script by meta.name: the project's .claude/workflows, then the home one.
+function savedWorkflow(name, root) {
+  for (const dir of [join(root, '.claude', 'workflows'), join(homedir(), '.claude', 'workflows')]) {
+    let files = []
+    try {
+      files = readdirSync(dir).filter((f) => f.endsWith('.js')).sort()
+    } catch {
+      continue
+    }
+    for (const file of files) {
+      const text = readFileSync(join(dir, file), 'utf8')
+      const meta = /export\s+const\s+meta\s*=\s*\{[^}]*?\bname\s*:\s*(['"])(.*?)\1/s.exec(text)
+      if (meta?.[2] === name) return text
+    }
+  }
+  return null
+}
+
+function admitWorkflow(input, tool) {
+  const cwd = typeof input.cwd === 'string' && input.cwd ? input.cwd : process.cwd()
+  let src = null
+  if (typeof tool.scriptPath === 'string' && tool.scriptPath) {
+    try {
+      src = readFileSync(resolve(cwd, tool.scriptPath), 'utf8')
+    } catch {
+      deny(`A workflow may launch only read-only agents (${WORKFLOW_TYPES.join(', ')}); scriptPath ${JSON.stringify(tool.scriptPath)} cannot be read. ${WORKFLOW_FORM}`)
+      return
+    }
+  } else if (typeof tool.script === 'string') src = tool.script
+  // A name with no saved file is a bundled workflow (such as deep-research), and a bare resume reruns an admitted run.
+  else if (typeof tool.name === 'string' && tool.name) src = savedWorkflow(tool.name, projectRoot(cwd))
+  if (src === null) return
+  const problem = workflowProblem(src)
+  if (problem) deny(`A workflow may launch only read-only agents (${WORKFLOW_TYPES.join(', ')}); ${problem}. ${WORKFLOW_FORM}`)
+}
+
 function admit(input) {
   const tool = input.tool_input
-  if (input.tool_name !== 'Agent' || !tool || typeof tool !== 'object' || Array.isArray(tool)) return
+  if (!tool || typeof tool !== 'object' || Array.isArray(tool)) return
+  if (input.tool_name === 'Workflow') return admitWorkflow(input, tool)
+  if (input.tool_name !== 'Agent') return
   const raw = tool.subagent_type
   // The prefix is optional: the agent registry accepts both spellings.
   const type = qualify(raw)
