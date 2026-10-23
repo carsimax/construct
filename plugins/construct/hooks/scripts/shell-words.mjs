@@ -102,7 +102,7 @@ const WRAPPERS = {
   nohup: new Set(),
   time: new Set(),
   exec: new Set(['-a']),
-  xargs: new Set(['-n', '-I', '-L', '-P', '-s', '-d', '-E', '-a', '-l', '-i', '--max-args', '--replace', '--max-procs', '--max-lines', '--delimiter', '--arg-file']),
+  xargs: new Set(['-a', '-d', '-E', '-I', '-J', '-L', '-n', '-P', '-R', '-S', '-s', '--max-args', '--replace', '--max-procs', '--max-lines', '--delimiter', '--arg-file']),
   nice: new Set(['-n', '--adjustment']),
   ionice: new Set(['-c', '-n', '-p', '--class', '--classdata', '--pid']),
   timeout: new Set(['-s', '-k', '--signal', '--kill-after']),

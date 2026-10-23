@@ -4,7 +4,9 @@
 //     cherry-pick, `--no-gpg-sign`, and `git -c core.hooksPath=...` on any subcommand;
 //   - ask: `rm` with recursive and force flags, `git push` with `--force`, `-f`, or a `+refspec`
 //     and no `--force-with-lease`, `git reset --hard`, `git clean -f`, `git checkout -- .`,
-//     `git checkout .`, and `git restore .`, `./`, or `:/` (unless it only touches the index).
+//     `git checkout .`, and `git restore .`, `./`, or `:/` (unless it only touches the index),
+//     `find ... -exec rm` / `-execdir rm` with those flags, `find ... -delete`, and
+//     `xargs [flags] rm` with those flags.
 //   - deny also: a statement that sets `GIT_CONFIG_PARAMETERS` or `GIT_CONFIG_KEY_<n>` to
 //     core.hooksPath through `export`, `declare` or `typeset` (any flags), `readonly`, `local`,
 //     or a bare assignment, even with no `git` in that statement.
@@ -12,7 +14,7 @@
 // backticks, heredoc bodies fed to a shell), so compounds and `git -C dir` are covered. When a
 // deny and an ask both match, deny is reported. Unreadable input or any error: no output (fail open).
 // Long options match as git does: any prefix at least as long as the minimum in `abbr` calls.
-// shortcut: a heuristic parser; git aliases, interpreter one-liners, xargs, `find -exec rm`, and
+// shortcut: a heuristic parser; git aliases, interpreter one-liners, and
 // variable-built commands are not caught. Upgrade if one of them shows up in real use.
 // Usage: node command-guard.mjs   (hook JSON on stdin)
 import { readInput } from './hook-io.mjs'
@@ -107,6 +109,21 @@ function rmHit(args) {
   return null
 }
 
+// findHit: `-delete`, or an `-exec`/`-execdir` command (up to `;` or `+`) that is a dangerous rm.
+function findHit(args) {
+  if (args.includes('-delete')) return hit('ask', 'find -delete removes every match without a way back. Run the find without -delete first to list them.')
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] !== '-exec' && args[i] !== '-execdir') continue
+    const end = args.findIndex((a, k) => k > i && (a === ';' || a === '+'))
+    const cmd = args.slice(i + 1, end === -1 ? args.length : end)
+    if (cmd[0] === 'rm') {
+      const h = rmHit(cmd.slice(1))
+      if (h) return h
+    }
+  }
+  return null
+}
+
 // hitsIn returns every hit of a command line; nested lines and substitutions are walked.
 function hitsIn(command, depth = 0) {
   if (depth > MAX_DEPTH) return []
@@ -123,7 +140,7 @@ function hitsIn(command, depth = 0) {
     if (SHELLS.has(name)) for (const arg of args) if (!arg.startsWith('-')) nested(arg)
     // `export X=...; git ...`: the assignment is its own statement, so it is checked without a `git`.
     if (/^(export|declare|typeset|readonly|local|[A-Za-z_]\w*=)/.test(words[0] ?? '') && words.some(hooksEnv)) found.push(hit('deny', HOOKS_ENV_REASON))
-    const h = name === 'git' ? gitHit(args, words) : name === 'rm' ? rmHit(args) : null
+    const h = name === 'git' ? gitHit(args, words) : name === 'rm' ? rmHit(args) : name === 'find' ? findHit(args) : null
     if (h) found.push(h)
   }
   // A heredoc body is data unless its command line runs a shell.

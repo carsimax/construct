@@ -133,6 +133,22 @@ describe('ask: destructive commands', () => {
   ])
 })
 
+describe('debt-round S3: find and xargs deletes', () => {
+  expect('ask', [
+    'find . -name x -exec rm -rf {} \\;',
+    'find . -exec rm -rf {} +',
+    'find /tmp/x -execdir rm -fr {} \\;',
+    'find . -type f -delete',
+    'ls | xargs rm -rf',
+    'xargs -0 rm -rf < list',
+    'bash -c "find . -delete"',
+    'ls | xargs -i rm -rf {}',
+    'ls | xargs -J % rm -rf %',
+    'ls | xargs -n 1 rm -rf',
+  ])
+  silent(['ls | xargs -I {} echo {}', "find . -name '*.js'",'find . -exec grep x {} \\;', 'xargs rm a.txt', 'ls | xargs echo'])
+})
+
 describe('pending-round S1: git restore at the root', () => {
   expect('ask', ['git restore ./', 'git restore :/', 'git restore -- ./', 'git restore -- :/', 'git restore --worktree :/', 'git restore -s HEAD :/'])
   silent(['git restore --staged ./', 'git restore -S :/', 'git restore --staged :/', 'git restore --staged -- ./ :/'])
