@@ -16,6 +16,7 @@ Objective: enforce the publication gate in git itself, so a push from any host o
 |---|---|---|---|---|---|---|
 | T1 | S1, S2 | `pre-push.mjs`, exported verdict, `bin/construct-gate`, tests | worker | 2, 5 | done (RED by parent: empty hook fails 2 tests; suite 1083/0) | b5c9c3f |
 | T3 | S1, S2, S3 | Fix the L4 review findings | worker | 1, 2, 5 | done (RED 9 fail on T1 code; tests/pre-push 21/21; suite 1092/0) | 89a77da |
+| T4 | S1, S2, S3 | Fix the L6 round-2 findings | parent | 2, 5 | done (RED 5 fail; tests/pre-push 26/26; suite 1097/0) | 9ff0a12 |
 | T2 | S3 | README, CLAUDE.md, CONTRIBUTING table if it names the gate | worker | none | done (CONTRIBUTING table does not name the gate) | 46a9ce8 |
 
 ## Log
@@ -37,4 +38,13 @@ Objective: enforce the publication gate in git itself, so a push from any host o
 
 - **L5 (2026-10-22, parent):** Real `git push` to a bare remote in mktemp with the hook installed (judges are policy-blocked from real pushes): Risk 2 without verdict → denied, names review-risk and the subject, remote unchanged; same push with PATH lacking node → denied with the node/uninstall/--no-verify message, remote unchanged; branch with no `odd/tasks/` documents → pushed.
 
-Next step: round-2 re-review verdicts.
+- **L6 (2026-10-22, review):** Round 2 (last). Both judges: every round-1 finding fixed. New:
+  - A-N1 (major): the T3 "no `odd/tasks/*.md` in the pushed tree → allow" short-cut let a Risk document moved out of `odd/tasks/` or archived under `odd/tasks/archive/` skip review (the gate reads the merge-base and denies). Fixed: the short-cut applies only when no default branch resolves (nothing can be compared); otherwise the gate's verdict stands. Residual, marked `shortcut:` in code: with no default branch, a moved document is not seen.
+  - A-N2 = B-N1 (minor): the `merge-base` substring rewrite replaced real denials for branches named `*merge-base*`. Fixed: matches the gate's `could not be checked (git merge-base ` error only.
+  - B-N2 (minor): node check ran before the plugin-gone check. Fixed: plugin gone → warn and allow first.
+  - A-N3 (minor): set-head advice hard-coded `origin`. Fixed: names the pushed remote (`argv[2]`).
+  - A B-002 partial (minor): first push of the default branch with documents and no remote default got no ways out. Fixed: message appends them.
+  - Accepted, not fixed: A-N4 (CRLF-converted hook reads as foreign; a copied hook with the marker on line 2 is overwritten on install, by design).
+  Parent fixes inline (small edits): RED 5 new tests fail, GREEN tests/pre-push 26/26, suite 1097/0.
+
+Next step: PR on the user's word.
