@@ -1,7 +1,7 @@
 # Construct
 
 [![Claude Code](https://img.shields.io/badge/Claude_Code-2.1.304%2B-blue)](#requirements)
-[![Plugin version](https://img.shields.io/badge/version-8.3.0-informational)](plugins/construct/.claude-plugin/plugin.json)
+[![Plugin version](https://img.shields.io/badge/version-8.4.0-informational)](plugins/construct/.claude-plugin/plugin.json)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 Construct is a Claude Code plugin that makes every request follow Organic Driven Development (ODD): authorize, explore, size, track, implement test-first, and close with evidence and a Risk line.
@@ -30,7 +30,7 @@ Construct is a Claude Code plugin that makes every request follow Organic Driven
 ### One command
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v8.3.0/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v8.4.0/install.sh | bash
 ```
 
 The installer checks the requirements above and stops before changing anything if one is missing, or if `~/.claude` or `~/.claude/settings.json` is not writable, or if `settings.json` is a directory. Then it runs the manual steps below for you:
@@ -48,7 +48,7 @@ If engram or codegraph is installed, the installer says Construct no longer need
 Pass options after `bash -s --`, for example `curl -fsSL <url> | bash -s -- --no-mcp`. To read the script before running it:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v8.3.0/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v8.4.0/install.sh -o install.sh
 less install.sh
 bash install.sh
 ```
@@ -64,7 +64,7 @@ The manual steps the installer runs, for when you want to run them yourself:
    claude plugin install construct@construct
    ```
 
-   The installer (`install.sh`) pins this marketplace to the release tag (`carsimax/construct#v8.3.0`); the command above follows the default branch.
+   The installer (`install.sh`) pins this marketplace to the release tag (`carsimax/construct#v8.4.0`); the command above follows the default branch.
 
 2. Optional: inside Claude Code, in `/config`, set each role's model and effort (rows such as `Worker model`).
 
@@ -347,11 +347,13 @@ Risk line: one reply can name several items, `Risk: items 2, 5 (reason)`; the Ri
 
 ## Status
 
-Current version: 8.3.0 (`plugins/construct/.claude-plugin/plugin.json`); a minor release. Releases are tagged `vX.Y.Z`.
+Current version: 8.4.0 (`plugins/construct/.claude-plugin/plugin.json`); a minor release. Releases are tagged `vX.Y.Z`.
 
-Changes in 8.3.0:
+Changes in 8.4.0:
 
-- Workflow admission: `delegation-admission` also runs on `PreToolUse` for `Workflow`, because a workflow's `agent()` calls never reach the `Agent` hook. A script is admitted only when every `agent()` call names a literal read-only `agentType` (`construct:explorer`, the `construct:review-*` lenses, `construct:judge-a`, `construct:judge-b`, `Explore`, or `Plan`). A workflow that launched a writing agent, or an agent with no `agentType`, is now denied: send writes through `construct:worker` with the `Agent` tool.
+- Memory closer to engram: the session context lists passive learnings apart (the 3 newest) and only sessions with a summary or memories, and search ranks passive learnings below agent saves. Passive capture skips an item whose words mostly match an earlier learning and titles it by its first sentence. Subagent and background-job notices are no longer stored as prompts, a `SessionEnd` hook marks the session closed, and `construct-memory relations pending` lists unjudged relation candidates, which the session context counts.
+
+8.3.0 made `delegation-admission` also run on `PreToolUse` for `Workflow`: a workflow script is admitted only when every `agent()` call names a literal read-only `agentType`, so writes go through `construct:worker` with the `Agent` tool.
 
 8.2.0 made the `workflow`, `review`, and `delivery` skills load the repository's real state (`hooks/scripts/skill-context.mjs`), ran the commit slice only on Bash `git` calls and the context backstop once per tool batch (`PostToolBatch`), capped `construct:explorer` at 30 turns and `construct:verifier` at 50, and made `delegation`, `review`, and `workflow` model-only skills.
 
