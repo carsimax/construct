@@ -63,7 +63,8 @@ test('session: the absolute fallback names an existing file', () => {
 test('session: an empty store still names the session and the CLI', () => {
   const c = setup()
   const r = hook(c, 'session', { session_id: SID })
-  assert.ok(ctxOf(r).endsWith('\n' + LINE))
+  // An empty session is not listed (S2 of odd/tasks/memory-engram-parity.md), so only the line remains.
+  assert.equal(ctxOf(r), LINE)
 })
 
 test('compact: adds the recovery instruction', () => {
@@ -71,7 +72,7 @@ test('compact: adds the recovery instruction', () => {
   const r = hook(c, 'compact', { session_id: SID, hook_event_name: 'SessionStart', source: 'compact' })
   assert.equal(r.json.hookSpecificOutput.hookEventName, 'SessionStart')
   const text = ctxOf(r)
-  assert.ok(text.includes('\n' + LINE + '\n\nContext was compacted.'))
+  assert.ok(text.startsWith(LINE + '\n\nContext was compacted.'))
   assert.match(text, /Context was compacted\. Before anything else, save the compacted summary above with `construct-memory summary --session sess-1`, then continue with the task\./)
 })
 

@@ -412,6 +412,7 @@ describe('context (S4)', () => {
     const { store, clock } = open()
     for (let i = 0; i < 7; i++) {
       store.startSession(`sess-${i}`)
+      store.save({ title: `work of ${i}`, content: `w${i}`, type: 'discovery', session_id: `sess-${i}` })
       clock.t += MIN
     }
     store.endSession('sess-6', `${'s'.repeat(250)}`)
@@ -641,6 +642,70 @@ describe('observationsWhere (S4 of odd/tasks/wave3-loops.md)', () => {
     store.remove(gone.id)
     assert.deepEqual(store.observationsWhere(['src/a.js']).map((o) => o.title).sort(), ['decided', 'dir', 'exact', 'list'])
     assert.deepEqual(store.observationsWhere(['docs/x.md']), [])
+    store.close()
+  })
+})
+
+describe('engram-parity context and ranking (S1-S3 of odd/tasks/memory-engram-parity.md)', () => {
+  test('S1: passive rows leave Recent Observations; the 3 newest go to Recent Learnings after it', () => {
+    const { store, clock } = open()
+    store.save(obs('agent decision one', { type: 'decision' }))
+    clock.t += MIN
+    store.save(obs('agent bugfix two', { type: 'bugfix' }))
+    for (let i = 0; i < 5; i++) {
+      clock.t += MIN
+      store.save(obs(`passive learning ${i}`, { type: 'passive' }))
+    }
+    const text = store.context()
+    const observations = text.split('### Recent Observations\n')[1].split('###')[0]
+    assert.deepEqual(observations.trim().split('\n'), ['- [bugfix] **agent bugfix two**', '- [decision] **agent decision one**'])
+    const learnings = text.split('### Recent Learnings\n')[1]
+    assert.ok(text.indexOf('### Recent Observations') < text.indexOf('### Recent Learnings'))
+    assert.deepEqual(learnings.trim().split('\n'), ['- [passive] **passive learning 4**', '- [passive] **passive learning 3**', '- [passive] **passive learning 2**'])
+    store.close()
+  })
+
+  test('S1: only passive rows give a Learnings section and no Observations section', () => {
+    const { store } = open()
+    store.save(obs('lonely passive item', { type: 'passive' }))
+    const text = store.context()
+    assert.ok(!text.includes('### Recent Observations'))
+    assert.match(text, /### Recent Learnings\n- \[passive\] \*\*lonely passive item\*\*\n/)
+    store.close()
+  })
+
+  test('S2: Recent Sessions lists only sessions with a summary or a live observation', () => {
+    const { store, clock } = open()
+    store.startSession('empty-one')
+    clock.t += MIN
+    store.startSession('with-summary')
+    store.endSession('with-summary', 'did things')
+    clock.t += MIN
+    store.startSession('with-obs')
+    store.save(obs('saved in session', { session_id: 'with-obs' }))
+    clock.t += MIN
+    store.startSession('deleted-obs')
+    store.remove(store.save(obs('gone later', { session_id: 'deleted-obs' })).id)
+    const sessions = store.context().split('### Recent Sessions\n')[1].split('###')[0]
+    assert.deepEqual(sessions.match(/\*\*[^*]+\*\*/g), ['**with-obs**', '**with-summary**'])
+    store.close()
+  })
+
+  test('S3: at equal relevance a passive row ranks below an older agent save (FTS path)', () => {
+    const { store, clock } = open()
+    const agent = store.save({ title: 'widget cache layer', content: 'widget cache layer notes', type: 'decision' }).id
+    clock.t += 60 * DAY
+    const passive = store.save({ title: 'widget cache layer', content: 'widget cache layer notes', type: 'passive' }).id
+    assert.deepEqual(store.search('widget cache').map((r) => r.id), [agent, passive])
+    store.close()
+  })
+
+  test('S3: passive rows sort after the others on the short-term LIKE path', () => {
+    const { store, clock } = open()
+    const agent = store.save({ title: 'qz note', content: 'about qz', type: 'bugfix' }).id
+    clock.t += DAY
+    const passive = store.save({ title: 'qz learning', content: 'about qz too', type: 'passive' }).id
+    assert.deepEqual(store.search('qz').map((r) => r.id), [agent, passive])
     store.close()
   })
 })

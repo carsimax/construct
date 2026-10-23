@@ -1,0 +1,29 @@
+# Memory engram parity
+
+Objective: construct-memory behaves like engram where it matters: a high-signal session context, passive capture that does not drown agent saves, sessions that close, and relations that get judged. Branch: feat/memory-engram-parity. Baseline: 88fea8c. Delivery strategy: single-pr. Test runner: `node --test tests/`.
+
+## Specs
+
+- **S1 — Session context keeps passive rows apart.** "Contexto de sesión estilo Engram: primero sesiones con resumen, luego fijadas, luego observaciones recientes que no sean `passive`. Los `passive` quedan fuera o con tope de 3". `### Recent Observations` lists the 20 newest live, unpinned observations whose type is not `passive`; a new `### Recent Learnings` section after it lists the 3 newest live, unpinned `passive` ones.
+- **S2 — Recent Sessions skips empty sessions.** "\"Recent Sessions\" omite las sesiones vacías". The 5 newest sessions that have a summary or at least one live observation.
+- **S3 — Search ranks passive rows lower.** "En la búsqueda, `passive` recibe penalización de rango para que no tape a `decision` y `bugfix`." FTS path: a passive row's rank weight is halved; short-term LIKE path: passive rows sort after the others.
+- **S4 — Passive near-duplicates are skipped.** "Captura pasiva: deduplicar por similitud (una consulta FTS contra los `passive` existentes), no solo por hash exacto." An item is not stored when a live passive observation has a word set (lowercase words of 3+ characters) with Jaccard similarity of at least 0.8.
+- **S5 — Passive titles end on a word.** "El título debe dejar de ser los primeros 60 caracteres con \"...\"." The title is the item's first sentence; when longer than 80 characters it is cut at the last word boundary within 80 and gets "...".
+- **S6 — Harness notifications are not stored as prompts.** "Filtrar los prompts del harness. `SKIPPED_PROMPT` ... solo cubre `<task-notification>` al inicio. Habría que añadir los patrones de subagente y job". Prompts starting with `Subagent <name> (task ` or `Background job <id> (` are skipped like `<task-notification>`. Existing rows are left alone (deleting them is the user's call, with `prompts delete <id>`).
+- **S7 — SessionEnd closes the session.** "Un hook `SessionEnd` que marque `ended_at`." A `SessionEnd` hook (`memory-hooks.mjs end`) sets `ended_at` when unset and keeps the summary; no output, fails open.
+- **S8 — Pending relations are visible and listable.** "En el contexto de sesión, una línea \"N relaciones pendientes\" y un comando `relations pending` que alimente `judge-many`." / "En el skill `memory`: juzgar los candidatos justo después de `save`". The context ends with `Relations: N pending judgment; list them with construct-memory relations pending.` when N > 0. `construct-memory relations pending [--limit N] [--json]` lists pending relations between live observations, newest first (default 20, max 100): judgment id and both observations' id, type, and title. The memory skill says to judge candidates right after a save and the pending list with `judge-many`.
+
+## Tasks
+
+| ID | Specs | Task | Route | Risk | Status | Commit |
+|---|---|---|---|---|---|---|
+| T1 | S1, S2, S3 | Context and search ranking in memory-store.mjs, tests | parent | none | done (RED 5 fail; suite 1141/0) | T1 |
+| T2 | S4, S5, S6, S7 | Passive capture, prompt filter, SessionEnd hook, tests, docs | parent | none | pending | |
+| T3 | S8 | Pending relations line, `relations pending` command, skill, README, tests | parent | none | pending | |
+
+## Log
+
+- **L1 (2026-10-23, user):** "Vamos con el tema de la memoria, dejare que todo sea local a nivel repo, pero que mejoras podemos hacer para que nuestro sistema de memoria sea mas parecido realmente a como lo hace engram?, ya me habias dicho unas codsas que hacer pero quiero un plan completo"
+- **L2 (2026-10-23, parent):** Measured on this clone's store: passive 421/453 observations, 13 of the 20 context rows passive, 5/49 sessions summarized or ended, 82 pending vs 15 judged relations, 32/214 prompts are harness notifications, 32 observations with topic_key. Plan F1-F5 proposed; F4 (MCP server) and F5 (bulk consolidate, access counter) are later features; scopes, cloud sync, and cross-project are out (repo-local only).
+- **L3 (2026-10-23, user):** "Vamos con ese plan!" (to the recommendation: start with F1 + F2, then F3; F4 as its own feature). Dropped from F2 with reason: the Stop-time summary reminder (blocking Stop is intrusive and the Risk-line gate already owns Stop) and the CLI guessing the active session (concurrent sessions would misattribute saves; the session id is already printed in the context line).
+- **L4 (2026-10-23, parent, T1):** RED: 5 new store tests failed. Green: passive rows split into `### Recent Learnings` (3), sessions filtered by summary or live observation, passive bm25 weight 0.5 and LIKE order passive last. Two hook tests changed with S2: an empty store's session is no longer listed, so the context is the Memory line alone. Suite 1141/0.

@@ -30,6 +30,8 @@ const CONTEXT_MARKER = '\n[truncated]\n'
 const BUSY_RETRIES = 5
 const PINNED_MAX = 20
 const PINNED_BOOST = 0.1
+const PASSIVE_WEIGHT = 0.5
+const LEARNINGS_MAX = 3
 const TIMELINE_DEFAULT = 5
 const PROMPTS_DEFAULT = 20
 const PROMPTS_MAX = 100
@@ -501,10 +503,11 @@ function makeStore(db, path, now, repoName) {
         if (hasShortTerm(terms)) {
           const group = "(o.title LIKE ? ESCAPE '\\' OR o.content LIKE ? ESCAPE '\\' OR o.type LIKE ? ESCAPE '\\' OR o.topic_key LIKE ? ESCAPE '\\')"
           const patterns = terms.flatMap((t) => Array(4).fill(likePattern(t)))
-          found = all(`SELECT ${columns} FROM observations o WHERE o.deleted_at IS NULL AND (${terms.map(() => group).join(any ? ' OR ' : ' AND ')})${typeSql} ORDER BY o.updated_at DESC, o.id DESC LIMIT ?`, ...patterns, ...typeArgs, SEARCH_MAX)
+          found = all(`SELECT ${columns} FROM observations o WHERE o.deleted_at IS NULL AND (${terms.map(() => group).join(any ? ' OR ' : ' AND ')})${typeSql} ORDER BY o.type = 'passive', o.updated_at DESC, o.id DESC LIMIT ?`, ...patterns, ...typeArgs, SEARCH_MAX)
         } else {
           const match = ftsQuoted(terms, any)
-          const rank = `bm25(observations_fts, 5.0, 1.0, 0.0, 3.0) * (1.0 + ${PINNED_BOOST} * o.pinned + 0.06 * (1.0 / (1.0 + MAX(0.0, julianday(?) - julianday(o.last_seen_at)) / 30.0)) + 0.04 * ((o.revision_count + o.duplicate_count) / (o.revision_count + o.duplicate_count + 4.0)))`
+          // bm25 is negative (lower ranks first), so the passive weight below 1 pushes passive rows down.
+          const rank = `bm25(observations_fts, 5.0, 1.0, 0.0, 3.0) * (CASE o.type WHEN 'passive' THEN ${PASSIVE_WEIGHT} ELSE 1.0 END) * (1.0 + ${PINNED_BOOST} * o.pinned + 0.06 * (1.0 / (1.0 + MAX(0.0, julianday(?) - julianday(o.last_seen_at)) / 30.0)) + 0.04 * ((o.revision_count + o.duplicate_count) / (o.revision_count + o.duplicate_count + 4.0)))`
           found = all(`SELECT ${columns} FROM observations_fts f JOIN observations o ON o.id = f.rowid WHERE observations_fts MATCH ? AND o.deleted_at IS NULL${typeSql} ORDER BY ${rank} ASC, o.id ASC LIMIT ?`, match, ...typeArgs, stamp(), SEARCH_MAX)
         }
         rows = rows.concat(found.filter((r) => !seen.has(r.id)))
@@ -604,11 +607,14 @@ function makeStore(db, path, now, repoName) {
 
     // context renders the session-start text: recent sessions, prompts, and observations.
     context() {
-      const sessions = all('SELECT s.id, s.started_at, s.summary, (SELECT count(*) FROM observations o WHERE o.session_id = s.id AND o.deleted_at IS NULL) AS n FROM sessions s ORDER BY s.started_at DESC, s.rowid DESC LIMIT 5').map((s) => (injects(s.summary) ? { ...s, summary: null } : s))
+      const sessions = all('SELECT s.id, s.started_at, s.summary, (SELECT count(*) FROM observations o WHERE o.session_id = s.id AND o.deleted_at IS NULL) AS n FROM sessions s WHERE s.summary IS NOT NULL OR EXISTS (SELECT 1 FROM observations o WHERE o.session_id = s.id AND o.deleted_at IS NULL) ORDER BY s.started_at DESC, s.rowid DESC LIMIT 5').map((s) => (injects(s.summary) ? { ...s, summary: null } : s))
       const prompts = all('SELECT content, created_at FROM user_prompts ORDER BY id DESC LIMIT 10').filter((p) => !injects(p.content))
       const pinned = all('SELECT type, title, content FROM observations WHERE deleted_at IS NULL AND pinned = 1 ORDER BY created_at DESC, id DESC LIMIT ?', PINNED_MAX).filter((o) => !injects(o.title) && !injects(o.content))
-      const observations = all('SELECT type, title, content FROM observations WHERE deleted_at IS NULL AND pinned = 0 ORDER BY updated_at DESC, id DESC LIMIT 20').filter((o) => !injects(o.title) && !injects(o.content))
-      if (sessions.length + prompts.length + pinned.length + observations.length === 0) return ''
+      // Passive rows are capped apart so agent saves are not crowded out (S1 of odd/tasks/memory-engram-parity.md).
+      const recent = (passive, n) => all(`SELECT type, title, content FROM observations WHERE deleted_at IS NULL AND pinned = 0 AND type ${passive ? '=' : '!='} 'passive' ORDER BY updated_at DESC, id DESC LIMIT ?`, n).filter((o) => !injects(o.title) && !injects(o.content))
+      const observations = recent(false, 20)
+      const learnings = recent(true, LEARNINGS_MAX)
+      if (sessions.length + prompts.length + pinned.length + observations.length + learnings.length === 0) return ''
       let out = '## Memory from Previous Sessions\n\n'
       if (sessions.length) {
         out += '### Recent Sessions\n'
@@ -628,6 +634,11 @@ function makeStore(db, path, now, repoName) {
       if (observations.length) {
         out += '### Recent Observations\n'
         for (const o of observations) out += `- [${o.type}] **${flat(o.title, Infinity)}**\n`
+        out += '\n'
+      }
+      if (learnings.length) {
+        out += '### Recent Learnings\n'
+        for (const o of learnings) out += `- [${o.type}] **${flat(o.title, Infinity)}**\n`
         out += '\n'
       }
       if (Buffer.byteLength(out) <= CONTEXT_MAX_BYTES) return out
