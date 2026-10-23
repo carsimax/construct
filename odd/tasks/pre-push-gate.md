@@ -35,4 +35,6 @@ Objective: enforce the publication gate in git itself, so a push from any host o
   - A-002, A-003, A-004, B-007 (minor): malformed stdin line allows; dangling symlink at the hook path is followed; README omits `--no-verify` and the same-user/fail-open bypasses; `status` orders versions differently from the hook.
   Not acted on: B-006 (verdict returns null when repositoryRoot throws; pre-push.mjs resolves the root first and denies, so the hook's claim holds).
 
-Next step: round-2 re-review of the T3 fixes.
+- **L5 (2026-10-22, parent):** Real `git push` to a bare remote in mktemp with the hook installed (judges are policy-blocked from real pushes): Risk 2 without verdict → denied, names review-risk and the subject, remote unchanged; same push with PATH lacking node → denied with the node/uninstall/--no-verify message, remote unchanged; branch with no `odd/tasks/` documents → pushed.
+
+Next step: round-2 re-review verdicts.
