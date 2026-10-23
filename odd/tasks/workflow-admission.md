@@ -7,6 +7,7 @@ Objective: a `Workflow` tool call cannot launch a writing agent past delegation 
 - **S1 — A workflow may launch only read-only agents.** "Vamos con lo que sigu!" (to: "propongo cerrar el hueco del `Workflow` con la regla estricta: un hook `PreToolUse` sobre `Workflow` que niegue los scripts con agentes que puedan escribir, o con un `agent()` sin `agentType`"). `delegation-admission.mjs` also runs on PreToolUse `Workflow` and denies, with a reason naming the call and the allowed types, a script in which any `agent(...)` call lacks a literal `agentType` option, names a type outside the read-only set, or `agent` is used other than as a direct call. Read-only set: the registry's reader, lens, and judge kinds (`construct:explorer`, `construct:review-*`, `construct:judge-a`, `construct:judge-b`, prefix optional) and the built-in `Explore` and `Plan`. Strings, template text, and comments never count as calls; code inside `${...}` does.
 - **S2 — Where the script comes from.** `script` is checked as given; `scriptPath` is read (relative to the cwd) and an unreadable path is denied; `name` is looked up as a saved workflow (`meta.name` in `.claude/workflows/*.js` of the project, then `~/.claude/workflows/*.js`) and checked when found; a name with no saved file (a bundled workflow such as `/deep-research`) and a bare `resumeFromRunId` pass. Any internal error fails open, as the rest of the hook does.
 - **S3 — Docs.** README (delegation admission), CLAUDE.md hook list, and the delegation skill say that workflows are read-only and writes go through `construct:worker` with the Agent tool.
+- **S4 — Release 8.3.0 and PR.** "1" (to: "preparar la 8.3.0 y abrir el PR, y anotar en él que la revisión independiente fue parcial"). Bump as in 35dea14; the PR states the independent review was partial.
 
 ## Tasks
 
@@ -15,6 +16,7 @@ Objective: a `Workflow` tool call cannot launch a writing agent past delegation 
 | T1 | S1, S2, S3 | Workflow admission in delegation-admission.mjs, hooks.json, tests, docs | parent | 2 | done (RED 8+1 fail; suite 1132/0; validate; live L3) | a858a2f |
 | T2 | S1 | Close the bypasses the parent probing found (L4) | parent | 2 | done (RED 3+1 fail; suite 1134/0) | 93d0da9 |
 | T3 | S1, S2 | Review findings and remaining bypasses (L5) | parent | 2 | done (RED 2 fail; suite 1136/0) | 47d531c |
+| T4 | S4 | Release 8.3.0 bump and PR | parent | 5 | done (suite 1136/0; validate --strict both) | release |
 
 ## Log
 
