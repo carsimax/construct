@@ -29,7 +29,7 @@ const clusterWidth = (g) => (WIDE.test(String.fromCodePoint(g.codePointAt(0))) |
 const cols = (s) => (PLAIN.test(s) ? s.length : [...SEGMENTER.segment(s)].reduce((n, { segment }) => n + clusterWidth(segment), 0))
 // The longest prefix of `s` within `max` columns; a cluster is never split.
 function head(s, max) {
-  if (PLAIN.test(s)) return s.slice(0, max)
+  if (PLAIN.test(s)) return s.slice(0, Math.max(0, max))
   let out = ''
   let used = 0
   for (const { segment } of SEGMENTER.segment(s)) {

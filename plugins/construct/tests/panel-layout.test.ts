@@ -870,3 +870,9 @@ test('S4 a clipped name never ends in a broken cluster', () => {
     expect(cellsOf(row), unit).toBeLessThanOrEqual(36)
   }
 })
+
+test('S4 an ASCII change path never overflows when huge counts leave no room for it', () => {
+  const rows = rowsOf({ columns: 40, changes: [{ path: 'src/aVeryLongDirectoryName/aVeryLongFileNameThatKeepsGoingAndGoing.ts', added: Number.MAX_VALUE, removed: Number.MAX_VALUE }] })
+  expect(rows.join('\n')).not.toContain('aVery') // no room for the path: it is dropped, not left whole
+  for (const r of rows) expect(cellsOf(r), r).toBeLessThanOrEqual(36)
+})
