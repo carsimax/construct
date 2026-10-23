@@ -19,7 +19,7 @@ Objective: enforce the publication gate in git itself, so a push from any host o
 | T1 | S1, S2 | `pre-push.mjs`, exported verdict, `bin/construct-gate`, tests | worker | 2, 5 | done (RED by parent: empty hook fails 2 tests; suite 1083/0) | b5c9c3f |
 | T3 | S1, S2, S3 | Fix the L4 review findings | worker | 1, 2, 5 | done (RED 9 fail on T1 code; tests/pre-push 21/21; suite 1092/0) | 89a77da |
 | T4 | S1, S2, S3 | Fix the L6 round-2 findings | parent | 2, 5 | done (RED 5 fail; tests/pre-push 26/26; suite 1097/0) | 9ff0a12 |
-| T5 | S4 | Release 8.1.0 bump | worker | 5 | pending | — |
+| T5 | S4 | Release 8.1.0 bump | worker | 5 | done (RED 3 install; suite 1097/0; validate --strict both) | da38784 |
 | T2 | S3 | README, CLAUDE.md, CONTRIBUTING table if it names the gate | worker | none | done (CONTRIBUTING table does not name the gate) | 46a9ce8 |
 
 ## Log
@@ -52,4 +52,6 @@ Objective: enforce the publication gate in git itself, so a push from any host o
 
 - **L7 (2026-10-22, user):** "ok". Added S4, T5.
 
-Next step: T5 bump, then push and PR.
+- **L8 (2026-10-22, parent):** Pushed from the Pi host (the PreToolUse gate does not fire here; the pre-push hook is not installed in this clone). Required lenses (review-risk, review-resilience) were not recorded in Construct's store; the blind dual review of L4 and L6 stands in.
+
+Next step: merge on the user's word; tag v8.1.0 and Release after merge.
