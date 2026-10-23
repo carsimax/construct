@@ -133,6 +133,22 @@ describe('ask: destructive commands', () => {
   ])
 })
 
+describe('pending-round S1: git restore at the root', () => {
+  expect('ask', ['git restore ./', 'git restore :/', 'git restore -- ./', 'git restore -- :/', 'git restore --worktree :/'])
+  silent(['git restore --staged ./', 'git restore -S :/', 'git restore --staged :/'])
+})
+
+describe('pending-round S2: exported hooks-path config', () => {
+  expect('deny', [
+    "export GIT_CONFIG_PARAMETERS=\"'core.hooksPath=/dev/null'\"; git commit -m x",
+    'export GIT_CONFIG_KEY_0=core.hooksPath',
+    'declare -x GIT_CONFIG_KEY_1=core.hooksPath',
+    'typeset -x GIT_CONFIG_KEY_2=core.hooksPath',
+    "GIT_CONFIG_PARAMETERS=\"'core.hooksPath=x'\"; git push",
+  ])
+  silent(["export GIT_CONFIG_PARAMETERS=\"'user.name=x'\"", 'export FOO=core.hooksPath', 'echo GIT_CONFIG_KEY_0=core.hooksPath'])
+})
+
 describe('allowed', () => {
   silent([
     'git push --force-with-lease',
