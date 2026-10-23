@@ -15,7 +15,7 @@ Objective: enforce the publication gate in git itself, so a push from any host o
 | ID | Specs | Task | Route | Risk | Status | Commit |
 |---|---|---|---|---|---|---|
 | T1 | S1, S2 | `pre-push.mjs`, exported verdict, `bin/construct-gate`, tests | worker | 2, 5 | done (RED by parent: empty hook fails 2 tests; suite 1083/0) | b5c9c3f |
-| T3 | S1, S2, S3 | Fix the L4 review findings | worker | 1, 2, 5 | pending | — |
+| T3 | S1, S2, S3 | Fix the L4 review findings | worker | 1, 2, 5 | done (RED 9 fail on T1 code; tests/pre-push 21/21; suite 1092/0) | 89a77da |
 | T2 | S3 | README, CLAUDE.md, CONTRIBUTING table if it names the gate | worker | none | done (CONTRIBUTING table does not name the gate) | 46a9ce8 |
 
 ## Log
@@ -35,4 +35,4 @@ Objective: enforce the publication gate in git itself, so a push from any host o
   - A-002, A-003, A-004, B-007 (minor): malformed stdin line allows; dangling symlink at the hook path is followed; README omits `--no-verify` and the same-user/fail-open bypasses; `status` orders versions differently from the hook.
   Not acted on: B-006 (verdict returns null when repositoryRoot throws; pre-push.mjs resolves the root first and denies, so the hook's claim holds).
 
-Next step: T3 worker, then re-review.
+Next step: round-2 re-review of the T3 fixes.
