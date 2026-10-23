@@ -1,7 +1,7 @@
 # Construct
 
 [![Claude Code](https://img.shields.io/badge/Claude_Code-2.1.304%2B-blue)](#requirements)
-[![Plugin version](https://img.shields.io/badge/version-8.1.0-informational)](plugins/construct/.claude-plugin/plugin.json)
+[![Plugin version](https://img.shields.io/badge/version-8.2.0-informational)](plugins/construct/.claude-plugin/plugin.json)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 Construct is a Claude Code plugin that makes every request follow Organic Driven Development (ODD): authorize, explore, size, track, implement test-first, and close with evidence and a Risk line.
@@ -30,7 +30,7 @@ Construct is a Claude Code plugin that makes every request follow Organic Driven
 ### One command
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v8.1.0/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v8.2.0/install.sh | bash
 ```
 
 The installer checks the requirements above and stops before changing anything if one is missing, or if `~/.claude` or `~/.claude/settings.json` is not writable, or if `settings.json` is a directory. Then it runs the manual steps below for you:
@@ -48,7 +48,7 @@ If engram or codegraph is installed, the installer says Construct no longer need
 Pass options after `bash -s --`, for example `curl -fsSL <url> | bash -s -- --no-mcp`. To read the script before running it:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v8.1.0/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v8.2.0/install.sh -o install.sh
 less install.sh
 bash install.sh
 ```
@@ -64,7 +64,7 @@ The manual steps the installer runs, for when you want to run them yourself:
    claude plugin install construct@construct
    ```
 
-   The installer (`install.sh`) pins this marketplace to the release tag (`carsimax/construct#v8.1.0`); the command above follows the default branch.
+   The installer (`install.sh`) pins this marketplace to the release tag (`carsimax/construct#v8.2.0`); the command above follows the default branch.
 
 2. Optional: inside Claude Code, in `/config`, set each role's model and effort (rows such as `Worker model`).
 
@@ -132,7 +132,7 @@ How the routing works:
 - The plugin's mod (`hooks/register.js`) applies the configured model when a subagent spawns and the configured effort on each of its requests.
 - A model passed explicitly on the Agent call wins; the configured model applies only when the call names none.
 - An effort of `default` keeps the model's own effort.
-- Turn budgets: `construct:explorer` stops after 30 turns, `construct:verifier` after 50, and each lens after 2. A capped agent returns its output marked partial, and it can be resumed. `construct:general` always runs in the background.
+- Turn budgets: `construct:explorer` stops after 30 turns, `construct:verifier` after 50, and each lens after 2. A capped agent returns its output marked partial, and it can be resumed.
 - The `delegation`, `review`, and `workflow` skills are model-only (`user-invocable: false`): the orchestrator loads them, and they do not appear in the `/` menu. Ask for a review in plain words.
 - The 5.x options `model_odd_*`, `effort_odd_*`, `model_jd_*`, and `effort_jd_*` are deprecated and still read while the matching `model_<role>` / `effort_<role>` is `inherit` (for example `model_odd_worker` for `model_worker`); set the new keys instead.
 - If the mod cannot run, each agent keeps the model and effort in its own frontmatter.
@@ -248,7 +248,7 @@ An approval never authorizes delivery. Commit, push, pull request, and merge sta
 
 ### Skill state
 
-`workflow`, `review`, and `delivery` open with a `## Current state` line that Claude Code runs when the skill loads (`hooks/scripts/skill-context.mjs <workflow|review|delivery>`): `workflow` shows `git status --short` (at most 12 lines, with a count of the rest) and the unfinished tasks of `odd/tasks/*.md`; `review` shows the lenses the Risk cells of the feature documents changed on the branch require (`LENSES_BY_RISK`) and which of them approved HEAD; `delivery` shows the same authored-lines number as the commit-slice signal. The script is read-only (it never writes the review store), prints at most 1,500 characters, and always exits 0: any failure (not a repository, no default branch, unknown kind) prints one `(state unavailable: <reason>)` line, because a non-zero exit would abort the skill.
+`workflow`, `review`, and `delivery` open with a `## Current state` line that Claude Code runs when the skill loads (`hooks/scripts/skill-context.mjs <workflow|review|delivery>`): `workflow` shows the unfinished tasks of `odd/tasks/*.md` first, then `git status --short` (at most 12 lines, with a count of the rest; read without taking the index lock); `review` shows the lenses the Risk cells of the feature documents changed on the branch require (`LENSES_BY_RISK`) and which of them approved HEAD; `delivery` shows the same authored-lines number as the commit-slice signal. The script is read-only (it never writes the review store), prints at most 1,500 characters, and always exits 0: any failure (not a repository, no default branch, unknown kind) prints one `(state unavailable: <reason>)` line, because a non-zero exit would abort the skill.
 
 ### Delivery signals
 
@@ -346,12 +346,16 @@ Risk line: one reply can name several items, `Risk: items 2, 5 (reason)`; the Ri
 
 ## Status
 
-Current version: 8.1.0 (`plugins/construct/.claude-plugin/plugin.json`); a minor release, nothing breaks. Releases are tagged `vX.Y.Z`.
+Current version: 8.2.0 (`plugins/construct/.claude-plugin/plugin.json`); a minor release, nothing breaks. Releases are tagged `vX.Y.Z`.
 
-Changes in 8.1.0:
+Changes in 8.2.0:
 
-- `construct-gate install | uninstall | status` adds an opt-in git pre-push hook (`hooks/scripts/pre-push.mjs`) that applies the publication gate's verdict to every push from the clone, from any host. It is a discipline layer: `git push --no-verify` skips it, it needs node on PATH, and it allows the push with a warning when the plugin is gone.
-- The README states what each gate layer guarantees.
+- The `workflow`, `review`, and `delivery` skills load the repository's real state (`hooks/scripts/skill-context.mjs`): the working tree and unfinished tasks, the lenses the Risk cells require and their verdicts for HEAD (the publication gate's own `reviewState`), and the branch's authored lines. The script always exits 0.
+- `delivery-signals` runs the commit slice only on Bash calls that run `git` (`if: "Bash(git *)"`) and the context backstop once per tool batch (`PostToolBatch`).
+- `construct:explorer` stops after 30 turns and `construct:verifier` after 50; `delegation`, `review`, and `workflow` are model-only skills.
+- The repository ships project skills for developing Construct (`.claude/skills/`, including the official `plugin-dev` and `skill-creator` skills).
+
+8.1.0 added `construct-gate install | uninstall | status`, an opt-in git pre-push hook that applies the publication gate's verdict to every push from the clone, and stated in the README what each gate layer guarantees.
 
 8.0.0 was a major release with one breaking change: the main thread makes small inline edits (up to `inline_edit_max_lines` lines per call, default 20; `0` restores the 7.x rule), see "Upgrading to 8.0". It also made `scripts/eval.sh` write `summary.json` (pass rates, cost, duration, turns), renamed the `small-delegated*` evals to `small-inline*`, and let each eval case ship an `outcome.sh` that checks the result in a clean directory.
 
