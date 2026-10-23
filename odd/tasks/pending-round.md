@@ -35,4 +35,6 @@ Objective: close the advisory follow-ups left open by mechanical-guards, panel-c
 
 - **L4 (2026-10-22, review):** Recheck of e55ea09..dab97aa: review-risk and review-reliability approved, no findings. Release folded into this branch as one PR instead of a stacked release PR.
 
-Next step: T5 release worker; then review-risk and review-resilience (Risk 5) on the new subject; PR is the user's call; tag v6.1.0 after merge.
+- **L5 (2026-10-22, review):** Subject e55ea09..90d7664: review-risk, review-resilience, review-reliability approved, no findings. Converge: S1-S6 each have a done task; no gap.
+
+Next step: user decides push and PR (title with 6.1.0); tag v6.1.0 after merge.
