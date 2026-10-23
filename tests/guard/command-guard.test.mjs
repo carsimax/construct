@@ -199,6 +199,20 @@ describe('debt-round S4: asks are opt-in', () => {
       assert.equal(run('rm -rf x', { asks }).decision, 'ask')
     })
   }
+  // Regression guards: these already passed against the current code.
+  for (const command of ['git push --force', 'git clean -fd', 'git checkout .', 'git restore ./', 'find . -exec sudo rm -rf {} \\;', 'ls | xargs -i rm -rf {}']) {
+    test(`no output with asks unset: ${command}`, () => {
+      const r = run(command, { asks: null })
+      assert.equal(r.status, 0)
+      assert.equal(r.stdout, '')
+    })
+  }
+  test('asks=on leaves asks off', () => {
+    assert.equal(run('rm -rf x', { asks: 'on' }).stdout, '')
+  })
+  test('deny holds with asks unset after a destructive command', () => {
+    assert.equal(run('rm -rf x; git push --no-verify', { asks: null }).decision, 'deny')
+  })
 })
 
 describe('allowed', () => {
