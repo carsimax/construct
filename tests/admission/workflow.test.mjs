@@ -96,6 +96,13 @@ describe('workflow script', () => {
     allowed(workflow({ script: `${META}const half = 4 / 2 / 1\nconst o = { agent: 1 }\nawait agent(\`x\${half / 2}\`, { agentType: 'Explore' })` }))
   })
 
+  test('a constructor chain and a slash right after a closing brace are denied', () => {
+    denied(workflow({ script: `${META}const F = (() => {}).constructor\nawait F('return agent')()('x')` }), 'a constructor reference cannot be admitted (line 2)')
+    denied(workflow({ script: `${META}const F = x['constructor']` }), 'a constructor reference cannot be admitted (line 2)')
+    denied(workflow({ script: `${META}if (a) { }\n/\`/.test(s); await agent('x')` }), 'a / right after } is ambiguous; assign the regex to a variable first (line 3)')
+    allowed(workflow({ script: `${META}const re = /a\\/b/g\nif (re.test(s)) { log('x') }\nawait agent('x', { agentType: 'Plan' })` }))
+  })
+
   test('strings, template text, comments, and properties are not calls; code inside ${} is', () => {
     allowed(
       workflow({
@@ -130,6 +137,13 @@ describe('script source', () => {
     writeFileSync(join(home, '.claude', 'workflows', 'other.js'), "export const meta = {\n  name: \"triage\",\n  description: 'd',\n}\nawait agent('a', { agentType: 'construct:worker' })")
     denied(workflow({ name: 'sweep' }, { cwd: repo, home }), 'agent() call 1 has no literal agentType')
     denied(workflow({ name: 'triage' }, { cwd: repo, home }), 'agent() call 1 names agentType "construct:worker"')
+  })
+
+  test('an unreadable entry in the workflows directory is skipped, not a reason to fail open', () => {
+    const repo = makeRepo()
+    mkdirSync(join(repo, '.claude', 'workflows', 'a.js'), { recursive: true })
+    write(repo, '.claude/workflows/b.js', "export const meta = { name: 'sweep', description: 'd' }\nawait agent('a')")
+    denied(workflow({ name: 'sweep' }, { cwd: repo }), 'agent() call 1 has no literal agentType')
   })
 
   test('a bundled workflow name and a bare resume pass; the stored files are untouched', () => {

@@ -343,8 +343,8 @@ const readOnlyType = (type) => READ_ONLY_BUILTINS.includes(type) || READ_ONLY_KI
 // tokenize reads a workflow script into identifiers, string literals, and punctuation, skipping comments
 // and template text while still reading the code inside `${...}`. A template with an expression is never
 // a literal. A `/` that cannot end a value starts a regex literal, read up to its closing `/` (a class
-// `[...]` may hold `/`). shortcut: `}` is taken as ending a value, so a regex right after a block is read
-// as division; upgrade to a real parser if a script needs that.
+// `[...]` may hold `/`). A `/` right after `}` (a block or an object: the scan cannot tell) is denied by
+// workflowProblem, so a regex there cannot hide code from the scan.
 const KEYWORDS = new Set(['return', 'typeof', 'instanceof', 'in', 'of', 'new', 'delete', 'void', 'throw', 'case', 'do', 'else', 'yield', 'await'])
 const endsValue = (token) =>
   token !== undefined && (token.kind === 'str' || (token.kind === 'id' && !KEYWORDS.has(token.value)) || (token.kind === 'p' && /[\w)\]}$]/.test(token.value)))
@@ -443,6 +443,9 @@ export function workflowProblem(src) {
   for (let k = 0; k < tokens.length; k++) {
     const { kind, value } = tokens[k]
     if (kind === 'p' && value === '\\') return `an escape outside a string cannot be admitted ${at(k)}`
+    if ((kind === 'p' || kind === 're') && is(k - 1, '}') && (value === '/' || kind === 're')) return `a / right after } is ambiguous; assign the regex to a variable first ${at(k)}`
+    // `(() => {}).constructor` is Function under another name.
+    if ((kind === 'id' || (kind === 'str' && tokens[k].literal)) && value === 'constructor') return `a constructor reference cannot be admitted ${at(k)}`
     if (kind !== 'id' || is(k - 1, '.')) continue
     if (value === 'eval' || value === 'Function') return `dynamic code (eval or Function) cannot be admitted ${at(k)}`
     if (GLOBALS.has(value)) return `the global object cannot be referenced ${at(k)}`
@@ -488,7 +491,12 @@ function savedWorkflow(name, root) {
       continue
     }
     for (const file of files) {
-      const text = readFileSync(join(dir, file), 'utf8')
+      let text
+      try {
+        text = readFileSync(join(dir, file), 'utf8')
+      } catch {
+        continue // an unreadable entry (a directory named x.js) is not a saved workflow
+      }
       const meta = /export\s+const\s+meta\s*=\s*\{[^}]*?\bname\s*:\s*(['"])(.*?)\1/s.exec(text)
       if (meta?.[2] === name) return text
     }
