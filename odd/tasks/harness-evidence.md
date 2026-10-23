@@ -84,4 +84,6 @@ Objective: measure whether Construct improves outcomes and at what cost, then cu
 
 - **L12 (2026-10-22, user):** "dale al 8.0.0". Added S6, T6.
 
-Next step: PR with (8.0.0) in the title on the user's word (gate needs lenses for Risk 2, 3, 5); tag v8.0.0 and Release after merge.
+- **L13 (2026-10-22, user):** "abre la or". Pushed and opened PR #59. The push ran from the Pi host, where Construct's publication gate does not fire: the required lenses (review-risk, review-reliability, review-resilience) were not run before publication.
+
+Next step: run the lenses on PR #59 before merge; tag v8.0.0 and Release after merge.
