@@ -27,15 +27,15 @@ done`
 const hookText = () => `#!/bin/sh
 ${MARKER}
 recorded='${quote(SELF)}'
-if ! command -v node >/dev/null 2>&1; then
-  echo "construct-gate: the Construct pre-push gate needs node on PATH (GUI and IDE git clients often lack it), so this push is denied. Put node on PATH, run 'construct-gate uninstall' to remove this hook, or use 'git push --no-verify' to skip it once." >&2
-  exit 1
-fi
 ${PICK}
 [ -n "$script" ] || script="$recorded"
 if [ ! -f "$script" ]; then
   echo "construct-gate: the Construct plugin was not found, so this push was not checked (construct-gate uninstall removes this hook)" >&2
   exit 0
+fi
+if ! command -v node >/dev/null 2>&1; then
+  echo "construct-gate: the Construct pre-push gate needs node on PATH (GUI and IDE git clients often lack it), so this push is denied. Put node on PATH, run 'construct-gate uninstall' to remove this hook, or use 'git push --no-verify' to skip it once." >&2
+  exit 1
 fi
 exec node "$script" "$@"
 `

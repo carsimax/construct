@@ -290,3 +290,59 @@ describe('review findings fixed in T3', () => {
     assert.ok(gate(repo, config, 'status').stdout.includes(`script: ${join(root, newest, 'hooks/scripts/pre-push.mjs')}`))
   })
 })
+
+describe('round-2 review findings', () => {
+  test('N-1: a branch whose name contains merge-base keeps the real denial reason', () => {
+    const { repo, bare, config } = installed('2')
+    git(repo, 'branch', '-m', 'feat', 'fix-merge-base')
+    const r = push(repo, config, 'origin', 'fix-merge-base')
+    assert.notEqual(r.status, 0)
+    assert.match(r.stderr, /review-risk/)
+    assert.doesNotMatch(r.stderr, /shares no history/)
+    assert.ok(!remoteRefs(bare).includes('refs/heads/fix-merge-base'))
+  })
+
+  test('N-2: with the plugin gone and no node on PATH the hook still warns and allows', () => {
+    const { repo, config } = installed('2')
+    const hook = join(repo, '.git/hooks/pre-push')
+    writeFileSync(hook, readFileSync(hook, 'utf8').replace(/^recorded='.*'$/m, "recorded='/nonexistent/pre-push.mjs'"))
+    const bin = scratchDir('pre-push-bin-')
+    for (const tool of ['sh', 'ls', 'sort']) symlinkSync(sh(repo, 'sh', ['-c', `command -v ${tool}`]).stdout.trim(), join(bin, tool))
+    const r = sh(repo, '/bin/sh', [hook], { allowFailure: true, env: { PATH: bin, CLAUDE_CONFIG_DIR: config }, input: '' })
+    assert.equal(r.status, 0, r.stderr)
+    assert.match(r.stderr, /plugin was not found/)
+  })
+})
+
+describe('round-2 judge A findings', () => {
+  for (const [name, to] of [['moved out of odd/tasks/', 'docs/f.md'], ['archived under odd/tasks/', 'odd/tasks/archive/f.md']]) {
+    test(`N1: a Risk 2 document ${name} after the merge-base is still judged`, () => {
+      const { repo, bare } = setup('2')
+      git(repo, 'checkout', '-q', 'main')
+      applyFiles(repo, { 'odd/tasks/f.md': TABLE('2') })
+      commitAll(repo, 'track')
+      git(repo, 'push', '-q', 'origin', 'main')
+      git(repo, 'fetch', '-q', 'origin')
+      git(repo, 'checkout', '-q', '-b', 'moved')
+      mkdirSync(join(repo, to, '..'), { recursive: true })
+      git(repo, 'mv', 'odd/tasks/f.md', to)
+      applyFiles(repo, { 'src/app.js': 'export const a = 3\n' })
+      commitAll(repo, 'move')
+      const config = configDir()
+      assert.equal(gate(repo, config, 'install').status, 0)
+      const r = push(repo, config, 'origin', 'moved')
+      assert.notEqual(r.status, 0, r.stderr)
+      assert.match(r.stderr, /review-risk/)
+      assert.ok(!remoteRefs(bare).includes('refs/heads/moved'))
+    })
+  }
+
+  test('N3: the set-head advice names the remote being pushed to', () => {
+    const { repo, config } = installed('2', { fetch: false })
+    git(repo, 'branch', '-m', 'main', 'trunk')
+    git(repo, 'remote', 'rename', 'origin', 'upstream')
+    const r = push(repo, config, 'upstream', 'feat')
+    assert.notEqual(r.status, 0)
+    assert.match(r.stderr, /git remote set-head upstream --auto/)
+  })
+})
