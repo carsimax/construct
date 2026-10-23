@@ -17,7 +17,7 @@ Objective: construct-memory behaves like engram where it matters: a high-signal 
 
 | ID | Specs | Task | Route | Risk | Status | Commit |
 |---|---|---|---|---|---|---|
-| T1 | S1, S2, S3 | Context and search ranking in memory-store.mjs, tests | parent | none | done (RED 5 fail; suite 1141/0) | T1 |
+| T1 | S1, S2, S3 | Context and search ranking in memory-store.mjs, tests | parent | none | done (RED 5 fail; suite 1141/0) | b591e61 |
 | T2 | S4, S5, S6, S7 | Passive capture, prompt filter, SessionEnd hook, tests, docs | parent | none | pending | |
 | T3 | S8 | Pending relations line, `relations pending` command, skill, README, tests | parent | none | pending | |
 
