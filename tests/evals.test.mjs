@@ -147,3 +147,13 @@ test('memory-recall outcome.sh passes UTC formatLogTime and fails local time', (
   const local = '`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}T${String(date.getHours()).padStart(2, "0")}:04:05`';
   assert.notEqual(outcome('memory-recall', add(local)), 0);
 });
+
+// claude plugin eval defaults a tool_used min to 1, so `max: 0` alone can never pass ("expected 1..0").
+test('every tool_used grader with max 0 also sets min 0', () => {
+  const dir = fileURLToPath(new URL('../plugins/construct/evals/', import.meta.url));
+  const graders = spawnSync('find', [dir, '-path', '*/graders/*.md'], { encoding: 'utf8' }).stdout.trim().split('\n');
+  for (const file of graders) {
+    const front = readFileSync(file, 'utf8').split(/^---$/m)[1] ?? '';
+    if (/^type: tool_used$/m.test(front) && /^max: 0$/m.test(front)) assert.match(front, /^min: 0$/m, file);
+  }
+});

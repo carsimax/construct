@@ -94,7 +94,7 @@ test('small work is inline up to inline_edit_max_lines and bigger edits go to th
   const sizing = readFileSync(join(pluginRoot, 'skills/workflow/SKILL.md'), 'utf8')
   assert.match(sizing, /- Small: done inline \(edit calls up to `inline_edit_max_lines` lines/)
   const grader = readFileSync(join(pluginRoot, 'evals/small-inline/graders/no-delegation.md'), 'utf8')
-  assert.match(grader, /tool: Agent\nmax: 0/)
+  assert.match(grader, /tool: Agent\nmin: 0\nmax: 0/)
   assert.doesNotMatch(grader, /arm: both/)
   const option = JSON.parse(readFileSync(join(pluginRoot, '.claude-plugin/plugin.json'), 'utf8')).userConfig.inline_edit_max_lines
   assert.equal(option.type, 'number')
