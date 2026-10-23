@@ -11,16 +11,18 @@ Objective: Claude recalls and saves memory through the `mem_*` MCP tools without
 - **S5 — The other skills name the tool first.** "primero vamos asi" (to: "paso a MCP primero los skills que siguen nombrando solo el CLI ... `construct:explorer` seguiría usando el CLI"). Every line of the workflow (and its persistence and research references), debugging, delegation, review, constraints, migration, and sources skills that names `construct-memory search|save|summary` names the `mem_*` tool before it; each skill stays within its word budget; `agents/explorer.md` keeps `construct-memory search`.
 - **S6 — The fallback is explicit.** "Si deja claro que si falla deje el metodo alternativo". The contract says "if the tool is missing or fails" before the CLI search and "if it fails" before the CLI save; the Memory line says "when a tool is missing or fails, use `construct-memory`"; the memory skill says "run the CLI when the tool is missing or fails, or the command is CLI-only".
 - **S7 — Wider live check.** 10 runs on the branch: 4 recall prompts, 3 save prompts, 3 where a `construct:general` subagent recalls; the first memory call of each is recorded.
+- **S8 — Release 8.6.1 and PR.** "primero vamos asi" (to: "skills MCP primero, medición de 10 ejecuciones y luego el release 8.6.1 junto con esta rama"). Bump as in 8.6.0, push the branch, open the PR.
 
 ## Tasks
 
 | ID | Specs | Task | Route | Risk | Status | Commit |
 |---|---|---|---|---|---|---|
-| T1 | S4 | Baseline live runs on main | parent | none | done (1/3 MCP first) | see L3 |
-| T2 | S1, S2, S3 | Contract, Memory line, skill, tests | parent | 3 | done (RED 5 fail; suite 1175/0) | see L4 |
-| T3 | S4 | Live runs on the branch | parent | none | done (3/3 MCP first) | see L5 |
-| T4 | S5, S6 | Other skills MCP first, explicit failure fallback, tests | parent | 3 | done (RED 1 fail; suite 1176/0) | see L6 |
-| T5 | S7 | 10-run live check | parent | none | done (10/10 MCP first) | see L7 |
+| T1 | S4 | Baseline live runs on main | parent | none | done (1/3 MCP first) | none (probe) |
+| T2 | S1, S2, S3 | Contract, Memory line, skill, tests | parent | 3 | done (RED 5 fail; suite 1175/0) | 21a1586 |
+| T3 | S4 | Live runs on the branch | parent | none | done (3/3 MCP first) | none (probe) |
+| T4 | S5, S6 | Other skills MCP first, explicit failure fallback, tests | parent | 3 | done (RED 1 fail; suite 1176/0) | 28eebb7 |
+| T5 | S7 | 10-run live check | parent | none | done (10/10 MCP first) | none (probe) |
+| T6 | S8 | Release 8.6.1 bump, push, PR | parent | 5 | done (suite green) | release |
 
 ## Log
 

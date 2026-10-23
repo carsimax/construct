@@ -1,7 +1,7 @@
 # Construct
 
 [![Claude Code](https://img.shields.io/badge/Claude_Code-2.1.304%2B-blue)](#requirements)
-[![Plugin version](https://img.shields.io/badge/version-8.6.0-informational)](plugins/construct/.claude-plugin/plugin.json)
+[![Plugin version](https://img.shields.io/badge/version-8.6.1-informational)](plugins/construct/.claude-plugin/plugin.json)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 Construct is a Claude Code plugin that makes every request follow Organic Driven Development (ODD): authorize, explore, size, track, implement test-first, and close with evidence and a Risk line.
@@ -30,7 +30,7 @@ Construct is a Claude Code plugin that makes every request follow Organic Driven
 ### One command
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v8.6.0/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v8.6.1/install.sh | bash
 ```
 
 The installer checks the requirements above and stops before changing anything if one is missing, or if `~/.claude` or `~/.claude/settings.json` is not writable, or if `settings.json` is a directory. Then it runs the manual steps below for you:
@@ -48,7 +48,7 @@ If engram or codegraph is installed, the installer says Construct no longer need
 Pass options after `bash -s --`, for example `curl -fsSL <url> | bash -s -- --no-mcp`. To read the script before running it:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v8.6.0/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v8.6.1/install.sh -o install.sh
 less install.sh
 bash install.sh
 ```
@@ -64,7 +64,7 @@ The manual steps the installer runs, for when you want to run them yourself:
    claude plugin install construct@construct
    ```
 
-   The installer (`install.sh`) pins this marketplace to the release tag (`carsimax/construct#v8.6.0`); the command above follows the default branch.
+   The installer (`install.sh`) pins this marketplace to the release tag (`carsimax/construct#v8.6.1`); the command above follows the default branch.
 
 2. Optional: inside Claude Code, in `/config`, set each role's model and effort (rows such as `Worker model`).
 
@@ -349,11 +349,13 @@ Risk line: one reply can name several items, `Risk: items 2, 5 (reason)`; the Ri
 
 ## Status
 
-Current version: 8.6.0 (`plugins/construct/.claude-plugin/plugin.json`); a minor release. Releases are tagged `vX.Y.Z`.
+Current version: 8.6.1 (`plugins/construct/.claude-plugin/plugin.json`); a patch release. Releases are tagged `vX.Y.Z`.
 
-Changes in 8.6.0:
+Changes in 8.6.1:
 
-- Memory maintenance: passive learnings are never relation candidates, and more harness notices (review bindings, todo reminders, Stop hook feedback) are not stored as prompts. `get` counts reads (`accessed: N`, a small search boost); the two columns are added to existing stores without a schema version bump, so older construct versions on other worktrees keep working. `construct-memory review passive [--days N] [--json]` lists passive learnings never read, as input for `consolidate` or `delete`. The memory MCP server names a buffer overflow and survives a failed reply.
+- Memory through the MCP tools first: the session contract, the SessionStart Memory line, and the skills tell Claude to recall with `mem_search` and save with `mem_save` (loading a deferred tool through tool search), and to use the `construct-memory` CLI only when a tool is missing or fails. `construct:explorer` keeps the CLI. In live runs, 10 of 10 recall, save, and subagent prompts used the tools first, against 1 of 3 recall prompts on 8.6.0.
+
+8.6.0 added the read counter and `construct-memory review passive`, kept passive learnings out of relation candidates and more harness notices out of stored prompts, and hardened the memory MCP server.
 
 8.5.0 added the plugin's own memory MCP server, `memory`, with ten engram-style `mem_*` tools over the `construct-memory` CLI.
 
