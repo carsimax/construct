@@ -166,3 +166,21 @@ test('testing.md verifier-weakening list names skipped tests, deleted assertions
   const t = readFileSync(join(skillsRoot, 'workflow/references/testing.md'), 'utf8')
   assert.match(t, /Never: skip a test, delete an assertion, suppress an error, widen a type, or commit a real credential or a fixture holding one/i)
 })
+
+// S2 (deterministic-signals T4): three skills inject real repository state through one dynamic-context line.
+test('workflow, review, and delivery inject skill-context.mjs at column 0; no other skill injects anything', () => {
+  const CMD = 'node "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/skill-context.mjs"'
+  for (const dir of skillDirs()) {
+    const text = readFileSync(join(skillsRoot, dir, 'SKILL.md'), 'utf8')
+    const block = text.split('---')[1] ?? ''
+    const injected = text.split('\n').filter((line) => line.startsWith('!`'))
+    if (['workflow', 'review', 'delivery'].includes(dir)) {
+      assert.deepEqual(injected, [`!\`${CMD} ${dir}\``], dir)
+      assert.ok(block.split('\n').includes(`allowed-tools: Bash(${CMD} *)`), `${dir} allowed-tools`)
+      assert.match(text, /^## Current state\n\n!`/m, `${dir} section`)
+    } else {
+      assert.deepEqual(injected, [], dir)
+      assert.doesNotMatch(block, /skill-context/, `${dir} allowed-tools`)
+    }
+  }
+})

@@ -48,12 +48,12 @@ function commitTargetDirectory(command, cwd) {
 }
 
 // git returns trimmed stdout, or undefined on any failure (a failed diff is not an empty one).
-function git(cwd, args) {
+export function git(cwd, args) {
   const run = spawnSync('git', args, { cwd, encoding: 'utf8', timeout: GIT_TIMEOUT_MS, stdio: ['ignore', 'pipe', 'ignore'] })
   return run.error || run.status !== 0 ? undefined : run.stdout.trim()
 }
 
-function defaultBranch(cwd) {
+export function defaultBranch(cwd) {
   const remote = git(cwd, ['symbolic-ref', '-q', '--short', 'refs/remotes/origin/HEAD'])
   if (remote) return remote
   return ['main', 'master'].find((name) => git(cwd, ['rev-parse', '--verify', '-q', `refs/heads/${name}`]) !== undefined)
@@ -76,7 +76,7 @@ function authoredLines(numstat) {
 }
 
 // commitSliceReport: one line after a commit on a feature branch, or null when there is no slice to report.
-function commitSliceReport(cwd) {
+export function commitSliceReport(cwd) {
   const branch = git(cwd, ['symbolic-ref', '-q', '--short', 'HEAD'])
   const target = branch === undefined ? undefined : defaultBranch(cwd)
   if (!branch || !target || branch === target || `origin/${branch}` === target) return null

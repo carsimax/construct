@@ -269,8 +269,8 @@ const out = (root, args) => git(root, args).toString('utf8').trim()
 const ok = (root, ref) => git(root, ['rev-parse', '--verify', '-q', `${ref}^{commit}`], { okStatuses: [0, 1] }).toString('utf8').trim() !== ''
 
 // defaultBranch returns the first resolvable candidate: a `gh pr create --base` branch, origin's HEAD,
-// then origin or local main and master; null when none exists.
-function defaultBranch(root, base) {
+// then origin or local main and master; null when none exists. skill-context.mjs reuses it.
+export function defaultBranch(root, base) {
   const head = git(root, ['symbolic-ref', '-q', 'refs/remotes/origin/HEAD'], { okStatuses: [0, 1] }).toString('utf8').trim()
   const named = base && !base.startsWith('-') ? [`refs/remotes/origin/${base.replace(/^refs\/heads\//, '')}`, `refs/heads/${base.replace(/^refs\/heads\//, '')}`] : []
   const candidates = [...named, head, ...['main', 'master'].flatMap((b) => [`refs/remotes/origin/${b}`, `refs/heads/${b}`])]
@@ -318,16 +318,10 @@ function riskItems(markdown, path) {
   return items
 }
 
-// refVerdict judges one published ref: null when it may go, else the denial reason.
-function refVerdict(root, pub, base, ref) {
-  const short = ref.replace(/^refs\/heads\//, '')
-  if (ref === '' || ref.startsWith('-') || !ok(root, ref)) {
-    return `publication-gate: ${pub.gate} is denied because the ref ${JSON.stringify(ref)} does not resolve to a commit in this repository, so its review state cannot be checked.`
-  }
-  if (base.startsWith('refs/heads/') && out(root, ['rev-parse', '--symbolic-full-name', ref]) === base) {
-    return `publication-gate: ${pub.gate} is denied because ${short} is the default branch and no remote-tracking default branch exists to compare it with (fetch origin, or publish a branch), so its review state cannot be checked.`
-  }
-  const sha = out(root, ['rev-parse', '--verify', `${ref}^{commit}`])
+// reviewState reads, without writing, the Risk items the feature documents changed between the merge base of base
+// and sha name, the lenses they require, and each lens's verdict for that subject ('ok', 'rejected', or 'missing').
+// A malformed Risk cell throws. refVerdict and skill-context.mjs share it.
+export function reviewState(root, base, sha) {
   const mergeBase = out(root, ['merge-base', base, sha])
   // -M pairs a rename: its new path is read at the ref and its old path at the merge-base (a rename plus a lowered Risk
   // stays visible). A plain delete is ignored (L15: reading deleted documents would demand reviews for old merged work).
@@ -351,11 +345,26 @@ function refVerdict(root, pub, base, ref) {
     for (const item of riskItems(out(root, ['show', `${commit}:${path}`]), path)) items.add(item)
   }
   const required = requiredLenses(items)
-  if (required.length === 0) return null
+  if (required.length === 0) return { mergeBase, items, required, state: () => 'missing' }
   const baseTree = out(root, ['rev-parse', `${mergeBase}^{tree}`])
   const headTree = out(root, ['rev-parse', `${sha}^{tree}`])
   const direct = readVerdicts(root, subjectHash(baseTree, headTree))
   const state = (lens) => (direct[lens] ? (direct[lens].approved === true ? 'ok' : 'rejected') : 'missing')
+  return { mergeBase, items, required, state }
+}
+
+// refVerdict judges one published ref: null when it may go, else the denial reason.
+function refVerdict(root, pub, base, ref) {
+  const short = ref.replace(/^refs\/heads\//, '')
+  if (ref === '' || ref.startsWith('-') || !ok(root, ref)) {
+    return `publication-gate: ${pub.gate} is denied because the ref ${JSON.stringify(ref)} does not resolve to a commit in this repository, so its review state cannot be checked.`
+  }
+  if (base.startsWith('refs/heads/') && out(root, ['rev-parse', '--symbolic-full-name', ref]) === base) {
+    return `publication-gate: ${pub.gate} is denied because ${short} is the default branch and no remote-tracking default branch exists to compare it with (fetch origin, or publish a branch), so its review state cannot be checked.`
+  }
+  const sha = out(root, ['rev-parse', '--verify', `${ref}^{commit}`])
+  const { mergeBase, items, required, state } = reviewState(root, base, sha)
+  if (required.length === 0) return null
   const missing = required.filter((lens) => state(lens) === 'missing')
   const rejected = required.filter((lens) => state(lens) === 'rejected')
   if (missing.length === 0 && rejected.length === 0) return null

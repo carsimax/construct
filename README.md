@@ -246,6 +246,10 @@ The installer is opt-in and never runs on its own. It writes to the effective ho
 
 An approval never authorizes delivery. Commit, push, pull request, and merge stay your decisions.
 
+### Skill state
+
+`workflow`, `review`, and `delivery` open with a `## Current state` line that Claude Code runs when the skill loads (`hooks/scripts/skill-context.mjs <workflow|review|delivery>`): `workflow` shows `git status --short` (at most 12 lines, with a count of the rest) and the unfinished tasks of `odd/tasks/*.md`; `review` shows the lenses the Risk cells of the feature documents changed on the branch require (`LENSES_BY_RISK`) and which of them approved HEAD; `delivery` shows the same authored-lines number as the commit-slice signal. The script is read-only (it never writes the review store), prints at most 1,500 characters, and always exits 0: any failure (not a repository, no default branch, unknown kind) prints one `(state unavailable: <reason>)` line, because a non-zero exit would abort the skill.
+
 ### Delivery signals
 
 Two deterministic checks that used to be prompt-only (ports of gentle-shell's `commit-slice-signal` and `context-backstop`).
