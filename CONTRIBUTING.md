@@ -2,6 +2,12 @@
 
 Construct is a Claude Code plugin (`plugins/construct/`), its local marketplace (`.claude-plugin/marketplace.json`), and a curl installer (`install.sh`). There is no build step: everything is plain Node.js ESM and Markdown. For the user-facing description, see [README.md](README.md).
 
+## Before you start
+
+- Construct is a preview and changes quickly. Open an [issue](https://github.com/carsimax/construct/issues/new/choose) first, so a pull request does not chase a moving target; issues labeled `good first issue` are a good place to begin.
+- Report vulnerabilities privately, as described in [SECURITY.md](SECURITY.md).
+- CI runs the [four checks](#checks-before-a-pull-request) on every pull request, so you can open one even if you cannot run `claude` locally.
+
 ## Setup
 
 - Node.js 22.16 or later (Node 23 is not supported), `git`, and Claude Code 2.1.304 or later.
@@ -25,7 +31,7 @@ The repository follows its own workflow, Organic Driven Development (ODD).
 Run all four and fix failures at the cause:
 
 ```bash
-node --test tests/                       # repository tests
+node --test 'tests/**/*.test.mjs'        # repository tests (Node 22 needs the quoted glob, not tests/)
 claude plugin test plugins/construct     # mod tests (plugins/construct/tests/*.test.ts)
 claude plugin validate --strict .        # marketplace manifest
 claude plugin validate --strict ./plugins/construct
@@ -35,7 +41,7 @@ Useful narrower runs:
 
 ```bash
 node --test tests/publication/publication.test.mjs    # one test file
-node --test --test-name-pattern="Risk-line" tests/     # tests matching a name
+node --test --test-name-pattern="Risk-line" 'tests/**/*.test.mjs'    # tests matching a name
 ```
 
 The behavior evals are optional. They spend real usage, because each run is an isolated `claude -p` session:
@@ -85,7 +91,8 @@ Many tests cross-check text against code, so a change in one place usually needs
 1. Bump `version` in `plugins/construct/.claude-plugin/plugin.json` in a `chore: release X.Y.Z` commit.
 2. Put the version in the pull request title, for example `feat(delegation): ... (0.3.0)`.
 3. Bump `CONSTRUCT_REF` in `install.sh` and the tag in its header URL together with the version.
-4. Tag the merged release `vX.Y.Z`.
+4. Move the `Unreleased` entries of [CHANGELOG.md](CHANGELOG.md) under the new version.
+5. Tag the merged release `vX.Y.Z`.
 
 ## Third-party material
 
