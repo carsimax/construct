@@ -294,6 +294,8 @@ describe('verifier-weakening markers (S2)', () => {
     ['Not implemented stub', 'src/a.js', "throw new Error('Not implemented')"],
     ['TODO comment', 'src/a.js', '// TODO fix later'],
     ['TODO hash comment', 'src/a.py', '  # TODO fix later'],
+    ['trailing // TODO after code', 'src/a.js', 'x = 1 // TODO fix'],
+    ['trailing # TODO after code', 'src/a.py', 'y = 2  # TODO later'],
     ['node:test skip option', 'src/a.test.js', "it('x', { skip: true }, () => {})"],
     ['node:test only option', 'src/a.test.js', "describe('x', { only: true }, () => {})"],
     ['t.Skipf', 'a_test.go', '\tt.Skipf("x %d", 1)'],
@@ -323,6 +325,14 @@ describe('verifier-weakening markers (S2)', () => {
       'src/a.js': "const t = '// TODO'\nconst u = 'https://example.com/TODO'\nconst v = 1 // mentions TODO mid-sentence\n",
       'scripts/a.sh': 'git log --grep TODO\n',
       'tests/test_a.py': '@pytest.mark.skipif(True, reason="x")\n',
+    })
+    silent(r)
+  })
+
+  test('trailing TODO look-alikes do not block', () => {
+    const { r } = marked({
+      'src/a.js': "fetch('http://x/TODO')\nconst todo = 1 // todo-list\n",
+      'src/a.py': 'a#TODO\n',
     })
     silent(r)
   })
