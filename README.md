@@ -1,7 +1,7 @@
 # Construct
 
 [![Claude Code](https://img.shields.io/badge/Claude_Code-2.1.304%2B-blue)](#requirements)
-[![Plugin version](https://img.shields.io/badge/version-8.2.0-informational)](plugins/construct/.claude-plugin/plugin.json)
+[![Plugin version](https://img.shields.io/badge/version-8.3.0-informational)](plugins/construct/.claude-plugin/plugin.json)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 Construct is a Claude Code plugin that makes every request follow Organic Driven Development (ODD): authorize, explore, size, track, implement test-first, and close with evidence and a Risk line.
@@ -30,7 +30,7 @@ Construct is a Claude Code plugin that makes every request follow Organic Driven
 ### One command
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v8.2.0/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v8.3.0/install.sh | bash
 ```
 
 The installer checks the requirements above and stops before changing anything if one is missing, or if `~/.claude` or `~/.claude/settings.json` is not writable, or if `settings.json` is a directory. Then it runs the manual steps below for you:
@@ -48,7 +48,7 @@ If engram or codegraph is installed, the installer says Construct no longer need
 Pass options after `bash -s --`, for example `curl -fsSL <url> | bash -s -- --no-mcp`. To read the script before running it:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v8.2.0/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v8.3.0/install.sh -o install.sh
 less install.sh
 bash install.sh
 ```
@@ -64,7 +64,7 @@ The manual steps the installer runs, for when you want to run them yourself:
    claude plugin install construct@construct
    ```
 
-   The installer (`install.sh`) pins this marketplace to the release tag (`carsimax/construct#v8.2.0`); the command above follows the default branch.
+   The installer (`install.sh`) pins this marketplace to the release tag (`carsimax/construct#v8.3.0`); the command above follows the default branch.
 
 2. Optional: inside Claude Code, in `/config`, set each role's model and effort (rows such as `Worker model`).
 
@@ -165,6 +165,7 @@ A `PreToolUse` hook on `Agent` (`hooks/scripts/delegation-admission.mjs`) denies
 - **Overlap.** A writer whose surfaces overlap those of a writer still open is denied. A glob entry covers what it matches and everything under it; entries are compared segment by segment, and two different literal segments never overlap whatever follows. Parentheses are literal (Next.js route groups such as `(dashboard)`). A segment with brackets, a backslash, or nested or unbalanced braces may match anything at its own position only, while `**` and an extglob (`@(`, `!(`, `+(`, `*(`, `?(`) overlap everything from their segment on. The hook records each admitted writer (its surfaces and a hash of its prompt) under `${CLAUDE_PLUGIN_DATA}/delegation-admission/<session>/` (same fallback as the gates), and a `SubagentStop` hook (`delegation-admission.mjs stop`) removes the record whose prompt hash matches the first user row of `agent_transcript_path`. A record older than one hour counts as a crashed writer and is dropped. The check and the record run under an `mkdir` lock beside the records (`<session>.lock`, a lock older than 10 seconds is broken, a wait over 3 seconds fails open), so two launches in the same parallel batch cannot both pass.
 - **Prefix.** `worker` and `verifier` are admitted the same with or without the `construct:` prefix.
 - **Verifier** (`construct:verifier`) needs a line `Risk: item N` (N 1-6). `Risk: none` does not admit a verifier.
+- **Workflows.** A workflow's `agent()` calls never reach the `Agent` hook, so the same script also runs on `PreToolUse` for `Workflow` and admits a script only when every `agent()` call names a literal `agentType` that cannot edit files: `construct:explorer`, the `construct:review-*` lenses, `construct:judge-a`, `construct:judge-b` (prefix optional), `Explore`, or `Plan`. A call with no `agentType` (the default workflow agent can write), a writing or unknown type, a non-literal, computed, quoted, or spread `agentType` (every `agentType` key counts), `agent` passed, aliased, or destructured, any reference to the global object (`globalThis`, `this`, `self`, `window`, `global`), an escape outside a string, `eval`, `Function`, any `constructor` reference, and a `/` right after `}` (put such a regex in a variable) are denied. The script is read from `script`, from `scriptPath` (relative to the cwd; unreadable is denied), or, for `name`, from a saved workflow in `.claude/workflows/` of the project or of the home directory; a bundled workflow name and a bare `resumeFromRunId` pass. Writes go through `construct:worker` with the `Agent` tool. Strings, template text, and comments are not calls; this is a discipline check on the script text, not a sandbox.
 
 The hook fails open on unreadable input or any internal error; a well-formed launch that breaks a rule is denied.
 
@@ -346,14 +347,13 @@ Risk line: one reply can name several items, `Risk: items 2, 5 (reason)`; the Ri
 
 ## Status
 
-Current version: 8.2.0 (`plugins/construct/.claude-plugin/plugin.json`); a minor release, nothing breaks. Releases are tagged `vX.Y.Z`.
+Current version: 8.3.0 (`plugins/construct/.claude-plugin/plugin.json`); a minor release. Releases are tagged `vX.Y.Z`.
 
-Changes in 8.2.0:
+Changes in 8.3.0:
 
-- The `workflow`, `review`, and `delivery` skills load the repository's real state (`hooks/scripts/skill-context.mjs`): the working tree and unfinished tasks, the lenses the Risk cells require and their verdicts for HEAD (the publication gate's own `reviewState`), and the branch's authored lines. The script always exits 0.
-- `delivery-signals` runs the commit slice only on Bash calls that run `git` (`if: "Bash(git *)"`) and the context backstop once per tool batch (`PostToolBatch`).
-- `construct:explorer` stops after 30 turns and `construct:verifier` after 50; `delegation`, `review`, and `workflow` are model-only skills.
-- The repository ships project skills for developing Construct (`.claude/skills/`, including the official `plugin-dev` and `skill-creator` skills).
+- Workflow admission: `delegation-admission` also runs on `PreToolUse` for `Workflow`, because a workflow's `agent()` calls never reach the `Agent` hook. A script is admitted only when every `agent()` call names a literal read-only `agentType` (`construct:explorer`, the `construct:review-*` lenses, `construct:judge-a`, `construct:judge-b`, `Explore`, or `Plan`). A workflow that launched a writing agent, or an agent with no `agentType`, is now denied: send writes through `construct:worker` with the `Agent` tool.
+
+8.2.0 made the `workflow`, `review`, and `delivery` skills load the repository's real state (`hooks/scripts/skill-context.mjs`), ran the commit slice only on Bash `git` calls and the context backstop once per tool batch (`PostToolBatch`), capped `construct:explorer` at 30 turns and `construct:verifier` at 50, and made `delegation`, `review`, and `workflow` model-only skills.
 
 8.1.0 added `construct-gate install | uninstall | status`, an opt-in git pre-push hook that applies the publication gate's verdict to every push from the clone, and stated in the README what each gate layer guarantees.
 

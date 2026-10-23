@@ -17,6 +17,7 @@ The parent orchestrates; agents do the work. Handoff templates are in `reference
 Small work is done inline: the parent edits directly when each call changes at most `inline_edit_max_lines` lines (default 20; 0 restores worker-only). Large work and any bigger edit go to `construct:worker` (surface-guard denies a main-thread edit over the limit); reads, answers, and `odd/tasks/` stay with the parent.
 
 - Worker: one per independent unit, code, tests, and docs together. Disjoint units launch in one message; dependent ones in order. Never launch a second agent of the same role and task in one turn.
+- Workflows launch only read-only agents, each `agent()` naming its `agentType` (hook); writes go through `construct:worker`.
 - `construct:explorer`: mapping beyond one batch or about 5 sequential lookups, one per front, at most 3 per message; dependents wait.
 - `construct:general`: long suites, builds, installs, broad research.
 - `construct:verifier`: only for a Risk-named item (see Verification).
