@@ -11,9 +11,15 @@ const line = (text, re) => text.split('\n').find((l) => re.test(l)) ?? ''
 describe('memory touchpoints (S19)', () => {
   test('session contract: Explore searches memory, Close saves what was learned', () => {
     const session = read('hooks/contract/session.md')
-    assert.match(line(session, /^2\. Explore/), /construct-memory search/)
+    const explore = line(session, /^2\. Explore/)
+    assert.match(explore, /construct-memory search/)
+    // The MCP tool comes first and the CLI is the fallback (S1 of odd/tasks/memory-mcp-first.md).
+    assert.ok(explore.indexOf('`mem_search`') >= 0 && explore.indexOf('`mem_search`') < explore.indexOf('construct-memory search'), 'mem_search before the CLI')
+    assert.match(explore, /tool search/)
     const close = line(session, /^8\. Close/)
     assert.match(close, /construct-memory save/)
+    assert.ok(close.indexOf('`mem_save`') >= 0 && close.indexOf('`mem_save`') < close.indexOf('construct-memory save'), 'mem_save before the CLI')
+    assert.match(close, /`mem_session_summary`/)
     assert.match(close, /session summary/)
     assert.ok(close.indexOf('construct-memory save') < close.indexOf('one report'), 'save before the report')
     assert.match(close, /Risk line \(format below\)\.$/)
