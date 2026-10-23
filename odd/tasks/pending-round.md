@@ -1,6 +1,6 @@
 # Pending round
 
-Objective: close the advisory follow-ups left open by mechanical-guards, panel-clean-room, and panel-default-bg, then release 6.1.0. Branch: fix/pending-round (release on chore/release-6.1.0 after it). Baseline: e55ea09. Delivery strategy: ask-on-risk; chains: stacked-to-main (fixes PR, then release PR). Test runner: `node --test tests/` and `claude plugin test plugins/construct`.
+Objective: close the advisory follow-ups left open by mechanical-guards, panel-clean-room, and panel-default-bg, then release 6.1.0. Branch: fix/pending-round. Baseline: e55ea09. Delivery strategy: single-pr (version in the PR title, CONTRIBUTING Releases step 2). Test runner: `node --test tests/` and `claude plugin test plugins/construct`.
 
 ## Specs
 
@@ -25,7 +25,7 @@ Objective: close the advisory follow-ups left open by mechanical-guards, panel-c
 | T4 | S5 | Subagent contract unrequested-work wording | worker | 6 | done (RED 1 fail; contract+word-budget 44/0; injected 2882 → 2933/3000) | fb7ebac |
 | T6 | S2, S3 | Verifier advisories (L3): `readonly`/`local` start a hooks-path statement; header comment says `declare`/`typeset` with any flags; tests for `readonly`+bare `export`, `sh -c 'declare -x ...'`, `git restore --staged -- ./ :/` silent, `git restore -s HEAD :/` asks; risk-line header comment no longer claims every marker is line-anchored | worker | 2 | done (RED 2 fail; tests/guard 109/0; tests/risk-line 87/0) | 4e5b581 |
 | T7 | S4 | Verifier advisory (L3): panel width test also covers wide text in the branch, ODD feature, and change path at widths 40-80 | worker | 6 | done (GREEN on HEAD, RED with e55ea09 layout.js; mod 215/3 env) | see log |
-| T5 | S6 | Release 6.1.0 bump and notes | worker | 5 | pending | — |
+| T5 | S6 | Release 6.1.0 bump and notes | worker | 5 | done (RED 3 install tests; GREEN 41/0; suite 994/0; validate --strict both pass) | 3bbb6a4 |
 
 ## Log
 
@@ -33,4 +33,6 @@ Objective: close the advisory follow-ups left open by mechanical-guards, panel-c
 - **L2 (2026-10-22, parent):** Checked against the code at e55ea09: prompt-hardening's `Branch:` follow-up is already fixed (`feature-state.mjs:87-92`); the panel-default-bg L6 evidence and "stops only when blocked" advisories are settled by the construct-native rewrite; only the "mention it instead" route is left (S5). Out of scope here, user decisions: GitHub Releases for v4.0.0-v6.0.0 (tags exist, Releases stop at v3.0.0) and the 29 stale remote branches.
 - **L3 (2026-10-22, review):** Subject e55ea09..13688a0: review-risk and review-reliability approved, no findings. Verifier: S1-S5 pass (guard probes: all new forms ask/deny, negatives silent; panel sweep 30-80 cols: baseline 710 rows over, candidate 0, ASCII byte-identical; suite 988/0; mod 214/3 env). Advisories applied as T6-T7: `readonly X=core.hooksPath; export X` bypass; S2 wording broader than `declare -x`; stale risk-line anchoring comment; S5 clause about shortening (cap held without it). Accepted: the branch's own TODO fixtures and the shortcut comment hit the trailing-TODO scan.
 
-Next step: T6, T7 workers; recheck (lenses on the new subject, verifier recheck of the guard); then the fixes PR is the user's call; T5 after.
+- **L4 (2026-10-22, review):** Recheck of e55ea09..dab97aa: review-risk and review-reliability approved, no findings. Release folded into this branch as one PR instead of a stacked release PR.
+
+Next step: T5 release worker; then review-risk and review-resilience (Risk 5) on the new subject; PR is the user's call; tag v6.1.0 after merge.
