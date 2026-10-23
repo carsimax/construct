@@ -319,6 +319,8 @@ describe('shell wrappers are unwrapped by shell-words', () => {
     "bash -c 'git push origin feat'",
   ]
   for (const command of cases) test(`denies: ${command}`, () => denied(hook(command, repo)))
+  test('denies: printf x | xargs -i git push', () => denied(hook('printf x | xargs -i git push', repo)))
+  test('silent: printf x | xargs -i echo git push', () => silent(hook('printf x | xargs -i echo git push', repo)))
 })
 
 describe('target directories', () => {

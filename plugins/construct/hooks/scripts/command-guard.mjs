@@ -109,19 +109,25 @@ function rmHit(args) {
   return null
 }
 
-// findHit: `-delete`, or an `-exec`/`-execdir` command (up to `;` or `+`) that is a dangerous rm.
-function findHit(args) {
-  if (args.includes('-delete')) return hit('ask', 'find -delete removes every match without a way back. Run the find without -delete first to list them.')
+// Find primaries that take an argument: that word is data, even when it reads `-delete` or `-exec`.
+const FIND_VALUE_PRIMARIES = new Set(['-name', '-iname', '-path', '-ipath', '-regex', '-iregex', '-newer', '-user', '-group', '-type', '-perm', '-size', '-mtime', '-maxdepth', '-mindepth'])
+const shQuote = (w) => `'${w.replace(/'/g, "'\\''")}'`
+
+// findHit: `-delete` asks; each `-exec`/`-execdir` command (up to `;` or `+`) is a command line of
+// its own, handed to `nested` so wrappers, absolute paths, and `sh -c` bodies get the top-level checks.
+function findHit(args, nested) {
+  let found = null
   for (let i = 0; i < args.length; i++) {
-    if (args[i] !== '-exec' && args[i] !== '-execdir') continue
-    const end = args.findIndex((a, k) => k > i && (a === ';' || a === '+'))
-    const cmd = args.slice(i + 1, end === -1 ? args.length : end)
-    if (cmd[0] === 'rm') {
-      const h = rmHit(cmd.slice(1))
-      if (h) return h
+    if (FIND_VALUE_PRIMARIES.has(args[i])) i++
+    else if (args[i] === '-delete') found ??= hit('ask', 'find -delete removes every match without a way back. Run the find without -delete first to list them.')
+    else if (args[i] === '-exec' || args[i] === '-execdir') {
+      const end = args.findIndex((a, k) => k > i && (a === ';' || a === '+'))
+      nested(args.slice(i + 1, end === -1 ? args.length : end).map(shQuote).join(' '))
+      if (end === -1) break
+      i = end
     }
   }
-  return null
+  return found
 }
 
 // hitsIn returns every hit of a command line; nested lines and substitutions are walked.
@@ -140,7 +146,7 @@ function hitsIn(command, depth = 0) {
     if (SHELLS.has(name)) for (const arg of args) if (!arg.startsWith('-')) nested(arg)
     // `export X=...; git ...`: the assignment is its own statement, so it is checked without a `git`.
     if (/^(export|declare|typeset|readonly|local|[A-Za-z_]\w*=)/.test(words[0] ?? '') && words.some(hooksEnv)) found.push(hit('deny', HOOKS_ENV_REASON))
-    const h = name === 'git' ? gitHit(args, words) : name === 'rm' ? rmHit(args) : name === 'find' ? findHit(args) : null
+    const h = name === 'git' ? gitHit(args, words) : name === 'rm' ? rmHit(args) : name === 'find' ? findHit(args, nested) : null
     if (h) found.push(h)
   }
   // A heredoc body is data unless its command line runs a shell.

@@ -145,8 +145,15 @@ describe('debt-round S3: find and xargs deletes', () => {
     'ls | xargs -i rm -rf {}',
     'ls | xargs -J % rm -rf %',
     'ls | xargs -n 1 rm -rf',
+    'find . -exec sudo rm -rf {} \\;',
+    'find . -exec /bin/rm -rf {} +',
+    'find . -exec env rm -rf {} \\;',
+    `find . -exec sh -c 'rm -rf "$1"' _ {} \\;`,
+    'xargs --replace rm -rf {}',
+    'xargs -R 2 -I {} rm -rf {}',
+    'find . -exec rm -rf {} \\; -o -exec rm -rf {} +',
   ])
-  silent(['ls | xargs -I {} echo {}', "find . -name '*.js'",'find . -exec grep x {} \\;', 'xargs rm a.txt', 'ls | xargs echo'])
+  silent(['find . -name -delete', 'find . -exec rm -f {} \\;', 'find . -exec echo rm -rf {} \\;', 'xargs --max-chars 100 echo', 'ls | xargs -I {} echo {}', "find . -name '*.js'",'find . -exec grep x {} \\;', 'xargs rm a.txt', 'ls | xargs echo'])
 })
 
 describe('pending-round S1: git restore at the root', () => {

@@ -23,4 +23,6 @@ test('xargs unwraps to its command: -i, -l and -e take no separate value, -J, -n
   assert.equal(head('xargs -J % rm -rf %'), 'rm -rf %')
   assert.equal(head('xargs -S 100 -R 2 rm -rf'), 'rm -rf')
   assert.equal(head('xargs -n 1 rm -rf'), 'rm -rf')
+  assert.equal(head('xargs --replace rm -rf {}'), 'rm -rf {}')
+  assert.equal(head('xargs --max-chars 100 rm -rf'), 'rm -rf')
 })
