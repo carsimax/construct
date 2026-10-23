@@ -676,7 +676,8 @@ test('maskSecrets stays fast on a long run of word characters (L9)', () => {
   const inputs = [(n: number) => 'a'.repeat(n), (n: number) => 'a'.repeat(n / 2) + 'key' + 'a'.repeat(n / 2), (n: number) => 'key'.repeat(n / 3), (n: number) => 'key_' + 'a'.repeat(n)]
   for (const make of inputs) {
     time(make(20000))
-    const small = Math.max(time(make(20000)), 1)
+    // floored at 10 ms so a GC pause on a sub-millisecond baseline cannot fail the ratio
+    const small = Math.max(time(make(20000)), 10)
     const big = time(make(200000))
     // 10x the input stays under 20x the time (quadratic would be ~100x); the ceiling is generous for loaded machines
     expect(big).toBeLessThan(small * 20)

@@ -71,9 +71,8 @@ function clip(segs, max) {
     out.push(s.t.length <= left ? s : { ...s, t: s.t.slice(0, left) })
     left -= s.t.length
   }
-  const last = out.at(-1)
-  if (last) last.t += '…'
-  else out.push(seg('…'))
+  const last = out.pop()
+  out.push(last ? { ...last, t: last.t + '…' } : seg('…')) // a copy: the caller's segment stays as it was
   return out
 }
 
@@ -163,7 +162,7 @@ function checkpoints(tasks, max) {
   const open = tasks.findIndex((t) => !t.done)
   const glyphs = tasks.map((t, i) => (t.done ? seg('●', { color: PALETTE.odd }) : i === open ? seg('◆', { color: PALETTE.odd, bold: true }) : seg('○', { dim: true })))
   const fits = Math.floor((max + 1) / 2)
-  const shown = glyphs.length <= fits ? glyphs : glyphs.slice(-Math.floor((max - 1) / 2))
+  const shown = glyphs.length <= fits ? glyphs : glyphs.slice(glyphs.length - Math.floor((max - 1) / 2))
   const joint = (g, i) => seg('━', { color: PALETTE.faint })
   const joined = shown.flatMap((g, i) => (i ? [joint(g, i), g] : [g]))
   return shown === glyphs ? joined : [seg('…━', { dim: true }), ...joined]
@@ -221,10 +220,11 @@ function gateCard(panel, w) {
   const v = { rule: count(panel.gate?.verdicts?.rule), ask: count(panel.gate?.verdicts?.ask), cleared: count(panel.gate?.verdicts?.cleared), deny: count(panel.gate?.verdicts?.deny) }
   const total = v.rule + v.ask + v.cleared + v.deny
   const inline = count(panel.inline?.count)
-  if (total === 0 && inline === 0) return null
-  const body = total === 0 ? [dimRow('nothing waiting on you', inner)] : gateBody(panel, v, inner)
   const denied = panel.gate?.lastDenied
-  if (total > 0 && denied && typeof denied === 'object') {
+  const hasDenied = denied && typeof denied === 'object'
+  if (total === 0 && inline === 0 && !hasDenied) return null
+  const body = total === 0 ? [dimRow('nothing waiting on you', inner)] : gateBody(panel, v, inner)
+  if (hasDenied) {
     const detail = cut(clean(maskSecrets(String(denied.detail ?? ''))), 80)
     body.push(row([seg(`✗ ${clean(String(denied.tool ?? 'tool'))}${detail ? `: ${detail}` : ''}`, { color: PALETTE.warn })], inner))
   }
