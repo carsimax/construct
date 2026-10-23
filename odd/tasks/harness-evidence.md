@@ -19,7 +19,7 @@ Objective: measure whether Construct improves outcomes and at what cost, before 
 |---|---|---|---|---|---|---|
 | T1 | S1 | Summary of cost, duration, turns, pass rates per case and arm from `aggregate-result.json` | worker | none | done (RED 6 fail; evals 9/9; suite 1061/0) | 54476a1 |
 | T2 | S2 | `outcome.sh` per outcome-bearing case, run by `scripts/eval.sh` on kept workspaces; outcome vs ritual rates in the summary | worker | 6 | done (fixture right/untouched/wrong per case; real eval L4) | 54476a1 |
-| T3 | S3 | Baseline run, 10 runs per case and arm, table in the Log | parent | none | done (160 runs, $16.42 + $0.31 judge; L5) | COMMIT |
+| T3 | S3 | Baseline run, 10 runs per case and arm, table in the Log | parent | none | done (160 runs, $16.42 + $0.31 judge; L5) | 9297e6f |
 
 ## Log
 
