@@ -1,8 +1,9 @@
-// Command guard (PreToolUse on Bash). Denies commands that bypass a verifier and asks before
-// destructive ones, in the main thread and in subagents:
+// Command guard (PreToolUse on Bash). Denies commands that bypass a verifier and, only when the
+// `command_guard_asks` option is on, asks before destructive ones, in the main thread and in
+// subagents. With the option off (the default) an ask match gives no output; denies always apply:
 //   - deny: `git commit --no-verify` / `-n`, `--no-verify` on push, merge, rebase, am and
 //     cherry-pick, `--no-gpg-sign`, and `git -c core.hooksPath=...` on any subcommand;
-//   - ask: `rm` with recursive and force flags, `git push` with `--force`, `-f`, or a `+refspec`
+//   - ask (opt-in): `rm` with recursive and force flags, `git push` with `--force`, `-f`, or a `+refspec`
 //     and no `--force-with-lease`, `git reset --hard`, `git clean -f`, `git checkout -- .`,
 //     `git checkout .`, and `git restore .`, `./`, or `:/` (unless it only touches the index),
 //     `find ... -exec rm` / `-execdir rm` with those flags, `find ... -delete`, and
@@ -62,6 +63,9 @@ function parse(args) {
 const abbr = (flags, full, min) => [...flags].some((a) => a.length >= min && full.startsWith(a))
 const ROOTS = ['.', './', ':/']
 const LEASE = '--force-with-lease'
+
+// The docs do not say how a boolean option is serialized, so only `true` or `1` turns asks on.
+const asksOn = () => ['true', '1'].includes((process.env.CLAUDE_PLUGIN_OPTION_COMMAND_GUARD_ASKS ?? '').trim().toLowerCase())
 
 const hit = (decision, reason) => ({ decision, reason: `command-guard: ${reason}` })
 
@@ -162,7 +166,7 @@ try {
   if (input?.tool_name === 'Bash' && typeof command === 'string' && command !== '') {
     const found = hitsIn(command)
     const chosen = found.find((h) => h.decision === 'deny') ?? found[0]
-    if (chosen) process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: chosen.decision, permissionDecisionReason: chosen.reason } })}\n`)
+    if (chosen && (chosen.decision === 'deny' || asksOn())) process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: chosen.decision, permissionDecisionReason: chosen.reason } })}\n`)
   }
 } catch {
   // Fail open.

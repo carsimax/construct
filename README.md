@@ -107,6 +107,7 @@ Options are plugin settings, edited in `/config`:
 |---|---|
 | Model and effort per role | See the routing table below. Each option defaults to `inherit`: use the deprecated key of the same role if it is set, else the agent's own frontmatter |
 | `panel_open_on_start` (boolean, default `true`) | Open the panel at every session start |
+| `command_guard_asks` (boolean, default `false`) | Let `command-guard` ask before destructive commands (`rm -rf`, force push, `reset --hard`, and the rest). Denies of verifier bypasses always apply |
 
 ### Agents and model routing
 
@@ -228,7 +229,7 @@ Review is a mandatory ODD phase for high-risk work. A work unit whose task's Ris
 
 **Publication gate.** The `PreToolUse` hook on `Bash` (`hooks/scripts/publication-gate.mjs`) denies `git push`, `gh pr create`, and `gh release create` (also through `sh -c`, `eval`, `$(...)`, backticks, wrappers, heredocs, and the `gh pr new` and `gh release new` aliases) until the required lenses approve the published ref. It judges every ref being published (push sources, `gh pr create --head`, `gh release create --target`, the default branch when none; `HEAD` when none is named). It finds the feature documents changed from the merge-base with the default branch, reads every Risk number at the ref and at the merge-base, and requires each required lens to approve one subject from the merge-base tree to the ref tree. The default branch itself with no remote-tracking default to compare with is denied. A Risk cell that is neither `none` nor readable denies, and so does any internal error. The denial names the missing lenses and the `construct:review` skill. The hook entry sets `onFailure: "block"`.
 
-**Command and surface guards.** Two more `PreToolUse` hooks fail open. `command-guard.mjs` on `Bash` denies commands that bypass the verifier (such as `git commit --no-verify`) and asks before destructive ones. `surface-guard.mjs` on `Write`, `Edit`, `MultiEdit`, and `NotebookEdit` keeps a writer inside its allowed edit surfaces and lets the main thread write only under `odd/tasks/`. The Risk-line gate also blocks a turn that adds skipped, focused, or stub test markers. `failure-streak.mjs` on `PostToolUseFailure` tells the model to change strategy when one tool fails five times within ten minutes.
+**Command and surface guards.** Two more `PreToolUse` hooks fail open. `command-guard.mjs` on `Bash` denies commands that bypass the verifier (such as `git commit --no-verify`) and, with `command_guard_asks` on, asks before destructive ones. `surface-guard.mjs` on `Write`, `Edit`, `MultiEdit`, and `NotebookEdit` keeps a writer inside its allowed edit surfaces and lets the main thread write only under `odd/tasks/`. The Risk-line gate also blocks a turn that adds skipped, focused, or stub test markers. `failure-streak.mjs` on `PostToolUseFailure` tells the model to change strategy when one tool fails five times within ten minutes.
 
 An approval never authorizes delivery. Commit, push, pull request, and merge stay your decisions.
 

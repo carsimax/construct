@@ -457,6 +457,12 @@
       "title": "Open the Construct panel on start",
       "description": "Open the docked Construct panel when a session starts (on by default); /construct opens it any time and /construct close closes it",
       "default": true
+    },
+    "command_guard_asks": {
+      "type": "boolean",
+      "title": "Ask before destructive commands",
+      "description": "Let command-guard ask before destructive commands (rm -rf, force push, reset --hard, and the rest); off by default. Denies of verifier bypasses such as git commit --no-verify always apply",
+      "default": false
     }
   }
 }

@@ -7,8 +7,13 @@ import { join } from 'node:path'
 
 const HOOK = join(new URL('../../plugins/construct/', import.meta.url).pathname, 'hooks/scripts/command-guard.mjs')
 
-function run(command, { input, tool_name = 'Bash' } = {}) {
+// Asks are opt-in (command_guard_asks), so rows run with them on unless a row sets `asks` (null: unset).
+function run(command, { input, tool_name = 'Bash', asks = 'true' } = {}) {
+  const env = { ...process.env }
+  delete env.CLAUDE_PLUGIN_OPTION_COMMAND_GUARD_ASKS
+  if (asks !== null) env.CLAUDE_PLUGIN_OPTION_COMMAND_GUARD_ASKS = asks
   const result = spawnSync('node', [HOOK], {
+    env,
     input: input ?? JSON.stringify({ session_id: 's1', cwd: process.cwd(), hook_event_name: 'PreToolUse', tool_name, tool_input: { command } }),
     encoding: 'utf8',
   })
@@ -173,6 +178,27 @@ describe('pending-round S2: exported hooks-path config', () => {
     "sh -c 'declare -x GIT_CONFIG_KEY_0=core.hooksPath && git commit'",
   ])
   silent(["export GIT_CONFIG_PARAMETERS=\"'user.name=x'\"", 'export FOO=core.hooksPath', 'echo GIT_CONFIG_KEY_0=core.hooksPath', 'readonly PATH'])
+})
+
+describe('debt-round S4: asks are opt-in', () => {
+  for (const asks of [null, 'false', '0', '', 'yes']) {
+    for (const command of ['rm -rf x', 'git reset --hard', 'find . -delete']) {
+      test(`no output with asks=${JSON.stringify(asks)}: ${command}`, () => {
+        const r = run(command, { asks })
+        assert.equal(r.status, 0)
+        assert.equal(r.stdout, '')
+      })
+    }
+    test(`deny holds with asks=${JSON.stringify(asks)}`, () => {
+      assert.equal(run('git commit --no-verify -m x', { asks }).decision, 'deny')
+      assert.equal(run('git reset --hard && git commit -n -m x', { asks }).decision, 'deny')
+    })
+  }
+  for (const asks of ['TRUE', '1', ' True ']) {
+    test(`asks on with asks=${JSON.stringify(asks)}`, () => {
+      assert.equal(run('rm -rf x', { asks }).decision, 'ask')
+    })
+  }
 })
 
 describe('allowed', () => {
