@@ -27,7 +27,9 @@
 // --git-dir/GIT_DIR, a spoofed origin/HEAD, deleted or moved feature documents, and store paths
 // built indirectly are not caught. Upgrade if one of them shows up in real use.
 // Usage: node publication-gate.mjs   (hook JSON on stdin)
+import { realpathSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { git, repositoryRoot } from './git-tree.mjs'
 import { readInput } from './hook-io.mjs'
 import { requiredLenses } from './review-lenses.mjs'
@@ -362,7 +364,8 @@ function refVerdict(root, pub, base, ref) {
   return `publication-gate: ${pub.gate} is denied because the feature documents of ${short} name Risk items ${[...items].sort().join(', ')} and it is not reviewed: ${parts.join('; ')}. Run the construct:review skill with the subject line \`Review subject: ${mergeBase}\`${checkout}, fix what a lens rejects, and publish again; new commits change the subject, so review after the last commit.`
 }
 
-function verdict(pub) {
+// verdict judges a publication (see findPublications for its shape): null when it may go, else the denial reason. pre-push.mjs reuses it.
+export function verdict(pub) {
   let root
   try {
     root = repositoryRoot(pub.dir)
@@ -408,9 +411,12 @@ function main() {
   }
 }
 
-try {
-  main()
-} catch (error) {
-  if (publishing) deny(`publication-gate: the publication could not be checked (${error.message}), so it is denied.`)
+// The hook runs only when this file is executed directly, so pre-push.mjs can import verdict.
+if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
+  try {
+    main()
+  } catch (error) {
+    if (publishing) deny(`publication-gate: the publication could not be checked (${error.message}), so it is denied.`)
+  }
+  process.exitCode = 0
 }
-process.exitCode = 0

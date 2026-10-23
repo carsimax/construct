@@ -1,0 +1,115 @@
+#!/usr/bin/env node
+// construct-gate: installs the pre-push hook that runs the publication gate for every git push (S2 of odd/tasks/pre-push-gate.md).
+import { spawnSync } from 'node:child_process'
+import { chmodSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
+import { dirname, join, resolve, sep } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const USAGE = `usage: construct-gate <install|uninstall|status>   (run inside a repository)
+
+  install     write a pre-push hook into the repository's hooks directory (core.hooksPath is honored); refuses a hook that is not Construct's
+  uninstall   remove the pre-push hook if it is Construct's
+  status      print whether the hook is installed and which pre-push.mjs it runs`
+
+const MARKER = '# construct-gate: Construct pre-push hook'
+const RECORDED = /^recorded='(.*)'$/m
+const SELF = fileURLToPath(new URL('../hooks/scripts/pre-push.mjs', import.meta.url))
+
+const quote = (text) => text.replace(/'/g, `'\\''`)
+
+// The newest installed plugin version that has pre-push.mjs, picked with `ls | sort -V`; the hook and `status` run this same text.
+const PICK = `root="\${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/cache/construct/construct"
+script=
+for v in $(ls "$root" 2>/dev/null | sort -V); do
+  [ -f "$root/$v/hooks/scripts/pre-push.mjs" ] && script="$root/$v/hooks/scripts/pre-push.mjs"
+done`
+
+const hookText = () => `#!/bin/sh
+${MARKER}
+recorded='${quote(SELF)}'
+${PICK}
+[ -n "$script" ] || script="$recorded"
+if [ ! -f "$script" ]; then
+  echo "construct-gate: the Construct plugin was not found, so this push was not checked (construct-gate uninstall removes this hook)" >&2
+  exit 0
+fi
+if ! command -v node >/dev/null 2>&1; then
+  echo "construct-gate: the Construct pre-push gate needs node on PATH (GUI and IDE git clients often lack it), so this push is denied. Put node on PATH, run 'construct-gate uninstall' to remove this hook, or use 'git push --no-verify' to skip it once." >&2
+  exit 1
+fi
+exec node "$script" "$@"
+`
+
+// The script the hook would run now: the same `ls | sort -V` pick, else the path recorded at install.
+function resolved(text) {
+  const r = spawnSync('sh', ['-c', `${PICK}\nprintf %s "$script"`], { encoding: 'utf8' })
+  return r.stdout || RECORDED.exec(text)?.[1].replace(/'\\''/g, "'") || SELF
+}
+
+const git = (...args) => spawnSync('git', args, { encoding: 'utf8' })
+
+function locate() {
+  const top = git('rev-parse', '--show-toplevel')
+  if (top.status !== 0) throw new Error('not inside a git repository')
+  const root = top.stdout.trim()
+  const hooks = git('-C', root, 'rev-parse', '--git-path', 'hooks')
+  if (hooks.status !== 0) throw new Error(`cannot find the hooks directory: ${hooks.stderr.trim()}`)
+  const common = git('-C', root, 'rev-parse', '--git-common-dir').stdout.trim()
+  return { root, common: resolve(root, common), file: join(resolve(root, hooks.stdout.trim()), 'pre-push') }
+}
+
+// null when absent; a symlink (dangling or not) reads as text that is never Construct's.
+function read(file) {
+  const stat = lstatSync(file, { throwIfNoEntry: false })
+  if (!stat) return null
+  return stat.isSymbolicLink() ? '' : readFileSync(file, 'utf8')
+}
+
+// A file is Construct's only when its second line is exactly the marker.
+const ours = (text) => text !== null && text.split('\n')[1] === MARKER
+
+const within = (path, dir) => path === dir || path.startsWith(dir + sep)
+
+function warnings({ root, common, file }) {
+  const dir = realpathSync(dirname(file))
+  if (within(dir, realpathSync(common))) return []
+  if (within(dir, realpathSync(root))) return [`construct-gate: warning: ${dir} is inside the working tree, so the hook can be committed and shared; use .git/hooks or keep it out of version control.`]
+  return [`construct-gate: warning: ${dir} is outside this repository's git directory, so the hook applies to every repository using it; uninstall removes it for all.`]
+}
+
+function run(command) {
+  if (command === undefined || command === 'help' || command === '--help' || command === '-h') return USAGE
+  if (!['install', 'uninstall', 'status'].includes(command)) throw new Error(`unknown command: ${command} (run construct-gate help)`)
+  const where = locate()
+  const { file } = where
+  const text = read(file)
+  if (command === 'status') {
+    if (!ours(text)) return text === null ? 'not installed' : `not installed (${file} is not Construct's)`
+    return `installed: ${file}\nscript: ${resolved(text)}`
+  }
+  if (text !== null && !ours(text)) throw new Error(`${file} is not Construct's hook; refusing to ${command === 'install' ? 'overwrite' : 'remove'} it`)
+  if (command === 'uninstall') {
+    if (text === null) return 'not installed'
+    unlinkSync(file)
+    return `removed ${file}`
+  }
+  mkdirSync(dirname(file), { recursive: true })
+  // Write beside the target and rename over it, so a crash never leaves a truncated hook that exits 0.
+  const temp = `${file}.${process.pid}.tmp`
+  try {
+    writeFileSync(temp, hookText())
+    chmodSync(temp, 0o755)
+    renameSync(temp, file)
+  } finally {
+    rmSync(temp, { force: true })
+  }
+  for (const warning of warnings(where)) process.stderr.write(`${warning}\n`)
+  return `installed ${file}`
+}
+
+try {
+  process.stdout.write(`${run(process.argv[2])}\n`)
+} catch (error) {
+  process.stderr.write(`construct-gate: ${error.message}\n`)
+  process.exitCode = 1
+}

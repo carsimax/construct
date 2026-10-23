@@ -1,7 +1,7 @@
 # Construct
 
 [![Claude Code](https://img.shields.io/badge/Claude_Code-2.1.304%2B-blue)](#requirements)
-[![Plugin version](https://img.shields.io/badge/version-8.0.0-informational)](plugins/construct/.claude-plugin/plugin.json)
+[![Plugin version](https://img.shields.io/badge/version-8.1.0-informational)](plugins/construct/.claude-plugin/plugin.json)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 Construct is a Claude Code plugin that makes every request follow Organic Driven Development (ODD): authorize, explore, size, track, implement test-first, and close with evidence and a Risk line.
@@ -30,7 +30,7 @@ Construct is a Claude Code plugin that makes every request follow Organic Driven
 ### One command
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v8.0.0/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v8.1.0/install.sh | bash
 ```
 
 The installer checks the requirements above and stops before changing anything if one is missing, or if `~/.claude` or `~/.claude/settings.json` is not writable, or if `settings.json` is a directory. Then it runs the manual steps below for you:
@@ -48,7 +48,7 @@ If engram or codegraph is installed, the installer says Construct no longer need
 Pass options after `bash -s --`, for example `curl -fsSL <url> | bash -s -- --no-mcp`. To read the script before running it:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v8.0.0/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v8.1.0/install.sh -o install.sh
 less install.sh
 bash install.sh
 ```
@@ -64,7 +64,7 @@ The manual steps the installer runs, for when you want to run them yourself:
    claude plugin install construct@construct
    ```
 
-   The installer (`install.sh`) pins this marketplace to the release tag (`carsimax/construct#v8.0.0`); the command above follows the default branch.
+   The installer (`install.sh`) pins this marketplace to the release tag (`carsimax/construct#v8.1.0`); the command above follows the default branch.
 
 2. Optional: inside Claude Code, in `/config`, set each role's model and effort (rows such as `Worker model`).
 
@@ -230,6 +230,16 @@ Review is a mandatory ODD phase for high-risk work. A work unit whose task's Ris
 
 **Publication gate.** The `PreToolUse` hook on `Bash` (`hooks/scripts/publication-gate.mjs`) denies `git push`, `gh pr create`, and `gh release create` (also through `sh -c`, `eval`, `$(...)`, backticks, wrappers, heredocs, and the `gh pr new` and `gh release new` aliases) until the required lenses approve the published ref. It judges every ref being published (push sources, `gh pr create --head`, `gh release create --target`, the default branch when none; `HEAD` when none is named). It finds the feature documents changed from the merge-base with the default branch, reads every Risk number at the ref and at the merge-base, and requires each required lens to approve one subject from the merge-base tree to the ref tree. The default branch itself with no remote-tracking default to compare with is denied. A Risk cell that is neither `none` nor readable denies, and so does any internal error. The denial names the missing lenses and the `construct:review` skill. The hook entry sets `onFailure: "block"`.
 
+**What each layer guarantees.** The `PreToolUse` gate is an early discipline check inside Claude Code sessions, not a security boundary: pushes from other hosts, other tools, and indirect commands are not seen. `construct-gate install` adds a git `pre-push` hook (`hooks/scripts/pre-push.mjs`) that judges every push from that clone with the same verdict, from any host. It is also a discipline layer, not a hard boundary: `git push --no-verify` skips it, the same user can redirect it (`CLAUDE_CONFIG_DIR`, `HOME`, or a planted plugin cache version), it allows with a warning when the plugin is gone, and it needs `node` on PATH (without it the push is denied and the message names `construct-gate uninstall` and `--no-verify`). When no default branch resolves, a pushed commit with no `odd/tasks/` document is allowed (nothing can be compared); with documents it is denied, and so is a ref with no history in common with the default branch. Risk cells are classified by the agent itself, so a wrong `none` is not caught. CI cannot check reviews: verdicts stay in the clone's local store.
+
+```bash
+construct-gate install     # write the pre-push hook into the repository's hooks directory
+construct-gate uninstall   # remove it (only Construct's own hook)
+construct-gate status      # installed or not, and the resolved script path
+```
+
+The installer is opt-in and never runs on its own. It writes to the effective hooks directory (`core.hooksPath` is honored) and refuses to overwrite a hook that is not Construct's. The hook uses the newest installed Construct version; if the plugin is gone it warns on stderr and allows the push. Like the gate, it denies on any internal error. `construct-gate` is on the Bash tool's PATH inside Claude Code sessions; from another terminal run it by path, for example `node ~/.claude/plugins/cache/construct/construct/<version>/bin/construct-gate install`. Lens verdicts are recorded only by Construct's hooks in a Claude Code session, so with the hook installed, review there before pushing from any host.
+
 **Command and surface guards.** Two more `PreToolUse` hooks fail open. `command-guard.mjs` on `Bash` denies commands that bypass the verifier (such as `git commit --no-verify`) and, with `command_guard_asks` on, asks before destructive ones. `surface-guard.mjs` on `Write`, `Edit`, `MultiEdit`, and `NotebookEdit` keeps a writer inside its allowed edit surfaces and lets the main thread write under `odd/tasks/` freely and elsewhere only when one call changes at most `inline_edit_max_lines` lines (default 20); bigger changes are denied and go to `construct:worker`. The Risk-line gate also blocks a turn that adds skipped, focused, or stub test markers. `failure-streak.mjs` on `PostToolUseFailure` tells the model to change strategy when one tool fails five times within ten minutes.
 
 An approval never authorizes delivery. Commit, push, pull request, and merge stay your decisions.
@@ -277,6 +287,7 @@ The mod draws one thing: a docked **panel** (a `Pane` with id `construct`) drawn
 | `plugins/construct/skills/` | Delivery and review skills (`delivery`, `review`, `debugging`, `constraints`, ...) |
 | `plugins/construct/hooks/` | `hooks.json`, the mod (`register.js`), its routing helpers, the status modules (`status/`), the panel modules (`panel/`), and the command hooks (`scripts/`: contract, feature state, the `shell-words` tokenizer, delivery signals, publication gate, review store guard, command and surface guards, Risk line gate, subagent count, delegation admission, review context and capture, and the memory store `memory-store.mjs` with its hooks `memory-hooks.mjs`) |
 | `plugins/construct/bin/construct-memory` | The memory command line (on the Bash tool's PATH) |
+| `plugins/construct/bin/construct-gate` | Installs, removes, or reports the git pre-push hook (`hooks/scripts/pre-push.mjs`) |
 | `plugins/construct/hooks/contract/` | Session and subagent contract texts injected by hooks |
 | `plugins/construct/evals/` | Behavior eval cases run by `claude plugin eval` (`scripts/eval.sh` also writes `summary.json` with ritual and outcome pass rates, cost, duration, and turns, and keeps the run dirs under /private/tmp; `scripts/probe-review.sh` stands in for `review-fires` where the eval sandbox has no working git) |
 | `plugins/construct/tests/` | Mod tests run by `claude plugin test` |
@@ -329,13 +340,14 @@ Risk line: one reply can name several items, `Risk: items 2, 5 (reason)`; the Ri
 
 ## Status
 
-Current version: 8.0.0 (`plugins/construct/.claude-plugin/plugin.json`); a major release with one breaking change: the main thread makes small inline edits (up to `inline_edit_max_lines` lines per call, default 20; `0` restores the 7.x rule), see "Upgrading to 8.0". Releases are tagged `vX.Y.Z`.
+Current version: 8.1.0 (`plugins/construct/.claude-plugin/plugin.json`); a minor release, nothing breaks. Releases are tagged `vX.Y.Z`.
 
-Changes in 8.0.0:
+Changes in 8.1.0:
 
-- BREAKING: `inline_edit_max_lines` (number, default 20). `surface-guard` lets the main thread make edit calls of at most that many changed lines; `0` keeps the main thread to `odd/tasks/`.
-- `scripts/eval.sh` writes `summary.json` (ritual and outcome pass rates, cost, duration, turns); the `small-delegated*` evals are now `small-inline*`.
-- Each case can ship an `outcome.sh` that checks the result in a clean directory; the `review-fires` number comes from `scripts/probe-review.sh`, because the eval sandbox has no working git.
+- `construct-gate install | uninstall | status` adds an opt-in git pre-push hook (`hooks/scripts/pre-push.mjs`) that applies the publication gate's verdict to every push from the clone, from any host. It is a discipline layer: `git push --no-verify` skips it, it needs node on PATH, and it allows the push with a warning when the plugin is gone.
+- The README states what each gate layer guarantees.
+
+8.0.0 was a major release with one breaking change: the main thread makes small inline edits (up to `inline_edit_max_lines` lines per call, default 20; `0` restores the 7.x rule), see "Upgrading to 8.0". It also made `scripts/eval.sh` write `summary.json` (pass rates, cost, duration, turns), renamed the `small-delegated*` evals to `small-inline*`, and let each eval case ship an `outcome.sh` that checks the result in a clean directory.
 
 7.0.0 was a major release with one breaking change: `command-guard` no longer asks before destructive commands unless `command_guard_asks` is `true`, and its denies always apply (see "Upgrading to 7.0"). It also covered `find -delete`, `find -exec`, and `xargs rm -rf`, measured panel width by grapheme cluster, and made the mod test suite run green.
 
