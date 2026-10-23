@@ -1,0 +1,22 @@
+name: Feature request or feedback
+description: Suggest a change, or tell us how the workflow felt in real use
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What you were trying to do
+      description: The task, and where Construct got in the way or fell short.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like instead
+      description: Optional. A rule, option, agent, or skill change you have in mind.
+  - type: input
+    id: construct
+    attributes:
+      label: Construct version
+      description: From `claude plugin list`.
+      placeholder: 8.6.1

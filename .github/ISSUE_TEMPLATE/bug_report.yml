@@ -1,0 +1,62 @@
+name: Bug report
+description: Construct did something wrong or failed
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: For a security vulnerability, use the private report in SECURITY.md instead.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you asked, what Construct did, and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The smallest prompt or command sequence that shows it.
+      placeholder: |
+        1. In a git repository, ask "..."
+        2. ...
+    validations:
+      required: true
+  - type: input
+    id: construct
+    attributes:
+      label: Construct version
+      description: From `claude plugin list`.
+      placeholder: 8.6.1
+    validations:
+      required: true
+  - type: input
+    id: claude
+    attributes:
+      label: Claude Code version
+      description: From `claude --version`.
+      placeholder: 2.1.304
+    validations:
+      required: true
+  - type: input
+    id: node
+    attributes:
+      label: Node.js version and OS
+      description: From `node --version`, and your operating system.
+      placeholder: v22.16.0, macOS 15
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: /construct doctor output
+      description: Run `/construct doctor` in a Claude Code session and paste the report.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Hook output or transcript excerpt
+      description: Optional. Remove anything private before pasting.
+      render: text

@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: Repository tests (Node ${{ matrix.node }}, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        node: ['22.16.0', '24']
+        include:
+          - os: macos-latest
+            node: '22.16.0'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      # A quoted glob: Node 22 rejects a directory argument to --test.
+      - run: node --test 'tests/**/*.test.mjs'
+
+  plugin:
+    name: Plugin validate and mod tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      # The documented minimum Claude Code; validate and test need no login.
+      - run: npm install -g @anthropic-ai/claude-code@2.1.304
+      - run: claude plugin validate --strict .
+      - run: claude plugin validate --strict ./plugins/construct
+      - run: claude plugin test plugins/construct

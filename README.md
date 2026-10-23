@@ -6,6 +6,12 @@
 
 Construct is a Claude Code plugin that makes every request follow Organic Driven Development (ODD): authorize, explore, size, track, implement test-first, and close with evidence and a Risk line.
 
+> **Preview.** Construct changes quickly, and usage feedback is the most useful contribution right now: [open an issue](https://github.com/carsimax/construct/issues/new/choose) before a pull request. Changes are in [CHANGELOG.md](CHANGELOG.md); vulnerabilities go through [SECURITY.md](SECURITY.md).
+
+## ODD in 30 seconds
+
+An agent writes code faster than you can check it. Organic Driven Development keeps each step small enough to check: the agent stays read-only until you ask for a change, sizes the task, tracks large work in a feature document (`odd/tasks/<feature>.md`), writes a failing test before the fix, and ends with what it verified and a Risk line naming anything hard to undo or hard to detect. Risky work is reviewed by independent lens agents before hooks let it be pushed.
+
 ## What you get
 
 - **ODD workflow.** A session contract, injected by hooks, that Claude follows on every request without being asked.
@@ -305,7 +311,7 @@ The mod draws one thing: a docked **panel** (a `Pane` with id `construct`) drawn
 
 ## Contributing
 
-Setup, checks, and pull request rules are in [CONTRIBUTING.md](CONTRIBUTING.md).
+Feedback and bug reports go in [issues](https://github.com/carsimax/construct/issues/new/choose). Setup, checks, and pull request rules are in [CONTRIBUTING.md](CONTRIBUTING.md); vulnerabilities are reported privately as described in [SECURITY.md](SECURITY.md).
 
 ## Upgrading to 8.0
 
@@ -355,19 +361,7 @@ Changes in 8.6.1:
 
 - Memory through the MCP tools first: the session contract, the SessionStart Memory line, and the skills tell Claude to recall with `mem_search` and save with `mem_save` (loading a deferred tool through tool search), and to use the `construct-memory` CLI only when a tool is missing or fails. `construct:explorer` keeps the CLI. In live runs, 10 of 10 recall, save, and subagent prompts used the tools first, against 1 of 3 recall prompts on 8.6.0.
 
-8.6.0 added the read counter and `construct-memory review passive`, kept passive learnings out of relation candidates and more harness notices out of stored prompts, and hardened the memory MCP server.
-
-8.5.0 added the plugin's own memory MCP server, `memory`, with ten engram-style `mem_*` tools over the `construct-memory` CLI.
-
-8.4.0 brought memory closer to engram: passive learnings load apart and rank lower, near-duplicate learnings are skipped, harness notices are not stored as prompts, a `SessionEnd` hook closes the session, and `construct-memory relations pending` lists unjudged candidates.
-
-8.3.0 made `delegation-admission` also run on `PreToolUse` for `Workflow`: a workflow script is admitted only when every `agent()` call names a literal read-only `agentType`, so writes go through `construct:worker` with the `Agent` tool.
-
-8.2.0 made the `workflow`, `review`, and `delivery` skills load the repository's real state (`hooks/scripts/skill-context.mjs`), ran the commit slice only on Bash `git` calls and the context backstop once per tool batch (`PostToolBatch`), capped `construct:explorer` at 30 turns and `construct:verifier` at 50, and made `delegation`, `review`, and `workflow` model-only skills.
-
-8.1.0 added `construct-gate install | uninstall | status`, an opt-in git pre-push hook that applies the publication gate's verdict to every push from the clone, and stated in the README what each gate layer guarantees.
-
-8.0.0 was a major release with one breaking change: the main thread makes small inline edits (up to `inline_edit_max_lines` lines per call, default 20; `0` restores the 7.x rule), see "Upgrading to 8.0". It also made `scripts/eval.sh` write `summary.json` (pass rates, cost, duration, turns), renamed the `small-delegated*` evals to `small-inline*`, and let each eval case ship an `outcome.sh` that checks the result in a clean directory.
+Earlier 8.x releases are in [CHANGELOG.md](CHANGELOG.md); older ones follow.
 
 7.0.0 was a major release with one breaking change: `command-guard` no longer asks before destructive commands unless `command_guard_asks` is `true`, and its denies always apply (see "Upgrading to 7.0"). It also covered `find -delete`, `find -exec`, and `xargs rm -rf`, measured panel width by grapheme cluster, and made the mod test suite run green.
 

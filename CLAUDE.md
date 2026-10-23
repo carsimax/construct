@@ -11,9 +11,9 @@ Construct: a Claude Code plugin (in `plugins/construct/`) plus its local marketp
 ## Commands
 
 ```bash
-node --test tests/                              # repository tests (contract, skills, agents, review hooks, publication gate and store guard, hook gates, installer)
+node --test 'tests/**/*.test.mjs'               # repository tests (contract, skills, agents, review hooks, publication gate and store guard, hook gates, installer)
 node --test tests/publication/publication.test.mjs  # one test file
-node --test --test-name-pattern="Risk-line" tests/   # tests matching a name
+node --test --test-name-pattern="Risk-line" 'tests/**/*.test.mjs'  # tests matching a name
 claude plugin test plugins/construct            # mod tests (plugins/construct/tests/*.test.ts)
 claude plugin validate --strict .               # marketplace manifest
 claude plugin validate --strict ./plugins/construct
