@@ -70,10 +70,11 @@ test('frontmatter by kind: lenses have no tools, a two-turn budget, no CLAUDE.md
 })
 
 // S4 (deterministic-signals): bounded turn budgets for the reader and the verifier; the runner stays in the background.
-test('frontmatter caps: explorer and verifier have a turn budget, general runs in the background', () => {
+// No agent forces background: an open background agent mutes the Risk-line gate (risk-line.mjs) for up to an hour.
+test('frontmatter caps: explorer and verifier have a turn budget, no agent forces the background', () => {
   assert.equal(frontmatter('explorer').maxTurns, '30')
   assert.equal(frontmatter('verifier').maxTurns, '50')
-  assert.equal(frontmatter('general').background, 'true')
+  for (const n of names) assert.equal(frontmatter(n).background, undefined, n)
   for (const n of ['worker', 'general', 'judge-a', 'judge-b']) assert.equal(frontmatter(n).maxTurns, undefined, n)
 })
 

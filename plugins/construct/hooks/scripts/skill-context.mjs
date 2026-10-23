@@ -11,28 +11,36 @@ const MAX = 1500
 const MAX_STATUS_LINES = 12
 const MAX_TASK_LINES = 10
 
-const clip = (text) => (text.length > MAX ? `${text.slice(0, MAX - 1)}…` : text)
+const TRUNCATED = '… (truncated)'
+// MAX counts the trailing newline too.
+const clip = (text) => (text.length + 1 > MAX ? `${text.slice(0, MAX - 1 - TRUNCATED.length)}${TRUNCATED}` : text)
 
 // Unlike delivery-signals' git, this keeps the leading space of the first status line.
 function status(cwd) {
-  const run = spawnSync('git', ['status', '--short'], { cwd, encoding: 'utf8', timeout: 2000, stdio: ['ignore', 'pipe', 'ignore'] })
+  const run = spawnSync('git', ['--no-optional-locks', 'status', '--short'], { cwd, encoding: 'utf8', timeout: 2000, stdio: ['ignore', 'pipe', 'ignore'] })
   if (run.error || run.status !== 0) throw new Error('git status failed')
   return run.stdout.split('\n').filter(Boolean)
 }
 
+// Tasks first: a clip cuts the tail, and a long working tree must not push the open tasks out.
 function workflow(cwd, root) {
-  const lines = status(cwd)
-  const shown = lines.slice(0, MAX_STATUS_LINES).map((l) => (l.length > 100 ? `${l.slice(0, 99)}…` : l))
-  const changes = lines.length === 0 ? ['Working tree: clean'] : ['Working tree:', ...shown, ...(lines.length > shown.length ? [`(+${lines.length - shown.length} more)`] : [])]
+  let changes
+  try {
+    const lines = status(cwd)
+    const shown = lines.slice(0, MAX_STATUS_LINES).map((l) => (l.length > 100 ? `${l.slice(0, 99)}…` : l))
+    changes = lines.length === 0 ? ['Working tree: clean'] : ['Working tree:', ...shown, ...(lines.length > shown.length ? [`(+${lines.length - shown.length} more)`] : [])]
+  } catch (error) {
+    changes = [`Working tree: unavailable (${error.message})`]
+  }
   let docs = []
   try {
     docs = activeDocuments(root)
   } catch {
     // No odd/tasks directory: no feature documents.
   }
-  if (docs.length === 0) return [...changes, 'No unfinished feature tasks.']
+  if (docs.length === 0) return ['No unfinished feature tasks.', ...changes]
   const tasks = docs.slice(0, 3).flatMap(({ doc }) => [doc.path, ...doc.rows.slice(0, MAX_TASK_LINES).map((r) => `- ${r.length > 120 ? `${r.slice(0, 119)}…` : r}`), ...(doc.rows.length > MAX_TASK_LINES ? [`- (+${doc.rows.length - MAX_TASK_LINES} more unfinished)`] : [])])
-  return [...changes, 'Unfinished tasks:', ...tasks]
+  return ['Unfinished tasks:', ...tasks, ...changes]
 }
 
 // The same read-only review state the publication gate judges (reviewState), for HEAD against the default branch.
@@ -41,6 +49,10 @@ function review(cwd, root) {
   const base = gateDefaultBranch(root)
   if (!base) throw new Error('no default branch (origin/HEAD, origin or local main or master)')
   const target = base.replace(/^refs\/(remotes\/|heads\/)/, '')
+  // The gate's own refusal (refVerdict): a local default branch with nothing remote to compare it with.
+  if (base.startsWith('refs/heads/') && git(cwd, ['rev-parse', '--symbolic-full-name', 'HEAD']) === base) {
+    return [`${target} is the default branch and no remote-tracking default branch exists to compare it with (fetch origin, or publish a branch), so its review state cannot be checked.`]
+  }
   const { mergeBase, items, required, state } = reviewState(root, base, git(cwd, ['rev-parse', 'HEAD']))
   const head = `Branch ${branch ?? '(detached HEAD)'} against ${target}:`
   if (required.length === 0) return [head, 'no review required (no Risk items in the feature documents changed on this branch).']

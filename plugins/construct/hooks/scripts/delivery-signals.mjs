@@ -11,8 +11,9 @@
 //       falls below the threshold again (compaction), as upstream does.
 // Usage: node delivery-signals.mjs post | batch   (hook JSON on stdin)
 import { spawnSync } from 'node:child_process'
-import { closeSync, mkdirSync, openSync, readSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { closeSync, mkdirSync, openSync, readSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { dataDir, readInput, safeName } from './hook-io.mjs'
 
 export const SLICE_LINES = 400
@@ -49,7 +50,8 @@ function commitTargetDirectory(command, cwd) {
 
 // git returns trimmed stdout, or undefined on any failure (a failed diff is not an empty one).
 export function git(cwd, args) {
-  const run = spawnSync('git', args, { cwd, encoding: 'utf8', timeout: GIT_TIMEOUT_MS, stdio: ['ignore', 'pipe', 'ignore'] })
+  // GIT_OPTIONAL_LOCKS=0: a read never takes index.lock from a concurrent commit.
+  const run = spawnSync('git', args, { cwd, encoding: 'utf8', timeout: GIT_TIMEOUT_MS, stdio: ['ignore', 'pipe', 'ignore'], env: { ...process.env, GIT_OPTIONAL_LOCKS: '0' } })
   return run.error || run.status !== 0 ? undefined : run.stdout.trim()
 }
 
@@ -176,7 +178,8 @@ function main() {
   if (notice) process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: event, additionalContext: notice } })}\n`)
 }
 
-if (Object.hasOwn(MODES, process.argv[2])) {
+// The hook runs only when this file is executed directly, so skill-context.mjs can import it.
+if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url)) && Object.hasOwn(MODES, process.argv[2])) {
   try {
     main()
   } catch {
