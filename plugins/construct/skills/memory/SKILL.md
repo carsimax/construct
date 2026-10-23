@@ -28,7 +28,7 @@ Give an evolving topic one stable `topic_key` (`area/subject`). Saving the key a
 
 Fix a row in place with `construct-memory update <id>`. `construct-memory delete <id>` soft-deletes it; `--hard` erases the row and its versions for good. The type sets the first review date in months: decision 6, policy 12, preference 3, config 3, discovery 6, pattern 6, architecture 12, bugfix 12.
 
-Pin with `construct-memory pin <id>` only what must load every session. SessionStart prints pinned rows under `### Pinned` (at most 20) and search ranks them higher. `construct-memory unpin <id>` removes the flag.
+Pin with `construct-memory pin <id>` (undo: `construct-memory unpin <id>`) only what must load every session: pinned rows (at most 20) load under `### Pinned` and rank higher.
 
 ## Recall
 
@@ -47,14 +47,14 @@ Ask the user before recording `supersedes` or `conflicts_with` on a decision, ar
 
 ## Consolidate and review
 
-- `construct-memory consolidate <id> <id> --title T` (merged content on stdin) only previews and prints a fingerprint. Writing needs the same call with `--confirm <fingerprint>`; the sources are soft-deleted and `supersedes` is recorded. A stale fingerprint is refused.
+- `construct-memory consolidate <id> <id> --title T` (merged content on stdin) only previews, printing a fingerprint; the same call with `--confirm <fingerprint>` writes it, soft-deletes the sources, and records `supersedes` (a stale fingerprint is refused).
 - Before architecture-sensitive work run `construct-memory review list`. Verify each `needs_review` row against the code; run `construct-memory review done <id>` only after the user confirms.
 - `construct-memory review stale` is read-only and lists rows whose `Where:` paths no longer exist. A missing path alone proves nothing. Classify each row: Keep, Update, Consolidate, Replace, or Delete.
 - Age is not staleness and unverifiable is not false: keep and flag such a row; act only on a contradiction.
 
 ## Prompts
 
-The UserPromptSubmit hook stores each prompt. `construct-memory prompts` lists them; `--search <query>` finds one by text. A prompt that holds a secret goes with `construct-memory prompts delete <id>`.
+`construct-memory prompts` lists stored prompts, `--search <query>` finds one, and `construct-memory prompts delete <id>` removes one holding a secret.
 
 ## Session end
 
@@ -62,7 +62,7 @@ The UserPromptSubmit hook stores each prompt. `construct-memory prompts` lists t
 
 ## Passive capture
 
-The SubagentStop hook turns each `## Key Learnings:` item (at least 20 characters and 4 words) of a subagent's final message into a `passive` row.
+The SubagentStop hook turns each `## Key Learnings:` item (at least 20 characters and 4 words) of a subagent's final message into a `passive` row unless its words mostly match an existing one; passive rows rank below saves.
 
 ## Backup
 

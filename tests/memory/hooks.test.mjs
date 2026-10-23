@@ -85,6 +85,41 @@ test('prompt: stores prompts, skips blank and notification prompts', () => {
   assert.deepEqual(rows(c, 'SELECT content FROM user_prompts').map((x) => x.content), ['fix the parser'])
 })
 
+test('prompt: harness subagent and background-job notices are skipped (S6 of memory-engram-parity)', () => {
+  const c = setup()
+  for (const prompt of [
+    'Subagent jd-judge-a (task mvl2xtcv-1-ea1p, "judge A") finished. No verdict.',
+    'Subagent jd-judge-a (task mvl2pnqf-4-88qh, "judge A") failed: could not start',
+    'Background job job-8 ("Workflow admission live probe") exited with code 0 after 17s.',
+    '  Background job job-7 ("suite") exited with code 1',
+  ]) assert.equal(hook(c, 'prompt', { session_id: SID, prompt }).out, '')
+  hook(c, 'prompt', { session_id: SID, prompt: 'Subagent naming: rename the explorer' })
+  hook(c, 'prompt', { session_id: SID, prompt: 'Background jobs are slow, why?' })
+  assert.deepEqual(rows(c, 'SELECT content FROM user_prompts ORDER BY id').map((x) => x.content), ['Subagent naming: rename the explorer', 'Background jobs are slow, why?'])
+})
+
+test('end: SessionEnd sets ended_at, keeps the summary, prints nothing (S7 of memory-engram-parity)', () => {
+  const c = setup()
+  hook(c, 'session', { session_id: SID })
+  const r = hook(c, 'end', { session_id: SID, hook_event_name: 'SessionEnd', reason: 'exit' })
+  assert.deepEqual([r.code, r.out, r.err], [0, '', ''])
+  const [row] = rows(c, `SELECT ended_at, summary FROM sessions WHERE id = '${SID}'`)
+  assert.ok(row.ended_at)
+  assert.equal(row.summary, null)
+  withStore(c, (s) => s.endSession('sess-2', 'kept summary'))
+  const [before] = rows(c, "SELECT ended_at FROM sessions WHERE id = 'sess-2'")
+  hook(c, 'end', { session_id: 'sess-2' })
+  assert.deepEqual(rows(c, "SELECT ended_at, summary FROM sessions WHERE id = 'sess-2'").map((x) => ({ ...x })), [{ ended_at: before.ended_at, summary: 'kept summary' }])
+})
+
+test('end: an unknown session gets a closed row; outside a repository nothing happens', () => {
+  const c = setup()
+  hook(c, 'end', { session_id: 'never-started' })
+  assert.equal(rows(c, "SELECT count(*) AS n FROM sessions WHERE id = 'never-started' AND ended_at IS NOT NULL")[0].n, 1)
+  const r = hook(c, 'end', { session_id: SID }, { cwd: scratchDir('mem-norepo-') })
+  assert.deepEqual([r.code, r.out, r.err], [0, '', ''])
+})
+
 const stateFile = (c) => join(c.data, 'memory-hooks', `${SID}.json`)
 const seedState = (c, state) => {
   mkdirSync(join(c.data, 'memory-hooks'), { recursive: true })
@@ -138,13 +173,13 @@ test('capture: numbered items, emphasis stripped, short items dropped, nothing e
   assert.equal(got[0].session_id, SID)
 })
 
-test('capture: bullets, Spanish heading, title cut at 60 characters', () => {
+test('capture: bullets, Spanish heading, title cut at a word within 80 characters', () => {
   const c = setup()
   const long = 'Este aprendizaje es suficientemente largo para que el titulo se corte en sesenta caracteres exactos'
   capture(c, report(`### Aprendizajes (Clave)\n\n- ${long}\n- corto`))
   const [row] = passive(c)
   assert.equal(row.content, long)
-  assert.equal(row.title, `${long.slice(0, 60)}...`)
+  assert.equal(row.title, 'Este aprendizaje es suficientemente largo para que el titulo se corte en sesenta...')
 })
 
 test('capture: an item under 4 words is dropped even when long enough', () => {
@@ -153,12 +188,12 @@ test('capture: an item under 4 words is dropped even when long enough', () => {
   assert.deepEqual(passive(c).map((x) => x.content), ['This item has enough words to be kept.'])
 })
 
-test('capture: the 60-character title cut never splits a non-ASCII character', () => {
+test('capture: the 80-character title cut never splits a non-ASCII character', () => {
   const c = setup()
   const long = `${'\u{1F600}'.repeat(70)} word word word`
   capture(c, report(`## Key Learnings\n\n1. ${long}`))
   const [row] = passive(c)
-  assert.equal(row.title, `${'\u{1F600}'.repeat(60)}...`)
+  assert.equal(row.title, `${'\u{1F600}'.repeat(70)} word word...`)
   assert.equal(row.title.includes('\uFFFD'), false)
 })
 
@@ -179,6 +214,24 @@ test('capture: the last matching section with items wins; numbered beats bullets
   const c = setup()
   capture(c, report('## Learnings\n\n1. First section learning that should be ignored here.', '## Key Learnings\n\n- Bullet learning that should not be used at all.\n1. Numbered learning that wins over the bullet one.', '## Next\n\n1. Not a learning section at all, just next steps.'))
   assert.deepEqual(passive(c).map((x) => x.content), ['Numbered learning that wins over the bullet one.'])
+})
+
+test('capture: a near-duplicate passive item is skipped at Jaccard 0.8, kept below (S4 of memory-engram-parity)', () => {
+  const c = setup()
+  capture(c, report('## Key Learnings\n\n1. alpha bravo charlie delta echo'))
+  // Same word set, different hash (1.0); then 4 of 5 shared words (exactly 0.8): both skipped.
+  capture(c, report('## Key Learnings\n\n1. Alpha, bravo, charlie, delta, echo!'))
+  capture(c, report('## Key Learnings\n\n1. alpha bravo charlie delta'))
+  // 5 shared of 6 (0.83) is skipped; 4 shared of 7 (0.57) is kept.
+  capture(c, report('## Key Learnings\n\n1. alpha bravo charlie delta echo foxtrot'))
+  capture(c, report('## Key Learnings\n\n1. alpha bravo charlie delta golf hotel'))
+  assert.deepEqual(passive(c).map((x) => x.content), ['alpha bravo charlie delta echo', 'alpha bravo charlie delta golf hotel'])
+})
+
+test('capture: a title is the first sentence when it fits (S5 of memory-engram-parity)', () => {
+  const c = setup()
+  capture(c, report('## Key Learnings\n\n1. The gate reads docs at the merge-base. It also follows renames between both trees.'))
+  assert.equal(passive(c)[0].title, 'The gate reads docs at the merge-base.')
 })
 
 test('capture: a second run adds nothing (dedup by normalized hash)', () => {
@@ -220,7 +273,7 @@ test('malformed stdin and an unknown mode are silent with exit 0', () => {
 test('hooks.json registers each mode in exec form, existing hooks first', () => {
   const hooks = JSON.parse(readFileSync(join(ROOT, 'plugins/construct/hooks/hooks.json'), 'utf8')).hooks
   const find = (event, mode) => hooks[event].flatMap((g) => g.hooks.map((h) => ({ ...h, matcher: g.matcher }))).find((h) => h.args?.[0]?.endsWith('memory-hooks.mjs') && h.args[1] === mode)
-  for (const [event, mode, matcher] of [['SessionStart', 'session', 'startup|resume|clear'], ['SessionStart', 'compact', 'compact'], ['UserPromptSubmit', 'prompt', undefined], ['SubagentStop', 'capture', undefined]]) {
+  for (const [event, mode, matcher] of [['SessionStart', 'session', 'startup|resume|clear'], ['SessionStart', 'compact', 'compact'], ['UserPromptSubmit', 'prompt', undefined], ['SubagentStop', 'capture', undefined], ['SessionEnd', 'end', undefined]]) {
     const h = find(event, mode)
     assert.ok(h, `${event} ${mode}`)
     assert.equal(h.command, 'node')
@@ -240,7 +293,7 @@ test('every mode fails open when node:sqlite cannot load, and session and compac
   const preload = join(dir, 'preload.mjs')
   writeFileSync(hooks, "export async function resolve(s, c, next) { if (s === 'node:sqlite') throw new Error('no sqlite'); return next(s, c) }\n")
   writeFileSync(preload, `import { register } from 'node:module'\nregister(${JSON.stringify(`file://${hooks}`)})\n`)
-  for (const mode of ['session', 'compact', 'prompt', 'capture']) {
+  for (const mode of ['session', 'compact', 'prompt', 'capture', 'end']) {
     const r = spawnSync('node', ['--no-deprecation', '--import', preload, SCRIPT, mode], { cwd: c.repo, encoding: 'utf8', input: JSON.stringify({ session_id: SID, prompt: 'hello there', last_assistant_message: '## Key Learnings\n1. A long enough learning item here.' }), env: { ...process.env, CLAUDE_PLUGIN_DATA: c.data } })
     assert.equal(r.status, 0, `${mode}: ${r.stderr}`)
     const line = 'Memory: unavailable (node:sqlite or fts5 missing); run construct-memory doctor'

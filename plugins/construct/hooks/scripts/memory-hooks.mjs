@@ -1,6 +1,6 @@
 // Memory hooks over the per-repository store. Every mode fails open: any problem
 // produces no output and exit code 0; outside a git repository nothing happens.
-// Usage: node memory-hooks.mjs session|compact|prompt|capture  (hook JSON on stdin)
+// Usage: node memory-hooks.mjs session|compact|prompt|capture|end  (hook JSON on stdin)
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -8,10 +8,12 @@ import { dataDir, readInput, safeName } from './hook-io.mjs'
 
 const REMIND_AFTER_MS = 15 * 60 * 1000
 const MIN_SESSION_MS = 5 * 60 * 1000
-const SKIPPED_PROMPT = /^\s*(<task-notification>|<agent-message)/
+// Harness notices delivered as user prompts: tags, and subagent or background-job completion lines.
+const SKIPPED_PROMPT = /^\s*(<task-notification>|<agent-message|Subagent \S+ \(task |Background job \S+ \()/
 const SECTION = /^(key learnings|learnings|aprendizajes( \(clave\)| clave)?)\s*:?$/i
 const MIN_CHARS = 20
 const MIN_WORDS = 4
+const TITLE_MAX = 80
 
 // The plugin bin/ is not on PATH in every environment (for example the eval sandbox), so name the absolute form.
 const CLI = join(process.env.CLAUDE_PLUGIN_ROOT || join(dirname(fileURLToPath(import.meta.url)), '..', '..'), 'bin', 'construct-memory')
@@ -51,6 +53,16 @@ export function learnings(text) {
   return []
 }
 
+// titleOf is the item's first sentence; past TITLE_MAX characters it is cut at the last word within it, with "...".
+export function titleOf(item) {
+  const sentence = item.replace(/\s+/g, ' ').split(/(?<=[.!?]) /)[0]
+  const chars = [...sentence]
+  if (chars.length <= TITLE_MAX) return sentence
+  const head = chars.slice(0, TITLE_MAX + 1).join('')
+  const cut = head.lastIndexOf(' ')
+  return `${(cut > 0 ? head.slice(0, cut) : chars.slice(0, TITLE_MAX).join('')).trimEnd()}...`
+}
+
 // reason shortens a store failure to a phrase for the SessionStart line.
 function reason(error) {
   const msg = String(error?.message ?? error)
@@ -64,7 +76,7 @@ function reason(error) {
 async function main() {
   const mode = process.argv[2]
   const input = readInput()
-  if (!input || !['session', 'compact', 'prompt', 'capture'].includes(mode)) return
+  if (!input || !['session', 'compact', 'prompt', 'capture', 'end'].includes(mode)) return
   // Loaded here, not at the top, so a Node without node:sqlite fails open instead of crashing on import.
   // session and compact say why memory is off; prompt and capture stay silent.
   const visible = mode === 'session' || mode === 'compact'
@@ -100,11 +112,12 @@ async function main() {
       if (now - Date.parse(state.started) < MIN_SESSION_MS || now - lastSave < REMIND_AFTER_MS || now - (Date.parse(state.reminded) || 0) < REMIND_AFTER_MS) return
       writeState(session, { ...state, reminded: new Date(now).toISOString() })
       emit('UserPromptSubmit', 'Memory: nothing saved in the last 15 minutes; if you decided, fixed, or learned something worth keeping, save it with `construct-memory save`.')
+    } else if (mode === 'end') {
+      memory.closeSession(session)
     } else if (typeof input.last_assistant_message === 'string') {
       for (const item of learnings(input.last_assistant_message)) {
-        if (injects(item) || memory.hasHash(normalizedHash(item))) continue
-        const chars = [...item.replace(/\s+/g, ' ')]
-        memory.save({ title: chars.length > 60 ? `${chars.slice(0, 60).join('')}...` : chars.join(''), content: item, type: 'passive', session_id: session })
+        if (injects(item) || memory.hasHash(normalizedHash(item)) || memory.similarPassive(item)) continue
+        memory.save({ title: titleOf(item), content: item, type: 'passive', session_id: session })
       }
     }
   } finally {

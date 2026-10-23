@@ -18,7 +18,7 @@ Objective: construct-memory behaves like engram where it matters: a high-signal 
 | ID | Specs | Task | Route | Risk | Status | Commit |
 |---|---|---|---|---|---|---|
 | T1 | S1, S2, S3 | Context and search ranking in memory-store.mjs, tests | parent | none | done (RED 5 fail; suite 1141/0) | b591e61 |
-| T2 | S4, S5, S6, S7 | Passive capture, prompt filter, SessionEnd hook, tests, docs | parent | none | pending | |
+| T2 | S4, S5, S6, S7 | Passive capture, prompt filter, SessionEnd hook, tests, docs | parent | none | done (RED 7 fail; suite 1146/0) | see L5 |
 | T3 | S8 | Pending relations line, `relations pending` command, skill, README, tests | parent | none | pending | |
 
 ## Log
@@ -27,3 +27,4 @@ Objective: construct-memory behaves like engram where it matters: a high-signal 
 - **L2 (2026-10-23, parent):** Measured on this clone's store: passive 421/453 observations, 13 of the 20 context rows passive, 5/49 sessions summarized or ended, 82 pending vs 15 judged relations, 32/214 prompts are harness notifications, 32 observations with topic_key. Plan F1-F5 proposed; F4 (MCP server) and F5 (bulk consolidate, access counter) are later features; scopes, cloud sync, and cross-project are out (repo-local only).
 - **L3 (2026-10-23, user):** "Vamos con ese plan!" (to the recommendation: start with F1 + F2, then F3; F4 as its own feature). Dropped from F2 with reason: the Stop-time summary reminder (blocking Stop is intrusive and the Risk-line gate already owns Stop) and the CLI guessing the active session (concurrent sessions would misattribute saves; the session id is already printed in the context line).
 - **L4 (2026-10-23, parent, T1):** RED: 5 new store tests failed. Green: passive rows split into `### Recent Learnings` (3), sessions filtered by summary or live observation, passive bm25 weight 0.5 and LIKE order passive last. Two hook tests changed with S2: an empty store's session is no longer listed, so the context is the Memory line alone. Suite 1141/0.
+- **L5 (2026-10-23, parent, T2):** RED: 7 hook tests failed (two were the old 60-character title pins, changed with S5). Green: `similarPassive` (FTS candidates, best 50, Jaccard >= 0.8 on 3+ character words), `titleOf` (first sentence, word cut within 80), `SKIPPED_PROMPT` extended, `closeSession` behind `memory-hooks.mjs end` registered on SessionEnd. Two test expectations of mine were wrong (the cut lands after "sesenta"; node:sqlite rows have a null prototype), fixed in the tests. The memory skill was at 799/800 words; pin, prompts, consolidate, and passive text rewritten in place to 795. Suite 1146/0. Commit: the feat(memory) commit after 1cc3565.

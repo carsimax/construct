@@ -32,6 +32,7 @@ const PINNED_MAX = 20
 const PINNED_BOOST = 0.1
 const PASSIVE_WEIGHT = 0.5
 const LEARNINGS_MAX = 3
+const PASSIVE_SIMILAR = 0.8
 const TIMELINE_DEFAULT = 5
 const PROMPTS_DEFAULT = 20
 const PROMPTS_MAX = 100
@@ -190,6 +191,8 @@ const SEARCH_COLUMNS = 'o.id, o.type, o.title, o.topic_key, o.pinned, o.created_
 const queryTerms = (text) => String(text ?? '').trim().split(/\s+/).map((t) => t.replace(/^"+|"+$/g, '')).filter(Boolean)
 const hasShortTerm = (terms) => terms.some((t) => [...t].length < 3)
 const ftsQuoted = (terms, any) => terms.map((t) => `"${t.replaceAll('"', '""')}"`).join(any ? ' OR ' : ' AND ')
+// wordSet is the lowercase words of 3+ letters or digits, the unit of passive near-duplicate checks.
+const wordSet = (text) => new Set(String(text).toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) ?? [])
 const likePattern = (term) => `%${term.replace(/[\\%_]/g, '\\$&')}%`
 
 // suggestTopicKey ports engram's SuggestTopicKey: a family from the type (or, for an untyped note, from
@@ -657,6 +660,15 @@ function makeStore(db, path, now, repoName) {
       })
     },
 
+    // closeSession sets ended_at once and leaves the summary alone (the SessionEnd hook).
+    closeSession(id) {
+      write(() => {
+        const at = stamp()
+        run('INSERT OR IGNORE INTO sessions (id, started_at) VALUES (?, ?)', id, at)
+        run('UPDATE sessions SET ended_at = ? WHERE id = ? AND ended_at IS NULL', at, id)
+      })
+    },
+
     addPrompt(sessionId, content) {
       write(() => run('INSERT INTO user_prompts (session_id, content, created_at) VALUES (?, ?, ?)', sessionId, filterLines(stripPrivate(content)), stamp()))
     },
@@ -802,6 +814,20 @@ function makeStore(db, path, now, repoName) {
 
     // lastSaveAt is the time of the newest save or update, or null.
     lastSaveAt: () => one('SELECT max(updated_at) AS t FROM observations').t,
+
+    // similarPassive is true when a live passive observation shares at least PASSIVE_SIMILAR of the words
+    // (Jaccard) of text (S4 of odd/tasks/memory-engram-parity.md). Candidates come from FTS, the best 50.
+    similarPassive(text) {
+      const words = wordSet(text)
+      if (words.size === 0) return false
+      const rows = all(`SELECT o.content FROM observations_fts f JOIN observations o ON o.id = f.rowid WHERE observations_fts MATCH ? AND o.deleted_at IS NULL AND o.type = 'passive'
+        ORDER BY bm25(observations_fts) LIMIT 50`, ftsQuoted([...words], true))
+      return rows.some(({ content }) => {
+        const other = wordSet(content)
+        const shared = [...words].filter((w) => other.has(w)).length
+        return shared / (words.size + other.size - shared) >= PASSIVE_SIMILAR
+      })
+    },
 
     // hasHash is true when a live (not soft-deleted) observation has this normalized_hash.
     hasHash: (hash) => Boolean(one('SELECT 1 AS found FROM observations WHERE normalized_hash = ? AND deleted_at IS NULL', hash)),
