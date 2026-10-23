@@ -19,7 +19,24 @@ const CONTROL = /[\u0000-\u001f\u007f-\u009f]/g
 
 const clean = (s) => (typeof s === 'string' ? s.replace(CONTROL, '') : '')
 const count = (n) => (isNum(n) && n > 0 ? Math.floor(n) : 0)
-const cut = (s, max) => (s.length <= max ? s : max > 1 ? `${s.slice(0, max - 1)}…` : s.slice(0, max))
+// Screen columns: East Asian wide, fullwidth and emoji-presentation code points take two, the rest one.
+// shortcut: combining marks, ZWJ sequences and variation selectors count by code point, upgrade with a width table if they show up in names.
+const WIDE = /[\u1100-\u115F\u2E80-\uA4CF\uAC00-\uD7A3\uF900-\uFAFF\uFE30-\uFE6F\uFF00-\uFF60\uFFE0-\uFFE6\u{20000}-\u{3FFFD}\p{Emoji_Presentation}]/u
+const cols = (s) => [...s].reduce((n, c) => n + (WIDE.test(c) ? 2 : 1), 0)
+// The longest prefix of `s` within `max` columns; a wide character is never split.
+function head(s, max) {
+  let out = ''
+  let used = 0
+  for (const c of s) {
+    const w = WIDE.test(c) ? 2 : 1
+    if (used + w > max) break
+    out += c
+    used += w
+  }
+  return out
+}
+const padTo = (s, n) => s + ' '.repeat(Math.max(0, n - cols(s)))
+const cut = (s, max) => (cols(s) <= max ? s : max > 1 ? `${head(s, max - 1)}…` : head(s, max))
 
 // `m:ss`, or `XhYY` from an hour on.
 export function clock(ms) {
@@ -59,7 +76,7 @@ function age(ms) {
 
 const seg = (t, o = {}) => ({ t, ...o })
 const sep = () => seg(SEP, { dim: true })
-const width = (segs) => segs.reduce((n, s) => n + s.t.length, 0)
+const width = (segs) => segs.reduce((n, s) => n + cols(s.t), 0)
 
 // The segments that fit in `max` cells, the cut one ending in `…`.
 function clip(segs, max) {
@@ -68,8 +85,8 @@ function clip(segs, max) {
   let left = Math.max(0, max - 1)
   for (const s of segs) {
     if (left <= 0) break
-    out.push(s.t.length <= left ? s : { ...s, t: s.t.slice(0, left) })
-    left -= s.t.length
+    out.push(cols(s.t) <= left ? s : { ...s, t: head(s.t, left) })
+    left -= cols(s.t)
   }
   const last = out.pop()
   out.push(last ? { ...last, t: last.t + '…' } : seg('…')) // a copy: the caller's segment stays as it was
@@ -119,7 +136,7 @@ function branchRow({ panel, git, effort }, max) {
   const room = (withMode) => max - width(build('', withMode)) - (branch ? 2 + SEP.length : 0)
   const fit = (withMode) => {
     const r = room(withMode)
-    return branch.length <= r ? branch : r > 8 ? cut(branch, r) : null
+    return cols(branch) <= r ? branch : r > 8 ? cut(branch, r) : null
   }
   const withMode = fit(true)
   if (withMode !== null) return row(build(withMode, true), max)
@@ -178,7 +195,7 @@ function oddCard(odd, w) {
   }
   const tasks = (Array.isArray(odd.tasks) ? odd.tasks : []).filter((t) => t && typeof t === 'object')
   if (tasks.length) body.push(row(checkpoints(tasks, inner), inner))
-  const title = cut(`ODD · ${clean(String(odd.feature))}`, inner - status.length - 1)
+  const title = cut(`ODD · ${clean(String(odd.feature))}`, inner - cols(status) - 1)
   return card({ title, status: { text: status, dim: true }, color: PALETTE.odd, children: body, width: w })
 }
 
@@ -281,7 +298,7 @@ function agentsCard(panel, nowMs, w) {
     const [glyph, now, done] = LOOKS[kindOf(a.name)] ?? OTHER_LOOK
     return { a: { ...a, name: clean(a.name) }, glyph, verb: a.status === 'running' ? now : done, model: typeof a.model === 'string' && a.model ? prettyModel(a.model) : '—' }
   })
-  const pad = (key, cap = Infinity) => Math.min(cap, Math.max(...looks.map((l) => (key === 'name' ? l.a.name : l[key]).length)))
+  const pad = (key, cap = Infinity) => Math.min(cap, Math.max(...looks.map((l) => cols(key === 'name' ? l.a.name : l[key]))))
   const [nameW, verbW, modelW] = [pad('name', MAX_NAME), pad('verb'), pad('model')]
   // glyph, name, verb, model, meter and clock with their spaces; the model goes first when the row does not fit, then the meter
   const clockW = 1 + Math.max(...shown.map((a) => clock(a.elapsedMs).length))
@@ -293,8 +310,8 @@ function agentsCard(panel, nowMs, w) {
     const tone = live ? { color: PALETTE.agent } : { dim: true }
     // the clock stays; name and verb are clipped with `…` when even they do not fit
     const room = inner - 2 - clockW - nameW - 1
-    const cells = verb.length <= room ? Math.min(verbW, room) : verbW // pad, never clip, a verb that fits
-    const left = clip([seg(cut(a.name, MAX_NAME).padEnd(nameW), tone), seg(' '), seg(verb.padEnd(cells), tone)], inner - 2 - clockW)
+    const cells = cols(verb) <= room ? Math.min(verbW, room) : verbW // pad, never clip, a verb that fits
+    const left = clip([seg(padTo(cut(a.name, MAX_NAME), nameW), tone), seg(' '), seg(padTo(verb, cells), tone)], inner - 2 - clockW)
     return row(
       [
         seg(glyph, live ? tone : { color: PALETTE.gate }),
@@ -317,11 +334,11 @@ function agentsCard(panel, nowMs, w) {
 
 // The path shortened to `…/dir/name`, then `…/name`, then clipped, to fit `max` cells.
 function fitPath(path, max) {
-  if (path.length <= max) return path
+  if (cols(path) <= max) return path
   const parts = path.split('/').filter(Boolean)
   for (const keep of [2, 1]) {
     const short = `…/${parts.slice(-keep).join('/')}`
-    if (short.length <= max) return short
+    if (cols(short) <= max) return short
   }
   return cut(parts.at(-1) ?? path, max)
 }
@@ -337,7 +354,7 @@ function statSegs(f) {
 function changeRow(f, inner) {
   const stat = statSegs(f)
   const path = fitPath(clean(f.path), inner - width(stat) - 1)
-  return row([seg(path.padEnd(inner - width(stat))), ...stat], inner)
+  return row([seg(padTo(path, inner - width(stat))), ...stat], inner)
 }
 
 function changesCard({ git, changes }, budget, w) {
@@ -347,7 +364,7 @@ function changesCard({ git, changes }, budget, w) {
   const behind = count(git?.behind)
   if (budget < 0 || (files.length === 0 && ahead === 0 && behind === 0)) return null
   const status = [...(ahead ? [`↑${ahead}`] : []), ...(behind ? [`↓${behind}`] : [])].join(' ')
-  const title = cut(clean(git?.branch) || 'changes', inner - status.length - 1)
+  const title = cut(clean(git?.branch) || 'changes', inner - cols(status) - 1)
   const sorted = [...files].sort((a, b) => lines(b) - lines(a))
   const fit = sorted.length <= budget ? sorted : sorted.slice(0, Math.max(0, budget - 1))
   const body = budget === 0 ? [] : fit.map((f) => changeRow(f, inner))
