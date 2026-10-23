@@ -812,8 +812,13 @@ test('the GATE card shows the last denial even with no counted checks (T7)', () 
 
 // ---- S4: wide characters count as two columns -----------------------------------
 
-// Display width: wide, fullwidth and emoji code points take two columns.
-const cellsOf = (s: string) => [...s].reduce((n, c) => n + (/[ᄀ-ᅟ⺀-꓏가-힣＀-｠￠-￦\p{Emoji_Presentation}]/u.test(c) ? 2 : 1), 0)
+// Display width by grapheme cluster: a wide first code point, or a ZWJ / VS16 emoji sequence, takes two columns.
+const WIDE_RE = /[ᄀ-ᅟ⺀-꓏가-힣＀-｠￠-￦\p{Emoji_Presentation}]/u
+const cellsOf = (s: string) =>
+  [...new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(s)].reduce((n, { segment: g }) => {
+    const wide = WIDE_RE.test(String.fromCodePoint(g.codePointAt(0)!)) || (/[\u200d\ufe0f]/.test(g) && /\p{Extended_Pictographic}/u.test(g))
+    return n + (wide ? 2 : 1)
+  }, 0)
 
 test('S4 agent rows with CJK or emoji names never exceed the card width at 40 columns', () => {
   for (const role of ['検索エージェント検索エージェント', '🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍', 'ｗｉｄｅ名前']) {
@@ -844,5 +849,24 @@ test('S4 wide text in the branch, ODD feature, change path and agent name never 
       expect(rows.some((r) => cellsOf(r) > [...r].length)).toBe(true) // wide text is really rendered
       for (const r of rows) expect(cellsOf(r), `${columns} cols: ${r}`).toBeLessThanOrEqual(Math.max(40, columns) - 4)
     }
+  }
+})
+
+test('S4 ZWJ, VS16 and combining sequences stay within the card width at 40 columns', () => {
+  const role = '👨‍👩‍👧 ❤️ e\u0301'
+  const rows = rowsOf({ panel: { ...full(), agents: [agent({ id: 'w', role, type: role })] }, columns: 40 })
+  expect(rows.some((r) => r.includes('👨‍👩‍👧'))).toBe(true)
+  for (const r of rows) expect(cellsOf(r), r).toBeLessThanOrEqual(36)
+})
+
+test('S4 a clipped name never ends in a broken cluster', () => {
+  for (const unit of ['a👨‍👩‍👧', 'e\u0301x', '❤️b', 'ab👨‍👩‍👧c']) {
+    const role = unit.repeat(8)
+    const rows = rowsOf({ panel: { ...full(), agents: [agent({ id: 'w', role, type: role })] }, columns: 40 })
+    const row = rows.find((r) => r.startsWith('• '))!
+    const before = row.slice(0, row.indexOf('…'))
+    expect(before, unit).not.toMatch(/\u200d$/)
+    expect(before, unit).not.toMatch(/^\p{M}|\s\p{M}/u)
+    expect(cellsOf(row), unit).toBeLessThanOrEqual(36)
   }
 })

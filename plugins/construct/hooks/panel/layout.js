@@ -19,18 +19,23 @@ const CONTROL = /[\u0000-\u001f\u007f-\u009f]/g
 
 const clean = (s) => (typeof s === 'string' ? s.replace(CONTROL, '') : '')
 const count = (n) => (isNum(n) && n > 0 ? Math.floor(n) : 0)
-// Screen columns: East Asian wide, fullwidth and emoji-presentation code points take two, the rest one.
-// shortcut: combining marks, ZWJ sequences and variation selectors count by code point, upgrade with a width table if they show up in names.
+// Screen columns, counted by grapheme cluster: a cluster is two wide when its first code point is East Asian
+// wide, fullwidth or emoji-presentation, or when it joins an emoji with ZWJ or VS16; every other cluster is one.
 const WIDE = /[\u1100-\u115F\u2E80-\uA4CF\uAC00-\uD7A3\uF900-\uFAFF\uFE30-\uFE6F\uFF00-\uFF60\uFFE0-\uFFE6\u{20000}-\u{3FFFD}\p{Emoji_Presentation}]/u
-const cols = (s) => [...s].reduce((n, c) => n + (WIDE.test(c) ? 2 : 1), 0)
-// The longest prefix of `s` within `max` columns; a wide character is never split.
+const EMOJI_JOIN = /(?=.*[\u200D\uFE0F])(?=.*\p{Extended_Pictographic})/su
+const PLAIN = /^[\x20-\x7e]*$/
+const SEGMENTER = new Intl.Segmenter(undefined, { granularity: 'grapheme' })
+const clusterWidth = (g) => (WIDE.test(String.fromCodePoint(g.codePointAt(0))) || EMOJI_JOIN.test(g) ? 2 : 1)
+const cols = (s) => (PLAIN.test(s) ? s.length : [...SEGMENTER.segment(s)].reduce((n, { segment }) => n + clusterWidth(segment), 0))
+// The longest prefix of `s` within `max` columns; a cluster is never split.
 function head(s, max) {
+  if (PLAIN.test(s)) return s.slice(0, max)
   let out = ''
   let used = 0
-  for (const c of s) {
-    const w = WIDE.test(c) ? 2 : 1
+  for (const { segment } of SEGMENTER.segment(s)) {
+    const w = clusterWidth(segment)
     if (used + w > max) break
-    out += c
+    out += segment
     used += w
   }
   return out
