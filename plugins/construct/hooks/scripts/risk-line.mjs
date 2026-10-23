@@ -11,8 +11,9 @@ import { fileURLToPath } from 'node:url'
 import { dataDir, hasOpenSubagents, pruneState, readInput, safeName } from './hook-io.mjs'
 
 const MAX_PATHS = 3
-// Code-shaped markers of a weakened verifier, matched on one added line. Anchored to the line
-// start (TODO: a comment opener at the line start) so a string literal in a fixture does not match.
+// Code-shaped markers of a weakened verifier, matched on one added line. The test markers and a
+// whole-line TODO are anchored to the line start, so a string literal in a fixture does not match them;
+// a trailing TODO is not anchored, so a string literal containing ` // TODO` can match (see the TODO shortcut).
 // shortcut: a template-literal fixture whose line starts with a marker still matches, upgrade with a real parser if it bites.
 const MARKERS = [
   /^\s*(?:it|test|describe|context)\.(?:skip|only|todo)\(/,

@@ -6,8 +6,8 @@
 //     and no `--force-with-lease`, `git reset --hard`, `git clean -f`, `git checkout -- .`,
 //     `git checkout .`, and `git restore .`, `./`, or `:/` (unless it only touches the index).
 //   - deny also: a statement that sets `GIT_CONFIG_PARAMETERS` or `GIT_CONFIG_KEY_<n>` to
-//     core.hooksPath through `export`, `declare -x`, `typeset -x`, or a bare assignment, even
-//     with no `git` in that statement.
+//     core.hooksPath through `export`, `declare` or `typeset` (any flags), `readonly`, `local`,
+//     or a bare assignment, even with no `git` in that statement.
 // Commands are found through shell-words.mjs (`sh -c`, `eval`, `env -S`, wrappers, `$(...)`,
 // backticks, heredoc bodies fed to a shell), so compounds and `git -C dir` are covered. When a
 // deny and an ask both match, deny is reported. Unreadable input or any error: no output (fail open).
@@ -122,7 +122,7 @@ function hitsIn(command, depth = 0) {
     // `bash <<< 'git commit -n'`: the here-string reaches the tokenizer as a plain word.
     if (SHELLS.has(name)) for (const arg of args) if (!arg.startsWith('-')) nested(arg)
     // `export X=...; git ...`: the assignment is its own statement, so it is checked without a `git`.
-    if (/^(export|declare|typeset|[A-Za-z_]\w*=)/.test(words[0] ?? '') && words.some(hooksEnv)) found.push(hit('deny', HOOKS_ENV_REASON))
+    if (/^(export|declare|typeset|readonly|local|[A-Za-z_]\w*=)/.test(words[0] ?? '') && words.some(hooksEnv)) found.push(hit('deny', HOOKS_ENV_REASON))
     const h = name === 'git' ? gitHit(args, words) : name === 'rm' ? rmHit(args) : null
     if (h) found.push(h)
   }

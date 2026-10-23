@@ -134,8 +134,8 @@ describe('ask: destructive commands', () => {
 })
 
 describe('pending-round S1: git restore at the root', () => {
-  expect('ask', ['git restore ./', 'git restore :/', 'git restore -- ./', 'git restore -- :/', 'git restore --worktree :/'])
-  silent(['git restore --staged ./', 'git restore -S :/', 'git restore --staged :/'])
+  expect('ask', ['git restore ./', 'git restore :/', 'git restore -- ./', 'git restore -- :/', 'git restore --worktree :/', 'git restore -s HEAD :/'])
+  silent(['git restore --staged ./', 'git restore -S :/', 'git restore --staged :/', 'git restore --staged -- ./ :/'])
 })
 
 describe('pending-round S2: exported hooks-path config', () => {
@@ -145,8 +145,11 @@ describe('pending-round S2: exported hooks-path config', () => {
     'declare -x GIT_CONFIG_KEY_1=core.hooksPath',
     'typeset -x GIT_CONFIG_KEY_2=core.hooksPath',
     "GIT_CONFIG_PARAMETERS=\"'core.hooksPath=x'\"; git push",
+    'readonly GIT_CONFIG_KEY_0=core.hooksPath; export GIT_CONFIG_KEY_0 GIT_CONFIG_COUNT=1 GIT_CONFIG_VALUE_0=/dev/null; git commit -m x',
+    'local -x GIT_CONFIG_KEY_0=core.hooksPath',
+    "sh -c 'declare -x GIT_CONFIG_KEY_0=core.hooksPath && git commit'",
   ])
-  silent(["export GIT_CONFIG_PARAMETERS=\"'user.name=x'\"", 'export FOO=core.hooksPath', 'echo GIT_CONFIG_KEY_0=core.hooksPath'])
+  silent(["export GIT_CONFIG_PARAMETERS=\"'user.name=x'\"", 'export FOO=core.hooksPath', 'echo GIT_CONFIG_KEY_0=core.hooksPath', 'readonly PATH'])
 })
 
 describe('allowed', () => {
