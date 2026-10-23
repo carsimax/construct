@@ -36,7 +36,7 @@ surface-guard then denies writes outside those entries. A worker given no list r
 
 ## Prompt contents
 
-Each handoff holds the task, the Spec line or question, `## Memory` (search hits the parent pastes; Bash-capable subagents may also run `construct-memory search`), reuse pointers, the verification commands with their strength, known environmental failures, and a request to close with `## Key Learnings:` (memory-hooks saves those passively).
+Each handoff holds the task, the Spec line or question, `## Memory` (search hits the parent pastes; subagents may also call `mem_search`, and `construct:explorer` runs `construct-memory search`), reuse pointers, the verification commands with their strength, known environmental failures, and a request to close with `## Key Learnings:` (memory-hooks saves those passively).
 
 Test-first: a runnable deterministic test and a clear expected outcome mean RED, then GREEN. For docs-only or no runnable RED the worker states the exception.
 

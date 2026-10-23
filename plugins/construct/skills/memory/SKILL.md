@@ -5,7 +5,7 @@ description: "Per-repository memory through the construct MCP tools and the cons
 
 # Memory
 
-One SQLite store per repository, shared by every worktree, never committed. The MCP tools `mem_save`, `mem_search`, `mem_context`, `mem_get_observation`, `mem_update`, `mem_timeline`, `mem_session_summary`, `mem_judge`, `mem_suggest_topic_key`, and `mem_relations_pending` run the CLI commands below with the same arguments; use them first; the CLI is the fallback, and delete, `prompts delete`, consolidate, import, export, and `review done` are CLI-only. `construct-memory help` lists every command.
+One SQLite store per repository, shared by every worktree, never committed. MCP tools take the same arguments as these commands: `mem_save` (`save`), `mem_search` (`search`), `mem_context` (`context`), `mem_get_observation` (`get`), `mem_update` (`update`), `mem_timeline` (`timeline`), `mem_session_summary` (`summary`), `mem_judge` (`judge`), `mem_suggest_topic_key` (`suggest-topic-key`), `mem_relations_pending` (`relations pending`). Call the tool; run the CLI when the tool is missing or fails, or the command is CLI-only (delete, `prompts delete`, consolidate, import, export, `review done`). `construct-memory help` lists every command.
 
 ## What to save
 
@@ -49,7 +49,7 @@ Ask the user before recording `supersedes` or `conflicts_with` on a decision, ar
 
 - `construct-memory consolidate <id> <id> --title T` (merged content on stdin) only previews, printing a fingerprint; the same call with `--confirm <fingerprint>` writes it, soft-deletes the sources, and records `supersedes` (a stale fingerprint is refused).
 - Before architecture-sensitive work run `construct-memory review list`; verify each `needs_review` row against the code, and run `construct-memory review done <id>` only after the user confirms.
-- `construct-memory review stale` is read-only and lists rows whose `Where:` paths no longer exist. A missing path alone proves nothing. Classify each row: Keep, Update, Consolidate, Replace, or Delete.
+- `construct-memory review stale` (read-only) lists rows whose `Where:` paths no longer exist; a missing path alone proves nothing. Classify each: Keep, Update, Consolidate, Replace, or Delete.
 - `construct-memory review passive` (`--days N`) lists old passive rows never read, oldest first; consolidate or delete them.
 - Age is not staleness: act only on a contradiction.
 
@@ -59,7 +59,7 @@ Ask the user before recording `supersedes` or `conflicts_with` on a decision, ar
 
 ## Session end
 
-`construct-memory summary --session <id>` reads the summary on stdin, stores it, and ends the session. Sections: Goal, Instructions, Discoveries, Accomplished, Next Steps, Relevant Files. After a compact, SessionStart asks for it.
+`construct-memory summary --session <id>` stores the summary from stdin and ends the session. Sections: Goal, Instructions, Discoveries, Accomplished, Next Steps, Relevant Files. After a compact, SessionStart asks for it.
 
 ## Passive capture
 
@@ -67,8 +67,8 @@ The SubagentStop hook turns each `## Key Learnings:` item (20+ characters, 4+ wo
 
 ## Backup
 
-`construct-memory export [file]` writes live memory as JSON; `construct-memory import <file> --project <name>` loads one project, idempotently. Both ask.
+`construct-memory export [file]` writes live memory as JSON; `construct-memory import <file> --project <name>` loads one project idempotently. Both ask.
 
 ## Where memory is used
 
-`workflow` closes a unit with save; `delegation` passes notes; `debugging` searches the symptom first and saves a root cause only if it passes the bar above; `review` saves a bugfix, and a deferred advisory as a decision; `constraints` saves under `quality/<rule>`; `migration` under `migration/<name>`; `explorer` (no MCP tools) searches with the CLI before it reads; every writer ends with `## Key Learnings:`.
+`workflow` saves at close; `delegation` passes notes; `debugging` searches the symptom first and saves a root cause that passes the bar; `review` saves a bugfix, a deferred advisory as a decision; `constraints` saves under `quality/<rule>`, `migration` under `migration/<name>`; `explorer` (no MCP tools) searches with the CLI first; every writer ends with `## Key Learnings:`.

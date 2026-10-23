@@ -99,7 +99,7 @@ async function main() {
       memory.startSession(session)
       const state = readState(session)
       if (!state.started) writeState(session, { ...state, started: new Date().toISOString() })
-      let text = `${memory.context()}\nMemory: the construct memory MCP tools (mem_search, mem_save, mem_context, ...) or \`construct-memory\` (session ${session}); \`construct-memory help\` lists commands. If construct-memory is not found, run node "${CLI}" instead.`.trim()
+      let text = `${memory.context()}\nMemory: call the mem_* tools of the construct memory MCP server (mem_search, mem_save, mem_get_observation, mem_session_summary, ...; load them through tool search when deferred); when a tool is missing or fails, use \`construct-memory\` (session ${session}); \`construct-memory help\` lists commands. If construct-memory is not found, run node "${CLI}" instead.`.trim()
       if (mode === 'compact') text += `\n\nContext was compacted. Before anything else, save the compacted summary above with \`construct-memory summary --session ${session}\`, then continue with the task.`
       emit('SessionStart', text)
     } else if (mode === 'prompt') {

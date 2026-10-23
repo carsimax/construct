@@ -30,7 +30,7 @@ An API that depends on a version is never written from memory. Check the officia
 - `UNVERIFIED:` anything not confirmed, with the reason.
 - `Conflicts:` documentation versus code, both stated.
 
-Save a lasting finding (for example a version quirk) with `construct-memory save` (type `discovery`) so later sessions skip the fetch.
+Save a lasting finding (for example a version quirk) with `mem_save` (else `construct-memory save`; type `discovery`) so later sessions skip the fetch.
 
 ## Reference
 

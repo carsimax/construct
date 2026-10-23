@@ -56,7 +56,7 @@ Approval is necessary, never sufficient: commit, push, PR, and merge stay the us
 
 ## Follow-ups and memory
 
-Advisory findings (WARNING, SUGGESTION) become follow-up rows in the feature document. Save a deferred advisory as a `decision` and a rejection's root cause as a `bugfix` with `construct-memory save` (see `construct:memory`).
+Advisory findings (WARNING, SUGGESTION) become follow-up rows in the feature document. Save a deferred advisory as a `decision` and a rejection's root cause as a `bugfix` with `mem_save` (else `construct-memory save`; see `construct:memory`).
 
 ## Report
 
