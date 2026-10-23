@@ -25,7 +25,7 @@ Objective: measure whether Construct improves outcomes and at what cost, then cu
 | T3 | S3 | Baseline run, 10 runs per case and arm, table in the Log | parent | none | done (160 runs, $16.42 + $0.31 judge; L5) | 9297e6f |
 
 | T4 | S4 | Make git work in the `review-fires` sandbox; re-measure 10 runs | worker | 6 | pending | — |
-| T5 | S5 | `inline_edit_max_lines` option, surface-guard, contract and skills, small-case graders; re-measure | worker | 2, 3 | pending | — |
+| T5 | S5 | `inline_edit_max_lines` option, surface-guard, contract and skills, small-case graders; re-measure | worker | 2, 3 | in progress (code done: RED 8 fail, suite 1070/0, validate --strict; re-measure pending) | 3b42371 |
 
 ## Log
 
@@ -64,4 +64,6 @@ Objective: measure whether Construct improves outcomes and at what cost, then cu
 
 - **L8 (2026-10-22, parent):** `execution.env: DEVELOPER_DIR` is rejected ("only EVAL_* keys can be set from case.yaml. Anything else must come from the operator's shell"); exporting it in the operator shell does not reach the agent (2 runs, same xcode-select error, review-risk 0/2). No in-sandbox fix: the review-firing number comes from `scripts/probe-review.sh` (same fixture and prompt, outside the sandbox). S4 assumption revised: the `review-fires` eval row is environment-bound; measure with `probe-review.sh --runs 10`.
 
-Next step: probe-review 10 runs; T5 worker running.
+- **L9 (2026-10-22, parent):** T5 review fixes: the denial no longer suggests splitting edits; `debugging` lets a small fix happen inline after reproducing, `debugging-fires` drops `worker-delegated` and `reproduced-first` anchors on the first edit or worker launch. Contract 7048/8000.
+
+Next step: re-measure small-inline*, debugging-* 10 runs per arm; probe-review result.
