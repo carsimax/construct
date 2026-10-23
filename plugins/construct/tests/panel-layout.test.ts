@@ -829,3 +829,20 @@ test('S4 a clipped wide name ends with an ellipsis and stays within the limit', 
   expect(row).toContain('…')
   expect(cellsOf(row)).toBeLessThanOrEqual(36)
 })
+
+test('S4 wide text in the branch, ODD feature, change path and agent name never overflows the card at 40, 41, 60 and 80 columns', () => {
+  for (const columns of [40, 41, 60, 80]) {
+    for (const w of ['検索エージェント検索エージェント', '🚀🚀🚀', 'ＡＢＣＤＥＦＧＨ']) {
+      const text = `${w}/${w}`
+      const rows = rowsOf({
+        columns,
+        git: { ...git, branch: text },
+        odd: { ...odd, feature: text },
+        changes: [{ path: `src/${text}.ts`, added: 3, removed: 1 }, ...changes],
+        panel: { ...full(), agents: [agent({ id: 'w', role: text, type: text })] },
+      })
+      expect(rows.some((r) => cellsOf(r) > [...r].length)).toBe(true) // wide text is really rendered
+      for (const r of rows) expect(cellsOf(r), `${columns} cols: ${r}`).toBeLessThanOrEqual(Math.max(40, columns) - 4)
+    }
+  }
+})
