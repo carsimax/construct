@@ -812,8 +812,16 @@ test('the GATE card shows the last denial even with no counted checks (T7)', () 
 
 // ---- S4: wide characters count as two columns -----------------------------------
 
-// Display width: wide, fullwidth and emoji code points take two columns.
-const cellsOf = (s: string) => [...s].reduce((n, c) => n + (/[ᄀ-ᅟ⺀-꓏가-힣＀-｠￠-￦\p{Emoji_Presentation}]/u.test(c) ? 2 : 1), 0)
+// Display width by grapheme cluster: a wide first code point, or a ZWJ / VS16 emoji sequence, takes two columns.
+const WIDE_RE = /[ᄀ-ᅟ⺀-꓏가-힣＀-｠￠-￦\p{Emoji_Presentation}]/u
+const cellsOf = (s: string) =>
+  [...new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(s)].reduce((n, { segment: g }) => {
+    const wide =
+      WIDE_RE.test(String.fromCodePoint(g.codePointAt(0)!)) ||
+      (/[\u200d\ufe0f]/.test(g) && /\p{Extended_Pictographic}/u.test(g)) ||
+      /[\p{Emoji_Modifier}\u20e3]/u.test(g)
+    return n + (wide ? 2 : 1)
+  }, 0)
 
 test('S4 agent rows with CJK or emoji names never exceed the card width at 40 columns', () => {
   for (const role of ['検索エージェント検索エージェント', '🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍', 'ｗｉｄｅ名前']) {
@@ -845,4 +853,53 @@ test('S4 wide text in the branch, ODD feature, change path and agent name never 
       for (const r of rows) expect(cellsOf(r), `${columns} cols: ${r}`).toBeLessThanOrEqual(Math.max(40, columns) - 4)
     }
   }
+})
+
+test('S4 ZWJ, VS16 and combining sequences stay within the card width at 40 columns', () => {
+  const role = '👨‍👩‍👧 ❤️ e\u0301'
+  const rows = rowsOf({ panel: { ...full(), agents: [agent({ id: 'w', role, type: role })] }, columns: 40 })
+  expect(rows.some((r) => r.includes('👨‍👩‍👧'))).toBe(true)
+  for (const r of rows) expect(cellsOf(r), r).toBeLessThanOrEqual(36)
+})
+
+test('S4 a clipped name never ends in a broken cluster', () => {
+  for (const unit of ['a👨‍👩‍👧', 'e\u0301x', '❤️b', 'ab👨‍👩‍👧c']) {
+    const role = unit.repeat(8)
+    const rows = rowsOf({ panel: { ...full(), agents: [agent({ id: 'w', role, type: role })] }, columns: 40 })
+    const row = rows.find((r) => r.startsWith('• '))!
+    const before = row.slice(0, row.indexOf('…'))
+    expect(before, unit).not.toMatch(/\u200d$/)
+    expect(before, unit).not.toMatch(/^\p{M}|\s\p{M}/u)
+    expect(cellsOf(row), unit).toBeLessThanOrEqual(36)
+  }
+})
+
+test('S4 skin-toned text emoji and keycaps count as two columns at 40 and 42 columns', () => {
+  for (const role of ['☝🏽'.repeat(8), '1️⃣2️⃣3️⃣4️⃣5️⃣6️⃣7️⃣8️⃣9️⃣']) {
+    for (const columns of [40, 42]) {
+      const rows = rowsOf({ panel: { ...full(), agents: [agent({ id: 'w', role, type: role })] }, columns })
+      expect(rows.some((r) => r.includes(role.slice(0, 4)))).toBe(true)
+      for (const r of rows) expect(cellsOf(r), `${columns} cols: ${r}`).toBeLessThanOrEqual(Math.max(40, columns) - 4)
+    }
+  }
+})
+
+test('S4 a 40 to 80 column sweep keeps mixed wide text in the card and ASCII rows unchanged', () => {
+  const wide = '👨‍👩‍👧🇲🇽👋🏽検索検索'
+  const asciiRow = (rows: string[]) => rows.find((r) => r.startsWith('• ') && r.includes('plainname'))
+  for (let columns = 40; columns <= 80; columns++) {
+    const mk = (names: string[], branch: string) =>
+      rowsOf({ columns, git: { ...git, branch }, panel: { ...full(), agents: names.map((n, i) => agent({ id: 'a' + i, role: n, type: n })) } })
+    for (const r of [...mk([wide.repeat(2), 'plainname'], wide), ...mk([wide, wide.repeat(3)], wide.repeat(2))])
+      expect(cellsOf(r), `${columns} cols: ${r}`).toBeLessThanOrEqual(Math.max(40, columns) - 4)
+    // wide text elsewhere must not change an all-ASCII agent row
+    expect(asciiRow(mk(['plainname'], wide)), `${columns} cols`).toBeDefined()
+    expect(asciiRow(mk(['plainname'], wide))).toBe(asciiRow(mk(['plainname'], 'feat/x')))
+  }
+})
+
+test('S4 an ASCII change path never overflows when huge counts leave no room for it', () => {
+  const rows = rowsOf({ columns: 40, changes: [{ path: 'src/aVeryLongDirectoryName/aVeryLongFileNameThatKeepsGoingAndGoing.ts', added: Number.MAX_VALUE, removed: Number.MAX_VALUE }] })
+  expect(rows.join('\n')).not.toContain('aVery') // no room for the path: it is dropped, not left whole
+  for (const r of rows) expect(cellsOf(r), r).toBeLessThanOrEqual(36)
 })

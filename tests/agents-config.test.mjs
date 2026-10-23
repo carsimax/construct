@@ -67,7 +67,9 @@ test('userConfig declares new model and effort options defaulting to inherit, an
   // The panel's switch is a key that is not a model or effort option
   assert.equal(cfg.panel_open_on_start?.type, 'boolean')
   assert.equal(cfg.panel_open_on_start?.default, true)
-  assert.equal(Object.keys(cfg).length, (Object.keys(S6).length + Object.keys(LEGACY).length) * 2 + 1)
+  assert.equal(cfg.command_guard_asks?.type, 'boolean')
+  assert.equal(cfg.command_guard_asks?.default, false)
+  assert.equal(Object.keys(cfg).length, (Object.keys(S6).length + Object.keys(LEGACY).length) * 2 + 2)
 })
 
 test('no non-deprecated userConfig title names a methodology (ODD, RDD, JD)', () => {

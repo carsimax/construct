@@ -39,7 +39,7 @@ Required lenses follow the Risk numbers of the feature document. Launch each len
 
 ## Safety
 
-Destructive git operations and irreversible changes need explicit confirmation; command-guard asks, and denies `--no-verify` and hook bypasses (hook). Remote execution or file transfer needs authorization naming destination, operation, and credential; ambient SSH agents and sessions are never reused.
+Destructive git operations and irreversible changes need explicit confirmation; command-guard denies `--no-verify` and hook bypasses, and asks only with `command_guard_asks` on (hook). Remote execution or file transfer needs authorization naming destination, operation, and credential; ambient SSH agents and sessions are never reused.
 
 ## Skill map (load the skill on its topic, before acting)
 

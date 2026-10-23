@@ -1,10 +1,13 @@
-// Command guard (PreToolUse on Bash). Denies commands that bypass a verifier and asks before
-// destructive ones, in the main thread and in subagents:
+// Command guard (PreToolUse on Bash). Denies commands that bypass a verifier and, only when the
+// `command_guard_asks` option is on, asks before destructive ones, in the main thread and in
+// subagents. With the option off (the default) an ask match gives no output; denies always apply:
 //   - deny: `git commit --no-verify` / `-n`, `--no-verify` on push, merge, rebase, am and
 //     cherry-pick, `--no-gpg-sign`, and `git -c core.hooksPath=...` on any subcommand;
-//   - ask: `rm` with recursive and force flags, `git push` with `--force`, `-f`, or a `+refspec`
+//   - ask (opt-in): `rm` with recursive and force flags, `git push` with `--force`, `-f`, or a `+refspec`
 //     and no `--force-with-lease`, `git reset --hard`, `git clean -f`, `git checkout -- .`,
-//     `git checkout .`, and `git restore .`, `./`, or `:/` (unless it only touches the index).
+//     `git checkout .`, and `git restore .`, `./`, or `:/` (unless it only touches the index),
+//     `find ... -exec rm` / `-execdir rm` with those flags, `find ... -delete`, and
+//     `xargs [flags] rm` with those flags.
 //   - deny also: a statement that sets `GIT_CONFIG_PARAMETERS` or `GIT_CONFIG_KEY_<n>` to
 //     core.hooksPath through `export`, `declare` or `typeset` (any flags), `readonly`, `local`,
 //     or a bare assignment, even with no `git` in that statement.
@@ -12,7 +15,7 @@
 // backticks, heredoc bodies fed to a shell), so compounds and `git -C dir` are covered. When a
 // deny and an ask both match, deny is reported. Unreadable input or any error: no output (fail open).
 // Long options match as git does: any prefix at least as long as the minimum in `abbr` calls.
-// shortcut: a heuristic parser; git aliases, interpreter one-liners, xargs, `find -exec rm`, and
+// shortcut: a heuristic parser; git aliases, interpreter one-liners, and
 // variable-built commands are not caught. Upgrade if one of them shows up in real use.
 // Usage: node command-guard.mjs   (hook JSON on stdin)
 import { readInput } from './hook-io.mjs'
@@ -61,6 +64,9 @@ const abbr = (flags, full, min) => [...flags].some((a) => a.length >= min && ful
 const ROOTS = ['.', './', ':/']
 const LEASE = '--force-with-lease'
 
+// The docs do not say how a boolean option is serialized, so only `true` or `1` turns asks on.
+const asksOn = () => ['true', '1'].includes((process.env.CLAUDE_PLUGIN_OPTION_COMMAND_GUARD_ASKS ?? '').trim().toLowerCase())
+
 const hit = (decision, reason) => ({ decision, reason: `command-guard: ${reason}` })
 
 const hooksEnv = (w) => /^GIT_CONFIG_KEY_\d+=core\.hookspath$/i.test(w) || (/^GIT_CONFIG_PARAMETERS=/.test(w) && /core\.hookspath/i.test(w))
@@ -107,6 +113,27 @@ function rmHit(args) {
   return null
 }
 
+// Find primaries that take an argument: that word is data, even when it reads `-delete` or `-exec`.
+const FIND_VALUE_PRIMARIES = new Set(['-name', '-iname', '-path', '-ipath', '-regex', '-iregex', '-newer', '-user', '-group', '-type', '-perm', '-size', '-mtime', '-maxdepth', '-mindepth'])
+const shQuote = (w) => `'${w.replace(/'/g, "'\\''")}'`
+
+// findHit: `-delete` asks; each `-exec`/`-execdir` command (up to `;` or `+`) is a command line of
+// its own, handed to `nested` so wrappers, absolute paths, and `sh -c` bodies get the top-level checks.
+function findHit(args, nested) {
+  let found = null
+  for (let i = 0; i < args.length; i++) {
+    if (FIND_VALUE_PRIMARIES.has(args[i])) i++
+    else if (args[i] === '-delete') found ??= hit('ask', 'find -delete removes every match without a way back. Run the find without -delete first to list them.')
+    else if (args[i] === '-exec' || args[i] === '-execdir') {
+      const end = args.findIndex((a, k) => k > i && (a === ';' || a === '+'))
+      nested(args.slice(i + 1, end === -1 ? args.length : end).map(shQuote).join(' '))
+      if (end === -1) break
+      i = end
+    }
+  }
+  return found
+}
+
 // hitsIn returns every hit of a command line; nested lines and substitutions are walked.
 function hitsIn(command, depth = 0) {
   if (depth > MAX_DEPTH) return []
@@ -123,7 +150,7 @@ function hitsIn(command, depth = 0) {
     if (SHELLS.has(name)) for (const arg of args) if (!arg.startsWith('-')) nested(arg)
     // `export X=...; git ...`: the assignment is its own statement, so it is checked without a `git`.
     if (/^(export|declare|typeset|readonly|local|[A-Za-z_]\w*=)/.test(words[0] ?? '') && words.some(hooksEnv)) found.push(hit('deny', HOOKS_ENV_REASON))
-    const h = name === 'git' ? gitHit(args, words) : name === 'rm' ? rmHit(args) : null
+    const h = name === 'git' ? gitHit(args, words) : name === 'rm' ? rmHit(args) : name === 'find' ? findHit(args, nested) : null
     if (h) found.push(h)
   }
   // A heredoc body is data unless its command line runs a shell.
@@ -139,7 +166,7 @@ try {
   if (input?.tool_name === 'Bash' && typeof command === 'string' && command !== '') {
     const found = hitsIn(command)
     const chosen = found.find((h) => h.decision === 'deny') ?? found[0]
-    if (chosen) process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: chosen.decision, permissionDecisionReason: chosen.reason } })}\n`)
+    if (chosen && (chosen.decision === 'deny' || asksOn())) process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: chosen.decision, permissionDecisionReason: chosen.reason } })}\n`)
   }
 } catch {
   // Fail open.
