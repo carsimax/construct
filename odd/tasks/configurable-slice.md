@@ -16,8 +16,8 @@ Objective: let users work with bigger slices: a configurable PR slice budget and
 
 | ID | Specs | Task | Route | Risk | Status | Commit |
 |---|---|---|---|---|---|---|
-| T1 | S1 | `slice_lines` option (default 1500) in delivery-signals, plugin.json, skills, README, CONTRIBUTING row, tests | worker | 3 | done | COMMIT1 |
-| T2 | S2 | `inline_edit_max_lines` default 150 in plugin.json, surface-guard, contract, skills, README, tests | worker | 2-3 | pending | — |
+| T1 | S1 | `slice_lines` option (default 1500) in delivery-signals, plugin.json, skills, README, CONTRIBUTING row, tests | worker | 3 | done | 13695a0 |
+| T2 | S2 | `inline_edit_max_lines` default 150 in plugin.json, surface-guard, contract, skills, README, tests | worker | 2-3 | done | COMMIT2 |
 | T3 | S3 | Release 8.7.0: version, install.sh ref, CHANGELOG, README upgrading note, install test fixtures | worker | 5 | pending | — |
 
 ## Log

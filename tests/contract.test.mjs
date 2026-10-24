@@ -85,7 +85,7 @@ test('the session contract scales autonomy to the verifier and closes with check
 
 test('small work is inline up to inline_edit_max_lines and bigger edits go to the worker (S5)', () => {
   const text = context('session', SESSION).additionalContext
-  assert.ok(text.includes('Small work is done inline: each edit call changes up to `inline_edit_max_lines` (20) lines'))
+  assert.ok(text.includes('Small work is done inline: each edit call changes up to `inline_edit_max_lines` (150) lines'))
   assert.ok(text.includes('Large work writes through `construct:worker`'))
   assert.ok(!text.includes('routing defect'))
   const delegation = readFileSync(join(pluginRoot, 'skills/delegation/SKILL.md'), 'utf8')
@@ -98,7 +98,7 @@ test('small work is inline up to inline_edit_max_lines and bigger edits go to th
   assert.doesNotMatch(grader, /arm: both/)
   const option = JSON.parse(readFileSync(join(pluginRoot, '.claude-plugin/plugin.json'), 'utf8')).userConfig.inline_edit_max_lines
   assert.equal(option.type, 'number')
-  assert.equal(option.default, 20)
+  assert.equal(option.default, 150)
 })
 
 test('SubagentStart gives worker agents the subagent contract', () => {

@@ -113,7 +113,7 @@ Options are plugin settings, edited in `/config`:
 |---|---|
 | Model and effort per role | See the routing table below. Each option defaults to `inherit`: use the deprecated key of the same role if it is set, else the agent's own frontmatter |
 | `panel_open_on_start` (boolean, default `true`) | Open the panel at every session start |
-| `inline_edit_max_lines` (number, default `20`) | Let the main thread edit repository files directly when one Write, Edit, MultiEdit, or NotebookEdit call changes at most this many lines; `surface-guard` sends bigger changes to `construct:worker`. `0` restores the old rule: the main thread writes only `odd/tasks/` |
+| `inline_edit_max_lines` (number, default `150`) | Let the main thread edit repository files directly when one Write, Edit, MultiEdit, or NotebookEdit call changes at most this many lines; `surface-guard` sends bigger changes to `construct:worker`. `0` restores the old rule: the main thread writes only `odd/tasks/` |
 | `slice_lines` (number, default `1500`) | Authored changed lines on a feature branch after which the commit-slice notice asks you to apply the delivery strategy. A target, not a cap. A value that is not a whole number of 1 or more falls back to the default |
 | `command_guard_asks` (boolean, default `false`) | Let `command-guard` ask before destructive commands (`rm -rf`, force push, `reset --hard`, and the rest). Denies of verifier bypasses always apply |
 
@@ -252,7 +252,7 @@ construct-gate status      # installed or not, and the resolved script path
 
 The installer is opt-in and never runs on its own. It writes to the effective hooks directory (`core.hooksPath` is honored) and refuses to overwrite a hook that is not Construct's. The hook uses the newest installed Construct version; if the plugin is gone it warns on stderr and allows the push. Like the gate, it denies on any internal error. `construct-gate` is on the Bash tool's PATH inside Claude Code sessions; from another terminal run it by path, for example `node ~/.claude/plugins/cache/construct/construct/<version>/bin/construct-gate install`. Lens verdicts are recorded only by Construct's hooks in a Claude Code session, so with the hook installed, review there before pushing from any host.
 
-**Command and surface guards.** Two more `PreToolUse` hooks fail open. `command-guard.mjs` on `Bash` denies commands that bypass the verifier (such as `git commit --no-verify`) and, with `command_guard_asks` on, asks before destructive ones. `surface-guard.mjs` on `Write`, `Edit`, `MultiEdit`, and `NotebookEdit` keeps a writer inside its allowed edit surfaces and lets the main thread write under `odd/tasks/` freely and elsewhere only when one call changes at most `inline_edit_max_lines` lines (default 20); bigger changes are denied and go to `construct:worker`. The Risk-line gate also blocks a turn that adds skipped, focused, or stub test markers. `failure-streak.mjs` on `PostToolUseFailure` tells the model to change strategy when one tool fails five times within ten minutes.
+**Command and surface guards.** Two more `PreToolUse` hooks fail open. `command-guard.mjs` on `Bash` denies commands that bypass the verifier (such as `git commit --no-verify`) and, with `command_guard_asks` on, asks before destructive ones. `surface-guard.mjs` on `Write`, `Edit`, `MultiEdit`, and `NotebookEdit` keeps a writer inside its allowed edit surfaces and lets the main thread write under `odd/tasks/` freely and elsewhere only when one call changes at most `inline_edit_max_lines` lines (default 150); bigger changes are denied and go to `construct:worker`. The Risk-line gate also blocks a turn that adds skipped, focused, or stub test markers. `failure-streak.mjs` on `PostToolUseFailure` tells the model to change strategy when one tool fails five times within ten minutes.
 
 An approval never authorizes delivery. Commit, push, pull request, and merge stay your decisions.
 
@@ -316,7 +316,7 @@ Feedback and bug reports go in [issues](https://github.com/carsimax/construct/is
 
 ## Upgrading to 8.0
 
-The main thread now makes small edits inline: each edit call may change up to `inline_edit_max_lines` lines (default 20); bigger ones go to `construct:worker`. Set `inline_edit_max_lines` to `0` to restore the 7.x rule (the main thread writes only `odd/tasks/`). The evals `small-delegated*` were renamed `small-inline*`, and `scripts/eval.sh` now writes `summary.json` with outcome and cost.
+The main thread now makes small edits inline: each edit call may change up to `inline_edit_max_lines` lines (default 150); bigger ones go to `construct:worker`. Set `inline_edit_max_lines` to `0` to restore the 7.x rule (the main thread writes only `odd/tasks/`). The evals `small-delegated*` were renamed `small-inline*`, and `scripts/eval.sh` now writes `summary.json` with outcome and cost.
 
 ## Upgrading to 7.0
 

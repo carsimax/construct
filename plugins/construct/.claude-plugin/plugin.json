@@ -468,7 +468,7 @@
       "type": "number",
       "title": "Inline edit limit (lines)",
       "description": "Let the main thread edit repository files directly when one Write, Edit, MultiEdit, or NotebookEdit call changes at most this many lines; surface-guard sends bigger changes to construct:worker. 0 restores the old rule: the main thread writes only odd/tasks/",
-      "default": 20
+      "default": 150
     },
     "slice_lines": {
       "type": "number",
