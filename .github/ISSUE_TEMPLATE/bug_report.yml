@@ -27,7 +27,7 @@ body:
     attributes:
       label: Construct version
       description: From `claude plugin list`.
-      placeholder: 8.6.1
+      placeholder: 8.7.0
     validations:
       required: true
   - type: input
