@@ -22,7 +22,7 @@ Work reaches the remote as small, reviewable units. The publication gate and the
 
 ## Budget
 
-A slice is about 400 authored changed lines (additions plus deletions, generated files excluded). It is a target, never a cap. The delivery-signals hook reports the count after each commit on a feature branch and, past the slice, tells you to apply the feature's strategy and record the boundary in the feature document.
+A slice is about 1500 authored changed lines (additions plus deletions, generated files excluded; the `slice_lines` option sets it). It is a target, never a cap. The delivery-signals hook reports the count after each commit on a feature branch and, past the slice, tells you to apply the feature's strategy and record the boundary in the feature document.
 
 - Slice once, honestly. Keep the best cohesive split. If it still exceeds the budget, report the overage and recommend the `size:exception` label.
 - The budget shapes slicing, never code: no deleted comments or tests, no minified code, no artificial splits.

@@ -1,7 +1,7 @@
 // Edit-surface guard (PreToolUse on Write, Edit, MultiEdit, NotebookEdit). A construct writer
 // (agent_id present) may only write inside the `## Allowed edit surfaces` recorded at its launch
 // by delegation-admission.mjs; the main thread may write under odd/tasks/ at any size and
-// elsewhere only a call that changes at most `inline_edit_max_lines` lines (option, default 20;
+// elsewhere only a call that changes at most `inline_edit_max_lines` lines (option, default 150;
 // 0 means odd/tasks/ only), and sends bigger changes to construct:worker. Paths outside the git work tree, a cwd outside a repository, a subagent
 // with no record, and any internal error pass (fail open, no output).
 // shortcut: the record is paired to its agent by same-type FIFO at SubagentStart, so two
@@ -23,7 +23,7 @@ function real(path) {
   }
 }
 
-const DEFAULT_MAX_LINES = 20
+const DEFAULT_MAX_LINES = 150
 
 // An unset or invalid option (not a whole number >= 0) falls back to the default.
 function maxLines() {

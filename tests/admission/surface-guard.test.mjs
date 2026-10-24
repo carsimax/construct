@@ -30,7 +30,7 @@ function started(repo, ...paths) {
   run(ADMISSION, ['start'], { session_id: 's1', agent_id: 'a1', agent_type: WORKER }, e)
   return e
 }
-const write = (repo, e, path, extra = {}, cwd = repo) => run(GUARD, [], { session_id: 's1', cwd, tool_name: 'Write', tool_input: { file_path: path, content: 'x\n'.repeat(21) }, ...extra }, e)
+const write = (repo, e, path, extra = {}, cwd = repo) => run(GUARD, [], { session_id: 's1', cwd, tool_name: 'Write', tool_input: { file_path: path, content: 'x\n'.repeat(151) }, ...extra }, e)
 const isDenied = (r, ...needles) => {
   assert.equal(r.status, 0)
   assert.equal(r.json.hookSpecificOutput.permissionDecision, 'deny')
@@ -112,7 +112,7 @@ describe('surface-guard', () => {
   })
   test('the main thread writing a big file is denied pointing at construct:worker', () => {
     const repo = makeRepo({ 'src/a.js': 'a\n' })
-    isDenied(write(repo, {}, join(repo, 'src/x.js'), { tool_input: { file_path: join(repo, 'src/x.js'), content: lines(21) } }), /src\/x\.js/, /21/, /20/, /construct:worker/)
+    isDenied(write(repo, {}, join(repo, 'src/x.js'), { tool_input: { file_path: join(repo, 'src/x.js'), content: lines(151) } }), /src\/x\.js/, /151/, /150/, /construct:worker/)
   })
   test('the main thread writing odd/tasks/ is allowed', () => {
     const repo = makeRepo({ 'src/a.js': 'a\n' })
@@ -141,52 +141,52 @@ const tool = (repo, tool_name, tool_input, env = {}) => run(GUARD, [], { session
 const edit = (repo, old_string, new_string, extra = {}, env) => tool(repo, 'Edit', { file_path: join(repo, 'src/a.js'), old_string, new_string, ...extra }, env)
 
 describe('inline edit limit (S5)', () => {
-  const repo = makeRepo({ 'src/a.js': 'a\n', 'src/big.js': `${lines(10, 'x')}\n` })
-  test('Edit passes at exactly 20 lines and is denied at 21, naming count, limit, and worker', () => {
-    isAllowed(edit(repo, lines(20), lines(3, 'n')))
-    isAllowed(edit(repo, 'a', lines(20, 'n')))
-    isDenied(edit(repo, 'a', lines(21, 'n')), /21/, /20/, /construct:worker/)
-    isDenied(edit(repo, lines(21), 'a'), /21/)
+  const repo = makeRepo({ 'src/a.js': 'a\n', 'src/big.js': `${lines(75, 'x')}\n` })
+  test('Edit passes at exactly 150 lines and is denied at 151, naming count, limit, and worker', () => {
+    isAllowed(edit(repo, lines(150), lines(3, 'n')))
+    isAllowed(edit(repo, 'a', lines(150, 'n')))
+    isDenied(edit(repo, 'a', lines(151, 'n')), /151/, /150/, /construct:worker/)
+    isDenied(edit(repo, lines(151), 'a'), /151/)
   })
   test('Edit with replace_all multiplies by the occurrences in the file', () => {
-    const r = makeRepo({ 'src/a.js': `${Array(11).fill('a').join('\n')}\n` })
+    const r = makeRepo({ 'src/a.js': `${Array(76).fill('a').join('\n')}\n` })
     isAllowed(edit(r, 'a', 'b\nc', { replace_all: false }))
-    isDenied(edit(r, 'a', 'b\nc', { replace_all: true }), /22/)
+    isDenied(edit(r, 'a', 'b\nc', { replace_all: true }), /152/)
   })
   test('MultiEdit sums its edits', () => {
     const multi = (...edits) => tool(repo, 'MultiEdit', { file_path: join(repo, 'src/a.js'), edits })
-    isAllowed(multi({ old_string: 'a', new_string: lines(10) }, { old_string: 'b', new_string: lines(10) }))
-    isDenied(multi({ old_string: 'a', new_string: lines(10) }, { old_string: 'b', new_string: lines(11) }), /21/, /construct:worker/)
+    isAllowed(multi({ old_string: 'a', new_string: lines(75) }, { old_string: 'b', new_string: lines(75) }))
+    isDenied(multi({ old_string: 'a', new_string: lines(75) }, { old_string: 'b', new_string: lines(76) }), /151/, /construct:worker/)
   })
   test('Write of a new file counts every line', () => {
     const w = (n) => tool(repo, 'Write', { file_path: join(repo, 'src/new.js'), content: lines(n) })
-    isAllowed(w(20))
-    isDenied(w(21), /21/)
+    isAllowed(w(150))
+    isDenied(w(151), /151/)
   })
   test('Write over an existing file counts lines added plus removed', () => {
     const w = (content) => tool(repo, 'Write', { file_path: join(repo, 'src/big.js'), content })
-    isAllowed(w(`${lines(10, 'x')}\n`))
-    isAllowed(w(`${lines(10, 'x')}\n${lines(10, 'y')}\n`))
-    isAllowed(w(`${lines(10, 'y')}\n`))
-    isDenied(w(`${lines(11, 'y')}\n`), /21/)
+    isAllowed(w(`${lines(75, 'x')}\n`))
+    isAllowed(w(`${lines(75, 'x')}\n${lines(75, 'y')}\n`))
+    isAllowed(w(`${lines(75, 'y')}\n`))
+    isDenied(w(`${lines(76, 'y')}\n`), /151/)
   })
   test('NotebookEdit counts the lines of new_source', () => {
     const nb = (n) => tool(repo, 'NotebookEdit', { notebook_path: join(repo, 'n.ipynb'), new_source: lines(n) })
-    isAllowed(nb(20))
-    isDenied(nb(21), /21/)
+    isAllowed(nb(150))
+    isDenied(nb(151), /151/)
   })
   test('odd/tasks/ is allowed at any size', () => {
     isAllowed(tool(repo, 'Write', { file_path: join(repo, 'odd/tasks/f.md'), content: lines(500) }))
   })
-  test('the option sets the limit; 0 restores the odd/tasks/-only rule; invalid values fall back to 20', () => {
+  test('the option sets the limit; 0 restores the odd/tasks/-only rule; invalid values fall back to 150', () => {
     const env = (v) => ({ CLAUDE_PLUGIN_OPTION_INLINE_EDIT_MAX_LINES: v })
     isAllowed(edit(repo, 'a', lines(50, 'n'), {}, env('50')))
     isDenied(edit(repo, 'a', lines(51, 'n'), {}, env('50')), /51/, /50/)
     isDenied(edit(repo, 'a', 'b', {}, env('0')), /construct:worker/)
     isAllowed(tool(repo, 'Write', { file_path: join(repo, 'odd/tasks/f.md'), content: 'x' }, env('0')))
     for (const bad of ['', 'abc', '-3', '2.5']) {
-      isAllowed(edit(repo, 'a', lines(20, 'n'), {}, env(bad)))
-      isDenied(edit(repo, 'a', lines(21, 'n'), {}, env(bad)), /20/)
+      isAllowed(edit(repo, 'a', lines(150, 'n'), {}, env(bad)))
+      isDenied(edit(repo, 'a', lines(151, 'n'), {}, env(bad)), /150/)
     }
   })
   test('a writer subagent keeps its surface rule regardless of size', () => {

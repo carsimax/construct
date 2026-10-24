@@ -1,7 +1,7 @@
 # Construct
 
 [![Claude Code](https://img.shields.io/badge/Claude_Code-2.1.304%2B-blue)](#requirements)
-[![Plugin version](https://img.shields.io/badge/version-8.6.1-informational)](plugins/construct/.claude-plugin/plugin.json)
+[![Plugin version](https://img.shields.io/badge/version-8.7.0-informational)](plugins/construct/.claude-plugin/plugin.json)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 Construct is a Claude Code plugin that makes every request follow Organic Driven Development (ODD): authorize, explore, size, track, implement test-first, and close with evidence and a Risk line.
@@ -36,7 +36,7 @@ An agent writes code faster than you can check it. Organic Driven Development ke
 ### One command
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v8.6.1/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v8.7.0/install.sh | bash
 ```
 
 The installer checks the requirements above and stops before changing anything if one is missing, or if `~/.claude` or `~/.claude/settings.json` is not writable, or if `settings.json` is a directory. Then it runs the manual steps below for you:
@@ -54,7 +54,7 @@ If engram or codegraph is installed, the installer says Construct no longer need
 Pass options after `bash -s --`, for example `curl -fsSL <url> | bash -s -- --no-mcp`. To read the script before running it:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v8.6.1/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v8.7.0/install.sh -o install.sh
 less install.sh
 bash install.sh
 ```
@@ -70,7 +70,7 @@ The manual steps the installer runs, for when you want to run them yourself:
    claude plugin install construct@construct
    ```
 
-   The installer (`install.sh`) pins this marketplace to the release tag (`carsimax/construct#v8.6.1`); the command above follows the default branch.
+   The installer (`install.sh`) pins this marketplace to the release tag (`carsimax/construct#v8.7.0`); the command above follows the default branch.
 
 2. Optional: inside Claude Code, in `/config`, set each role's model and effort (rows such as `Worker model`).
 
@@ -113,7 +113,8 @@ Options are plugin settings, edited in `/config`:
 |---|---|
 | Model and effort per role | See the routing table below. Each option defaults to `inherit`: use the deprecated key of the same role if it is set, else the agent's own frontmatter |
 | `panel_open_on_start` (boolean, default `true`) | Open the panel at every session start |
-| `inline_edit_max_lines` (number, default `20`) | Let the main thread edit repository files directly when one Write, Edit, MultiEdit, or NotebookEdit call changes at most this many lines; `surface-guard` sends bigger changes to `construct:worker`. `0` restores the old rule: the main thread writes only `odd/tasks/` |
+| `inline_edit_max_lines` (number, default `150`) | Let the main thread edit repository files directly when one Write, Edit, MultiEdit, or NotebookEdit call changes at most this many lines; `surface-guard` sends bigger changes to `construct:worker`. `0` restores the old rule: the main thread writes only `odd/tasks/` |
+| `slice_lines` (number, default `1500`) | Authored changed lines on a feature branch after which the commit-slice notice asks you to apply the delivery strategy. A target, not a cap. A value that is not a whole number of 1 or more falls back to the default |
 | `command_guard_asks` (boolean, default `false`) | Let `command-guard` ask before destructive commands (`rm -rf`, force push, `reset --hard`, and the rest). Denies of verifier bypasses always apply |
 
 ### Agents and model routing
@@ -251,7 +252,7 @@ construct-gate status      # installed or not, and the resolved script path
 
 The installer is opt-in and never runs on its own. It writes to the effective hooks directory (`core.hooksPath` is honored) and refuses to overwrite a hook that is not Construct's. The hook uses the newest installed Construct version; if the plugin is gone it warns on stderr and allows the push. Like the gate, it denies on any internal error. `construct-gate` is on the Bash tool's PATH inside Claude Code sessions; from another terminal run it by path, for example `node ~/.claude/plugins/cache/construct/construct/<version>/bin/construct-gate install`. Lens verdicts are recorded only by Construct's hooks in a Claude Code session, so with the hook installed, review there before pushing from any host.
 
-**Command and surface guards.** Two more `PreToolUse` hooks fail open. `command-guard.mjs` on `Bash` denies commands that bypass the verifier (such as `git commit --no-verify`) and, with `command_guard_asks` on, asks before destructive ones. `surface-guard.mjs` on `Write`, `Edit`, `MultiEdit`, and `NotebookEdit` keeps a writer inside its allowed edit surfaces and lets the main thread write under `odd/tasks/` freely and elsewhere only when one call changes at most `inline_edit_max_lines` lines (default 20); bigger changes are denied and go to `construct:worker`. The Risk-line gate also blocks a turn that adds skipped, focused, or stub test markers. `failure-streak.mjs` on `PostToolUseFailure` tells the model to change strategy when one tool fails five times within ten minutes.
+**Command and surface guards.** Two more `PreToolUse` hooks fail open. `command-guard.mjs` on `Bash` denies commands that bypass the verifier (such as `git commit --no-verify`) and, with `command_guard_asks` on, asks before destructive ones. `surface-guard.mjs` on `Write`, `Edit`, `MultiEdit`, and `NotebookEdit` keeps a writer inside its allowed edit surfaces and lets the main thread write under `odd/tasks/` freely and elsewhere only when one call changes at most `inline_edit_max_lines` lines (default 150); bigger changes are denied and go to `construct:worker`. The Risk-line gate also blocks a turn that adds skipped, focused, or stub test markers. `failure-streak.mjs` on `PostToolUseFailure` tells the model to change strategy when one tool fails five times within ten minutes.
 
 An approval never authorizes delivery. Commit, push, pull request, and merge stay your decisions.
 
@@ -263,7 +264,7 @@ An approval never authorizes delivery. Commit, push, pull request, and merge sta
 
 Two deterministic checks that used to be prompt-only (ports of gentle-shell's `commit-slice-signal` and `context-backstop`).
 
-- **Commit slice** (`hooks/scripts/delivery-signals.mjs post`, `PostToolUse` on Bash calls that run `git`, main thread and subagents). After a successful `git commit` on a branch other than the default branch (`origin/HEAD`, else `main` or `master`), the hook adds context with the authored changed lines from the merge base to `HEAD` (added plus deleted, renames counted by what changed; lock files such as `package-lock.json`, `yarn.lock`, `Cargo.lock`, `go.sum`, minified `.min.js`/`.min.css`, and generated golden files excluded) and the number of lines left before the ~400-line slice. Past 400 it asks you to apply the feature's delivery strategy before the next commit. Failed, interrupted, and background commands, text that only mentions `git commit`, and commits on the default branch add nothing. `git -C DIR` and a preceding `cd DIR` pick the repository.
+- **Commit slice** (`hooks/scripts/delivery-signals.mjs post`, `PostToolUse` on Bash calls that run `git`, main thread and subagents). After a successful `git commit` on a branch other than the default branch (`origin/HEAD`, else `main` or `master`), the hook adds context with the authored changed lines from the merge base to `HEAD` (added plus deleted, renames counted by what changed; lock files such as `package-lock.json`, `yarn.lock`, `Cargo.lock`, `go.sum`, minified `.min.js`/`.min.css`, and generated golden files excluded) and the number of lines left before the ~1500-line slice (option `slice_lines`). Past it, the hook asks you to apply the feature's delivery strategy before the next commit. Failed, interrupted, and background commands, text that only mentions `git commit`, and commits on the default branch add nothing. `git -C DIR` and a preceding `cd DIR` pick the repository.
 - **Context backstop** (`delivery-signals.mjs batch`, `PostToolBatch`, once per batch of tool calls, main thread only). When the latest assistant usage in the transcript (input, cache read, cache write, and output tokens) reaches 150,000 tokens, one notice asks you to delegate the next multi-step unit to `construct:worker`. It fires once per crossing: a later reading below the threshold (after compaction) re-arms it. The hook reads only the last 256 KB of `transcript_path`. The hook payload and transcript give no context window and the model id does not reveal it, so the window is treated as unknown and the absolute cap applies (as in gentle-shell, where an unknown window leaves the cap alone). The notice is advice, not a gate.
 
 Both `PostToolUse` signals fail open (no output, exit 0).
@@ -315,7 +316,7 @@ Feedback and bug reports go in [issues](https://github.com/carsimax/construct/is
 
 ## Upgrading to 8.0
 
-The main thread now makes small edits inline: each edit call may change up to `inline_edit_max_lines` lines (default 20); bigger ones go to `construct:worker`. Set `inline_edit_max_lines` to `0` to restore the 7.x rule (the main thread writes only `odd/tasks/`). The evals `small-delegated*` were renamed `small-inline*`, and `scripts/eval.sh` now writes `summary.json` with outcome and cost.
+The main thread now makes small edits inline: each edit call may change up to `inline_edit_max_lines` lines (default 150); bigger ones go to `construct:worker`. Set `inline_edit_max_lines` to `0` to restore the 7.x rule (the main thread writes only `odd/tasks/`). The evals `small-delegated*` were renamed `small-inline*`, and `scripts/eval.sh` now writes `summary.json` with outcome and cost.
 
 ## Upgrading to 7.0
 
@@ -355,11 +356,12 @@ Risk line: one reply can name several items, `Risk: items 2, 5 (reason)`; the Ri
 
 ## Status
 
-Current version: 8.6.1 (`plugins/construct/.claude-plugin/plugin.json`); a patch release. Releases are tagged `vX.Y.Z`.
+Current version: 8.7.0 (`plugins/construct/.claude-plugin/plugin.json`); a minor release. Releases are tagged `vX.Y.Z`.
 
-Changes in 8.6.1:
+Changes in 8.7.0:
 
-- Memory through the MCP tools first: the session contract, the SessionStart Memory line, and the skills tell Claude to recall with `mem_search` and save with `mem_save` (loading a deferred tool through tool search), and to use the `construct-memory` CLI only when a tool is missing or fails. `construct:explorer` keeps the CLI. In live runs, 10 of 10 recall, save, and subagent prompts used the tools first, against 1 of 3 recall prompts on 8.6.0.
+- New option `slice_lines` (default `1500`, was a fixed 400): the commit-slice budget of authored changed lines.
+- `inline_edit_max_lines` now defaults to `150` (was `20`); set it back to `20` for the old limit.
 
 Earlier 8.x releases are in [CHANGELOG.md](CHANGELOG.md); older ones follow.
 

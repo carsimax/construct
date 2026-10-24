@@ -14,7 +14,7 @@ A diff that shows a parent's changes is a base bug: retarget it, do not edit aro
 Every chained PR body begins with:
 
 - chain, tracker, position (`n of N`), base, depends on, follow-up
-- review budget: `<changed lines> / 400`
+- review budget: `<changed lines> / 1500`
 - starts at, ends with
 
 Child PRs also carry a dependency diagram marking the current PR.

@@ -4,6 +4,10 @@ Notable changes per release. Versions follow [Semantic Versioning](https://semve
 
 ## Unreleased
 
+## 8.7.0
+
+- New option `slice_lines` (default `1500`, was a fixed 400): the commit-slice budget that delivery-signals reports against.
+- `inline_edit_max_lines` now defaults to `150` (was `20`); set it to `20` to keep the old limit.
 - CI runs the repository tests, the mod tests, and both manifest validations on every pull request.
 - `SECURITY.md`, issue forms, and a pull request template.
 - This changelog.

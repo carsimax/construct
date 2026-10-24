@@ -32,7 +32,7 @@ Small means all three hold:
 
 Large means failing the resume test: several sessions, outside parties, separate deliverables, or requirements that would not survive compaction. Never size by file counts, command counts, or a requested todo list.
 
-- Small: done inline (edit calls up to `inline_edit_max_lines` lines, default 20; bigger ones go to `construct:worker`), no feature document, no commits unless asked.
+- Small: done inline (edit calls up to `inline_edit_max_lines` lines, default 150; bigger ones go to `construct:worker`), no feature document, no commits unless asked.
 - Large: feature document first, then work-unit commits on a feature branch.
 
 ## Risk

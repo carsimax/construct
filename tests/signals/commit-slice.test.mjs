@@ -6,29 +6,37 @@ import { describe, test } from 'node:test'
 import { applyFiles, commitAll, git, makeRepo } from '../helpers/repo.mjs'
 import { featureRepo, hook, lines, PLUGIN, SCRIPT } from './helpers.mjs'
 
-const commit = (repo, extra = {}, command = 'git commit -m unit') =>
-  hook({ cwd: repo, tool_name: 'Bash', tool_input: { command }, tool_response: { stdout: '[feat abc] unit', stderr: '', interrupted: false }, ...extra })
+const commit = (repo, extra = {}, command = 'git commit -m unit', env = {}) =>
+  hook({ cwd: repo, tool_name: 'Bash', tool_input: { command }, tool_response: { stdout: '[feat abc] unit', stderr: '', interrupted: false }, ...extra }, env)
 
 describe('commit slice', () => {
-  test('under 400 reports the count and the lines left', () => {
+  test('under 1500 reports the count and the lines left', () => {
     const r = commit(featureRepo({ 'src/b.js': lines(120) }))
     assert.equal(r.status, 0)
     assert.equal(r.json.hookSpecificOutput.hookEventName, 'PostToolUse')
     assert.match(r.context, /Commit slice: 120 authored changed lines in 1 commit on feat since main/)
-    assert.match(r.context, /280 lines left before the ~400-line slice/)
+    assert.match(r.context, /1380 lines left before the ~1500-line slice/)
     assert.doesNotMatch(r.context, /Past the/)
   })
 
-  test('exactly 400 is not past the slice', () => {
-    const r = commit(featureRepo({ 'src/b.js': lines(400) }))
-    assert.match(r.context, /400 authored changed lines/)
+  test('exactly 1500 is not past the slice', () => {
+    const r = commit(featureRepo({ 'src/b.js': lines(1500) }))
+    assert.match(r.context, /1500 authored changed lines/)
     assert.match(r.context, /0 lines left/)
   })
 
-  test('over 400 adds the slice notice', () => {
-    const r = commit(featureRepo({ 'src/b.js': lines(450) }))
-    assert.match(r.context, /450 authored changed lines/)
-    assert.match(r.context, /Past the ~400-line slice: apply the feature's delivery strategy/)
+  test('over 1500 adds the slice notice', () => {
+    const r = commit(featureRepo({ 'src/b.js': lines(1550) }))
+    assert.match(r.context, /1550 authored changed lines/)
+    assert.match(r.context, /Past the ~1500-line slice: apply the feature's delivery strategy/)
+  })
+
+  test('CLAUDE_PLUGIN_OPTION_SLICE_LINES sets the budget; unset, invalid, or 0 falls back to 1500', () => {
+    const repo = featureRepo({ 'src/b.js': lines(120) })
+    const env = (v) => ({ CLAUDE_PLUGIN_OPTION_SLICE_LINES: v })
+    assert.match(commit(repo, {}, 'git commit -m unit', env('100')).context, /Past the ~100-line slice/)
+    assert.match(commit(repo, {}, 'git commit -m unit', env('200')).context, /80 lines left before the ~200-line slice/)
+    for (const bad of ['', 'abc', '-3', '2.5', '0']) assert.match(commit(repo, {}, 'git commit -m unit', env(bad)).context, /1380 lines left before the ~1500-line slice/, bad)
   })
 
   test('additions and deletions both count, lockfiles and minified files do not', () => {
