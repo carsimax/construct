@@ -5,7 +5,7 @@
 //   (a) Commit slice: after a successful `git commit` (main thread or subagent) on a branch
 //       other than the default branch (PostToolUse, registered for Bash git calls only), the branch's authored changed lines against the default
 //       branch (merge base to HEAD, lock files, minified and generated files excluded) and, past
-//       400, a notice to apply the delivery strategy.
+//       the budget (option `slice_lines`, default 1500), a notice to apply the delivery strategy.
 //   (b) Context backstop: when the latest transcript usage reaches 150k tokens (the window is
 //       unknown to a hook, so the absolute cap stands, as upstream), one notice to delegate (PostToolBatch, once per batch of tool calls). Main thread only (no agent_id). It re-arms when usage
 //       falls below the threshold again (compaction), as upstream does.
@@ -16,7 +16,13 @@ import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { dataDir, readInput, safeName } from './hook-io.mjs'
 
-export const SLICE_LINES = 400
+export const SLICE_LINES = 1500
+
+// An unset or invalid option (not a whole number >= 1; 0 would flag every commit) falls back to the default.
+function sliceLines() {
+  const raw = (process.env.CLAUDE_PLUGIN_OPTION_SLICE_LINES ?? '').trim()
+  return /^\d+$/.test(raw) && Number(raw) > 0 ? Number(raw) : SLICE_LINES
+}
 const isGeneratedGoldenPath = (logicalPath) => {
   const normalized = `/${logicalPath.replace(/^\.\//, '')}`
   return normalized.includes('/testdata/golden/') && normalized.endsWith('.golden')
@@ -90,9 +96,10 @@ export function commitSliceReport(cwd) {
   if (numstat === undefined) return null
   const lines = authoredLines(numstat)
   const head = `Commit slice: ${lines} authored changed lines in ${commits} commit${commits === 1 ? '' : 's'} on ${branch} since ${target} (lock files excluded).`
-  return lines > SLICE_LINES
-    ? `${head} Past the ~${SLICE_LINES}-line slice: apply the feature's delivery strategy before the next commit (record the slice boundary in the feature document).`
-    : `${head} ${SLICE_LINES - lines} lines left before the ~${SLICE_LINES}-line slice.`
+  const budget = sliceLines()
+  return lines > budget
+    ? `${head} Past the ~${budget}-line slice: apply the feature's delivery strategy before the next commit (record the slice boundary in the feature document).`
+    : `${head} ${budget - lines} lines left before the ~${budget}-line slice.`
 }
 
 // A Bash result that is not a finished success carries no commit: an error flag, an interruption,

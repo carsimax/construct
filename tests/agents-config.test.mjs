@@ -71,7 +71,9 @@ test('userConfig declares new model and effort options defaulting to inherit, an
   assert.equal(cfg.command_guard_asks?.default, false)
   assert.equal(cfg.inline_edit_max_lines?.type, 'number')
   assert.equal(cfg.inline_edit_max_lines?.default, 20)
-  assert.equal(Object.keys(cfg).length, (Object.keys(S6).length + Object.keys(LEGACY).length) * 2 + 3)
+  assert.equal(cfg.slice_lines?.type, 'number')
+  assert.equal(cfg.slice_lines?.default, 1500)
+  assert.equal(Object.keys(cfg).length, (Object.keys(S6).length + Object.keys(LEGACY).length) * 2 + 4)
 })
 
 test('no non-deprecated userConfig title names a methodology (ODD, RDD, JD)', () => {

@@ -11,7 +11,7 @@ const header = read('workflow/references/feature-document.md').split('\n').find(
 const VOCABULARY = ['ask-on-risk', 'auto-chain', 'single-pr', 'exception-ok', 'stacked-to-main', 'feature-branch-chain']
 
 test('the skill budget figure equals SLICE_LINES', () => {
-  assert.equal(SLICE_LINES, 400)
+  assert.equal(SLICE_LINES, 1500)
   assert.match(delivery, new RegExp(`about ${SLICE_LINES} authored changed lines`))
   for (const [, figure] of delivery.matchAll(/(\d+)(?:-line| authored| changed lines| lines)/g)) {
     if (Number(figure) >= 100) assert.equal(Number(figure), SLICE_LINES)
