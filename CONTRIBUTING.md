@@ -10,7 +10,7 @@ Construct is a Claude Code plugin (`plugins/construct/`), its local marketplace 
 
 ## Setup
 
-- Node.js 22.16 or later (Node 23 is not supported), `git`, Claude Code 2.1.304 or later, and [Engram](https://github.com/Gentleman-Programming/engram) (the memory the contract and skills call).
+- Node.js 22.16 or later (Node 23 is not supported), `git`, Claude Code 2.1.304 or later, and [Engram](https://github.com/Gentleman-Programming/engram) (the memory the contract and skills call). Install Engram with `brew install gentleman-programming/tap/engram && engram setup claude-code`.
 - Load the plugin for one session without installing it:
 
 ```bash
