@@ -1,4 +1,4 @@
-// The panel layout: turns the stored panel state and the live data (usage, ODD feature, memory,
+// The panel layout: turns the stored panel state and the live data (usage, ODD feature,
 // git) into one column of bordered cards. Each card is built by a small function of its own;
 // buildPanel only decides which cards show and how many rows the changes card may take.
 
@@ -69,14 +69,6 @@ function tokens(n) {
   if (n < 1000) return String(Math.round(n))
   const k = Math.round(n / 1000)
   return k >= 1000 ? `${(n / 1e6).toFixed(1)}M` : `${k}k`
-}
-
-// "5 minutes ago" as the shortest unit: `<1m`, `5m`, `3h`, `2d`.
-function age(ms) {
-  const m = Math.floor(ms / 60_000)
-  if (m < 1) return '<1m'
-  if (m < 60) return `${m}m`
-  return m < 1440 ? `${Math.floor(m / 60)}h` : `${Math.floor(m / 1440)}d`
 }
 
 // ---- rows: a row is a list of segments `{ t, color?, dim?, bold? }`, clipped to one line -------
@@ -259,30 +251,6 @@ function gateCard(panel, w) {
   return card({ title: 'GATE · permissions', status: gateStatus(v, total), color: PALETTE.gate, children: body, width: w })
 }
 
-// ---- MEMORY card ---------------------------------------------------------------
-
-const AMBER_REASON = /newer|read-?only|unable to open|not writable/i
-
-function memoryCard(memory, nowMs, w) {
-  const inner = w - 4
-  const color = PALETTE.cleared
-  if (typeof memory.off === 'string') {
-    const reason = clean(memory.off)
-    return card({ title: 'MEMORY', color, children: [dimRow(reason, inner, AMBER_REASON.test(reason) ? PALETTE.amber : undefined)], width: w })
-  }
-  const n = count(memory.memories)
-  if (n === 0) return card({ title: 'MEMORY', status: { text: '0 memories', dim: true }, color, children: [dimRow('nothing remembered yet', inner)], width: w })
-  const review = count(memory.review)
-  const body = [row([seg(`${review} to review`, review > 0 ? { color: PALETTE.amber } : { dim: true }), seg(` · ${count(memory.pinned)} pinned · ${count(memory.pending)} pending`, { dim: true })], inner)]
-  const saved = Date.parse(memory.lastSaveAt)
-  const facts = [
-    ...(Number.isFinite(saved) ? [`last save ${age(Math.max(0, nowMs - saved))} ago`] : []),
-    ...(isNum(memory.sessionSaves) ? [`+${count(memory.sessionSaves)} this session`] : []),
-  ]
-  if (facts.length) body.push(row([seg(facts.join(SEP), { dim: true })], inner))
-  return card({ title: 'MEMORY', status: `${n} memories`, color, children: body, width: w })
-}
-
 // ---- agents card ---------------------------------------------------------------
 
 // Glyph, running verb, done verb by role kind (roles.mjs); anything else is a plain worker.
@@ -384,7 +352,7 @@ function changesCard({ git, changes }, budget, w) {
 // Rows a card takes: its border, then the title row and the body rows.
 const heightOf = (c) => c.children.length + 2
 
-export function buildPanel({ panel: stored, usage, odd, memory, nowMs, columns, rows, model, effort, git, changes }) {
+export function buildPanel({ panel: stored, usage, odd, nowMs, columns, rows, model, effort, git, changes }) {
   const panel = stored ?? initialState()
   const w = isNum(columns) ? Math.max(40, Math.floor(columns)) : PANEL_COLUMNS
   const now = isNum(nowMs) ? nowMs : Date.now()
@@ -392,7 +360,6 @@ export function buildPanel({ panel: stored, usage, odd, memory, nowMs, columns, 
     mainCard({ panel, usage, model, effort, git, nowMs: now }, w),
     odd?.feature ? oddCard(odd, w) : null,
     gateCard(panel, w),
-    memory ? memoryCard(memory, now, w) : null,
     agentsCard(panel, now, w),
   ].filter(Boolean)
   const used = cards.reduce((n, c) => n + heightOf(c), 0)

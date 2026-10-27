@@ -128,8 +128,7 @@ test('/construct doctor returns a report even when every process fails', { optio
   expect(text).toContain('Construct doctor')
   expect(text).toContain('✓ Claude Code 2.1.304')
   expect(text).toContain('✗ Node')
-  expect(text).not.toContain('engram')
-  expect(text).toContain('✗ Memory (node:sqlite with FTS5 trigram)')
+  expect(text).toContain('✗ Engram (not found)')
   expect(text).not.toContain('CodeGraph')
   expect(await isUp($)).toBe(false)
 })
@@ -140,68 +139,32 @@ test('/construct doctor turns a hanging in-process probe into a failed row', { o
   hang = true
   const text = String((await $.command.run({ command: 'construct', args: 'doctor' }))?.text ?? '')
   expect(text).toContain('Construct doctor')
-  expect(text).toContain('✗ Memory (node:sqlite with FTS5 trigram)')
+  expect(text).toContain('✗ Engram (not found)')
 })
 
 test('/construct doctor reports a healthy setup', { options: { panel_open_on_start: false } }, async ($, on) => {
   const run = (a: string[]) => {
+    if (a[0] === 'engram') return ok('engram 3.6.0\n')
     if (a[0] === 'git') return ok('/home/me/proj\n.git\n.git\n')
     if (a[1] === '--version') return ok('v22.16.0\n')
-    if (a[1] === '-e') return ok('ok\n')
-    if (String(a[1]).endsWith('construct-memory')) return ok('[{"check":"schema","ok":true},{"check":"wal","ok":true}]')
     return ok('usage')
   }
   await start($, on, { run, exists: true, version: '2.1.400' })
   const text = String((await $.command.run({ command: 'construct', args: 'doctor' }))?.text ?? '')
   expect(text).not.toContain('✗')
-  expect(text).toContain('✓ memory: schema')
-  expect(text).toContain('✓ memory: wal')
+  expect(text).toContain('✓ Engram 3.6.0')
 })
 
-test('/construct doctor shows a failing memory check even though the command exits 1', { options: { panel_open_on_start: false } }, async ($, on) => {
-  const seen: string[][] = []
+test('/construct doctor shows Engram not found when its probe throws, and still shows Node', { options: { panel_open_on_start: false } }, async ($, on) => {
   const run = (a: string[]) => {
-    seen.push(a)
-    if (a[0] === 'git') return ok('/home/me/proj\n.git\n.git\n')
+    if (a[0] === 'engram') throw new Error('spawn engram ENOENT')
     if (a[1] === '--version') return ok('v22.16.0\n')
-    if (a[1] === '-e') return ok('ok\n')
-    if (String(a[1]).endsWith('construct-memory')) return { ...ok('[{"check":"wal","ok":false,"detail":"journal mode is delete"}]'), exitCode: 1 }
     return ok('usage')
   }
   await start($, on, { run, exists: true })
   const text = String((await $.command.run({ command: 'construct', args: 'doctor' }))?.text ?? '')
-  expect(text).toContain('✗ memory: wal — journal mode is delete')
-  expect(seen.some((a) => a[0] === 'node' && a.includes('doctor') && a.includes('--json'))).toBe(true)
-})
-
-for (const mode of ['no-git', 'no-probe']) {
-  test(`/construct doctor skips the memory doctor when ${mode === 'no-git' ? 'outside git' : 'the memory probe failed'}`, { options: { panel_open_on_start: false } }, async ($, on) => {
-    const seen: string[][] = []
-    const run = (a: string[]) => {
-      seen.push(a)
-      if (a[0] === 'git') return mode === 'no-git' ? { ...ok(''), exitCode: 128 } : ok('/home/me/proj\n.git\n.git\n')
-      if (a[1] === '--version') return ok('v22.16.0\n')
-      if (a[1] === '-e') return ok(mode === 'no-git' ? 'ok\n' : 'nope\n')
-      return ok('usage')
-    }
-    await start($, on, { run, exists: true })
-    const text = String((await $.command.run({ command: 'construct', args: 'doctor' }))?.text ?? '')
-    expect(text).not.toContain('memory: ')
-    expect(text).not.toContain('memory doctor')
-    expect(seen.some((a) => a.includes('doctor'))).toBe(false)
-  })
-}
-
-test('/construct doctor adds one failed row when the memory doctor cannot run', { options: { panel_open_on_start: false } }, async ($, on) => {
-  const run = (a: string[]) => {
-    if (a[0] === 'git') return ok('/home/me/proj\n.git\n.git\n')
-    if (a[1] === '--version') return ok('v22.16.0\n')
-    if (a[1] === '-e') return ok('ok\n')
-    return { ...ok(''), exitCode: 2 }
-  }
-  await start($, on, { run, exists: true })
-  const text = String((await $.command.run({ command: 'construct', args: 'doctor' }))?.text ?? '')
-  expect(text).toContain('✗ memory doctor — could not run')
+  expect(text).toContain('✗ Engram (not found)')
+  expect(text).toContain('✓ Node')
 })
 
 test('the Pane draws the panel for the construct pane id', async ($, on) => {
@@ -535,49 +498,4 @@ test('the blocked-state wiring passes tool.check and tool.call results through u
   expect((await checkAsk($, CALL)).decision).toBe('ask')
   const r = await $.tool.call({ tool: 'AskUserQuestion' })
   expect(r.text).toBe('ok')
-})
-
-// ---- MEMORY card (S20) ----
-
-const STATS = JSON.stringify({ observations: 7, deleted: 0, needing_review: 1, pinned: 2, sessions: 1, prompts: 0, bytes: 1, pending_relations: 3, last_save_at: new Date(NOW - 120_000).toISOString(), session_saves: 4 })
-const memoryRun = (reply: (a: string[]) => any) => (a: string[]) => (String(a[1]).endsWith('construct-memory') && a[2] === 'stats' ? reply(a) : a[0] === 'git' && a.includes('rev-parse') ? ok('/home/me/proj\n.git\n.git\n') : { ...ok(''), exitCode: 1 })
-
-test('the memory card shows the stats read from construct-memory with the session id', async ($, on) => {
-  const argvs: string[][] = []
-  await start($, on, { run: memoryRun((a) => (argvs.push(a), ok(STATS))) })
-  const p = await pane($)
-  await p.redraw()
-  const text = await joined(p)
-  expect(argvs[0].slice(2)).toEqual(['stats', '--json', '--session', 'sess-1'])
-  expect(text).toContain('7 memories')
-  expect(text).toContain('1 to review')
-  expect(text).toContain('2 pinned')
-  expect(text).toContain('3 pending')
-  expect(text).toContain('last save 2m ago')
-  expect(text).toContain('+4 this session')
-})
-
-test('a failing memory run with an empty stderr leaves the card out', async ($, on) => {
-  await start($, on, { run: memoryRun(() => ({ ...ok(''), exitCode: 1, stderr: '' })) })
-  const p = await pane($)
-  await p.redraw()
-  expect(await joined(p)).not.toContain('MEMORY')
-})
-
-test('a failing memory run with a stderr line shows the reason', async ($, on) => {
-  await start($, on, { run: memoryRun(() => ({ ...ok(''), exitCode: 1, stderr: 'construct-memory: boom' })) })
-  const p = await pane($)
-  await p.redraw()
-  const text = await joined(p)
-  expect(text).toContain('MEMORY')
-  expect(text).toContain('boom')
-})
-
-test('a missing node:sqlite shows why memory is off', async ($, on) => {
-  await start($, on, { run: memoryRun(() => ({ ...ok(''), exitCode: 1, stderr: 'construct-memory: memory needs node:sqlite with FTS5' })) })
-  const p = await pane($)
-  await p.redraw()
-  const text = await joined(p)
-  expect(text).toContain('MEMORY')
-  expect(text).toContain('memory unavailable (Node 22.16+)')
 })

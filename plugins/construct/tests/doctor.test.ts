@@ -1,5 +1,5 @@
 import { expect, test } from 'claude-code/testing'
-import { checkClaude, checkMemory, checkNode, formatReport, memoryDoctorRows } from '../hooks/status/doctor.js'
+import { checkClaude, checkEngram, checkNode, formatReport } from '../hooks/status/doctor.js'
 
 // Pure checks behind /construct doctor (S8).
 
@@ -31,14 +31,11 @@ test('Node needs 22.16 or later', () => {
   expect(checkNode('v22.1.0').label).toContain('22.16')
 })
 
-test('memory needs node:sqlite with FTS5 trigram, probed through node', () => {
-  expect(checkMemory('ok\n').ok).toBe(true)
-  for (const out of [null, '', 'nope']) {
-    const row = checkMemory(out)
-    expect(row.ok).toBe(false)
-    expect(row.hint).toContain('Node 22.16+')
-    expect(row.hint).not.toContain('23')
-  }
+test('engram row reads `engram version`', () => {
+  expect(checkEngram('engram 3.6.0\n')).toEqual({ ok: true, label: 'Engram 3.6.0', hint: expect.any(String) })
+  for (const out of [null, '', 'garbage']) expect(checkEngram(out).ok).toBe(false)
+  expect(checkEngram(null).label).toBe('Engram (not found)')
+  expect(checkEngram(null).hint).toBe('brew install gentleman-programming/tap/engram && engram setup claude-code')
 })
 
 test('the report has one line per check', () => {
@@ -47,23 +44,4 @@ test('the report has one line per check', () => {
     { ok: false, label: 'broken', hint: 'fix it' },
   ])
   expect(text.split('\n')).toEqual(['Construct doctor', '✓ fine', '✗ broken — fix it'])
-})
-
-test('memory doctor rows: one per check, prefixed, with the detail as the hint', () => {
-  const out = JSON.stringify([
-    { check: 'schema', ok: true },
-    { check: 'wal', ok: false, detail: 'journal mode is delete' },
-  ])
-  const rows = memoryDoctorRows(out)
-  expect(rows).toEqual([
-    { ok: true, label: 'memory: schema', hint: '' },
-    { ok: false, label: 'memory: wal', hint: 'journal mode is delete' },
-  ])
-  expect(formatReport(rows).split('\n')).toEqual(['Construct doctor', '✓ memory: schema', '✗ memory: wal — journal mode is delete'])
-})
-
-test('memory doctor that could not run, or printed junk, is one failed row', () => {
-  for (const out of [null, '', 'usage', '{}', '[1]']) {
-    expect(memoryDoctorRows(out)).toEqual([{ ok: false, label: 'memory doctor', hint: 'could not run' }])
-  }
 })
