@@ -11,42 +11,6 @@ import { scratchDir } from '../helpers/repo.mjs'
 
 const INSTALLER = new URL('../../install.sh', import.meta.url).pathname
 
-// One rule per non-destructive construct-memory command (S21 d).
-const MEMORY_RULES = [
-  'Bash(construct-memory search *)',
-  'Bash(construct-memory get *)',
-  'Bash(construct-memory context *)',
-  'Bash(construct-memory timeline *)',
-  'Bash(construct-memory stats *)',
-  'Bash(construct-memory doctor *)',
-  'Bash(construct-memory suggest-topic-key *)',
-  'Bash(construct-memory save *)',
-  'Bash(construct-memory update *)',
-  'Bash(construct-memory summary *)',
-  'Bash(construct-memory review list *)',
-  'Bash(construct-memory review stale *)',
-  'Bash(construct-memory review passive *)',
-  'Bash(construct-memory prompts --search *)',
-  'Bash(construct-memory prompts --limit *)',
-  'Bash(construct-memory pin *)',
-  'Bash(construct-memory unpin *)',
-  'Bash(construct-memory judge *)',
-  'Bash(construct-memory judge-many *)',
-  'Bash(construct-memory compare *)',
-  'Bash(construct-memory relations pending *)',
-  'Bash(construct-memory help *)',
-  'Bash(construct-memory prompts)',
-  ...['mem_save', 'mem_search', 'mem_context', 'mem_get_observation', 'mem_update', 'mem_timeline', 'mem_session_summary', 'mem_judge', 'mem_suggest_topic_key', 'mem_relations_pending'].map((t) => `mcp__plugin_construct_memory__${t}`),
-]
-
-// Permission rule semantics (code.claude.com/docs/en/permissions, Bash): a rule ending in ` *`
-// matches the bare command and any arguments; any other rule matches only the exact command.
-const allows = (rules, command) =>
-  rules.some((rule) => {
-    const body = rule.slice('Bash('.length, -1)
-    return body.endsWith(' *') ? command === body.slice(0, -2) || command.startsWith(body.slice(0, -1)) : command === body
-  })
-
 const STUBS = {
   claude: `
 if [ "$1" = "--version" ]; then echo "\${STUB_CLAUDE_VERSION:-2.1.304} (Claude Code)"; exit 0; fi
@@ -55,7 +19,7 @@ case "$1 $2 $3" in
   "plugin marketplace add") echo "    Source: GitHub ($4)" >> "$STUB_STATE/marketplaces"; exit 0 ;;
 esac
 case "$1 $2" in
-  "plugin list") cat "$STUB_STATE/plugins" 2>/dev/null; exit 0 ;;
+  "plugin list") cat "$STUB_STATE/plugins" 2>/dev/null; [ -f "$STUB_STATE/engram-plugin" ] && printf '  ❯ engram@engram\\n'; exit 0 ;;
   "plugin install") echo "  ❯ $3" >> "$STUB_STATE/plugins"; exit 0 ;;
 esac
 exit 0`,
@@ -65,7 +29,7 @@ exit 0`,
 // piped script would swallow the rest of it.
 const stub = (name, body) => `#!/bin/bash\necho "${name} $*" >> "$STUB_LOG"\n${body}\ncat >/dev/null\n`
 
-function sandbox({ engram = false, codegraph = false, node = true } = {}) {
+function sandbox({ engram = true, engramPlugin = true, codegraph = false, node = true } = {}) {
   const root = scratchDir('construct-install-')
   const bin = join(root, 'bin')
   const state = join(root, 'state')
@@ -77,12 +41,12 @@ function sandbox({ engram = false, codegraph = false, node = true } = {}) {
   }
   put(bin, 'claude', stub('claude', STUBS.claude))
   if (engram) put(bin, 'engram', stub('engram', ''))
+  if (engramPlugin) writeFileSync(join(state, 'engram-plugin'), '')
   if (codegraph) put(bin, 'codegraph', stub('codegraph', ''))
-  // Not logged: settings_tool calls node too. STUB_NODE_VERSION fakes `node -p`; STUB_NODE_NOSQLITE fails `node -e` (the probe).
+  // Not logged: settings_tool calls node too. STUB_NODE_VERSION fakes `node -p`.
   if (node) {
     put(bin, 'node', `#!/bin/bash
 if [ "$1" = "-p" ] && [ -n "$STUB_NODE_VERSION" ]; then echo "$STUB_NODE_VERSION"; exit 0; fi
-if [ "$1" = "-e" ] && [ -n "$STUB_NODE_NOSQLITE" ]; then echo "ERR_NO_FTS5" >&2; exit 1; fi
 exec "${process.execPath}" "$@"
 `)
   }
@@ -122,35 +86,25 @@ test('a clean machine gets every tool, in order, and the Construct settings', ()
     'claude plugin install construct@construct',
   ])
   assert.ok(!run.calls.some((c) => /context7/.test(c)), 'context7 is never registered')
-  assert.deepEqual(readSettings(box), {
-    permissions: { allow: MEMORY_RULES },
-  })
-  assert.ok(!('theme' in readSettings(box)), 'a clean machine never gets a theme')
-  assert.deepEqual(backups(box), [], 'no backup when there was no file')
+  assert.equal(existsSync(settingsPath(box)), false, 'nothing to merge, so no settings file is created')
   assert.match(run.stdout, /Installed:/)
 })
 
-test('existing settings are merged, never overwritten, and backed up first', () => {
+test('existing settings with nothing to change are left byte for byte, with no backup', () => {
   const box = sandbox()
-  const before = {
+  const before = JSON.stringify({
     model: 'opus',
     skipDangerousModePermissionPrompt: false,
     permissions: { allow: ['Bash(ls *)', 'mcp__engram'], deny: ['Bash(rm *)'] },
-  }
+  })
   writeSettings(box, before)
   const run = install(box)
   assert.equal(run.status, 0, run.stderr)
-  assert.deepEqual(readSettings(box), {
-    ...before,
-    permissions: { allow: ['Bash(ls *)', 'mcp__engram', ...MEMORY_RULES], deny: ['Bash(rm *)'] },
-  })
-  const [backup] = backups(box)
-  assert.ok(backup, 'a backup exists')
-  assert.deepEqual(JSON.parse(readFileSync(join(box.home, '.claude', backup), 'utf8')), before)
-  assert.match(run.stdout, new RegExp(backup.replace(/[.]/g, '\\.')))
+  assert.equal(readFileSync(settingsPath(box), 'utf8'), before)
+  assert.deepEqual(backups(box), [])
 })
 
-test('a symlinked settings.json stays a link and its target gets the merge', () => {
+test('a symlinked settings.json stays a link', () => {
   const box = sandbox()
   const target = join(box.root, 'dotfiles-settings.json')
   writeFileSync(target, JSON.stringify({ model: 'opus' }))
@@ -161,7 +115,6 @@ test('a symlinked settings.json stays a link and its target gets the merge', () 
   assert.ok(lstatSync(settingsPath(box)).isSymbolicLink(), 'still a symlink')
   assert.equal(JSON.parse(readFileSync(target, 'utf8')).theme, undefined)
   assert.equal(JSON.parse(readFileSync(target, 'utf8')).model, 'opus')
-  assert.deepEqual(JSON.parse(readFileSync(target, 'utf8')).permissions.allow, MEMORY_RULES)
 })
 
 test('the merge keeps the file mode of settings.json', () => {
@@ -239,13 +192,11 @@ test('the help text marks --force deprecated and no longer mentions replacing a 
 test('a second run changes nothing and installs nothing', () => {
   const box = sandbox()
   assert.equal(install(box).status, 0)
-  const settings = readFileSync(settingsPath(box), 'utf8')
   const second = install(box)
   assert.equal(second.status, 0, second.stderr)
   const writes = second.calls.filter((c) => /^(brew|npm|engram|codegraph|claude (plugin (install|marketplace add)|mcp))/.test(c))
   assert.deepEqual(writes, [])
-  assert.equal(readFileSync(settingsPath(box), 'utf8'), settings)
-  assert.deepEqual(backups(box), [])
+  assert.equal(existsSync(settingsPath(box)), false)
   assert.match(second.stdout, /Skipped:/)
 })
 
@@ -289,7 +240,6 @@ test('preflight stops before any change when a requirement is missing or too old
     ['no node', sandbox({ node: false }), {}, /node/i],
     ['old node', sandbox(), { STUB_NODE_VERSION: '22.15.9' }, /22\.16/],
     ['old node, lower minor', sandbox(), { STUB_NODE_VERSION: '22.9.0' }, /22\.16/],
-    ['node 23 without fts5', sandbox(), { STUB_NODE_VERSION: '23.11.0', STUB_NODE_NOSQLITE: '1' }, /node:sqlite.*FTS5.*22\.16/],
   ]) {
     const run = install(box, [], env)
     assert.notEqual(run.status, 0, label)
@@ -318,7 +268,7 @@ test('an unknown option is rejected before any change', () => {
   assert.deepEqual(run.calls, [])
 })
 
-test('the installer never grants anything beyond the construct-memory CLI', () => {
+test('the installer never grants a permission or a mode', () => {
   const text = readFileSync(INSTALLER, 'utf8')
   assert.doesNotMatch(text, /skipDangerousModePermissionPrompt|bypassPermissions|defaultMode/)
   assert.match(text.trimEnd().split('\n').at(-1), /^main "\$@"$/, 'main runs on the last line')
@@ -363,9 +313,7 @@ test('an empty or whitespace-only settings.json is treated as an empty object', 
     chmodSync(settingsPath(box), 0o600)
     const run = install(box)
     assert.equal(run.status, 0, run.stderr)
-    assert.deepEqual(readSettings(box), {
-      permissions: { allow: MEMORY_RULES },
-    })
+    assert.equal(readFileSync(settingsPath(box), 'utf8'), content)
     assert.equal(statSync(settingsPath(box)).mode & 0o777, 0o600)
   }
 })
@@ -381,7 +329,7 @@ test('a settings.json that is a directory stops the preflight with one clear mes
   assert.ok(statSync(settingsPath(box)).isDirectory(), 'the directory is untouched')
 })
 
-test('a dangling-symlink settings.json stays a link and its target is created with the merge', () => {
+test('a dangling-symlink settings.json stays a link and no target is created', () => {
   const box = sandbox()
   const target = join(box.root, 'dotfiles', 'settings.json')
   mkdirSync(join(box.home, '.claude'))
@@ -389,8 +337,7 @@ test('a dangling-symlink settings.json stays a link and its target is created wi
   const run = install(box)
   assert.equal(run.status, 0, run.stderr)
   assert.ok(lstatSync(settingsPath(box)).isSymbolicLink(), 'still a symlink')
-  assert.equal(JSON.parse(readFileSync(target, 'utf8')).theme, undefined)
-  assert.deepEqual(readSettings(box), JSON.parse(readFileSync(target, 'utf8')))
+  assert.equal(existsSync(target), false)
 })
 
 const CLEAN = /at .*\.js|node:|Error:|ELOOP|ENOTDIR|EISDIR/
@@ -468,7 +415,7 @@ test('settings.local.json is never touched, even with the old theme in it', () =
 
 test('--force with another theme leaves settings.json unchanged and makes no backup', () => {
   const box = sandbox()
-  const before = JSON.stringify({ theme: 'dark', permissions: { allow: MEMORY_RULES } }, null, 2)
+  const before = JSON.stringify({ theme: 'dark' }, null, 2)
   writeSettings(box, before)
   const run = install(box, ['--force'])
   assert.equal(run.status, 0, run.stderr)
@@ -523,60 +470,28 @@ test('node 22.16 passes the check, a newer minor than the installed major.minor 
   }
 })
 
-test('the node:sqlite FTS5 probe fails with one clear line and nothing is installed', () => {
-  const box = sandbox()
-  const run = install(box, [], { STUB_NODE_NOSQLITE: '1' })
+const BREW = /brew install gentleman-programming\/tap\/engram && engram setup claude-code/
+const INSTALLS = (run) => run.calls.filter((c) => /claude plugin (install|marketplace add)/.test(c))
+
+test('without the engram binary nothing is installed and one line says how to get it', () => {
+  const run = install(sandbox({ engram: false }))
   assert.notEqual(run.status, 0)
-  const lines = run.stderr.split('\n').filter((l) => /construct-install:/.test(l))
-  assert.deepEqual(lines, [`construct-install: Node.js ${process.versions.node} has no node:sqlite with FTS5 trigram, which Construct memory needs; use Node.js 22.16 or later (Node.js 23 is not supported)`])
-  assert.doesNotMatch(run.stderr, /ERR_NO_FTS5/)
-  assert.deepEqual(run.calls.filter((c) => !/--version/.test(c)), [])
-  assert.equal(existsSync(settingsPath(box)), false)
+  assert.match(run.stderr, BREW)
+  assert.deepEqual(INSTALLS(run), [])
 })
 
-test('the probe in install.sh is the doctor probe', () => {
-  const sh = readFileSync(INSTALLER, 'utf8')
-  const doctor = readFileSync(new URL('../../plugins/construct/hooks/status/doctor.js', import.meta.url), 'utf8')
-  const sql = (t) => /CREATE VIRTUAL TABLE t USING fts5\(x, tokenize='trigram'\)/.exec(t)?.[0]
-  assert.ok(sql(doctor) && sql(sh), 'both create the same trigram table')
+test('engram binary without the engram@engram plugin also fails before installing', () => {
+  const run = install(sandbox({ engram: true, engramPlugin: false }))
+  assert.notEqual(run.status, 0)
+  assert.match(run.stderr, BREW)
+  assert.deepEqual(INSTALLS(run), [])
 })
 
-test('engram is never installed, set up, uninstalled, or given permission rules; one line says it is not needed', () => {
-  const box = sandbox({ engram: true })
-  const before = { permissions: { allow: ['mcp__engram', 'mcp__plugin_engram_engram'] } }
+test('with engram and its plugin, install proceeds and adds no memory allow rule', () => {
+  const box = sandbox({ engram: true, engramPlugin: true })
+  const before = { permissions: { allow: ['Bash(construct-memory search *)'] } }
   writeSettings(box, before)
   const run = install(box)
   assert.equal(run.status, 0, run.stderr)
-  assert.deepEqual(run.calls.filter((c) => /engram|brew/i.test(c)), [])
-  assert.equal(run.stdout.split('\n').filter((l) => /no longer needs? engram|engram.*no longer/i.test(l)).length, 1)
-  assert.deepEqual(readSettings(box).permissions.allow, ['mcp__engram', 'mcp__plugin_engram_engram', ...MEMORY_RULES], 'the user keeps their rules')
-})
-
-test('without engram nothing about it is printed, and no engram rule or marketplace is added', () => {
-  const box = sandbox()
-  const run = install(box)
-  assert.equal(run.status, 0, run.stderr)
-  assert.doesNotMatch(run.stdout + run.stderr, /engram/i)
-  assert.doesNotMatch(readFileSync(settingsPath(box), 'utf8'), /engram/)
-  assert.equal(run.calls.some((c) => /marketplace add/.test(c) && !/carsimax\/construct/.test(c)), false)
-})
-
-test('the construct-memory rule is merged once; a second run keeps it a single entry', () => {
-  const box = sandbox()
-  assert.equal(install(box).status, 0)
-  assert.equal(install(box).status, 0)
-  assert.deepEqual(readSettings(box).permissions.allow, MEMORY_RULES)
-})
-
-test('the merged rules pre-approve reads and saves and never a destructive construct-memory command', () => {
-  const box = sandbox()
-  assert.equal(install(box).status, 0)
-  const rules = readSettings(box).permissions.allow
-  assert.deepEqual(rules, MEMORY_RULES)
-  // These prefixes are only safe because the CLI refuses trailing options and words that reach a destructive form
-  // (tests/memory/cli.test.mjs, 'a pre-approved prefix plus a destructive suffix'); the rules alone would match `prompts --limit 5 delete 1`.
-  for (const ok of ['search auth bug', 'prompts', 'prompts --search x', 'prompts --limit 5', 'review list', 'review list --limit 5', 'review stale', 'review stale --json', 'review passive', 'review passive --days 7 --json', 'doctor --json', 'help'])
-    assert.ok(allows(rules, `construct-memory ${ok}`), ok)
-  for (const bad of ['delete 1 --hard', 'delete 1', 'prompts delete 1', 'export x.json', 'consolidate 1 2', 'import x.json', 'review done 1'])
-    assert.ok(!allows(rules, `construct-memory ${bad}`), bad)
+  assert.deepEqual(readSettings(box).permissions.allow, before.permissions.allow, 'old user rules are kept, none added')
 })
