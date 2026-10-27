@@ -16,7 +16,7 @@ const FILES = [
   ['agents/worker.md', 500], ['agents/explorer.md', 250], ['agents/verifier.md', 650], ['agents/general.md', 200],
   [skill('review'), 900], [ref('review', 'security-checklist'), 450], [ref('review', 'dual-review'), 700],
   ...lens, ['agents/judge-a.md', 250], ['agents/judge-b.md', 250],
-  [skill('delivery'), 900], [ref('delivery', 'chains'), 500], [skill('memory'), 800],
+  [skill('delivery'), 900], [ref('delivery', 'chains'), 500],
   [skill('debugging'), 550], [ref('debugging', 'triage'), 500],
   [skill('migration'), 450], [ref('migration', 'phases'), 300],
   [skill('constraints'), 600], [ref('constraints', 'constraints-template'), 450],

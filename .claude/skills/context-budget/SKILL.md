@@ -51,7 +51,7 @@ Over 10,000 chars the platform replaces hook output with a file path and a 2,000
 - Repository `CLAUDE.md` target: under 200 lines; files over 4 MiB are skipped; `<!-- -->` comments are stripped before injection. `@path` imports (four hops max) do not save context: they load with the importing file.
 - `.claude/rules/*.md`: only the `paths` frontmatter is read; invalid YAML loads the rule unconditionally.
 - AGENTS.md is read only when no CLAUDE.md exists in cwd or above (built-in mod `cc-plugin-agents-md`, v2.1.277+).
-- Auto memory lives in `~/.claude/projects/<project>/memory/` and is separate from `construct-memory`. Agent `memory` frontmatter uses its own directory.
+- Auto memory lives in `~/.claude/projects/<project>/memory/` and is separate from Engram. Agent `memory` frontmatter uses its own directory.
 
 ## Where new construct text belongs
 

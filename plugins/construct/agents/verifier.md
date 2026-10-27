@@ -52,4 +52,4 @@ earlier blockers.
 - Probes worth committing as tests
 - Scratch paths
 
-Close with `## Key Learnings:` (1-5 items) so the memory hook can keep them.
+Close with `## Key Learnings:` (1-5 items) so Engram can keep them.

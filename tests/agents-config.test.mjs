@@ -83,17 +83,16 @@ test('no non-deprecated userConfig title names a methodology (ODD, RDD, JD)', ()
   }
 })
 
-test('no plugin agent references gentle-ai or any engram tool', () => {
+test('no plugin agent references gentle-ai', () => {
   for (const file of agentFiles) {
     const text = readFileSync(join(pluginRoot, 'agents', file), 'utf8')
     assert.doesNotMatch(text, /gentle[-_ ]?ai/i, file)
-    assert.doesNotMatch(text, /mcp__(plugin_engram_)?engram/, file)
   }
 })
 
-test('explorer keeps Bash so it can run construct-memory search, and the manifests have no engram dependency', () => {
-  const tools = readFileSync(join(pluginRoot, 'agents', 'explorer.md'), 'utf8').match(/^tools:(.*)$/m)[1]
-  assert.match(tools, /\bBash\b/)
+test('explorer tells agents to recall with mem_search, and the manifests have no engram dependency', () => {
+  const text = readFileSync(join(pluginRoot, 'agents', 'explorer.md'), 'utf8')
+  assert.match(text, /mem_search/)
   assert.equal(manifest.dependencies, undefined)
   const market = JSON.parse(readFileSync(new URL('../.claude-plugin/marketplace.json', import.meta.url), 'utf8'))
   assert.equal(market.allowCrossMarketplaceDependenciesOn, undefined)

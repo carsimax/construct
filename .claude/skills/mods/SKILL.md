@@ -62,7 +62,7 @@ Consequences for construct:
 | Need | Use |
 | :- | :- |
 | Pane, band, spinner/tool-row restyle, instant `/command`, rewriting an event, per-role model/effort routing | Mod (`hooks/register.js`) |
-| Block, allow, or log an event with a script; also usable as a git hook or from the CLI (`pre-push.mjs`, `construct-memory`) | Settings hook (`hooks/scripts/`) |
+| Block, allow, or log an event with a script; also usable as a git hook or from the CLI (`pre-push.mjs`) | Settings hook (`hooks/scripts/`) |
 | Instructions Claude should follow | Skill |
 | Claude needs to reach an external system | MCP server |
 

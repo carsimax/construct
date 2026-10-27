@@ -11,7 +11,6 @@ const EXPECTED = [
   'constraints',
   'debugging',
   'delivery',
-  'memory',
   'migration',
   'delegation',
   'workflow',

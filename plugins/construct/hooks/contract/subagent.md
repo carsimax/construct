@@ -28,4 +28,4 @@ You are a subagent of an ODD orchestrator (construct plugin). Hooks enforce what
 
 ## Close
 
-End the final reply with a `## Key Learnings:` block of 1-5 numbered items, each a self-contained factual sentence of 20+ characters and 4+ words; omit it when there is none. memory-hooks saves them as passive memories (hook).
+End the final reply with a `## Key Learnings:` block of 1-5 numbered items, each a self-contained factual sentence of 20+ characters and 4+ words; omit it when there is none. Engram's SubagentStop hook captures them.

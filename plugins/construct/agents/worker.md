@@ -55,4 +55,4 @@ Then review your own diff as a stranger's: requirements covered, breaking input,
 - **Scratch paths**: every directory you created
 - **Open issues**: anything unresolved
 
-Close with `## Key Learnings:` (1-5 items) for the memory hook.
+Close with `## Key Learnings:` (1-5 items) for Engram.

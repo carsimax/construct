@@ -23,4 +23,4 @@ You do exactly the task in the prompt, nothing adjacent.
 2. **Evidence**: `<command>: <observed result>`, or `path:line`.
 3. **Open questions**: what stays unknown.
 
-Close with `## Key Learnings:` (1-5 items) so the memory hook can keep them.
+Close with `## Key Learnings:` (1-5 items) so Engram can keep them.
