@@ -30,34 +30,6 @@
             "timeout": 10
           }
         ]
-      },
-      {
-        "matcher": "startup|resume|clear",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node",
-            "args": [
-              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/memory-hooks.mjs",
-              "session"
-            ],
-            "timeout": 10
-          }
-        ]
-      },
-      {
-        "matcher": "compact",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node",
-            "args": [
-              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/memory-hooks.mjs",
-              "compact"
-            ],
-            "timeout": 10
-          }
-        ]
       }
     ],
     "SubagentStart": [
@@ -275,34 +247,6 @@
             "timeout": 30
           }
         ]
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node",
-            "args": [
-              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/memory-hooks.mjs",
-              "capture"
-            ],
-            "timeout": 10
-          }
-        ]
-      }
-    ],
-    "SessionEnd": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node",
-            "args": [
-              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/memory-hooks.mjs",
-              "end"
-            ],
-            "timeout": 10
-          }
-        ]
       }
     ],
     "Stop": [
@@ -331,19 +275,6 @@
               "mark"
             ],
             "timeout": 30
-          }
-        ]
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node",
-            "args": [
-              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/memory-hooks.mjs",
-              "prompt"
-            ],
-            "timeout": 10
           }
         ]
       }
