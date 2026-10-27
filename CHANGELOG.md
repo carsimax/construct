@@ -4,6 +4,14 @@ Notable changes per release. Versions follow [Semantic Versioning](https://semve
 
 ## Unreleased
 
+## 9.0.0
+
+- **Breaking:** the `construct-memory` CLI and the `memory` MCP server are removed. [Engram](https://github.com/Gentleman-Programming/engram) is required and the installer stops without it: `brew install gentleman-programming/tap/engram && engram setup claude-code`. Existing `construct-memory/` stores stay on disk and are not migrated.
+- The panel MEMORY card is removed.
+- `/construct doctor` checks Engram.
+- The `construct:memory` skill is removed in favor of `engram:memory`.
+- The review-lens memory hints are removed.
+
 ## 8.7.0
 
 - New option `slice_lines` (default `1500`, was a fixed 400): the commit-slice budget that delivery-signals reports against.
