@@ -104,10 +104,10 @@ test('existing settings with nothing to change are left byte for byte, with no b
   assert.deepEqual(backups(box), [])
 })
 
-test('a symlinked settings.json stays a link', () => {
+test('a symlinked settings.json stays a link and its target gets the old theme removed', () => {
   const box = sandbox()
   const target = join(box.root, 'dotfiles-settings.json')
-  writeFileSync(target, JSON.stringify({ model: 'opus' }))
+  writeFileSync(target, JSON.stringify({ theme: OLD_THEME, model: 'opus' }))
   mkdirSync(join(box.home, '.claude'))
   symlinkSync(target, settingsPath(box))
   const run = install(box)
@@ -117,13 +117,14 @@ test('a symlinked settings.json stays a link', () => {
   assert.equal(JSON.parse(readFileSync(target, 'utf8')).model, 'opus')
 })
 
-test('the merge keeps the file mode of settings.json', () => {
+test('the rewrite keeps the file mode of settings.json', () => {
   const box = sandbox()
-  writeSettings(box, { model: 'opus' })
+  writeSettings(box, { theme: OLD_THEME, model: 'opus' })
   chmodSync(settingsPath(box), 0o600)
   const run = install(box)
   assert.equal(run.status, 0, run.stderr)
   assert.equal(statSync(settingsPath(box)).mode & 0o777, 0o600)
+  assert.equal('theme' in readSettings(box), false, 'the rewrite ran')
 })
 
 test('MIN_CLAUDE and MIN_NODE match the doctor minimums', () => {
