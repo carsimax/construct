@@ -113,7 +113,7 @@ claude plugin install construct@construct
 
 ## Configuration
 
-Construct has no `/config` options. Two limits are set per session by the orchestrator with `construct-limits` (the plugin's `bin/`, on the Bash PATH of a session); the user can also run it with `!`:
+Construct has no `/config` options. Two limits are set per session by the orchestrator with `construct-limits` (the plugin's `bin/`, on the Bash PATH of a session); the user can also run it with `!`, but a subagent cannot run `set` (`command-guard` denies it; `show` is allowed):
 
 ```bash
 construct-limits set inline=300 cap=5   # either key alone is fine; the other keeps its earlier value

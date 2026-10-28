@@ -2,6 +2,7 @@
 // fallback directory; hooks (which have it) must still see the declared limits.
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
+import { mkdirSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { makeRepo, scratchDir } from '../helpers/repo.mjs'
@@ -28,7 +29,9 @@ test('limits set without CLAUDE_PLUGIN_DATA apply to hooks that have it', () => 
     run('node', [join(PLUGIN, 'hooks/scripts/surface-guard.mjs')], hookEnv,
       JSON.stringify({ session_id: 'sA', cwd: repo, tool_name: 'Edit', tool_input: { file_path: join(repo, 'src/a.js'), old_string: 'a', new_string: lines(n) } })).stdout
   assert.equal(edit(300), '')
-  assert.notEqual(edit(301), '')
+  const denied = JSON.parse(edit(301))
+  assert.equal(denied.hookSpecificOutput.permissionDecision, 'deny')
+  assert.match(denied.hookSpecificOutput.permissionDecisionReason, /limit of 300\b/)
 
   const cap = join(PLUGIN, 'hooks/scripts/iteration-cap.mjs')
   const hook = (event) =>
@@ -38,4 +41,19 @@ test('limits set without CLAUDE_PLUGIN_DATA apply to hooks that have it', () => 
     hook('PostToolUseFailure')
   }
   assert.match(hook('PreToolUse'), /deny/)
+})
+
+test('readLimits uses the newer of the plugin data dir and fallback dir files', () => {
+  const tmp = scratchDir('limits-tmp-')
+  const data = scratchDir('limits-data-')
+  for (const [dir, inline, time] of [[data, 200, 1000], [join(tmp, `construct-${process.getuid()}`), 400, 2000]]) {
+    mkdirSync(join(dir, 'limits'), { recursive: true, mode: 0o700 })
+    const f = join(dir, 'limits', 'sB.json')
+    writeFileSync(f, JSON.stringify({ inline }))
+    utimesSync(f, time, time)
+  }
+  const script = `import { readLimits } from ${JSON.stringify(join(PLUGIN, 'hooks/scripts/limits.mjs'))}; console.log(JSON.stringify(readLimits('sB')))`
+  const r = run('node', ['--input-type=module', '-e', script], { ...process.env, TMPDIR: tmp, CLAUDE_PLUGIN_DATA: data })
+  assert.equal(r.status, 0, r.stderr)
+  assert.equal(JSON.parse(r.stdout).inline, 400)
 })

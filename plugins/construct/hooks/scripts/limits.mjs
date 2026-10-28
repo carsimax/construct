@@ -1,7 +1,7 @@
 // Session limits (S3 of .vault/tasks/config-surface.md): the orchestrator declares them with `bin/construct-limits`,
 // surface-guard (inline) and iteration-cap (cap) read them. One file per session under dataDir()/limits/, written to a temp
 // name and renamed. Defaults and ceilings live here only; an unreadable or invalid file means the defaults.
-import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { randomBytes } from 'node:crypto'
 import { join } from 'node:path'
 import { dataDir, fallbackDir, safeName } from './hook-io.mjs'
@@ -12,17 +12,23 @@ export const CEILINGS = { inline: 500, cap: 10 }
 const file = (session, base) => join(base ?? dataDir(), 'limits', `${safeName(session)}.json`)
 
 // The Bash tool has no CLAUDE_PLUGIN_DATA, so the CLI writes to the fallback directory while hooks use the plugin data
-// directory: with no explicit base, a session file missing from dataDir() is read from the fallback directory.
+// directory: with no explicit base, the session file is read from both and the more recently modified one wins.
 function read(session, base) {
-  const bases = base ? [base] : [dataDir, fallbackDir]
-  for (const b of bases) {
+  const paths = (base ? [base] : [dataDir, fallbackDir]).map((b) => file(session, typeof b === 'function' ? b() : b))
+  let best = null
+  for (const path of paths) {
     try {
-      return JSON.parse(readFileSync(file(session, typeof b === 'function' ? b() : b), 'utf8'))
+      const mtime = statSync(path).mtimeMs
+      if (best === null || mtime > best.mtime) best = { path, mtime }
     } catch {
       // Not here (or untrusted directory): try the next one.
     }
   }
-  return {}
+  try {
+    return best ? JSON.parse(readFileSync(best.path, 'utf8')) : {}
+  } catch {
+    return {}
+  }
 }
 
 // readLimits returns the active { inline, cap } of a session, each clamped to its ceiling.

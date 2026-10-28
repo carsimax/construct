@@ -5,6 +5,7 @@
 //   - deny also: `construct-gate oracle unlock`, except when it is the whole command (one plain `construct-gate oracle unlock <path>`, no
 //     separator, redirection, expansion, or wrapper) on an existing regular file with no symlink under the root, in the main thread right
 //     after the user answered an AskUserQuestion with `Unlock` for a question naming that path in backticks (recorded in the review store by unlock-approval.mjs; one unlock per answer; see unlockApproved);
+//   - deny also: `construct-limits set` from a subagent (hook input has `agent_id`); only the main thread declares session limits;
 //   - deny also: a statement that sets `GIT_CONFIG_PARAMETERS` or `GIT_CONFIG_KEY_<n>` to
 //     core.hooksPath through `export`, `declare` or `typeset` (any flags), `readonly`, `local`,
 //     or a bare assignment, even with no `git` in that statement.
@@ -159,6 +160,9 @@ const LONE_UNLOCK = /^(?:node )?(?:[\w.@%+=:,/-]*\/)?construct-gate oracle unloc
 const lonePath = (command) => LONE_UNLOCK.exec(command.trim().replace(/ +/g, ' '))?.[1] ?? null
 
 const isGate = (word) => /(^|\/)construct-gate$/.test(word ?? '')
+const isLimits = (word) => /(^|\/)construct-limits$/.test(word ?? '')
+const LIMITS_REASON = 'only the main thread declares session limits: a subagent cannot run construct-limits set. `construct-limits show` is allowed; ask the orchestrator to change a limit.'
+let subagent = false
 
 // hitsIn returns every hit of a command line; splitCommands finds the commands nested in
 // substitutions and heredoc expansions, and the lines a command runs as a string are read again.
@@ -182,6 +186,7 @@ function hitsIn(command, depth = 0) {
     // Any word with basename construct-gate counts, so node flags, env, command, xargs and npx wrappers are caught; `node -e` importing review-store cannot be seen in text (discipline layer).
     const at = words.findIndex((w, i) => isGate(w) && words[i + 1] === 'oracle' && words[i + 2] === 'unlock')
     if (at !== -1) found.push({ ...hit('deny', UNLOCK_REASON), unlock: true })
+    if (subagent && words.some((w, i) => isLimits(w) && words[i + 1] === 'set')) found.push(hit('deny', LIMITS_REASON))
     if (h) found.push(h)
   }
   return found
@@ -191,6 +196,7 @@ try {
   const input = readInput()
   const command = input?.tool_input?.command
   if (input?.tool_name === 'Bash' && typeof command === 'string' && command !== '') {
+    subagent = Boolean(input.agent_id)
     let found = hitsIn(command)
     const unlocks = found.filter((h) => 'unlock' in h)
     if (unlocks.length === 1 && lonePath(command) !== null && unlockApproved(input, [lonePath(command)])) found = found.filter((h) => !('unlock' in h))
