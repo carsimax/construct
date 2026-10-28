@@ -37,7 +37,7 @@ surface-guard then denies writes outside those entries. A worker given no list r
 
 ## Prompt contents
 
-Each handoff holds the task, the Spec line or question, `## Memory` (search hits the parent pastes), reuse pointers, the verification commands with their strength, known environmental failures, and a request to close with `## Key Learnings:` (Engram's SubagentStop hook captures those).
+Each handoff holds the task, the Spec line or question, `## Memory` (search hits the parent pastes), reuse pointers, the verification commands with their strength, known environmental failures, and a request to close with `## Key Learnings:`.
 
 Test-first: a runnable deterministic test and a clear expected outcome mean RED, then GREEN. For docs-only or no runnable RED the worker states the exception.
 
@@ -46,7 +46,7 @@ Test-first: a runnable deterministic test and a clear expected outcome mean RED,
 - Verifier strength is stated in each handoff. A weak verifier has ambiguous requirements or external side effects: the worker stops after one step and reports. When there is no verifier it names what would make the work verifiable. In docs-only units the reviewed diff is the verifier.
 - Formatters run before verification, afterwards only check-only commands. A byte change reruns the affected checks. Unavailable, partial, or declined proof is never a pass.
 - A docs-only change gets a parent structural readback; other content gets the verifier when Risk-named.
-- One `construct:verifier` per final PR, before publication, covering every Risk-named unit in it, after their own checks. delegation-admission denies a verifier prompt without `Risk: item N` (N from 1 to 6; `Risk: none` does not admit). It also carries the whole feature document, baseline, candidate, probe forms, and a scratch directory.
+- One `construct:verifier` per final PR, before publication, covering every Risk-named unit in it, after their own checks. delegation-admission denies a verifier prompt without `Risk: item N` (N from 1 to 6; `Risk: none` does not admit). It carries the whole feature document, baseline, candidate, probe forms, and a scratch directory.
 
 ## Correction bounds
 
@@ -60,4 +60,4 @@ When a subagent or tool hands back a question, a menu, a consent request, or an 
 2. Use AskUserQuestion when the envelope fits; otherwise a plain-text envelope with the answer syntax, then stop. Never choose, default, or launch dependent work while the answer is pending.
 3. Validate the reply: trimmed, case-insensitive label match, exactly one label; ordinals ("first", "2") alias to positions. An invalid answer re-presents the envelope; a valid one is returned once.
 4. A question about a choice is answered from the envelope without recommending, then the choice is re-presented.
-5. A worker's `oracle_conflict` goes whole to the user: fix the spec and unlock, or fix the code. Never unlock for them.
+5. A worker's `oracle_conflict` goes to the user through AskUserQuestion (path, spec against test; `Unlock` or `Keep the test`). On `Unlock` run the unlock yourself, once; a worker never unlocks.
