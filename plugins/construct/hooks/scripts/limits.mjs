@@ -1,31 +1,34 @@
-// Session limits (S3 of .vault/tasks/config-surface.md): the orchestrator declares them with `bin/construct-limits`,
-// surface-guard (inline) and iteration-cap (cap) read them. One file per session under dataDir()/limits/, written to a temp
+// Session limits (S3 of .vault/tasks/config-surface.md): the orchestrator declares them with `bin/construct-limits set`, which
+// limits-record.mjs (PreToolUse on Bash) records; surface-guard (inline) and iteration-cap (cap) read them. One file per session under dataDir()/limits/, written to a temp
 // name and renamed. Defaults and ceilings live here only; an unreadable or invalid file means the defaults.
-import { mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { randomBytes } from 'node:crypto'
 import { join } from 'node:path'
-import { dataDir, fallbackDir, safeName } from './hook-io.mjs'
+import { dataDir, safeName } from './hook-io.mjs'
 
 export const DEFAULTS = { inline: 150, cap: 3 }
 export const CEILINGS = { inline: 500, cap: 10 }
 
+export const isLimits = (word) => /(^|\/)construct-limits$/.test(word ?? '')
+
+// parseSet validates the arguments of `construct-limits set`: { values } or { error }. One parser for the CLI and the hook.
+export function parseSet(args) {
+  if (args.length === 0) return { error: 'set needs inline=<N> or cap=<N>' }
+  const values = {}
+  for (const arg of args) {
+    const [key, value] = arg.split(/=(.*)/s)
+    if (!Object.hasOwn(DEFAULTS, key)) return { error: `unknown key ${JSON.stringify(key)} (use inline or cap)` }
+    if (!/^(0|[1-9]\d*)$/.test(value ?? '')) return { error: `${key} must be a whole number >= 0, got ${JSON.stringify(value ?? '')}` }
+    values[key] = Number(value)
+  }
+  return { values }
+}
+
 const file = (session, base) => join(base ?? dataDir(), 'limits', `${safeName(session)}.json`)
 
-// The Bash tool has no CLAUDE_PLUGIN_DATA, so the CLI writes to the fallback directory while hooks use the plugin data
-// directory: with no explicit base, the session file is read from both and the more recently modified one wins.
 function read(session, base) {
-  const paths = (base ? [base] : [dataDir, fallbackDir]).map((b) => file(session, typeof b === 'function' ? b() : b))
-  let best = null
-  for (const path of paths) {
-    try {
-      const mtime = statSync(path).mtimeMs
-      if (best === null || mtime > best.mtime) best = { path, mtime }
-    } catch {
-      // Not here (or untrusted directory): try the next one.
-    }
-  }
   try {
-    return best ? JSON.parse(readFileSync(best.path, 'utf8')) : {}
+    return JSON.parse(readFileSync(file(session, base), 'utf8'))
   } catch {
     return {}
   }

@@ -1,6 +1,6 @@
 // Shared helpers for the command hooks: hook input from stdin and the plugin
 // data directory they keep small per-session state in.
-import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs'
+import { lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -19,11 +19,6 @@ export function readInput() {
 // access is never trusted (another local user could pre-seed its state).
 export function dataDir() {
   if (process.env.CLAUDE_PLUGIN_DATA) return process.env.CLAUDE_PLUGIN_DATA
-  return fallbackDir()
-}
-
-// fallbackDir is the private per-user directory in the system temp dir, whatever CLAUDE_PLUGIN_DATA says.
-export function fallbackDir() {
   const dir = join(tmpdir(), `construct-${process.getuid()}`)
   try {
     mkdirSync(dir, { mode: 0o700 })
@@ -48,15 +43,7 @@ const STATE_DIRS = ['risk-line', 'subagent-count', 'delegation-admission', 'deli
 // session directory directly under one of STATE_DIRS) and stale construct-index-* temporary directories idle for over 7 days.
 // Nothing else in the data directory is touched. Best effort: errors are ignored.
 export function pruneState(now = Date.now()) {
-  // `construct-limits` runs in the Bash tool, without CLAUDE_PLUGIN_DATA, so its limits files live in the fallback directory.
-  const targets = STATE_DIRS.map((name) => join(dataDir(), name))
-  targets.push(join(dataDir(), 'limits'))
-  try {
-    // fallbackDir() creates the directory; pruning must not.
-    if (existsSync(join(tmpdir(), `construct-${process.getuid()}`))) targets.push(join(fallbackDir(), 'limits'))
-  } catch {
-    // Best effort: an untrusted fallback directory is left alone.
-  }
+  const targets = [...STATE_DIRS, 'limits'].map((name) => join(dataDir(), name))
   for (const base of targets) {
     let entries
     try {

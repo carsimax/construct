@@ -6,7 +6,7 @@ import { describe, test } from 'node:test'
 import { scratchDir } from '../helpers/repo.mjs'
 
 const PLUGIN = new URL('../../plugins/construct/', import.meta.url).pathname
-const CLI = join(PLUGIN, 'bin/construct-limits')
+const RECORD = join(PLUGIN, 'hooks/scripts/limits-record.mjs')
 const HOOK = join(PLUGIN, 'hooks/scripts/iteration-cap.mjs')
 const CMD = 'node --test tests/a.test.mjs'
 
@@ -17,9 +17,10 @@ const baseEnv = (data, extra = {}) => {
   return env
 }
 const set = (data, session, ...pairs) => {
-  const r = spawnSync(CLI, ['set', ...pairs], { encoding: 'utf8', env: { ...baseEnv(data), CLAUDE_CODE_SESSION_ID: session } })
-  assert.equal(r.error, undefined, `construct-limits did not run: ${r.error?.message}`)
+  // The main thread's `construct-limits set` is recorded by the limits-record hook (S1 of .vault/tasks/limits-hook.md).
+  const r = spawnSync('node', [RECORD], { input: JSON.stringify({ session_id: session, cwd: process.cwd(), hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command: `construct-limits set ${pairs.join(' ')}` } }), encoding: 'utf8', env: baseEnv(data) })
   assert.equal(r.status, 0, r.stderr)
+  assert.match(r.stdout, /set recorded/)
 }
 function hook(data, payload, extra) {
   const r = spawnSync('node', [HOOK], { input: JSON.stringify(payload), encoding: 'utf8', env: baseEnv(data, extra) })
