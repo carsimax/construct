@@ -46,6 +46,19 @@ test('large-tracked document-sections matches a feature document with all sectio
   }
 });
 
+// Serialized form of a Write input in a real trace (kept run, 2026-10-28): JSON with escaped newlines.
+// That run wrote Specs, Layout, Tasks and no Log, so the grader failed because it measured correctly.
+const written = (headings) =>
+  `{"type":"tool_use","name":"Write","input":{"file_path":"/w/cwd/.vault/tasks/todo-cli.md","content":"# todo-cli\\n\\n${headings.map((h) => `## ${h}\\n\\n- x\\n\\n`).join('')}"}}`;
+
+test('large-tracked document-sections matches the escaped JSON form of a written document', () => {
+  for (const re of regexes('large-tracked/graders/document-sections.md')) {
+    assert.match(written(['Specs', 'Tasks', 'Log']), re);
+    assert.match(written(['Specs', 'Layout', 'Tasks', 'Log']), re);
+    assert.doesNotMatch(written(['Specs', 'Layout', 'Tasks']), re);
+  }
+});
+
 // --- harness evidence: summary and outcome checks ---
 
 const root = fileURLToPath(new URL('..', import.meta.url));
