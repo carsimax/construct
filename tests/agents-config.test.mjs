@@ -93,6 +93,8 @@ test('no plugin agent references gentle-ai', () => {
 test('explorer tells agents to recall with mem_search, and the manifests have no engram dependency', () => {
   const text = readFileSync(join(pluginRoot, 'agents', 'explorer.md'), 'utf8')
   assert.match(text, /mem_search/)
+  const tools = text.split('---')[1].match(/^tools: (.*)$/m)[1].split(/,\s*/)
+  for (const t of ['mcp__engram__mem_search', 'mcp__engram__mem_get_observation']) assert.ok(tools.includes(t), `explorer lists ${t}`)
   assert.equal(manifest.dependencies, undefined)
   const market = JSON.parse(readFileSync(new URL('../.claude-plugin/marketplace.json', import.meta.url), 'utf8'))
   assert.equal(market.allowCrossMarketplaceDependenciesOn, undefined)

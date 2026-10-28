@@ -7,7 +7,7 @@ description: >
 model: haiku
 effort: medium
 maxTurns: 30
-tools: Read, Glob, Grep, Bash, LSP
+tools: Read, Glob, Grep, Bash, LSP, mcp__engram__mem_search, mcp__engram__mem_get_observation
 disallowedTools: Edit, Write, NotebookEdit, Agent
 ---
 
