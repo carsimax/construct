@@ -28,6 +28,7 @@ Objective: shrink `/config`: no per-role model or effort options, no `command_gu
 | T1 | S1, S5 | Remove model/effort userConfig and option routing; keep general-purpose on sonnet/medium; docs | worker | 3 | done | c3139b8 |
 | T2 | S2, S5 | Remove command_guard_asks and every ask rule from command-guard; docs | worker | 2, 3 | done | 89273d3 |
 | T3 | S3, S4, S5 | `construct-limits` session limits read by surface-guard and iteration-cap with ceilings; no inline writes while a document is unfinished; band shows limits; docs | worker | 2, 3 | done | 5712399, 065bb22 |
+| T4 | S3 | Prune idle session limits files (plugin data dir and the temp fallback dir); fix the stale BUILTIN_DEFAULTS comment | worker | 3 | done | a765c54 |
 
 ## Log
 
@@ -39,4 +40,5 @@ Objective: shrink `/config`: no per-role model or effort options, no `command_gu
 - **L6 (2026-10-28):** T3: the mod has no session id or plugin data dir, so the band cannot show the limits without new plumbing; dropped from S3. The user unlocked `tests/iteration-cap/iteration-cap.test.mjs` (old odd/ oracle asserting the removed option) through AskUserQuestion.
 - **L7 (2026-10-28):** Live check found the Bash tool has no CLAUDE_PLUGIN_DATA, so construct-limits wrote where hooks never read; fixed (hooks read both dirs, newer wins). Review: subagents may not run `construct-limits set` (fixed). Left open (non-blocking WARNINGs): a set crossing the two dirs drops the other key; a subagent can still write the limits file directly or through `node -e`.
 - **L8 (2026-10-28):** Verifier: S1-S5 pass (1290/1290 tests). Advisories left for the user: `echo construct-limits set` from a subagent is also denied; `limits/` is not in `pruneState` STATE_DIRS; stale comment at roles.mjs:26.
-- Next step: the PR on the user's word.
+- **L9 (2026-10-28):** "ok vamos asi" (T4 cleanup, then push and the PR; release after merge on the user's word).
+- Next step: the PR review and merge; then the 14.0.0 release on the user's word.
