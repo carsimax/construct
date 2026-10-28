@@ -4,6 +4,7 @@ Notable changes per release. Versions follow [Semantic Versioning](https://semve
 
 ## Unreleased
 
+- Eval results are recorded in `docs/evals/results.md`: the 12.0.2 baseline, the run after ADD P4, and a three-run check showing that the single-run large-tracked and review-fires gains were noise.
 - The iteration cap counts consecutive failures: a passing run of a command resets its count. `hooks.json` registers `iteration-cap.mjs` on `PostToolUse` (Bash) too, and a test checks all five registrations.
 - New hook `iteration-cap.mjs` and option `iteration_cap` (default 3, `0` turns it off): a Bash command that already failed that many times for one agent in one session is denied with an instruction to stop and report what it tried, the failure, and its hypothesis, and never to edit the test to pass. A subagent's counts end when it stops; the main thread's reset on the next user prompt. Fails open.
 
