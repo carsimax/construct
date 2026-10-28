@@ -4,6 +4,8 @@ Notable changes per release. Versions follow [Semantic Versioning](https://semve
 
 ## Unreleased
 
+## 13.1.1
+
 - The delivery context shows a sub-branch cut from the feature branch with no commits of its own as `empty`, not `merged` (judged by its reflog; without one it reads as merged). The living-spec check no longer treats `.vault/specs/README.md` as the spec of a finished `.vault/tasks/README.md`: that feature's file is `.vault/specs/README.feature.md`.
 - `construct-gate oracle unlock` accepts `./path`, `a//b`, and an absolute path inside the repository for the stored path, and rejects a path outside it. `surface-guard` runs no git command for the lock check when the review store has no oracle lock files. `CONSTRUCT_LS_REMOTE_TIMEOUT_MS` shortens or sets the 15 s `ls-remote` limit of the release-ref check (a timeout keeps the lock).
 
