@@ -83,7 +83,8 @@ function emptyTree(root) {
 // since a same-size rewrite with its mtime restored would match it. Above hashBudget
 // index entries, hashing every file can outlast the hook timeout, so the temporary
 // index starts as a copy of the real one (unless an entry is assume-unchanged or
-// skip-worktree, whose changes `add -A` would skip) and `fast` tells the caller.
+// skip-worktree, whose changes `add -A` would skip) and `fast` tells the caller. A
+// split index counts only its delta in the header, so it takes the full hash (slower, not weaker).
 export const FREEZE_HASH_BUDGET = 20_000
 
 export function freezeWorkingTree(root, { hashBudget = FREEZE_HASH_BUDGET } = {}) {
@@ -101,7 +102,8 @@ export function freezeWorkingTree(root, { hashBudget = FREEZE_HASH_BUDGET } = {}
       utimesSync(env.GIT_INDEX_FILE, second, second)
       fast = true
     } else if (head !== null) git(root, ['read-tree', 'HEAD'], { env })
-    git(root, ['add', '-A'], { env })
+    // A copied index carries fsmonitor and untracked-cache state the repository controls: ignore both.
+    git(root, [...(fast ? ['-c', 'core.fsmonitor=false', '-c', 'core.untrackedCache=false'] : []), 'add', '-A'], { env })
     const candidateTree = text(git(root, ['write-tree'], { env }))
     return { baseTree: head ?? emptyTree(root), candidateTree, fast }
   } finally {

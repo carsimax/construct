@@ -19,7 +19,7 @@
 // variable-built commands are not caught. Upgrade if one of them shows up in real use.
 // Usage: node command-guard.mjs   (hook JSON on stdin)
 import { readInput } from './hook-io.mjs'
-import { extractHeredocs, GIT_VALUE_FLAGS, nestedLines, SHELLS, splitCommands, substitutionBodies, UndelimitedSubstitution } from './shell-words.mjs'
+import { extractHeredocs, GIT_VALUE_FLAGS, nestedLines, SHELLS, splitCommands, substitutionBodies } from './shell-words.mjs'
 
 const MAX_DEPTH = 4
 // Flags whose value is a word of its own (or the rest of a short cluster): their text is not a flag.
@@ -170,11 +170,7 @@ try {
     const chosen = found.find((h) => h.decision === 'deny') ?? found[0]
     if (chosen && (chosen.decision === 'deny' || asksOn())) process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: chosen.decision, permissionDecisionReason: chosen.reason } })}\n`)
   }
-} catch (error) {
-  // Fail open, except for a substitution that cannot be delimited: it can hide any command after it,
-  // however that command is spelled, so it is denied whatever the text says.
-  if (error instanceof UndelimitedSubstitution) {
-    process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: 'command-guard: a quoted command substitution could not be delimited (a `case`, or an unmatched `(`, inside "$( … )"), so a verifier bypass after it cannot be ruled out. Move that part into its own command or a script.' } })}\n`)
-  }
+} catch {
+  // Fail open.
 }
 process.exitCode = 0

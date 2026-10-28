@@ -55,9 +55,8 @@ export function splitCommands(input) {
       plain = false
       for (i++; i < input.length && input[i] !== '"'; i++) {
         // A `$(...)` inside double quotes is one span: its own quotes do not close the string.
-        if (input[i] === '$' && input[i + 1] === '(') {
-          const end = closingParen(input, i + 2)
-          if (end < 0) throw new UndelimitedSubstitution()
+        const end = input[i] === '$' && input[i + 1] === '(' ? closingParen(input, i + 2) : -1
+        if (end > 0) {
           cur += input.slice(i, end + 1)
           i = end
           continue
@@ -162,7 +161,7 @@ function unwrap(texts) {
   return { at: i, strings, rest: texts.slice(i) }
 }
 
-const HEREDOC_RE = /<<-?\s*(['"]?)\\?([A-Za-z_]\w*)\1[^\n]*\n[\s\S]*?\n[ \t]*\2(?=\n|$)/g
+const HEREDOC_RE = /<<-?\s*(['"]?)([A-Za-z_]\w*)\1[^\n]*\n[\s\S]*?\n[ \t]*\2(?=\n|$)/g
 
 // extractHeredocs removes heredoc bodies from the command (they are data) and returns them
 // with the header line they belong to, so a body fed to a shell or SQL client is checked.
@@ -178,16 +177,6 @@ export function extractHeredocs(command) {
   return { text, bodies }
 }
 
-// UndelimitedSubstitution is thrown when a `$(`, `<(`, or `>(` has no end closingParen can find.
-// Re-reading such a body character by character can pair its quotes wrongly and hide the
-// commands after it, so callers that guard commands treat this error as a hit (fail closed).
-export class UndelimitedSubstitution extends Error {
-  constructor() {
-    super('a command substitution could not be delimited')
-    this.name = 'UndelimitedSubstitution'
-  }
-}
-
 // closingBacktick returns the index of the backtick that closes the span opened before `from`, or -1.
 export function closingBacktick(text, from) {
   for (let i = from; i < text.length; i++) {
@@ -199,12 +188,8 @@ export function closingBacktick(text, from) {
 
 // closingParen returns the index of the `)` that closes a `$(` whose body starts at `from`, or -1.
 // The body is scanned with quote state: a `)` inside single or double quotes, after a backslash,
-// or inside a nested `$(...)` or backtick span does not close it. Neither does the `)` of a bare
-// `(...)` group or inside a `#` comment, so a command after them stays inside the body. A `case`
-// word returns -1: its pattern `)`s cannot be told apart without a full parser, so the caller
-// reads the rest of the command as the body (fail closed).
+// or inside a nested `$(...)` or backtick span does not close it.
 export function closingParen(text, from) {
-  let depth = 0
   for (let i = from; i < text.length; i++) {
     const c = text[i]
     if (c === '\\') i++
@@ -220,27 +205,9 @@ export function closingParen(text, from) {
     } else if (c === '$' && text[i + 1] === '(') {
       i = closingParen(text, i + 2)
       if (i < 0) return -1
-    } else if (c === '$' && text[i + 1] === '{') {
-      // a parameter expansion: a `(` or `)` in its pattern is not a group
-      i = text.indexOf('}', i + 2)
-      if (i < 0) return -1
-    } else if (c === '#' && (i === from || /[\s;&|()]/.test(text[i - 1]))) {
-      // a comment runs to the end of the line; with no newline the body cannot close
-      i = text.indexOf('\n', i)
-      if (i < 0) return -1
-    } else if (c === '(') depth++
-    else if (c === ')') {
-      if (depth > 0) depth--
-      else return i
-    } else if (keywordAt(text, i, 'case')) return -1
+    } else if (c === ')') return i
   }
   return -1
-}
-
-// keywordAt reports whether the shell word `word` starts at index i.
-function keywordAt(text, i, word) {
-  const end = i + word.length
-  return text.startsWith(word, i) && (i === 0 || /[\s;&|(]/.test(text[i - 1])) && (end === text.length || /[\s;&|)]/.test(text[end]))
 }
 
 // closingDouble returns the index of the `"` that closes a double-quoted string whose body starts

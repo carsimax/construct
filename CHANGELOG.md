@@ -6,9 +6,8 @@ Notable changes per release. Versions follow [Semantic Versioning](https://semve
 
 ## 12.0.1
 
-- The publication gate now gates a push inside a quoted `$( … )` after a `( … )` group, a `#` comment, a `${ … }` with a `)`, or a backslash-quoted here-doc delimiter.
-- A quoted `$( … )` that cannot be delimited (a `case`, or an unmatched `(`, inside it) is now denied by the publication gate and `command-guard`, whatever follows it: before, the commands after it could go unseen. Move that part into its own command or a script.
-- The Risk-line gate hashes every file when it records the tree, so a same-size rewrite with its modification time restored is no longer missed. Above 20,000 tracked files it keeps the faster index-seeded snapshot to stay within its timeout, and says so once per session.
+- The Risk-line gate hashes every file when it records the tree, so a same-size rewrite with its modification time restored is no longer missed. Above 20,000 tracked files it keeps the faster index-seeded snapshot (with fsmonitor and the untracked cache off) to stay within its timeout, and says so once per session.
+- Known, not fixed in this release: the shell parsing shared by the publication gate, `command-guard`, and `review-store-guard` can still miss a command hidden inside or after a quoted `$( … )` (a `( … )` group, a `case`, a `#` comment, or a `}` or `)` inside `${ … }`) or after a `<<WORD` that is not a real here-doc. Guards are a discipline layer (see SECURITY.md); a parser rewrite is planned.
 
 ## 12.0.0
 

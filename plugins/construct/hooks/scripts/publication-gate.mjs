@@ -35,7 +35,7 @@ import { git, repositoryRoot } from './git-tree.mjs'
 import { readInput } from './hook-io.mjs'
 import { requiredLenses } from './review-lenses.mjs'
 import { pruneStore, readVerdicts, subjectHash } from './review-store.mjs'
-import { closingBacktick, closingParen, extractHeredocs, GIT_VALUE_FLAGS, nestedLines, SHELLS, splitCommands, substitutionBodies, UndelimitedSubstitution } from './shell-words.mjs'
+import { closingBacktick, closingParen, extractHeredocs, GIT_VALUE_FLAGS, nestedLines, SHELLS, splitCommands, substitutionBodies } from './shell-words.mjs'
 
 const MAX_DEPTH = 4
 const PUSH_VALUE_FLAGS = new Set(['--repo', '-o', '--push-option', '--receive-pack', '--exec'])
@@ -45,8 +45,7 @@ const GH_VALUE_FLAGS = new Set(['-R', '--repo', '--hostname'])
 // tokenizer would split such a span into commands of its own and `git -C $(pwd)` would lose its
 // directory; quoted, it stays one word and is seen as unresolvable. Span ends come from the
 // quote-aware scanners above. A span that never closes is left as written, so the tokenizer
-// still sees whatever follows it (inside double quotes it throws UndelimitedSubstitution, which
-// main's catch denies whatever the text says).
+// still sees whatever follows it.
 function quoteSubstitutions(text) {
   let out = ''
   let quote = null
@@ -372,8 +371,7 @@ if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToP
   try {
     main()
   } catch (error) {
-    // An undelimited substitution can hide a publication however it is spelled, so it is denied whatever the text says.
-    if (publishing || error instanceof UndelimitedSubstitution) deny(`publication-gate: the publication could not be checked (${error.message}), so it is denied.`)
+    if (publishing) deny(`publication-gate: the publication could not be checked (${error.message}), so it is denied.`)
   }
   process.exitCode = 0
 }

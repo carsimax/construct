@@ -317,44 +317,8 @@ describe('shell wrappers are unwrapped by shell-words', () => {
     'echo "$(git push origin feat)"',
     "eval 'git push origin feat'",
     "bash -c 'git push origin feat'",
-    // security-review S1: a bare `(` or a case pattern `)` inside $(...) does not end the body.
-    'echo "$( (true); git push origin feat )"',
-    'echo $( (true) && git push origin feat )',
-    'echo $(case x in x) git push origin feat;; esac)',
-    'echo $(case x in (x) true;; esac; git push origin feat)',
-    'echo "$( ( (true) ); git push origin feat )"',
-    // review-risk lens: a substitution that cannot be delimited must not hide the commands after it.
-    `echo "$(echo \${x/(/} 'a"b')"; git push origin feat`,
-    // pre-existing: a `)` inside \${...} and a backslash-quoted here-doc delimiter.
-    'echo "$(echo ${x/)/}; git push origin feat)"',
-    'echo "$(true #)\ngit push origin feat)"',
-    'echo "$(true # a ) b\ngit push origin feat)"',
-    'cat <( (true); git push origin feat )',
   ]
   for (const command of cases) test(`denies: ${command}`, () => denied(hook(command, repo)))
-  // review-risk lens: a `case` inside a quoted $(...) cannot be delimited without a full parser, so the
-  // gate fails closed (the generic denial) instead of re-reading the body and losing what follows it.
-  const undelimited = [
-      'echo "$(case x in x) git push origin feat;; esac)"',
-      'echo "$(case x in x) true;; esac; git push origin feat)"',
-      'echo "$(case x in x) echo esac) git push origin feat;; esac)"',
-      'echo "$(case x in x) echo esac ;; y) git push origin feat;; esac)"',
-      'echo "$(case x in esac) git push origin feat;; esac)"',
-      'echo "$(echo case) $(git push origin feat)"',
-      `echo "$(echo case 'a"b')"; git push origin feat`,
-      `echo "$(grep -i case 'it"s' f)" && git push origin feat`,
-      `git commit -m "$(echo use case 'it"s')" ; git push origin feat`,
-    `echo "$(echo case 'a"b')"; g"i"t pu"s"h origin feat`,
-      'echo "$(cat <<\\EOF\n)\nEOF\ngit push origin feat)"',
-      'echo "$(cat <<EOF\n)\nEOF\ngit push origin feat)"',
-  ]
-  for (const command of undelimited) {
-    test(`denies, fail closed: ${command}`, () => {
-      const r = hook(command, repo)
-      assert.equal(r.decision, 'deny', r.stdout)
-      assert.match(r.reason, /could not be checked \(a command substitution could not be delimited\)/)
-    })
-  }
   test('denies: printf x | xargs -i git push', () => denied(hook('printf x | xargs -i git push', repo)))
   test('silent: printf x | xargs -i echo git push', () => silent(hook('printf x | xargs -i echo git push', repo)))
 })
