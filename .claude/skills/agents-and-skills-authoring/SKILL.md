@@ -40,7 +40,7 @@ Sources (read 2026-10-23): [sub-agents](https://code.claude.com/docs/en/sub-agen
 ### What a subagent sees
 
 - Gets: its own body as system prompt (not Claude Code's), the task message, all CLAUDE.md levels and AGENTS.md (Explore and Plan skip them), a git status snapshot, preloaded skills, the `SubagentStart` `additionalContext` (our subagent contract).
-- Does **not** get: parent history, skills the parent loaded, files the parent read, the output style, parent auto memory. Hand off by reference to `odd/tasks/<feature>.md`, never by "as discussed".
+- Does **not** get: parent history, skills the parent loaded, files the parent read, the output style, parent auto memory. Hand off by reference to `.vault/tasks/<feature>.md`, never by "as discussed".
 - Combined non-built-in descriptions over 15,000 tokens raise a startup warning. Keep `description` short and the detail in the body.
 
 ### Nesting, concurrency, background
