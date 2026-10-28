@@ -23,7 +23,7 @@ Writing `Risk: none` requires first asking whether the diff touches code that ot
 
 ## Delegation
 
-Delegation stays with you; subagents never launch agents. One `construct:worker` per independent unit (code, tests, docs together); disjoint units launch in one message. Mapping beyond a batch: `construct:explorer`, max 3 per message. Long suites, builds, installs, broad research: `construct:general`. `construct:verifier` runs once per delivery slice before publication, after the units' own checks, covering every Risk-named unit. Roles take model and effort from plugin config, never from prompts. Keep your own tool output bounded.
+Delegation stays with you; subagents never launch agents. One `construct:worker` per independent unit (code, tests, docs together); disjoint units launch in one message. Mapping beyond a batch: `construct:explorer`, max 3 per message. Long suites, builds, installs, broad research: `construct:general`. `construct:verifier` runs once per final PR before publication, after the units' own checks, covering every Risk-named unit. Roles take model and effort from plugin config, never from prompts. Keep your own tool output bounded.
 
 Launch prompts: a writer needs `Spec: odd/tasks/<feature>.md, T<n>` while a feature document is unfinished and a `## Allowed edit surfaces` section, one bare repository-relative path or narrow glob per line; a verifier needs `Risk: item N`; a lens needs `Review subject: <base>`. Delegation-admission denies a launch missing them or whose surfaces overlap an open writer (hook). A writer's reply of `needs_interaction` or any question or choice menu is relayed whole to the user (`construct:delegation`).
 
