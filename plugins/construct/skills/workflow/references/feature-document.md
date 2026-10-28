@@ -32,3 +32,6 @@ Objective: <one sentence>. Branch: <branch>. Baseline: <commit>. Test runner: <c
 - Log: L1 is the verbatim request; later corrections are verbatim with a date; progress notes stay brief. Keep a line `Next step: <action>` near the end; the hook shows it.
 - A requirement change appends a verbatim Log entry, rewrites just the `S#` it touches, and reopens just its task. Findings never expand scope.
 - Record the baseline commit in the header before the first change; the verifier's baseline comes from it.
+- An `S#` that cannot be fully specified carries `NEEDS CLARIFICATION: <question>`; the gate denies a `done` task naming it. Ask the user, record the answer in the Log, then rewrite the `S#` without the marker.
+- Quote rule: each `S#` quotes its Log entry verbatim in double quotes, or says `Assumption`; the hook warns on an `S#` with neither.
+- Feature documents are never deleted. When all tasks are finished, add the `S#` to `odd/spec.md` under `## <feature>`.
