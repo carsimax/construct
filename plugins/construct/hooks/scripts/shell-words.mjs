@@ -1,105 +1,112 @@
-// Shell-word tokenizer and command unwrapping for the publication gate.
-// Pure: no I/O.
+// Shell parsing and command unwrapping for the publication gate, the command guard, and the review
+// store guard. The shell grammar is read by mvdan-sh 0.10.1 (mvdan/sh compiled with GopherJS,
+// BSD-3-Clause, vendored unmodified as ../vendor/mvdan-sh.cjs, see LICENSE-mvdan-sh), so a command
+// hidden inside `$( )`, `case`, a heredoc, `${a:-'})'}`, or a quoted spelling is found as bash finds it.
+// Text the parser rejects throws ShellParseError: bash can still run the part before a syntax
+// error, so the callers deny it instead of guessing.
+import { createRequire } from 'node:module'
 import { basename } from 'node:path'
 
 export const SHELLS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh'])
 // Flags of `git` that take a value, so the next word is not the subcommand.
 export const GIT_VALUE_FLAGS = new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace', '--exec-path', '--super-prefix', '--config-env'])
 
-// splitCommands is a small shell-word splitter: quotes and backslashes group a word,
-// unquoted ; | & ( ) ` newline end a command, and < > are dropped as separators so
-// `cat <.env` yields the word `.env`. A bare digit word glued to < or > is the redirection's
-// file descriptor and is dropped (`2>&1`), and `&>` / `&>>` redirect instead of ending the
-// command. Each returned word keeps whether it was quoted (`r`: redirection target) and its raw source text (`s`, quotes intact).
-// Each command keeps the unquoted `(` and `)` seen since the previous command, in order (`parens`), so a caller can end a subshell.
+export class ShellParseError extends Error {}
+
+// The 1.5 MB parser loads (about 25 ms) on the first parse only.
+let syntax
+const parser = () => (syntax ??= createRequire(import.meta.url)('../vendor/mvdan-sh.cjs').syntax)
+
+// Operator numbers of mvdan-sh 0.10.1; the vendored file is pinned by hash in tests/band-license.test.mjs.
+const HDOC = new Set([61, 62]) // <<  <<-
+const HERE_STRING = 63 // <<<
+const PIPES = new Set([12, 13]) // |  |&
+
+// ANSI-C quoting: $'\x67it' is the word git.
+const ANSI = { a: '\x07', b: '\b', e: '\x1b', E: '\x1b', f: '\f', n: '\n', r: '\r', t: '\t', v: '\v', '\\': '\\', "'": "'", '"': '"', '?': '?' }
+const ansiC = (text) =>
+  text.replace(/\\(?:([abeEfnrtv\\'"?])|x([0-9a-fA-F]{1,2})|u([0-9a-fA-F]{1,4})|U([0-9a-fA-F]{1,8})|([0-7]{1,3})|c(.))/g, (m, c, x, u, big, oct, ctl) => {
+    if (c) return ANSI[c]
+    if (x) return String.fromCharCode(parseInt(x, 16))
+    if (u || big) return String.fromCodePoint(parseInt(u ?? big, 16))
+    if (oct) return String.fromCharCode(parseInt(oct, 8) & 255)
+    return String.fromCharCode(ctl.charCodeAt(0) & 31)
+  })
+
+// splitCommands parses `input` and returns every simple command in it, in source order, nested
+// ones included (`$( )`, backticks, `<( )`, subshells, `case`, loops, `${a:-$(...)}`, heredoc
+// expansions). Each command is an array of words:
+//   t  the word's literal text; quotes and escapes resolved, an expansion (`$x`, `$(...)`) kept as written;
+//   r  a redirection target (not an argument);
+//   h  a here-string (`<<< text`): data for the command, and a script when the command is a shell;
+//   s  the word's source text.
+// Assignments (`FOO=1 git`) and `export`/`declare` arguments are words too. Properties of the array:
+//   parens     the `(` and `)` of subshells and substitutions opened or closed since the previous command, in order;
+//   heredocs   the source of each heredoc body fed to the command;
+//   pipeline   the same object for every command of one pipeline.
+// Throws ShellParseError when the text is not valid shell.
 export function splitCommands(input) {
+  const sh = parser()
+  let file
+  try {
+    file = sh.NewParser().Parse(input, '')
+  } catch (error) {
+    throw new ShellParseError(typeof error?.Error === 'function' ? error.Error() : String(error))
+  }
+  const bytes = Buffer.from(input) // node offsets are UTF-8 byte offsets
+  const raw = (node) => bytes.subarray(node.Pos().Offset(), node.End().Offset()).toString()
+  const part = (p, quoted) => {
+    switch (sh.NodeType(p)) {
+      case 'Lit': return quoted ? p.Value.replace(/\\([$`"\\])|\\\n/g, (_, c) => c ?? '') : p.Value.replace(/\\([\s\S])/g, (_, c) => (c === '\n' ? '' : c))
+      case 'SglQuoted': return p.Dollar ? ansiC(p.Value) : p.Value
+      case 'DblQuoted': return p.Parts.map((q) => part(q, true)).join('')
+      default: return raw(p)
+    }
+  }
+  const text = (word) => word.Parts.map((p) => part(p, false)).join('')
+  const word = (w, extra) => ({ t: text(w), r: false, h: false, s: raw(w), ...extra })
+  const assign = (a) => {
+    if (a.Array) return { t: raw(a), r: false, h: false, s: raw(a) }
+    if (a.Name === null) return word(a.Value) // a declare flag: `-x`
+    const value = a.Value === null ? '' : text(a.Value)
+    return { t: `${a.Name.Value}${a.Append ? '+' : ''}${a.Naked ? '' : '='}${value}`, r: false, h: false, s: raw(a) }
+  }
   const commands = []
-  let words = []
+  const stack = []
   let parens = ''
-  let cur = ''
-  let has = false
-  let plain = true // no quote or backslash went into the current word
-  let redir = false
-  let piped = false
-  let ws = 0 // index where the current word's raw source starts
-  const endWord = (end) => {
-    if (has) words.push({ t: cur, r: redir, s: input.slice(ws, end).trim() })
-    if (has) redir = false
-    cur = ''
-    has = false
-    plain = true
-  }
-  const endCommand = (end) => {
-    endWord(end)
-    redir = false
-    if (words.length) {
-      words.piped = piped
-      words.parens = parens
-      parens = ''
-      commands.push(words)
+  let pipeline = null
+  let pipeDepth = 0
+  sh.Walk(file, (node) => {
+    if (node === null) {
+      const type = stack.pop()
+      if (type === 'Subshell' || type === 'CmdSubst' || type === 'ProcSubst') parens += ')'
+      else if (type === 'Pipe' && --pipeDepth === 0) pipeline = null
+      return true
     }
-    words = []
-    piped = false
-  }
-  for (let i = 0; i < input.length; i++) {
-    const c = input[i]
-    if (c === "'") {
-      const end = input.indexOf("'", i + 1)
-      const stop = end === -1 ? input.length : end
-      cur += input.slice(i + 1, stop)
-      has = true
-      plain = false
-      i = stop
-    } else if (c === '"') {
-      has = true
-      plain = false
-      for (i++; i < input.length && input[i] !== '"'; i++) {
-        // A `$(...)` inside double quotes is one span: its own quotes do not close the string.
-        const end = input[i] === '$' && input[i + 1] === '(' ? closingParen(input, i + 2) : -1
-        if (end > 0) {
-          cur += input.slice(i, end + 1)
-          i = end
-          continue
-        }
-        // Inside double quotes bash drops a backslash only before $ ` " \ or newline.
-        if (input[i] === '\\' && input[i + 1] === '\n') { i++; continue }
-        if (input[i] === '\\' && i + 1 < input.length && '$`"\\'.includes(input[i + 1])) i++
-        cur += input[i]
+    const type = sh.NodeType(node)
+    stack.push(type === 'BinaryCmd' && PIPES.has(node.Op) ? 'Pipe' : type)
+    if (type === 'Subshell' || type === 'CmdSubst' || type === 'ProcSubst') parens += '('
+    else if (type === 'BinaryCmd' && PIPES.has(node.Op)) {
+      if (pipeDepth++ === 0) pipeline = {}
+    } else if (type === 'Stmt') {
+      const words = []
+      const cmdType = node.Cmd === null ? null : sh.NodeType(node.Cmd)
+      if (cmdType === 'CallExpr') words.push(...node.Cmd.Assigns.map(assign), ...node.Cmd.Args.map((w) => word(w)))
+      else if (cmdType === 'DeclClause') words.push({ t: node.Cmd.Variant.Value, r: false, h: false, s: node.Cmd.Variant.Value }, ...node.Cmd.Args.map(assign))
+      const heredocs = []
+      for (const redir of node.Redirs) {
+        if (redir.Hdoc) heredocs.push(redir.Hdoc.Parts.every((p) => sh.NodeType(p) === 'Lit') ? redir.Hdoc.Parts.map((p) => p.Value).join('') : raw(redir.Hdoc).replace(/\n?[ \t]*[^\n]*$/, '\n'))
+        if (redir.Op === HERE_STRING) words.push(word(redir.Word, { h: true }))
+        else words.push(word(redir.Word, { r: true }))
       }
-    } else if (c === '\\' && input[i + 1] === '\n') {
-      i++ // a continuation line joins before tokenizing
-    } else if (c === '\\' && i + 1 < input.length) {
-      cur += input[++i]
-      has = true
-      plain = false
-    } else if (/\s/.test(c) && c !== '\n') {
-      endWord(i)
-    } else if (';|&()`\n'.includes(c) && !(c === '&' && input[i + 1] === '>')) {
-      endCommand(i)
-      if (c === '(' || c === ')') parens += c
-      // `|` and `|&` feed the next command; `||` does not.
-      if (c === '|') {
-        if (input[i + 1] === '|') i++
-        else {
-          // `|&` pipes stderr too: consume the `&` so it does not end a command.
-          if (input[i + 1] === '&') i++
-          piped = true
-        }
+      if (words.length > 0) {
+        Object.assign(words, { parens, heredocs, pipeline })
+        parens = ''
+        commands.push(words)
       }
-    } else if (c === '<' || c === '>' || c === '&') {
-      if (c !== '&' && plain && /^[0-9]+$/.test(cur)) { cur = ''; has = false }
-      endWord(i)
-      // Operators: >> >| >&N &>> &> <<EOF; a here-string (<<<) takes data, not a file.
-      const op = /^(<<<|<<-?|>>|>\||>&[0-9-]*|<&[0-9-]*|&>>|&>|[<>])/.exec(input.slice(i))[0]
-      i += op.length - 1
-      redir = op !== '<<<' && !/&[0-9-]*$/.test(op) || /^[<>]&$/.test(op)
-    } else {
-      cur += c
-      has = true
     }
-    if (!has) ws = i + 1
-  }
-  endCommand(input.length)
+    return true
+  })
   return commands
 }
 
@@ -161,97 +168,21 @@ function unwrap(texts) {
   return { at: i, strings, rest: texts.slice(i) }
 }
 
-const HEREDOC_RE = /<<-?\s*(['"]?)([A-Za-z_]\w*)\1[^\n]*\n[\s\S]*?\n[ \t]*\2(?=\n|$)/g
 
-// extractHeredocs removes heredoc bodies from the command (they are data) and returns them
-// with the header line they belong to, so a body fed to a shell or SQL client is checked.
-export function extractHeredocs(command) {
-  const bodies = []
-  const text = command.replace(HEREDOC_RE, (raw, _q, _tag, offset) => {
-    const nl = raw.indexOf('\n')
-    const lineStart = command.lastIndexOf('\n', offset - 1) + 1
-    const header = command.slice(lineStart, offset) + raw.slice(0, nl)
-    bodies.push({ header, body: raw.slice(nl + 1, raw.lastIndexOf('\n')) })
-    return raw.slice(0, nl)
-  })
-  return { text, bodies }
-}
-
-// closingBacktick returns the index of the backtick that closes the span opened before `from`, or -1.
-export function closingBacktick(text, from) {
-  for (let i = from; i < text.length; i++) {
-    if (text[i] === '\\') i++
-    else if (text[i] === '`') return i
+// heredocScripts maps each command to the heredoc bodies that run as shell code: a body is data
+// unless a command of its pipeline is a shell (`cat <<E | bash`, `bash <<E`).
+export function heredocScripts(commands) {
+  const groups = new Map()
+  for (const command of commands) {
+    const key = command.pipeline ?? command
+    groups.set(key, [...(groups.get(key) ?? []), command])
   }
-  return -1
-}
-
-// closingParen returns the index of the `)` that closes a `$(` whose body starts at `from`, or -1.
-// The body is scanned with quote state: a `)` inside single or double quotes, after a backslash,
-// or inside a nested `$(...)` or backtick span does not close it.
-export function closingParen(text, from) {
-  for (let i = from; i < text.length; i++) {
-    const c = text[i]
-    if (c === '\\') i++
-    else if (c === "'") {
-      i = text.indexOf("'", i + 1)
-      if (i < 0) return -1
-    } else if (c === '"') {
-      i = closingDouble(text, i + 1)
-      if (i < 0) return -1
-    } else if (c === '`') {
-      i = closingBacktick(text, i + 1)
-      if (i < 0) return -1
-    } else if (c === '$' && text[i + 1] === '(') {
-      i = closingParen(text, i + 2)
-      if (i < 0) return -1
-    } else if (c === ')') return i
+  const scripts = new Map()
+  for (const members of groups.values()) {
+    if (!members.some((c) => SHELLS.has(nestedLines(c.filter((w) => !w.r).map((w) => w.t)).name))) continue
+    for (const c of members) if (c.heredocs.length > 0) scripts.set(c, c.heredocs)
   }
-  return -1
-}
-
-// closingDouble returns the index of the `"` that closes a double-quoted string whose body starts
-// at `from`, or -1. Substitutions inside it are skipped whole.
-function closingDouble(text, from) {
-  for (let i = from; i < text.length; i++) {
-    const c = text[i]
-    if (c === '\\') i++
-    else if (c === '"') return i
-    else if (c === '`') {
-      i = closingBacktick(text, i + 1)
-      if (i < 0) return -1
-    } else if (c === '$' && text[i + 1] === '(') {
-      i = closingParen(text, i + 2)
-      if (i < 0) return -1
-    }
-  }
-  return -1
-}
-
-// substitutionBodies lists the bodies of $(...), <(...), >(...), and backticks outside
-// single quotes. A body is a command line of its own (its own substitutions are found when it is read).
-export function substitutionBodies(command) {
-  const out = []
-  let quote = null
-  for (let i = 0; i < command.length; i++) {
-    const c = command[i]
-    if (quote === "'") {
-      if (c === "'") quote = null
-    } else if (c === '\\') i++
-    else if (c === "'" && quote === null) quote = "'"
-    else if (c === '"') quote = quote === '"' ? null : '"'
-    else if ((c === '$' || c === '<' || c === '>') && command[i + 1] === '(' && (c === '$' || quote === null)) {
-      const end = closingParen(command, i + 2)
-      out.push(command.slice(i + 2, end < 0 ? command.length : end))
-      i = end < 0 ? command.length : end
-    } else if (c === '`') {
-      let j = i + 1
-      while (j < command.length && command[j] !== '`') j += command[j] === '\\' ? 2 : 1
-      out.push(command.slice(i + 1, j).replace(/\\([\\$`])/g, '$1'))
-      i = j
-    }
-  }
-  return out
+  return scripts
 }
 
 // nestedLines lists the command lines one simple command (its live words) runs as a string:

@@ -5,7 +5,7 @@
 // `review-capture.mjs` or `review-context.mjs` (directly or as the script of node, bun, deno, or a
 // shell) or names `construct-review`, once quotes, backslashes, and brackets are removed. Commands
 // that only name the hook files as data (grep, git diff, cat, a commit message) pass. A heuristic
-// guard: it fails open on unreadable input.
+// guard: it fails open on unreadable input, and denies a command the shell parser rejects.
 // shortcut: a name built indirectly (variables, concatenation, base64), a glob spelling
 // (`construct-revie?`, `con*-review`), or a run through an interpreter's own code (`node -e`) is
 // not seen; upgrade if that shows up in real use.
@@ -15,21 +15,26 @@ import { basename, dirname, join, relative, resolve } from 'node:path'
 import { git } from './git-tree.mjs'
 import { readInput } from './hook-io.mjs'
 import { storeAt } from './review-store.mjs'
-import { nestedLines, splitCommands, substitutionBodies } from './shell-words.mjs'
+import { heredocScripts, nestedLines, SHELLS, ShellParseError, splitCommands } from './shell-words.mjs'
 
 const INTERPRETERS = new Set(['node', 'nodejs', 'bun', 'deno', 'sh', 'bash', 'zsh', 'dash', 'ksh'])
 const HOOK_FILE = /^review-(capture|context)\.mjs$/
 const plain = (text) => text.replace(/["'\\\[\]]/g, '').toLowerCase()
 
 // runsReviewHook is true when a command segment executes a review hook file: the file as the
-// command, or as an argument of an interpreter. Nested command lines (sh -c, eval, $(...)) are walked.
+// command, or as an argument of an interpreter. splitCommands finds the commands nested in
+// substitutions; nested command lines (sh -c, eval, here-strings and heredocs fed to a shell) are
+// read again. Throws ShellParseError for text that is not valid shell.
 function runsReviewHook(command, depth = 0) {
   if (depth > 4) return false
-  return splitCommands(command).some((tokens) => {
+  const commands = splitCommands(command)
+  const scripts = heredocScripts(commands)
+  return commands.some((tokens) => {
     const words = tokens.filter((w) => !w.r).map((w) => w.t)
-    for (const word of words) if (substitutionBodies(word).some((body) => runsReviewHook(body, depth + 1))) return true
     const { name, args, lines } = nestedLines(words)
     if (lines.some((line) => runsReviewHook(line, depth + 1))) return true
+    if (SHELLS.has(name) && tokens.some((w) => w.h && runsReviewHook(w.t, depth + 1))) return true
+    if ((scripts.get(tokens) ?? []).some((body) => runsReviewHook(body, depth + 1))) return true
     return HOOK_FILE.test(basename(plain(name))) || (INTERPRETERS.has(name.toLowerCase()) && args.some((a) => HOOK_FILE.test(basename(plain(a)))))
   })
 }
@@ -69,7 +74,8 @@ function main() {
 
 try {
   main()
-} catch {
-  // Fail open: no output, exit 0.
+} catch (error) {
+  // Fail open, except on text that is not valid shell: bash can run the part before a syntax error.
+  if (error instanceof ShellParseError) process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: `review-store-guard: the command could not be parsed (${error.message}), so it is denied: text the guard cannot read may run a review hook. Rewrite it as plain shell.` } })}\n`)
 }
 process.exitCode = 0

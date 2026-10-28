@@ -5,13 +5,13 @@ Objective: replace the heuristic shell parsing in `shell-words.mjs` (used by pub
 ## Specs
 
 - **S1 — Parser rewrite.** "Si sigue con la recomendacion" / "si sigue" (recommendation: redo the parser as its own feature with a real shell parser, after five heuristic attempts in `odd/tasks/security-review.md` traded bypasses for false denials).
-  - Open: which parser. A new dependency needs the user's OK (CLAUDE.md).
+  - Parser: `mvdan-sh` 0.10.1 (mvdan/sh compiled with GopherJS, BSD-3-Clause), vendored as one file because the plugin ships no package.json. A parse error denies, as UndelimitedSubstitution does today. sh-syntax was dropped (L3).
   - Every case below is a test before any implementation.
 
 ### Must deny (hidden publication or verifier bypass; bash or zsh runs the hidden command)
 
 - `echo "$( (true); git push origin feat )"` and `echo "$( ( (true) ); git push origin feat )"`
-- `echo "$(case x in x) git push origin feat;; esac)"`, `echo "$(case x in x) echo esac) git push origin feat;; esac)"`, `echo "$(case x in esac) git push origin feat;; esac)"`
+- `echo "$(case x in x) git push origin feat;; esac)"` and `echo "$(case x in x) echo esac) git push origin feat;; esac)"` (the second is a syntax error in bash and zsh, denied as unparseable)
 - `echo "$(true #)` newline `git push origin feat)"`
 - `echo "$(echo ${x/)/}; git push origin feat)"`, `echo "$(echo ${a:-'})'}; git push)"`, `echo "$(echo ${a:-\})}; git push)"`
 - `echo "$(echo case 'a"b')"; git push origin feat` and the spelling `g"i"t pu"s"h`
@@ -22,6 +22,7 @@ Objective: replace the heuristic shell parsing in `shell-words.mjs` (used by pub
 
 ### Must allow (common idioms)
 
+- `echo "$(case x in esac) git push origin feat;; esac)"` (moved here from Must deny, L5): `esac` right after `in` closes the case, so the `)` ends the substitution and the rest is literal text; bash and zsh print it and run nothing.
 - `git commit -m "$(cat <<'EOF'` newline `fix: add tests` newline `EOF` newline `)"`, including messages with `don't`, `edge case`, `(header only`, `1) read 2) write`
 - `gh pr create --body "$(cat <<'EOF' ... EOF)"`
 - `echo "$(grep -i case README.md)"`, `VAR="$(git log --oneline | grep case)"`, `echo "$(git branch --show-current)"`
@@ -30,11 +31,21 @@ Objective: replace the heuristic shell parsing in `shell-words.mjs` (used by pub
 
 | ID | Specs | Task | Route | Risk | Status | Commit |
 |---|---|---|---|---|---|---|
-| T1 | S1 | Choose the parser (user decision on the dependency) | user | none | pending | — |
-| T2 | S1 | Tests for every case above, then the parser, then a clean-context review-risk and review-resilience pass | worker | 2 | pending | — |
+| T1 | S1 | Choose the parser (user decision on the dependency) | user | none | done | — |
+| T2 | S1 | Tests for every case above, then the parser, then a clean-context review-risk and review-resilience pass | worker | 2 | in-review | — |
 
 ## Log
 
 - **L1 (2026-10-27):** opened from `odd/tasks/security-review.md` L8–L10; cases from the review-risk and review-resilience lens reports on 01111dc..2f73487.
+- **L2 (2026-10-27):** T1. Candidates checked with `npm view`: sh-syntax 0.7.0 (MIT, no deps, ~800 KB, updated 2026-09); mvdan-sh 0.10.1 (deprecated, see mvdan/sh#1145); bash-parser 0.5.0 (unmaintained, many deps); shell-quote (a tokenizer only: no heredocs, case, or nested substitution); tree-sitter-bash (native addon, 20 MB). User chose sh-syntax. Not yet verified: its API, its WASM load time, and how it parses zsh-only syntax.
+- **L3 (2026-10-27):** T2 probe (Node 26.12.1, scratchpad, nothing vendored). sh-syntax 0.7.0: import plus parse takes 10-15 ms, but its JSON AST stops at `Stmt`. `Cmd` carries only `Pos`/`End`, with no node type, args, or nested substitutions, so it cannot find a hidden `git push`. mvdan-sh 0.10.1 (1.5 MB, CommonJS): load takes about 25 ms and parse 5 ms. `syntax.Walk` + `NodeType` found the nested `git push` in the `case`, `<<\EOF`, and `${a:-'})'}` cases. Quoted words (`g"i"t`) need their parts joined, because `Lit()` is empty for them. T1 reopened: the dependency choice goes back to the user.
+- **L4 (2026-10-27):** user chose mvdan-sh, accepting that it is deprecated upstream.
+- **L5 (2026-10-27):** T2 worker. Vendored `mvdan-sh` 0.10.1 `index.js` unmodified as `hooks/vendor/mvdan-sh.cjs` (sha256 pinned in `tests/band-license.test.mjs`) with `LICENSE-mvdan-sh` and a NOTICE section. RED first: 92 new tests (`tests/publication/shell-parser*.mjs`, `tests/guard/shell-parser.test.mjs`) against the old code: 57 failed (every nested-paren, `case`, comment, `${...}`, `<<\EOF`, `echo '<<E'`, `<<<E` shape for all three hooks, plus the four unparseable inputs), 35 passed (the `g"i"t` spelling and the allow idioms already worked). Then `shell-words.mjs` rewritten on the parser: `splitCommands` walks the AST (nested commands, subshell parens, pipelines, here-strings, heredoc bodies); `extractHeredocs`, `closingParen`, `closingBacktick`, `substitutionBodies`, and the gate's `quoteSubstitutions`/`stripComments`/`views` are gone. A parse error throws `ShellParseError` and publication-gate, command-guard, and review-store-guard deny it (review-store-guard used to fail open). GREEN: 992 of 996 pass (the 3 extra are license tests). Decisions and conflicts, for the user:
+  - **Spec correction.** `echo "$(case x in esac) git push origin feat;; esac)"` is not a hidden command: `esac` right after `in` closes the case, so the `)` ends the substitution and the rest is literal text. bash 3.2.57 and zsh both print it (`echo "$(case x in esac) echo HID;; esac)"` prints ` echo HID;; esac)`), and mvdan-sh agrees. It moved from Must deny to an allow test (`dataShapes`). `echo esac)` as a case body is a syntax error in bash and zsh, so it is denied as unparseable.
+  - **Four existing tests in `tests/publication/publication.test.mjs` conflict with deny-on-parse-error and were left unchanged:** `denies: echo $(echo foo; git push origin feat` and `denies: echo $(echo ')'; git push origin feat` (still denied, but the reason is "could not be parsed", not the review state their `denied` helper matches), and `a non-publishing command with odd quoting stays silent` (its second line, an unterminated `$(`) and `a crash on a command that is no publication stays silent` (30000 nested `$(`) expect silence for unparseable text that mentions no publication. Open question: deny every unparseable command (current, per S1), or deny only when the text mentions a publication.
+  - Cost: about 0.10 s per gate or guard call (node alone 0.06 s, the old code 0.06 s), so the 1.5 MB parser adds about 40 ms; it loads on the first parse.
+  - Not covered, as before: brace expansion (`{git,push}`), aliases, variable-built names, interpreter one-liners. The README still calls `shell-words` a tokenizer (outside this unit's surfaces).
 
-Next step: T1.
+- **L6 (2026-10-27):** user chose to always deny an unparseable command. The four conflicting tests in `tests/publication/publication.test.mjs` now expect the "could not be parsed" deny (two renamed or split, each with a comment: bash runs the valid lines before a syntax error). The `esac` reclassification was accepted. `node --test 'tests/**/*.test.mjs'`: 996 tests, 996 pass, 0 fail. T2 is in-review.
+
+Next step: the clean-context review-risk and review-resilience pass.

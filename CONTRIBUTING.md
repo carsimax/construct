@@ -95,7 +95,7 @@ Many tests cross-check text against code, so a change in one place usually needs
 
 ## Third-party material
 
-Adapted code keeps its license in a `plugins/construct/LICENSE-<project>` file and in the header of each adapted file (see `LICENSE-gentle-shell`), and is listed in [`plugins/construct/NOTICE`](plugins/construct/NOTICE), which carries no license text. Ideas from another project, with no text or code copied, get one credit line in the README's Credits section.
+Adapted code keeps its license in a `plugins/construct/LICENSE-<project>` file and in the header of each adapted file (see `LICENSE-gentle-shell`), and is listed in [`plugins/construct/NOTICE`](plugins/construct/NOTICE), which carries no license text. Third-party code copied unmodified (`hooks/vendor/mvdan-sh.cjs`, BSD-3-Clause) keeps its license in `LICENSE-<project>` too and is listed in NOTICE under Vendored code; `tests/band-license.test.mjs` pins the file's hash, so a new version is a new file and a new hash. Ideas from another project, with no text or code copied, get one credit line in the README's Credits section.
 
 ## License
 
