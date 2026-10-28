@@ -181,21 +181,6 @@
         "hooks": [
           {
             "type": "command",
-            "if": "Bash(git *)",
-            "command": "node",
-            "args": [
-              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/delivery-signals.mjs",
-              "post"
-            ],
-            "timeout": 10
-          }
-        ]
-      },
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
             "command": "node",
             "args": [
               "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/iteration-cap.mjs"

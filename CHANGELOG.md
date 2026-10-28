@@ -4,6 +4,7 @@ Notable changes per release. Versions follow [Semantic Versioning](https://semve
 
 ## Unreleased
 
+- The commit-slice notice is removed: `delivery-signals.mjs` no longer reports the authored changed lines after a `git commit` (its `post` hook registration is gone), and the `slice_lines` option is removed from `plugin.json`, so a `slice_lines` value users had set is now ignored. The context backstop (`delivery-signals.mjs batch`) is unchanged. The `delivery` skill's state line now shows the feature branch (`feat/<feature>`, or the parent of a sub-branch `feat/<feature>-t<n>`), the current sub-branch, and the local sub-branches merged or unmerged into the feature branch.
 - Eval results are recorded in `docs/evals/results.md`: the 12.0.2 baseline, the run after ADD P4, and a three-run check showing that the single-run large-tracked and review-fires gains were noise.
 - The iteration cap counts consecutive failures: a passing run of a command resets its count. `hooks.json` registers `iteration-cap.mjs` on `PostToolUse` (Bash) too, and a test checks all five registrations.
 - New hook `iteration-cap.mjs` and option `iteration_cap` (default 3, `0` turns it off): a Bash command that already failed that many times for one agent in one session is denied with an instruction to stop and report what it tried, the failure, and its hypothesis, and never to edit the test to pass. A subagent's counts end when it stops; the main thread's reset on the next user prompt. Fails open.
