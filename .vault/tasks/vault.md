@@ -10,7 +10,7 @@ Objective: the per-repository working directory becomes `.vault/` with container
 - **S4 — Risk paths per folder.** "Si vamos asi" (L3). The publication gate reads every file under `.vault/risk-paths/` at the merge base and at the default-branch tip (never the ref); a malformed line in any file denies, naming the file.
 - **S5 — Hidden folder works.** "Si vamos asi" (L3). Assumption: tests prove each hook, the risk floor globs, the review context, and the CLI find `.vault/` content despite the leading dot.
 - **S6 — ADD text.** "Si vamos asi" (L3, level A). "Organic Driven Development" and "ODD" in prose become "Agent Driven Development" and "ADD"; internal `ODD_REVIEW_*` markers stay. Assumption: historical entries (CHANGELOG releases, `docs/research/`, `reference/`) are not rewritten.
-- **S7 — This repository and the release.** "Si vamos asi" (L3). This repository's `odd/` moves to `.vault/` with `git mv` (`odd/spec.md` becomes `.vault/specs/README.md`; `odd/risk-paths` becomes `.vault/risk-paths/hooks.txt`). Release 13.0.0 with a one-line migration note (`git mv odd .vault`, then move `spec.md` and `risk-paths` into their folders).
+- **S7 — This repository and the release.** "Si vamos asi" (L3). This repository's active files move to `.vault/` with `git mv`; its finished feature documents stay in `odd/tasks/` (L5) (`odd/spec.md` becomes `.vault/specs/README.md`; `odd/risk-paths` becomes `.vault/risk-paths/hooks.txt`). Release 13.0.0 with a one-line migration note (`git mv odd .vault`, then move `spec.md` and `risk-paths` into their folders).
 
 ## Tasks
 
@@ -26,4 +26,5 @@ Objective: the per-repository working directory becomes `.vault/` with container
 - **L2 (2026-10-28):** "y considera que task, risk-path y spec mas biene esten los archivos dentro de carpetas es decir task,risk-path y specs deberia ser carpetas contendoras"
 - **L3 (2026-10-28):** "Si vamos asi" (plan: level A text rename, `.vault/` with container folders, no backward compatibility, 13.0.0).
 - **L4 (2026-10-28):** T1 did not write its new tests RED first (the rename went in before them). T3 moved this repository with `git mv`; `odd/risk-paths` became `.vault/risk-paths/hooks.txt`.
+- **L5 (2026-10-28):** Moving the 21 old feature documents passed the 400 KB review-context budget (~500 KB of diff). Answer: "Dejar los viejos en odd/": this repository's finished documents stay in `odd/tasks/` as an unused archive, like other projects; only `vault.md`, `spec.md` (now `.vault/specs/README.md`) and `risk-paths` (now `.vault/risk-paths/hooks.txt`) move.
 - Next step: review and the final PR, then release 13.0.0.
