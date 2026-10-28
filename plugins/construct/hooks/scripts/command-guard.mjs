@@ -11,15 +11,16 @@
 //   - deny also: a statement that sets `GIT_CONFIG_PARAMETERS` or `GIT_CONFIG_KEY_<n>` to
 //     core.hooksPath through `export`, `declare` or `typeset` (any flags), `readonly`, `local`,
 //     or a bare assignment, even with no `git` in that statement.
-// Commands are found through shell-words.mjs (`sh -c`, `eval`, `env -S`, wrappers, `$(...)`,
-// backticks, heredoc bodies fed to a shell), so compounds and `git -C dir` are covered. When a
-// deny and an ask both match, deny is reported. Unreadable input or any error: no output (fail open).
+// Commands are found by the shell parser in shell-words.mjs (`sh -c`, `eval`, `env -S`, wrappers,
+// `$(...)`, backticks, heredoc bodies and here-strings fed to a shell), so compounds and `git -C dir`
+// are covered. Text the parser rejects is denied: bash can run the part before a syntax error. When a
+// deny and an ask both match, deny is reported. Unreadable input or any other error: no output (fail open).
 // Long options match as git does: any prefix at least as long as the minimum in `abbr` calls.
-// shortcut: a heuristic parser; git aliases, interpreter one-liners, and
-// variable-built commands are not caught. Upgrade if one of them shows up in real use.
+// shortcut: git aliases, interpreter one-liners, brace expansion, and variable-built commands are
+// not caught. Upgrade if one of them shows up in real use.
 // Usage: node command-guard.mjs   (hook JSON on stdin)
 import { readInput } from './hook-io.mjs'
-import { extractHeredocs, GIT_VALUE_FLAGS, nestedLines, SHELLS, splitCommands, substitutionBodies } from './shell-words.mjs'
+import { GIT_VALUE_FLAGS, heredocScripts, nestedLines, parsesAsShell, SHELLS, ShellParseError, splitCommands } from './shell-words.mjs'
 
 const MAX_DEPTH = 4
 // Flags whose value is a word of its own (or the rest of a short cluster): their text is not a flag.
@@ -136,28 +137,25 @@ function findHit(args, nested) {
   return found
 }
 
-// hitsIn returns every hit of a command line; nested lines and substitutions are walked.
+// hitsIn returns every hit of a command line; splitCommands finds the commands nested in
+// substitutions and heredoc expansions, and the lines a command runs as a string are read again.
+// Throws ShellParseError for text that is not valid shell.
 function hitsIn(command, depth = 0) {
   if (depth > MAX_DEPTH) return []
   const found = []
   const nested = (line) => found.push(...hitsIn(line, depth + 1))
-  const { text, bodies } = extractHeredocs(command)
-  for (const tokens of splitCommands(text)) {
+  const commands = splitCommands(command)
+  const scripts = heredocScripts(commands)
+  for (const tokens of commands) {
     const words = tokens.filter((w) => !w.r).map((w) => w.t)
-    // Raw source, not the unquoted text: a backtick or `$(` inside single quotes is literal.
-    for (const w of tokens) if (!w.r) for (const body of substitutionBodies(w.s)) nested(body)
     const { name, args, lines } = nestedLines(words)
     for (const line of lines) nested(line)
-    // `bash <<< 'git commit -n'`: the here-string reaches the tokenizer as a plain word.
-    if (SHELLS.has(name)) for (const arg of args) if (!arg.startsWith('-')) nested(arg)
+    if (SHELLS.has(name)) for (const w of tokens) if (w.h) nested(w.t)
+    for (const { text, strict } of scripts.get(tokens) ?? []) if (strict || parsesAsShell(text)) nested(text)
     // `export X=...; git ...`: the assignment is its own statement, so it is checked without a `git`.
     if (/^(export|declare|typeset|readonly|local|[A-Za-z_]\w*=)/.test(words[0] ?? '') && words.some(hooksEnv)) found.push(hit('deny', HOOKS_ENV_REASON))
     const h = name === 'git' ? gitHit(args, words) : name === 'rm' ? rmHit(args) : name === 'find' ? findHit(args, nested) : null
     if (h) found.push(h)
-  }
-  // A heredoc body is data unless its command line runs a shell.
-  for (const { header, body } of bodies) {
-    if (splitCommands(header).some((words) => SHELLS.has(nestedLines(words.filter((w) => !w.r).map((w) => w.t)).name))) nested(body)
   }
   return found
 }
@@ -170,7 +168,8 @@ try {
     const chosen = found.find((h) => h.decision === 'deny') ?? found[0]
     if (chosen && (chosen.decision === 'deny' || asksOn())) process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: chosen.decision, permissionDecisionReason: chosen.reason } })}\n`)
   }
-} catch {
-  // Fail open.
+} catch (error) {
+  // Fail open, except on text that is not valid shell: bash can run the part before a syntax error.
+  if (error instanceof ShellParseError) process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: `command-guard: the command could not be parsed (${error.message}), so it is denied: text the guard cannot read may hide a verifier bypass. Rewrite it as plain shell.` } })}\n`)
 }
 process.exitCode = 0

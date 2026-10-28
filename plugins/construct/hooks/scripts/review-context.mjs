@@ -1,12 +1,13 @@
 // PreToolUse hook on Agent: a construct:review-* lens gets its whole context
 // from here, so the orchestrator never pastes evidence. The prompt names the
 // subject with one line, `Review subject: <base>` (the head is HEAD). The hook builds the binding, name-status, numstat, per-path
-// patches (a deleted path is listed with a marker, not its removed content; plus the
+// patches (a deleted path, or a pinned vendored file whose blob hash matches, is listed with a marker, not its content; plus the
 // security checklist for review-risk) from the two trees, replaces the
 // prompt with it, and records the pending lens for review-capture.mjs. A review
 // agent it cannot prepare is denied; other agents pass untouched, errors for
 // them fail open.
 // Usage: node review-context.mjs   (hook JSON on stdin)
+import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { git, repositoryRoot } from './git-tree.mjs'
 import { readInput } from './hook-io.mjs'
@@ -18,6 +19,11 @@ const CHECKLIST = new URL('../../skills/review/references/security-checklist.md'
 const MAX_CONTEXT_BYTES = 400 * 1024
 const DIFF_FLAGS = ['--no-color', '--no-ext-diff', '--no-textconv', '--no-renames', '--ignore-submodules=none']
 const FORM = 'Review subject: <base>'
+// Vendored files whose content is omitted: exact repository-relative path -> sha256 of the blob.
+// Changing the vendored file means changing this pin, and that change is shown to the lenses.
+const OMITTED_SHA256 = {
+  'plugins/construct/hooks/vendor/mvdan-sh.cjs': '2b613c6ddf9ff8ba530e3d2e30a1c34a7b146abafa8408e18a9b8cdd771d0f2c',
+}
 
 const decide = (permissionDecision, extra) =>
   process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision, ...extra } })}\n`)
@@ -53,7 +59,11 @@ async function buildContext(root, lens, base, head) {
   let bytes = Buffer.byteLength(text)
   for (const [index, path] of manifest.entries()) {
     // A deleted file's body is noise to a reviewer and can alone exceed the budget.
-    const patch = nameStatus[index].status.startsWith('D') ? 'deleted; content omitted\n' : withNewline(out(root, ['diff', ...DIFF_FLAGS, baseTree, headTree, '--', `:(literal)${path}`]))
+    const patch = nameStatus[index].status.startsWith('D')
+      ? 'deleted; content omitted\n'
+      : Object.hasOwn(OMITTED_SHA256, path) && OMITTED_SHA256[path] === createHash('sha256').update(git(root, ['cat-file', 'blob', `${headTree}:${path}`])).digest('hex')
+        ? 'vendored; content omitted: it matches the sha256 pinned in review-context.mjs\n'
+        : withNewline(out(root, ['diff', ...DIFF_FLAGS, baseTree, headTree, '--', `:(literal)${path}`]))
     const chunk = `ODD_REVIEW_PATH ${JSON.stringify({ index, path })}\n${patch}ODD_REVIEW_PATH_END ${index}\n`
     text += chunk
     bytes += Buffer.byteLength(chunk)

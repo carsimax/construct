@@ -157,8 +157,10 @@ describe('other commands are untouched', () => {
   ]
   for (const command of cases) test(`silent: ${JSON.stringify(command)}`, () => silent(hook(command, repo)))
 
-  test('a heredoc body is data', () => {
-    silent(hook("cat <<'EOF'\ngit push\ngh pr create\nEOF", repo))
+  // Accepted cost of reading every body best-effort: a body that parses and holds a push is checked even as data.
+  test('a heredoc body that parses is checked, one that does not is data', () => {
+    denied(hook("cat <<'EOF'\ngit push\ngh pr create\nEOF", featureRepo('2')))
+    silent(hook("cat <<'EOF'\nrun git push (later\nEOF", repo))
   })
 
   test('other tools', () => {
@@ -377,10 +379,16 @@ describe('quoted delimiters inside substitutions do not hide a later push', () =
     "echo `echo ')'`; git push origin feat",
     "echo $(echo $(echo ')')); git push origin feat",
     "echo $(echo \\)); git push origin feat",
-    'echo $(echo foo; git push origin feat',
-    "echo $(echo ')'; git push origin feat",
   ]
   for (const command of cases) test(`denies: ${command}`, () => denied(hook(command, repo)))
+  // Bash runs the valid lines before a syntax error, so a publication can hide in front of the broken text: denied as unparseable.
+  for (const command of ['echo $(echo foo; git push origin feat', "echo $(echo ')'; git push origin feat"]) {
+    test(`denies: ${command}`, () => {
+      const r = hook(command, repo)
+      assert.equal(r.decision, 'deny')
+      assert.match(r.reason, /publication-gate: .*could not be parsed/)
+    })
+  }
 
   test('a substitution directory with a quoted paren is still unresolvable', () => {
     const r = hook("git -C $(echo ')') push origin feat", repo)
@@ -397,10 +405,13 @@ describe('both command views are analyzed', () => {
     assert.equal(r.stdout.trim().split('\n').length, 1)
   })
 
-  test('a non-publishing command with odd quoting stays silent', () => {
+  test('a non-publishing command with odd quoting stays silent when it parses and is denied when it does not', () => {
     const repo = featureRepo()
     silent(hook("echo $(echo a #'\n); echo ')'", repo))
-    silent(hook("echo $(echo ')'; echo \"git push\"", repo))
+    // Bash runs the valid lines before a syntax error, so a publication can hide in front of the broken text.
+    const r = hook("echo $(echo ')'; echo \"git push\"", repo)
+    assert.equal(r.decision, 'deny')
+    assert.match(r.reason, /publication-gate: .*could not be parsed/)
   })
 
   test('a push with nothing due allows once, without output', () => {
@@ -719,8 +730,11 @@ describe('errors deny, aliases and shell bodies are seen', () => {
     assert.match(r.reason, /publication-gate/)
   })
 
-  test('a crash on a command that is no publication stays silent', () => {
-    silent(hook('echo ' + '$('.repeat(30000) + ')'.repeat(30000), featureRepo('2')))
+  test('a crash on a command that is no publication is denied as unparseable', () => {
+    // Bash runs the valid lines before a syntax error, so a publication can hide in front of the broken text.
+    const r = hook('echo ' + '$('.repeat(30000) + ')'.repeat(30000), featureRepo('2'))
+    assert.equal(r.decision, 'deny')
+    assert.match(r.reason, /publication-gate/)
   })
 
   const cases = [
@@ -733,8 +747,9 @@ describe('errors deny, aliases and shell bodies are seen', () => {
   ]
   for (const command of cases) test(`denies without verdicts: ${JSON.stringify(command)}`, () => denied(hook(command, featureRepo('2'))))
 
-  test('a heredoc fed to something else is data', () => {
-    silent(hook('cat <<EOF\ngit push\nEOF', featureRepo('2')))
-    silent(hook('git commit -F - <<EOF\ngit push\nEOF', featureRepo('2')))
+  test('a heredoc fed to something else is read best-effort: a body that parses is checked', () => {
+    denied(hook('cat <<EOF\ngit push\nEOF', featureRepo('2')))
+    denied(hook('git commit -F - <<EOF\ngit push\nEOF', featureRepo('2')))
+    silent(hook('cat <<EOF\nprose: git push (later\nEOF', featureRepo('2')))
   })
 })

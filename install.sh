@@ -2,7 +2,7 @@
 # Construct installer: sets up the Construct plugin and merges the Construct
 # settings into ~/.claude/settings.json. Safe to run again; a second run changes nothing.
 #
-#   curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v12.0.0/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v12.0.1/install.sh | bash
 #
 # Runs under the macOS system bash (3.2): no associative arrays, no ${x,,}.
 set -euo pipefail
@@ -10,7 +10,7 @@ set -euo pipefail
 MIN_CLAUDE=2.1.304
 MIN_NODE=22.16
 CONSTRUCT_REPO=carsimax/construct
-CONSTRUCT_REF=v12.0.0 # the release this script belongs to; keep in step with the URL above
+CONSTRUCT_REF=v12.0.1 # the release this script belongs to; keep in step with the URL above
 CONSTRUCT_PLUGIN=construct@construct
 
 INSTALLED=""

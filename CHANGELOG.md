@@ -4,6 +4,14 @@ Notable changes per release. Versions follow [Semantic Versioning](https://semve
 
 ## Unreleased
 
+## 12.0.1
+
+- The publication gate, `command-guard`, and `review-store-guard` read commands with a real shell parser, mvdan-sh 0.10.1 (BSD-3-Clause, vendored unmodified in `hooks/vendor/`), instead of the heuristic tokenizer. Commands hidden in nested subshells, `case`, comments, `${...}`, heredocs, and quoted spellings (`g"i"t`, `$'\x67it'`) are now found, and the heredoc commit idiom `git commit -m "$(cat <<'EOF' ...)"` is no longer denied.
+- A command that does not parse as shell is denied by all three hooks, since bash still runs the lines before a syntax error. zsh-only syntax the parser does not know (for example `*(.)` glob qualifiers) is denied too.
+- A heredoc or here-string body fed to a shell, `eval`, `source`, or `.`, or attached to a block, loop, or function, is checked as a script. Any other body is checked when it parses as shell, so a data heredoc whose line starts with `git push` is now denied.
+- `review-store-guard` denies a command it cannot parse instead of letting it through.
+- `review-context` leaves out the content of a vendored file whose blob matches the sha256 pinned in `review-context.mjs`; any other path keeps its full diff.
+
 ## 12.0.0
 
 - **Breaking:** the 12 deprecated 5.x options (`model_odd_*`, `effort_odd_*`, `model_jd_*`, `effort_jd_*`) are removed and no longer read. Set `model_<role>` and `effort_<role>` instead. The built-in `general-purpose` keeps `sonnet`/`medium` while `model_general` and `effort_general` are `inherit`.

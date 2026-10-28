@@ -35,64 +35,11 @@ import { git, repositoryRoot } from './git-tree.mjs'
 import { readInput } from './hook-io.mjs'
 import { requiredLenses } from './review-lenses.mjs'
 import { pruneStore, readVerdicts, subjectHash } from './review-store.mjs'
-import { closingBacktick, closingParen, extractHeredocs, GIT_VALUE_FLAGS, nestedLines, SHELLS, splitCommands, substitutionBodies } from './shell-words.mjs'
+import { GIT_VALUE_FLAGS, heredocScripts, nestedLines, parsesAsShell, SHELLS, ShellParseError, splitCommands } from './shell-words.mjs'
 
 const MAX_DEPTH = 4
 const PUSH_VALUE_FLAGS = new Set(['--repo', '-o', '--push-option', '--receive-pack', '--exec'])
 const GH_VALUE_FLAGS = new Set(['-R', '--repo', '--hostname'])
-
-// quoteSubstitutions wraps each unquoted `$(...)` or backtick span in double quotes, because the
-// tokenizer would split such a span into commands of its own and `git -C $(pwd)` would lose its
-// directory; quoted, it stays one word and is seen as unresolvable. Span ends come from the
-// quote-aware scanners above. A span that never closes is left as written, so the tokenizer
-// still sees whatever follows it.
-function quoteSubstitutions(text) {
-  let out = ''
-  let quote = null
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i]
-    let end = -1
-    if (quote === null && c === '$' && text[i + 1] === '(') end = closingParen(text, i + 2)
-    else if (quote === null && c === '`') end = closingBacktick(text, i + 1)
-    if (end > i) {
-      out += `"${text.slice(i, end + 1)}"`
-      i = end
-      continue
-    }
-    if (c === '\\' && quote !== "'") out += text[i++]
-    else if (c === "'" && quote !== '"') quote = quote === "'" ? null : "'"
-    else if (c === '"' && quote !== "'") quote = quote === '"' ? null : '"'
-    out += text[i] ?? ''
-  }
-  return out
-}
-
-// stripComments removes `#` comments (a `#` that starts a word, outside quotes, to the end of the
-// line): the tokenizer does not know them, so a quote inside a comment would open a quote run.
-function stripComments(text) {
-  let out = ''
-  let quote = null
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i]
-    if (c === '\\' && quote !== "'") out += text[i++]
-    else if (c === "'" && quote !== '"') quote = quote === "'" ? null : "'"
-    else if (c === '"' && quote !== "'") quote = quote === '"' ? null : '"'
-    else if (c === '#' && quote === null && (i === 0 || /[\s;&|(`]/.test(text[i - 1]))) {
-      while (i + 1 < text.length && text[i + 1] !== '\n') i++
-      continue
-    }
-    out += text[i] ?? ''
-  }
-  return out
-}
-
-// Heredoc bodies are data, not commands. Each command is read in three views: as written, with
-// substitutions quoted into single words, and with comments removed as well, so a scanner mistake
-// in one view cannot hide a push another sees.
-const views = (command) => {
-  const text = extractHeredocs(command).text
-  return [text, quoteSubstitutions(text), quoteSubstitutions(stripComments(text))]
-}
 
 // resolveDir returns the directory a `-C`/`cd` argument names, or null when it cannot be known:
 // `~`, `$HOME`, and `${HOME}` expand from HOME; any other `$` or backtick, or a relative path
@@ -173,41 +120,29 @@ function ghPublication(args, cwd) {
   return null
 }
 
-// findPublications walks a command line and returns every publication it contains.
+// findPublications walks a command line and returns every publication it contains. splitCommands
+// finds the commands nested in substitutions, `case`, and heredoc expansions; the lines a command
+// runs as a string (`sh -c`, `eval`, `env -S`, a here-string or heredoc fed to a shell) are read again.
+// Throws ShellParseError for text that is not valid shell.
 function findPublications(command, cwd, depth = 0) {
-  const seen = new Map()
-  for (const text of views(command)) {
-    for (const pub of publicationsIn(text, cwd, depth)) seen.set(JSON.stringify(pub), pub)
-  }
-  // A heredoc body is data unless its command line runs a shell.
-  if (depth <= MAX_DEPTH) {
-    for (const { header, body } of extractHeredocs(command).bodies) {
-      if (!splitCommands(header).some((words) => SHELLS.has(nestedLines(words.filter((w) => !w.r).map((w) => w.t)).name))) continue
-      for (const pub of findPublications(body, cwd, depth + 1)) seen.set(JSON.stringify(pub), pub)
-    }
-  }
-  return [...seen.values()]
-}
-
-function publicationsIn(text, cwd, depth) {
   if (depth > MAX_DEPTH) return []
   const found = []
   const nested = (line, at) => found.push(...findPublications(line, at, depth + 1))
+  const commands = splitCommands(command)
+  const scripts = heredocScripts(commands)
   let where = cwd
   const saved = [] // the directory before each open subshell: a `cd` inside `( ... )` ends with it
-  for (const tokens of splitCommands(text)) {
+  for (const tokens of commands) {
     for (const p of tokens.parens) {
       if (p === '(') saved.push(where)
       else if (saved.length > 0) where = saved.pop()
     }
     // A redirection target is not a word.
     const words = tokens.filter((w) => !w.r).map((w) => w.t)
-    // Raw source, not the unquoted text: a backtick or `$(` inside single quotes is literal.
-    for (const w of tokens) if (!w.r) for (const body of substitutionBodies(w.s)) nested(body, where)
     const { name, args, lines } = nestedLines(words)
     for (const line of lines) nested(line, where)
-    // `bash <<< 'git push'`: the here-string reaches the tokenizer as a plain word.
-    if (SHELLS.has(name)) for (const arg of args) if (!arg.startsWith('-')) nested(arg, where)
+    if (SHELLS.has(name)) for (const w of tokens) if (w.h) nested(w.t, where)
+    for (const { text, strict } of scripts.get(tokens) ?? []) if (strict || parsesAsShell(text)) nested(text, where)
     if (name === 'cd' || name === 'pushd' || name === 'popd') where = changeDir(where, name, args)
     else if (name === 'git') {
       const push = gitPublication(args, where)
@@ -217,7 +152,7 @@ function publicationsIn(text, cwd, depth) {
       if (pub) found.push(pub)
     }
   }
-  return found
+  return [...new Map(found.map((pub) => [JSON.stringify(pub), pub])).values()]
 }
 
 const out = (root, args) => git(root, args).toString('utf8').trim()
@@ -371,7 +306,9 @@ if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToP
   try {
     main()
   } catch (error) {
-    if (publishing) deny(`publication-gate: the publication could not be checked (${error.message}), so it is denied.`)
+    // Bash can run the part of a command before a syntax error, so unparseable text is denied outright.
+    if (error instanceof ShellParseError) deny(`publication-gate: the command could not be parsed (${error.message}), so it is denied: text the gate cannot read may hide a publication. Rewrite it as plain shell.`)
+    else if (publishing) deny(`publication-gate: the publication could not be checked (${error.message}), so it is denied.`)
   }
   process.exitCode = 0
 }

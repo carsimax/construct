@@ -10,5 +10,14 @@ notice is in its LICENSE file and in the header of each adapted file
   Zechner: hooks/scripts/delegation-admission.mjs and
   hooks/scripts/delivery-signals.mjs. See LICENSE-gentle-shell.
 
+Vendored code
+-------------
+Third-party code copied unmodified into the plugin. Its license is in its LICENSE file
+(tests/band-license.test.mjs checks the file, its hash, and the license).
+
+- mvdan-sh 0.10.1 (https://github.com/mvdan/sh, compiled with GopherJS; npm package
+  mvdan-sh), BSD-3-Clause, Copyright (c) 2016, Daniel Marti: hooks/vendor/mvdan-sh.cjs,
+  the shell parser behind hooks/scripts/shell-words.mjs. See LICENSE-mvdan-sh.
+
 The projects that gave Construct ideas, with no text or code copied, are credited
 in the README.
