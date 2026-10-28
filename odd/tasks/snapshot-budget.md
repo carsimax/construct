@@ -38,4 +38,6 @@ Objective: stop the Risk-line snapshot from trusting the real index's stat cache
 
 - **L3 (2026-10-27):** T2 by worker; RED confirmed afterwards (5 new tests fail on the baseline source). Two test flakes fixed by the parent: ctime crossing a second boundary (`core.trustctime=false` in the test repos) and a shared-TMPDIR race (private TMPDIR). Full suite 1088/1088 six runs in a row. Not bounded: the fallback's `add -A` when assume-unchanged or skip-worktree entries force a HEAD seed (existing behavior). New env knob `CONSTRUCT_SNAPSHOT_BUDGET_MS`, for tests.
 
-Next step: review-risk and review-resilience, then the user decides push and PR.
+- **L4 (2026-10-27):** Lenses on 864b2fb: no blockers. review-risk WARNING (pruneState recursive delete of planted `construct-index-*` on a shared /tmp) fixed in one correction batch: only directories owned by the user with no group or other permissions are pruned (RED then GREEN). review-resilience WARNINGs left for the user: the fallback's unbounded `add -A` when assume-unchanged or skip-worktree entries force a HEAD seed, and `slow` never retried within a session.
+
+Next step: review-risk on the correction commit, then the user decides push and PR.

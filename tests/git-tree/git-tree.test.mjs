@@ -1,7 +1,7 @@
 // The shared git helpers of the risk-line hook.
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, lutimesSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { spawnSync } from 'node:child_process'
 import { join } from 'node:path'
@@ -63,14 +63,21 @@ describe('git-tree', () => {
   test('pruneState removes stale construct-index directories only', () => {
     const tmp = scratchDir('odd-git-tree-')
     const week = new Date(Date.now() - 8 * 24 * 3600 * 1000)
-    for (const name of ['construct-index-old', 'construct-index-new', 'other-old']) mkdirSync(join(tmp, name))
+    for (const name of ['construct-index-old', 'construct-index-new', 'other-old']) mkdirSync(join(tmp, name), { mode: 0o700 })
+    // a stale one others can write is not a snapshot of ours
+    mkdirSync(join(tmp, 'construct-index-shared'))
+    chmodSync(join(tmp, 'construct-index-shared'), 0o777)
+    utimesSync(join(tmp, 'construct-index-shared'), week, week)
+    // a stale entry that is not a directory (here a symlink) is never followed or removed
+    symlinkSync(join(tmp, 'other-old'), join(tmp, 'construct-index-link'))
     for (const name of ['construct-index-old', 'other-old']) utimesSync(join(tmp, name), week, week)
+    lutimesSync(join(tmp, 'construct-index-link'), week, week)
     const hookIo = new URL('../../plugins/construct/hooks/scripts/hook-io.mjs', import.meta.url).pathname
     const r = spawnSync('node', ['-e', `import(${JSON.stringify(hookIo)}).then((m) => m.pruneState())`], {
       env: { ...process.env, TMPDIR: tmp, CLAUDE_PLUGIN_DATA: scratchDir('odd-git-tree-') },
     })
     assert.equal(r.status, 0)
-    assert.deepEqual(readdirSync(tmp).sort(), ['construct-index-new', 'other-old'])
+    assert.deepEqual(readdirSync(tmp).sort(), ['construct-index-link', 'construct-index-new', 'construct-index-shared', 'other-old'])
   })
 
   test('freezeWorkingTree includes an untracked file and leaves the index alone', () => {

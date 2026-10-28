@@ -66,7 +66,12 @@ export function pruneState(now = Date.now()) {
       if (!entry.startsWith('construct-index-')) continue
       try {
         const path = join(tmpdir(), entry)
-        if (now - lstatSync(path).mtimeMs > STATE_MAX_AGE_MS) rmSync(path, { recursive: true, force: true })
+        const stat = lstatSync(path)
+        // Only our own directories: on a shared /tmp another user could plant one to steer the recursive delete.
+        // mkdtemp makes it 0700, so a group- or world-writable one is not a snapshot of ours.
+        const own =
+          stat.isDirectory() && (stat.mode & 0o077) === 0 && (typeof process.getuid !== 'function' || stat.uid === process.getuid())
+        if (own && now - stat.mtimeMs > STATE_MAX_AGE_MS) rmSync(path, { recursive: true, force: true })
       } catch {
         // Best effort.
       }
