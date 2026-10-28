@@ -110,13 +110,13 @@ add_marketplace() {
   marketplaces=$(run claude plugin marketplace list)
   if [[ "$marketplaces" == *"($1)"* || "$marketplaces" == *"($1#"* || "$marketplaces" == *"($1@"* ]]; then
     skipped "marketplace $1 (already added)"
-    # Never change an existing install silently: say when its pinned ref is not this release's.
-    if [ -n "${2:-}" ] && [[ "$marketplaces" =~ \("$1"#([^\)]*)\) ]] && [ "${BASH_REMATCH[1]}" != "$2" ]; then
-      warn "marketplace $1 is pinned to ${BASH_REMATCH[1]}, not $2; run: claude plugin marketplace update construct, then claude plugin update $CONSTRUCT_PLUGIN"
+    # Never change an existing install silently. A pinned ref blocks every update, and marketplace update does not move it.
+    if [[ "$marketplaces" =~ \("$1"#([^\)]*)\) ]]; then
+      warn "marketplace $1 is pinned to ${BASH_REMATCH[1]}, so plugin updates stay on it; to follow releases run: claude plugin marketplace remove construct, then claude plugin marketplace add $1, then claude plugin install $CONSTRUCT_PLUGIN"
     fi
   else
     say "Adding the $1 marketplace"
-    run claude plugin marketplace add "$1${2:+#$2}"
+    run claude plugin marketplace add "$1"
     installed "marketplace $1"
   fi
 }
@@ -268,7 +268,7 @@ main() {
   preflight
   require_engram
   note_codegraph
-  add_marketplace "$CONSTRUCT_REPO" "$CONSTRUCT_REF"
+  add_marketplace "$CONSTRUCT_REPO"
   install_plugin
   merge_settings
   summary

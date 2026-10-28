@@ -70,8 +70,6 @@ The manual steps the installer runs, for when you want to run them yourself:
    claude plugin install construct@construct
    ```
 
-   The installer (`install.sh`) pins this marketplace to the release tag (`carsimax/construct#v12.0.0`); the command above follows the default branch.
-
 2. Optional: inside Claude Code, in `/config`, set each role's model and effort (rows such as `Worker model`).
 
 3. Check that it works. Open a session in any git repository:
@@ -104,6 +102,14 @@ claude plugin update construct@construct       # install the new version
 ```
 
 Restart Claude Code afterwards; a plugin update applies to new sessions. `claude plugin list` shows the installed version.
+
+Installers before 12.0.2 pinned the marketplace to a release tag (`claude plugin marketplace list` shows `carsimax/construct#vX.Y.Z`), and `marketplace update` does not move a pin. Replace the pinned marketplace once; the commands above work from then on:
+
+```bash
+claude plugin marketplace remove construct
+claude plugin marketplace add carsimax/construct
+claude plugin install construct@construct
+```
 
 ## Configuration
 
