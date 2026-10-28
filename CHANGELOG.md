@@ -4,6 +4,11 @@ Notable changes per release. Versions follow [Semantic Versioning](https://semve
 
 ## Unreleased
 
+- **Breaking:** the docked panel is replaced by a band above the prompt: the phase, the active feature and its tasks, the gate, and the running agents. The model, effort, branch, changed files, context, and plan limits are no longer drawn; your status line shows them.
+- **Breaking:** the `panel_open_on_start` option and `/construct close` are removed. `/construct` now prints the setup report, like `/construct doctor`.
+- `/construct doctor` no longer checks Engram; the installer already requires it.
+- The mod no longer runs `git status` and `git diff` after each turn.
+
 ## 9.0.0
 
 - **Breaking:** the `construct-memory` CLI and the `memory` MCP server are removed. [Engram](https://github.com/Gentleman-Programming/engram) is required and the installer stops without it: `brew install gentleman-programming/tap/engram && engram setup claude-code`. Existing `construct-memory/` stores stay on disk and are not migrated.

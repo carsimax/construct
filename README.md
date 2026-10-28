@@ -18,7 +18,7 @@ An agent writes code faster than you can check it. Organic Driven Development ke
 - **Role agents with model routing.** 10 agents (explorer, worker, verifier, judges, review lenses). You choose each role's model and effort in `/config`.
 - **Skills.** Procedures that load on demand: workflow (sizing included), delegation, debugging, quality bar, migrations, branches, commits and pull requests (`delivery`), review, and more.
 - **Mandatory review.** Work whose Risk names a high-risk item is reviewed by lens agents before it can be published. Hooks build the evidence, record the verdicts, and gate `git push`, `gh pr create`, and `gh release create`.
-- **Status panel.** A docked panel with the model, context, plan limits, active feature, permission gate, agents, and changes. Open it with `/construct`.
+- **Status band.** One or two rows above the prompt with the phase, the active feature and its tasks, the permission gate, and the running agents. It leaves the model, branch, context, and plan limits to your status line.
 - **Output style.** The `Principal Engineer` output style.
 
 - **Memory.** Provided by [Engram](https://github.com/Gentleman-Programming/engram), which you install separately. See [Memory](#memory).
@@ -27,7 +27,7 @@ An agent writes code faster than you can check it. Organic Driven Development ke
 
 | Requirement | Why |
 |---|---|
-| Claude Code 2.1.304 or later, signed in | The panel is a mod, and the panel needs 2.1.304. Tested on 2.1.304 |
+| Claude Code 2.1.304 or later, signed in | The status band is a mod, and the mod needs 2.1.304. Tested on 2.1.304 |
 | Node.js 22.16 or later (Node 23 is not supported) | The plugin's scripts and hooks. Claude Code's native install does not bundle Node.js |
 | `git` on the PATH | The review and publication hooks read the repository |
 | [Engram](https://github.com/Gentleman-Programming/engram) | The memory: recall and save through its `mem_*` tools |
@@ -79,7 +79,7 @@ The manual steps the installer runs, for when you want to run them yourself:
 
    - Ask "what does your Construct contract say about Risk lines?". The answer quotes the `Risk: item N` rule.
    - `/agents` lists the `construct:` agents, such as `construct:worker` and `construct:review-risk`.
-   - `/construct` opens the panel; `/construct doctor` prints a setup report.
+   - `/construct doctor` prints a setup report.
 
 ## First session
 
@@ -113,7 +113,6 @@ Options are plugin settings, edited in `/config`:
 | Option | Effect |
 |---|---|
 | Model and effort per role | See the routing table below. Each option defaults to `inherit`: use the deprecated key of the same role if it is set, else the agent's own frontmatter |
-| `panel_open_on_start` (boolean, default `true`) | Open the panel at every session start |
 | `inline_edit_max_lines` (number, default `150`) | Let the main thread edit repository files directly when one Write, Edit, MultiEdit, or NotebookEdit call changes at most this many lines; `surface-guard` sends bigger changes to `construct:worker`. `0` restores the old rule: the main thread writes only `odd/tasks/` |
 | `slice_lines` (number, default `1500`) | Authored changed lines on a feature branch after which the commit-slice notice asks you to apply the delivery strategy. A target, not a cap. A value that is not a whole number of 1 or more falls back to the default |
 | `command_guard_asks` (boolean, default `false`) | Let `command-guard` ask before destructive commands (`rm -rf`, force push, `reset --hard`, and the rest). Denies of verifier bypasses always apply |
@@ -259,27 +258,27 @@ Two deterministic checks that used to be prompt-only (ports of gentle-shell's `c
 
 Both `PostToolUse` signals fail open (no output, exit 0).
 
-### Construct panel (mod)
+### Construct band (mod)
 
-The mod draws one thing: a docked **panel** (a `Pane` with id `construct`) drawn as cards and shaped to the ODD flow: one column at any width, no header or legend, `round` bordered cards, the bold title on the left and the status on the right. It has a voice: each agent role has a glyph and a verb (`⌕ explorer mapping`, `⚒ worker building`, `⊨ verifier verifying`, `⚖ judge judging`, `◎ review-risk reviewing`), the main card reads `● building`, `◆ waiting on you`, or `○ ready`, the GATE card says `all clear` or `N waiting on you`, and empty cards say so (`nothing remembered yet`). The band above the prompt is not drawn. It needs Claude Code 2.1.304 or later and does not appear in `claude -p` runs, which draw no interface.
+The mod draws one thing: a **band** above the prompt (the `AbovePrompt` render site), at most two rows, shaped to the ODD flow. It shows only what Construct knows; the model, effort, branch, diff, context, and plan limits belong to your status line and are not repeated. It needs Claude Code 2.1.304 or later, draws in the terminal and the Desktop app, and does not appear in `claude -p` runs, which draw no interface.
 
-**Commands and opening.** `/construct` opens the panel, `/construct close` closes it, and `/construct doctor` prints a setup report instead: one line per check, `✓ label` or `✗ label — hint`, for Claude Code 2.1.304 or later, Node 22.16 or later, Engram (`engram version`). The checks run in parallel with a 3 s timeout each, and a failed check shows as `✗` and never throws. The panel opens at every session start; to turn that off, set the plugin option `panel_open_on_start` (boolean, default `true`) to `false`.
+**Row one.** The status, the active feature, and the gate, separated by ` · `:
 
-**Width.** The panel asks for 66 columns when it opens (`columns: 66` on `ui.open`). That is a request, not a guarantee: a width you drag or keep wins, and the layout reads the real width (never below 40). Rows that do not fit are clipped, and the changes card keeps only the file rows that fit the pane height.
+- **Status**: `○ ready` when idle; `● building`, `● mapping`, `● verifying`, `● reviewing`, or `● working` while a turn runs (named by the ODD phase of the running agents; plain `● busy` with none running); `◆ waiting on you` (warning color) while Claude waits on you: a `tool.check` verdict of `ask` on a real call (the permission prompt), or a `tool.call` on `AskUserQuestion` or `ExitPlanMode` while it is open. The next settled `tool.call`, `turn.start`, or `turn.complete` clears it.
+- **Feature** (only with one): `ODD <feature>` (the newest `odd/tasks/*.md` with an unfinished task, the rule of `feature-state.mjs`), one checkpoint per task (done filled, current highlighted, the latest kept behind `…` when there are many), and the current task id and title.
+- **Gate** (only after a permission verdict or an inline write): `gate N pending` (warning color) while asks wait on you, else `gate ✓ N` for the calls that passed; `✗ N` for denials; `⚠ N inline` for main-thread `Edit`, `Write`, `MultiEdit`, or `NotebookEdit` calls outside `odd/tasks/`. It only observes and never blocks.
 
-**Colors.** The text colors are theme keys, so they follow the active theme, and the panel draws on the terminal's own background.
+**Row two** (only while subagents run): one segment per running agent, oldest first: a glyph and verb by role (`⌕ explorer mapping`, `⚒ worker building`, `⊨ verifier verifying`, `⚖ judge judging`, `◎ review-risk reviewing`; the subagent type with `•` when it has no construct role), the routed model, and the elapsed time as static text.
 
-**The panel, top to bottom.** Every section is a card of the same width (round border, bold title on the left, status on the right); the borders separate the sections. A card with nothing to show takes no room.
+**Width.** The band draws to the width Claude Code gives it. When a row does not fit, the task title goes first, then the agents' models, then the row is clipped with `…`. When the band has room for one row only, row two is left out. With nothing to show (idle, no open feature, no gate activity) the band draws nothing. Other mods share the band: what they draw stays below Construct's rows. You can collapse the band with Ctrl+X Ctrl+A; the mod cannot tell, so it is never the only place something that needs your answer appears.
 
-1. **main card** (always drawn, with or without a `statusLine`): `<Model>` (no suffix) and idle, busy (named by the ODD phase of the running agents: `● verifying`, `● reviewing`, `● implementing`, `● exploring`, `● working`; plain `● busy` with none running), or `◆ blocked` (warning color) while Claude waits on you: a `tool.check` verdict of `ask` on a real call (the permission prompt), or a `tool.call` on `AskUserQuestion` or `ExitPlanMode` while it is open; the next settled `tool.call`, `turn.start` or `turn.complete` clears it, and the idle "waiting for your input" state never sets it (it is the one indicator, with no extra row; the mod's `classic.*` hooks are bypassed by a higher-tier module, so none is used); the current git branch (`⎇ <branch>`, hidden without one); the effort meter (`▮▯`), the permission mode (from the main thread's spawns), and the main request count; the context gauge with tokens used and window; the 5-hour and 7-day gauges (`▰▱`) with the time to each reset (`↻3h10m`, `↻4d2h`), omitted when the figure is missing, for example off a subscription.
-2. **ODD card** (only with an active feature): the feature (newest `odd/tasks/*.md` with an unfinished task, the rule of `feature-state.mjs`), the current task, one checkpoint per task (done filled, current highlighted) and the open count.
-3. **GATE card**: a stacked bar of permission verdicts, allowed / asked (`you`, or `classifier` in `auto` mode) / pending / denied counts, `file`, `shell` and `other` bucket counts, the last denied tool with credential-like values masked, and the inline-write alert (a main-thread `Edit`, `Write`, `MultiEdit` or `NotebookEdit` outside `odd/tasks/`: the count and last path, error color). It only observes and never blocks.
-4. **agents card**: titled `agents`, with `N running · M total` on the right, one row per subagent (up to 6, then `+N earlier`): a status mark, a short name (the construct role, as in `worker` or `review-risk`; the subagent type when there is no construct role), the routed model with its effort meter (for example `Sonnet 5.5 ▮▮▮▯`), and the elapsed time as static text.
-5. **changes card** (only with something to show): round card titled with the branch, `↑N` (commits to push) and `↓N` (commits to pull) on the right, each shown only when above 0. One row per changed file, biggest change first: the path (long paths keep their basename: `…/dir/name`) and `+added` / `-removed` lines (`bin` for a binary file). Changes are the working tree against `HEAD`, staged and unstaged; an untracked file shows `+lines` (counted for the first 20 untracked files) or `new` when it is a directory, past the first 20, or not countable. Rows fit the pane height; when some are cut the last row is `+N more`. The card is hidden when the repository is clean and in sync.
+**Colors.** The text colors are theme keys, so they follow the active theme.
 
-**Refresh and fail-open.** Git (status, `diff --numstat HEAD` and a line count per untracked file) and the feature documents are read only on `session.start` and after each main-thread `turn.complete`, in the background with a timeout, never on a redraw. Context and the plan limits are read from the session usage on each redraw. Nothing is animated: the agents' elapsed times are static text computed at each redraw, which happens on the events below, not on a timer. The panel's own state is kept in a versioned `atom` fed from engine events (`agent.spawn`, `turn.start`, `turn.step`, `tool.call`, `tool.check`, `turn.complete`, and `session.compact`); the panel redraws on those events, not per token. These hooks only observe: each passes its event on unchanged and swallows its own failures, and the model and effort routing is untouched. Any error leaves out the affected card and never blocks or delays a turn.
+**Command.** `/construct doctor` (or plain `/construct`) prints a setup report: one line per check, `✓ label` or `✗ label — hint`, for Claude Code 2.1.304 or later and Node 22.16 or later. The checks run in parallel with a 3 s timeout each, and a failed check shows as `✗` and never throws. The installer checks Engram, so the doctor does not.
 
-**Credit.** The panel code is Construct's own; the card-panel idea came from [claude-flightdeck](https://github.com/scasella/claude-flightdeck) (see [Credits](#credits)).
+**Refresh and fail-open.** The project root (`git rev-parse --show-toplevel`) and the feature documents are read only on `session.start` and after each main-thread `turn.complete`, in the background with a timeout, never on a redraw. Nothing is animated: elapsed times are computed at each redraw, which happens on the events below, not on a timer. The band's state is kept in a versioned `atom` fed from engine events (`agent.spawn`, `turn.start`, `tool.call`, `tool.check`, and `turn.complete`); the band redraws on those events, not per token. These hooks only observe: each passes its event on unchanged and swallows its own failures, and the model and effort routing is untouched. Any error leaves out the affected segment and never blocks or delays a turn.
+
+**Credit.** The band code is Construct's own; it replaces a docked panel whose card idea came from [claude-flightdeck](https://github.com/scasella/claude-flightdeck) (see [Credits](#credits)).
 
 ### Layout
 
@@ -290,7 +289,7 @@ The mod draws one thing: a docked **panel** (a `Pane` with id `construct`) drawn
 | `plugins/construct/` | The plugin (manifest name `construct`) |
 | `plugins/construct/agents/` | The 10 role agents |
 | `plugins/construct/skills/` | Delivery and review skills (`delivery`, `review`, `debugging`, `constraints`, ...) |
-| `plugins/construct/hooks/` | `hooks.json`, the mod (`register.js`), its routing helpers, the status modules (`status/`), the panel modules (`panel/`), and the command hooks (`scripts/`: contract, feature state, the `shell-words` tokenizer, delivery signals, publication gate, review store guard, command and surface guards, Risk line gate, subagent count, delegation admission, review context and capture) |
+| `plugins/construct/hooks/` | `hooks.json`, the mod (`register.js`), its routing helpers, the status modules (`status/`), the band modules (`band/`), and the command hooks (`scripts/`: contract, feature state, the `shell-words` tokenizer, delivery signals, publication gate, review store guard, command and surface guards, Risk line gate, subagent count, delegation admission, review context and capture) |
 | `plugins/construct/bin/construct-gate` | Installs, removes, or reports the git pre-push hook (`hooks/scripts/pre-push.mjs`) |
 | `plugins/construct/hooks/contract/` | Session and subagent contract texts injected by hooks |
 | `plugins/construct/evals/` | Behavior eval cases run by `claude plugin eval` (`scripts/eval.sh` also writes `summary.json` with ritual and outcome pass rates, cost, duration, and turns, and keeps the run dirs under /private/tmp; `scripts/probe-review.sh` stands in for `review-fires` where the eval sandbox has no working git) |
