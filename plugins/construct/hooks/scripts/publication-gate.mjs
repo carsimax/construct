@@ -238,19 +238,39 @@ function projectFloor(root, commit) {
   })
 }
 
+// objectExists: `git cat-file -e` exits 0 (exists) or 1 (absent); any other status (an invalid name is 128) rethrows.
+function objectExists(root, id) {
+  try {
+    git(root, ['cat-file', '-e', id])
+    return true
+  } catch (error) {
+    if (error.status === 1) return false
+    throw error
+  }
+}
+
+// releaseRef is the remote-tracking default branch (origin/HEAD, then origin/main or origin/master) or '' when there is none:
+// the publisher chooses `--base` and local branches, so only the remote-tracking default may release a lock.
+function releaseRef(root) {
+  const head = git(root, ['symbolic-ref', '-q', 'refs/remotes/origin/HEAD'], { okStatuses: [0, 1] }).toString('utf8').trim()
+  return [head, 'refs/remotes/origin/main', 'refs/remotes/origin/master'].find((ref) => ref && git(root, ['rev-parse', '--verify', '-q', `${ref}^{commit}`], { okStatuses: [0, 1] }).length > 0) ?? ''
+}
+
 // oracleDenial (S3, protect only): a locked oracle (oracle-record.mjs) must be unchanged at the ref. A lock applies to a ref
 // that carries the oracle (the path exists there, or its history ever had the locked blob at that path). It is released
-// only when its feature document exists at base (the default branch tip) with no unfinished task; the document at the ref is
+// only when its feature document exists at the remote-tracking default branch (never a `--base` or a local branch; none means no release) with no unfinished task; the document at the ref is
 // never read, so one push cannot edit an oracle and finish or delete its document. A table the hook cannot read keeps the lock.
 // Returns the denial text, or null.
-function oracleDenial(root, base, sha) {
+function oracleDenial(root, sha) {
+  const release = releaseRef(root)
   const changed = []
   for (const lock of readOracles(root)) {
     const now = git(root, ['rev-parse', '--verify', '-q', `${sha}:${lock.path}`], { okStatuses: [0, 1] }).toString('utf8').trim()
     if (now === lock.blob) continue
-    if (now === '' && git(root, ['log', '-1', '--format=%H', `--find-object=${lock.blob}`, sha, '--', lock.path], { okStatuses: [0, 128] }).toString('utf8').trim() === '') continue
-    if (out(root, ['ls-tree', '--name-only', base, '--', lock.feature]) !== '') {
-      const tasks = unfinishedRows(out(root, ['show', `${base}:${lock.feature}`]).split('\n'))
+    // A blob that does not exist (status 1) cannot be in any history; any other git failure throws and denies.
+    if (now === '' && (!objectExists(root, lock.blob) || git(root, ['log', '-1', '--format=%H', `--find-object=${lock.blob}`, sha, '--', lock.path]).toString('utf8').trim() === '')) continue
+    if (release && out(root, ['ls-tree', '--name-only', release, '--', lock.feature]) !== '') {
+      const tasks = unfinishedRows(out(root, ['show', `${release}:${lock.feature}`]).split('\n'))
       if (tasks && tasks.rows.length === 0) continue
     }
     changed.push(`${lock.path} (${now === '' ? 'missing' : 'changed'} at the ref, locked for ${lock.feature})`)
@@ -313,7 +333,7 @@ function refVerdict(root, pub, base, ref) {
     return `publication-gate: ${pub.gate} is denied because ${short} is the default branch and no remote-tracking default branch exists to compare it with (fetch origin, or publish a branch), so its review state cannot be checked.`
   }
   const sha = out(root, ['rev-parse', '--verify', `${ref}^{commit}`])
-  const locked = oracleDenial(root, base, sha)
+  const locked = oracleDenial(root, sha)
   if (locked) return `publication-gate: ${pub.gate} is denied because ${short} changes an oracle that is locked by content hash: ${locked}. The oracle is locked while its feature has unfinished tasks: restore the file, or return \`oracle_conflict\` to the user (the spec and the test disagree) or ask them to unlock it.`
   const { mergeBase, items, required, floor, state } = reviewState(root, base, sha)
   if (required.length === 0) return null
