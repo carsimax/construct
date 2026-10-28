@@ -20,9 +20,11 @@ Objective: a hook records the session limits in the plugin data directory when t
 | ID | Specs | Task | Route | Risk | Status | Commit |
 |---|---|---|---|---|---|---|
 | T1 | S1, S2, S3 | `limits-record.mjs` PreToolUse hook (registered in exec form), shared argument parser in limits.mjs, CLI without writes, single-directory read and prune; tests and docs | worker | 2, 3 | done | 8386968 |
+| T2 | S1 | A failed write is reported in the hook context, not swallowed | worker | 2, 3 | done | 53c06cd |
 
 ## Log
 
 - **L1 (2026-10-28):** "Rediseño con hook (Recommended)" chosen in the menu after #105 merged; its description: "New feature before the release: a PreToolUse hook stores the main thread's `construct-limits set` in CLAUDE_PLUGIN_DATA (one directory, decision by agent_id). Fixes the fallbackDir fail-open and the cross-directory set. Then the 14.0.0 release."
 - **L2 (2026-10-28):** T1 done: 1311/1311 tests, 98/98 mod tests. A `set` is recorded at PreToolUse, before the command runs, with the same validation as the CLI. `node bin/construct-limits set` (an interpreter wrapper) is not recorded; direct runs are.
-- Next step: lenses on the cumulative diff, push, and the PR.
+- **L3 (2026-10-28):** Review: reliability WARNING (a failed write is silent) gets T2. Risk WARNING (a set is recorded at PreToolUse even if the user or a sibling hook rejects the command) is accepted: only the main thread can set, and moving to PostToolUse would need the locked oracle unlocked.
+- Next step: re-review, push, and the PR.
