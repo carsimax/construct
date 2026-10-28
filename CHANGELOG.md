@@ -4,6 +4,8 @@ Notable changes per release. Versions follow [Semantic Versioning](https://semve
 
 ## Unreleased
 
+- New hook `iteration-cap.mjs` and option `iteration_cap` (default 3, `0` turns it off): a Bash command that already failed that many times for one agent in one session is denied with an instruction to stop and report what it tried, the failure, and its hypothesis, and never to edit the test to pass. A subagent's counts end when it stops; the main thread's reset on the next user prompt. Fails open.
+
 ## 12.1.0
 
 - Oracle flow documented and closed: `construct:worker` returns the new status `oracle_conflict` (report path, test, the `S#` it contradicts, why) instead of editing, skipping, or weakening a locked oracle; the `workflow` (testing reference), `delegation` (an `## Oracle` handoff and the relay rule: the user decides, never unlocked for them), and `review` skills, and the session and subagent contracts describe oracle-first work, locks, and the conflict exit; METHODOLOGY principle 4 records what exists and its accepted limits. `review-context` writes feature document paths and lock fields (`path`, `feature`, `task`, `error`) as JSON strings so none can start a line like a hook marker.

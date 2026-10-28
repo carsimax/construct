@@ -336,6 +336,12 @@
       "description": "Let the main thread edit repository files directly when one Write, Edit, MultiEdit, or NotebookEdit call changes at most this many lines; surface-guard sends bigger changes to construct:worker. 0 restores the old rule: the main thread writes only odd/tasks/",
       "default": 150
     },
+    "iteration_cap": {
+      "type": "number",
+      "title": "Iteration cap (failures)",
+      "description": "Deny a Bash command after it failed this many times for one agent, so the agent stops and reports instead of looping. A value that is not a whole number of 1 or more uses 3. 0 turns the cap off",
+      "default": 3
+    },
     "slice_lines": {
       "type": "number",
       "title": "Commit slice budget (lines)",

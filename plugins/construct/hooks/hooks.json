@@ -102,6 +102,19 @@
         ]
       },
       {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/iteration-cap.mjs"
+            ],
+            "timeout": 10
+          }
+        ]
+      },
+      {
         "matcher": "Write|Edit|MultiEdit|NotebookEdit",
         "hooks": [
           {
@@ -204,6 +217,14 @@
               "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/failure-streak.mjs"
             ],
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/iteration-cap.mjs"
+            ],
+            "timeout": 10
           }
         ]
       }
@@ -230,6 +251,18 @@
             "args": [
               "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/delegation-admission.mjs",
               "stop"
+            ],
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/iteration-cap.mjs"
             ],
             "timeout": 10
           }
@@ -288,6 +321,14 @@
               "mark"
             ],
             "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/iteration-cap.mjs"
+            ],
+            "timeout": 10
           }
         ]
       }
