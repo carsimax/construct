@@ -32,7 +32,7 @@ test('the registry names exactly the agent files, each with one kind', () => {
   const files = readdirSync(join(pluginRoot, 'agents')).filter((f) => f.endsWith('.md')).map((f) => f.replace(/\.md$/, ''))
   assert.deepEqual([...names].sort(), files.sort())
   assert.ok(names.every((n) => ['reader', 'writer', 'verifier', 'runner', 'judge', 'lens'].includes(ROLES[n])))
-  assert.deepEqual(namesOf('writer'), ['worker'])
+  assert.deepEqual(namesOf('writer'), ['worker', 'oracle'])
   assert.deepEqual(namesOf('judge'), ['judge-a', 'judge-b'])
   assert.deepEqual(namesOf('lens').sort(), ['review-readability', 'review-reliability', 'review-resilience', 'review-risk'])
 })

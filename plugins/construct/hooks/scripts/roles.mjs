@@ -9,6 +9,7 @@ export const PREFIX = 'construct:'
 export const ROLES = {
   'explorer': 'reader',
   'worker': 'writer',
+  'oracle': 'writer',
   'verifier': 'verifier',
   'general': 'runner',
   'judge-a': 'judge',

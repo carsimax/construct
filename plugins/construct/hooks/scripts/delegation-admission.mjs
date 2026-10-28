@@ -32,6 +32,7 @@ import { kindOf, namesOf, qualified } from './roles.mjs'
 import { dataDir, readInput, safeName, SUBAGENT_MAX_IDLE_MS } from './hook-io.mjs'
 
 export const WRITERS = new Set(namesOf('writer').map(qualified))
+const ORACLE = qualified('oracle')
 const VERIFIER = qualified(namesOf('verifier')[0])
 
 const HEADING = /^## Allowed edit surfaces[ \t]*$/gim
@@ -545,9 +546,18 @@ function admit(input) {
     deny(`${type} needs scoped edit surfaces. ${parsed.problem} ${SURFACES_FORM} Resend the same task text, changing only that section.`)
     return
   }
+  if (type === ORACLE && parsed.paths.some((path) => /[*?[\]{}]/.test(path))) {
+    deny(`${type} edit surfaces must be exact file paths, with no glob (any of * ? [ ] { }), because each is locked by its content hash when the oracle stops. List every test file by its full path.`)
+    return
+  }
   const cwd = typeof input.cwd === 'string' && input.cwd ? input.cwd : process.cwd()
   const root = projectRoot(cwd)
-  if (hasUnfinishedDocument(root) && !namesFeatureDocument(prompt, root)) {
+  // The oracle record hook reads the Spec line, so an oracle needs one whether or not a feature document is unfinished.
+  if (type === ORACLE && parsed.paths.some((path) => { try { return lstatSync(resolve(root, path)).isDirectory() } catch { return false } })) {
+    deny(`${type} edit surfaces must be file paths, not directories: each file is locked by its content hash. List every test file by its full path.`)
+    return
+  }
+  if ((type === ORACLE || hasUnfinishedDocument(root)) && !namesFeatureDocument(prompt, root)) {
     deny(`${type} needs a Spec line: no \`Spec:\` line in the prompt names an existing regular file under odd/tasks/. ${SPEC_FORM}`)
     return
   }

@@ -60,6 +60,32 @@ export function writeVerdict(root, record) {
   }
 }
 
+// Oracle locks (oracle-record.mjs): one record per locked test path, { path, blob, feature, task, at }; a later
+// record for the same path replaces it. Never pruned: a lock lives until its feature finishes or the user unlocks it.
+const oracleFile = (root, path) => join(storeDir(root), 'oracles', `${createHash('sha256').update(path).digest('hex')}.json`)
+export const writeOracle = (root, record) => atomicWrite(oracleFile(root, record.path), `${JSON.stringify(record)}\n`)
+
+// readOracles lists the oracle lock records; an unreadable one is skipped.
+export function readOracles(root) {
+  const dir = join(storeDir(root), 'oracles')
+  const records = []
+  let names = []
+  try {
+    names = readdirSync(dir)
+  } catch {
+    // No locks yet.
+  }
+  for (const name of names) {
+    try {
+      const record = readJson(join(dir, name))
+      if (typeof record?.path === 'string' && typeof record.blob === 'string' && typeof record.feature === 'string') records.push(record)
+    } catch {
+      // Unreadable record: not a lock.
+    }
+  }
+  return records
+}
+
 const MAX_AGE_MS = 30 * 24 * 3600 * 1000
 
 // pruneStore removes pending and verdict records not touched for 30 days. One cheap pass; failures are ignored.

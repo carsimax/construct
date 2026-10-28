@@ -236,6 +236,19 @@
         ]
       },
       {
+        "matcher": "^construct:oracle$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/oracle-record.mjs"
+            ],
+            "timeout": 10
+          }
+        ]
+      },
+      {
         "matcher": "^construct:review-",
         "hooks": [
           {

@@ -72,6 +72,34 @@
       ],
       "default": "inherit"
     },
+    "model_oracle": {
+      "type": "string",
+      "title": "Oracle model",
+      "description": "Model the oracle agent runs on; \"inherit\" = use the agent's own frontmatter",
+      "options": [
+        "inherit",
+        "haiku",
+        "sonnet",
+        "opus",
+        "fable"
+      ],
+      "default": "inherit"
+    },
+    "effort_oracle": {
+      "type": "string",
+      "title": "Oracle effort",
+      "description": "Effort level for the oracle agent; default keeps the model's own level; \"inherit\" = use the agent's own frontmatter",
+      "options": [
+        "inherit",
+        "default",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "default": "inherit"
+    },
     "model_verifier": {
       "type": "string",
       "title": "Verifier model",

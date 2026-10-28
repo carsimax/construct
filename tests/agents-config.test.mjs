@@ -11,6 +11,7 @@ const agentFiles = readdirSync(join(pluginRoot, 'agents')).filter((f) => f.endsW
 const S6 = {
   'explorer': ['haiku', 'medium'],
   'worker': ['sonnet', 'medium'],
+  'oracle': ['opus', 'medium'],
   'verifier': ['opus', 'medium'],
   'judge-a': ['opus', 'medium'],
   'judge-b': ['sonnet', 'medium'],

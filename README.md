@@ -15,7 +15,7 @@ An agent writes code faster than you can check it. Organic Driven Development ke
 ## What you get
 
 - **ODD workflow.** A session contract, injected by hooks, that Claude follows on every request without being asked.
-- **Role agents with model routing.** 10 agents (explorer, worker, verifier, judges, review lenses). You choose each role's model and effort in `/config`.
+- **Role agents with model routing.** 11 agents (explorer, worker, oracle, verifier, judges, review lenses). You choose each role's model and effort in `/config`.
 - **Skills.** Procedures that load on demand: workflow (sizing included), delegation, debugging, quality bar, migrations, branches, commits and pull requests (`delivery`), review, and more.
 - **Mandatory review.** Work whose Risk names a high-risk item is reviewed by lens agents before it can be published. Hooks build the evidence, record the verdicts, and gate `git push`, `gh pr create`, and `gh release create`.
 - **Status band.** One or two rows above the prompt with the phase, the active feature and its tasks, the permission gate, and the running agents. It leaves the model, branch, context, and plan limits to your status line.
@@ -124,12 +124,13 @@ Options are plugin settings, edited in `/config`:
 
 ### Agents and model routing
 
-The plugin ships 10 agents. Each role's model and effort can be changed in `/config`, where every option appears as a row such as `Worker model` or `Review risk effort`.
+The plugin ships 11 agents. Each role's model and effort can be changed in `/config`, where every option appears as a row such as `Worker model` or `Review risk effort`.
 
 | Role | Agent | Model | Effort |
 |---|---|---|---|
 | Explorer | `construct:explorer` | haiku | medium |
 | Worker | `construct:worker` | sonnet | medium |
+| Oracle | `construct:oracle` | opus | medium |
 | Verifier | `construct:verifier` | opus | medium |
 | Judge A | `construct:judge-a` | opus | medium |
 | Judge B | `construct:judge-b` | sonnet | medium |
@@ -172,7 +173,7 @@ After a compaction or a resume, a second `SessionStart` hook (matcher `compact|r
 
 A `PreToolUse` hook on `Agent` (`hooks/scripts/delegation-admission.mjs`) denies a malformed launch, with a reason that names what is missing and the expected form. It runs next to the review-context hook; an admitted launch prints nothing, so the two never conflict. Other agents are untouched.
 
-- **Writers** (`construct:worker`) need a `## Allowed edit surfaces` section with at least one entry per line. An entry that is absolute, starts with `~` or a drive letter, contains `..`, or starts with a glob (a bare `*` or `**` included) is denied, as is prose inside the section; a path with whitespace goes in backticks, and repeated sections must agree.
+- **Writers** (`construct:worker`, `construct:oracle`) need a `## Allowed edit surfaces` section with at least one entry per line. An entry that is absolute, starts with `~` or a drive letter, contains `..`, or starts with a glob (a bare `*` or `**` included) is denied, as is prose inside the section; a path with whitespace goes in backticks, and repeated sections must agree.
 - **Spec line.** When an unfinished feature document exists (the same rule the compact/resume re-injection uses), a writer prompt also needs a line `Spec: odd/tasks/<feature>.md, T<n>` naming an existing regular file under `odd/tasks/` (a symlink does not count). Without such a document, small work needs no `Spec:` line.
 - **Overlap.** A writer whose surfaces overlap those of a writer still open is denied. A glob entry covers what it matches and everything under it; entries are compared segment by segment, and two different literal segments never overlap whatever follows. Parentheses are literal (Next.js route groups such as `(dashboard)`). A segment with brackets, a backslash, or nested or unbalanced braces may match anything at its own position only, while `**` and an extglob (`@(`, `!(`, `+(`, `*(`, `?(`) overlap everything from their segment on. The hook records each admitted writer (its surfaces and a hash of its prompt) under `${CLAUDE_PLUGIN_DATA}/delegation-admission/<session>/` (same fallback as the gates), and a `SubagentStop` hook (`delegation-admission.mjs stop`) removes the record whose prompt hash matches the first user row of `agent_transcript_path`. A record older than one hour counts as a crashed writer and is dropped. The check and the record run under an `mkdir` lock beside the records (`<session>.lock`, a lock older than 10 seconds is broken, a wait over 3 seconds fails open), so two launches in the same parallel batch cannot both pass.
 - **Prefix.** `worker` and `verifier` are admitted the same with or without the `construct:` prefix.
@@ -292,7 +293,7 @@ The mod draws one thing: a **band** above the prompt (the `AbovePrompt` render s
 | `.claude-plugin/marketplace.json` | Local marketplace `construct` |
 | `install.sh` | One-command installer (see [One command](#one-command)) |
 | `plugins/construct/` | The plugin (manifest name `construct`) |
-| `plugins/construct/agents/` | The 10 role agents |
+| `plugins/construct/agents/` | The 11 role agents |
 | `plugins/construct/skills/` | Delivery and review skills (`delivery`, `review`, `debugging`, `constraints`, ...) |
 | `plugins/construct/hooks/` | `hooks.json`, the mod (`register.js`), its routing helpers, the status modules (`status/`), the band modules (`band/`), and the command hooks (`scripts/`: contract, feature state, the `shell-words` command reader over the vendored mvdan-sh parser (`hooks/vendor/`), delivery signals, publication gate, review store guard, command and surface guards, Risk line gate, subagent count, delegation admission, review context and capture) |
 | `plugins/construct/bin/construct-gate` | Installs, removes, or reports the git pre-push hook (`hooks/scripts/pre-push.mjs`) |

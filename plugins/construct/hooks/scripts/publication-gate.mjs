@@ -15,6 +15,8 @@
 //   - requiredLenses(items) (review-lenses.mjs) says which lenses must have approved the subject, the
 //     hash of the merge-base tree and the ref tree (review-store.mjs). A rejected subject stays
 //     rejected. A required lens without approval: deny, naming the lenses, the `Review subject:` line, and the construct:review skill;
+//   - a locked oracle (oracle-record.mjs) must be unchanged at the ref unless its feature document is finished on the default
+//     branch: a changed or missing one denies; no oracle is ever required;
 //   - an error while deciding denies with its reason, including one thrown after the command was
 //     found to be a publication. Only unreadable hook input, a command that is no publication, and a
 //     directory that is no git repository pass. The hook entry sets onFailure: "block" as well.
@@ -31,10 +33,11 @@ import { realpathSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { defaultBranch } from './delivery-signals.mjs'
+import { unfinishedRows } from './feature-state.mjs'
 import { git, repositoryRoot } from './git-tree.mjs'
 import { readInput } from './hook-io.mjs'
 import { requiredLenses } from './review-lenses.mjs'
-import { pruneStore, readVerdicts, subjectHash } from './review-store.mjs'
+import { pruneStore, readOracles, readVerdicts, subjectHash } from './review-store.mjs'
 import { GIT_VALUE_FLAGS, heredocScripts, nestedLines, parsesAsShell, SHELLS, ShellParseError, splitCommands } from './shell-words.mjs'
 
 const MAX_DEPTH = 4
@@ -235,6 +238,46 @@ function projectFloor(root, commit) {
   })
 }
 
+// objectExists: `git cat-file -e` exits 0 (exists) or 1 (absent); any other status (an invalid name is 128) rethrows.
+function objectExists(root, id) {
+  try {
+    git(root, ['cat-file', '-e', id])
+    return true
+  } catch (error) {
+    if (error.status === 1) return false
+    throw error
+  }
+}
+
+// releaseRef is the remote-tracking default branch (origin/HEAD, then origin/main or origin/master) or '' when there is none:
+// the publisher chooses `--base` and local branches, so only the remote-tracking default may release a lock.
+function releaseRef(root) {
+  const head = git(root, ['symbolic-ref', '-q', 'refs/remotes/origin/HEAD'], { okStatuses: [0, 1] }).toString('utf8').trim()
+  return [head, 'refs/remotes/origin/main', 'refs/remotes/origin/master'].find((ref) => ref && git(root, ['rev-parse', '--verify', '-q', `${ref}^{commit}`], { okStatuses: [0, 1] }).length > 0) ?? ''
+}
+
+// oracleDenial (S3, protect only): a locked oracle (oracle-record.mjs) must be unchanged at the ref. A lock applies to a ref
+// that carries the oracle (the path exists there, or its history ever had the locked blob at that path). It is released
+// only when its feature document exists at the remote-tracking default branch (never a `--base` or a local branch; none means no release) with no unfinished task; the document at the ref is
+// never read, so one push cannot edit an oracle and finish or delete its document. A table the hook cannot read keeps the lock.
+// Returns the denial text, or null.
+function oracleDenial(root, sha) {
+  const release = releaseRef(root)
+  const changed = []
+  for (const lock of readOracles(root)) {
+    const now = git(root, ['rev-parse', '--verify', '-q', `${sha}:${lock.path}`], { okStatuses: [0, 1] }).toString('utf8').trim()
+    if (now === lock.blob) continue
+    // A blob that does not exist (status 1) cannot be in any history; any other git failure throws and denies.
+    if (now === '' && (!objectExists(root, lock.blob) || git(root, ['log', '-1', '--format=%H', `--find-object=${lock.blob}`, sha, '--', lock.path]).toString('utf8').trim() === '')) continue
+    if (release && out(root, ['ls-tree', '--name-only', release, '--', lock.feature]) !== '') {
+      const tasks = unfinishedRows(out(root, ['show', `${release}:${lock.feature}`]).split('\n'))
+      if (tasks && tasks.rows.length === 0) continue
+    }
+    changed.push(`${lock.path} (${now === '' ? 'missing' : 'changed'} at the ref, locked for ${lock.feature})`)
+  }
+  return changed.length === 0 ? null : changed.join('; ')
+}
+
 // reviewState reads, without writing, the Risk items the feature documents changed between the merge base of base
 // and sha name, the lenses they require, and each lens's verdict for that subject ('ok', 'rejected', or 'missing').
 // The risk floor adds items from the diff paths (floor: item -> matched paths). A malformed Risk cell or odd/risk-paths line throws. refVerdict and skill-context.mjs share it.
@@ -290,6 +333,8 @@ function refVerdict(root, pub, base, ref) {
     return `publication-gate: ${pub.gate} is denied because ${short} is the default branch and no remote-tracking default branch exists to compare it with (fetch origin, or publish a branch), so its review state cannot be checked.`
   }
   const sha = out(root, ['rev-parse', '--verify', `${ref}^{commit}`])
+  const locked = oracleDenial(root, sha)
+  if (locked) return `publication-gate: ${pub.gate} is denied because ${short} changes an oracle that is locked by content hash: ${locked}. The oracle is locked while its feature has unfinished tasks: restore the file, or return \`oracle_conflict\` to the user (the spec and the test disagree) or ask them to unlock it.`
   const { mergeBase, items, required, floor, state } = reviewState(root, base, sha)
   if (required.length === 0) return null
   const missing = required.filter((lens) => state(lens) === 'missing')
