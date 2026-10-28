@@ -2,9 +2,9 @@
 // a frozen working tree, the HEAD commit, and an atomic file write.
 import { spawnSync } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
-import { mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { closeSync, copyFileSync, mkdirSync, mkdtempSync, openSync, readSync, renameSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 
 const DEFAULT_OUTPUT_LIMIT = 64 << 20
 
@@ -80,18 +80,47 @@ function emptyTree(root) {
 // real index is never read for writing or changed. The base is the HEAD tree, or
 // the empty tree on an unborn branch. The temporary index starts from HEAD, with no
 // stat cache, so `add -A` hashes every file: the real index's cache is not trusted,
-// since a same-size rewrite with its mtime restored would match it.
-export function freezeWorkingTree(root) {
+// since a same-size rewrite with its mtime restored would match it. Above hashBudget
+// index entries, hashing every file can outlast the hook timeout, so the temporary
+// index starts as a copy of the real one (unless an entry is assume-unchanged or
+// skip-worktree, whose changes `add -A` would skip) and `fast` tells the caller.
+export const FREEZE_HASH_BUDGET = 20_000
+
+export function freezeWorkingTree(root, { hashBudget = FREEZE_HASH_BUDGET } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'construct-index-'))
   try {
     const env = { GIT_INDEX_FILE: join(dir, 'index') }
     const head = headTree(root)
-    if (head !== null) git(root, ['read-tree', 'HEAD'], { env })
+    const index = resolve(root, text(git(root, ['rev-parse', '--git-path', 'index'])))
+    let fast = false
+    // `ls-files -v` tags assume-unchanged entries with a lowercase letter and skip-worktree ones with S
+    if (indexEntries(index) > hashBudget && !/^([a-z]|S) /m.test(text(git(root, ['ls-files', '-v'])))) {
+      copyFileSync(index, env.GIT_INDEX_FILE)
+      // Keep the index mtime (floored, never later) so git still rehashes racily clean entries.
+      const second = Math.floor(statSync(index).mtimeMs / 1000)
+      utimesSync(env.GIT_INDEX_FILE, second, second)
+      fast = true
+    } else if (head !== null) git(root, ['read-tree', 'HEAD'], { env })
     git(root, ['add', '-A'], { env })
     const candidateTree = text(git(root, ['write-tree'], { env }))
-    return { baseTree: head ?? emptyTree(root), candidateTree }
+    return { baseTree: head ?? emptyTree(root), candidateTree, fast }
   } finally {
     rmSync(dir, { recursive: true, force: true })
+  }
+}
+
+// indexEntries reads the entry count from the index header (`DIRC`, version, count); 0 when there is none.
+function indexEntries(index) {
+  let fd
+  try {
+    fd = openSync(index, 'r')
+    const header = Buffer.alloc(12)
+    if (readSync(fd, header, 0, 12, 0) < 12 || header.toString('latin1', 0, 4) !== 'DIRC') return 0
+    return header.readUInt32BE(8)
+  } catch {
+    return 0
+  } finally {
+    if (fd !== undefined) closeSync(fd)
   }
 }
 

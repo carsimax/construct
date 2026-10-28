@@ -71,6 +71,21 @@ describe('git-tree', () => {
     assert.notEqual(freezeWorkingTree(repo).candidateTree, baseTree)
   })
 
+  test('above the hash budget the snapshot is seeded from the real index and says so', () => {
+    const repo = makeRepo({ 'a.txt': 'a\n', 'b.txt': 'b\n' })
+    assert.equal(freezeWorkingTree(repo).fast, false)
+    const { baseTree, fast } = freezeWorkingTree(repo, { hashBudget: 1 })
+    assert.equal(fast, true)
+    writeFileSync(join(repo, 'a.txt'), 'changed\n')
+    assert.notEqual(freezeWorkingTree(repo, { hashBudget: 1 }).candidateTree, baseTree)
+  })
+
+  test('an assume-unchanged entry keeps the full hash even above the budget', () => {
+    const repo = makeRepo({ 'a.txt': 'a\n', 'b.txt': 'b\n' })
+    sh(repo, 'update-index', '--assume-unchanged', 'a.txt')
+    assert.equal(freezeWorkingTree(repo, { hashBudget: 1 }).fast, false)
+  })
+
   test('headCommit is null on an unborn repository and freezeWorkingTree uses the empty tree', () => {
     const repo = scratchDir('odd-git-tree-')
     sh(repo, 'init', '-q', '-b', 'main')
