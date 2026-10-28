@@ -6,8 +6,9 @@ Notable changes per release. Versions follow [Semantic Versioning](https://semve
 
 ## 12.0.1
 
-- The publication gate now gates a push inside a quoted `$( … )` that follows a `( … )` group, a `case` pattern, or a `#` comment.
-- The Risk-line gate hashes every file again when it records the tree, so a same-size rewrite with its modification time restored is no longer missed.
+- The publication gate now gates a push inside a quoted `$( … )` after a `( … )` group, a `#` comment, a `${ … }` with a `)`, or a backslash-quoted here-doc delimiter.
+- A quoted `$( … )` that cannot be delimited (a `case`, or an unmatched `(`, inside it) is now denied by the publication gate and `command-guard`, whatever follows it: before, the commands after it could go unseen. Move that part into its own command or a script.
+- The Risk-line gate hashes every file when it records the tree, so a same-size rewrite with its modification time restored is no longer missed. Above 20,000 tracked files it keeps the faster index-seeded snapshot to stay within its timeout, and says so once per session.
 
 ## 12.0.0
 

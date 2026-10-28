@@ -344,7 +344,7 @@ Risk line: one reply can name several items, `Risk: items 2, 5 (reason)`; the Ri
 
 Current version: 12.0.1 (`plugins/construct/.claude-plugin/plugin.json`); a patch release. Releases are tagged `vX.Y.Z`.
 
-Changes in 12.0.1: the publication gate closes three ways to hide a push inside `$( … )`, and the Risk-line gate no longer misses a same-size rewrite with a restored modification time. See [CHANGELOG.md](CHANGELOG.md).
+Changes in 12.0.1: the publication gate and `command-guard` close several ways to hide a command inside or after a quoted `$( … )`, denying one they cannot delimit; the Risk-line gate no longer misses a same-size rewrite with a restored modification time, up to 20,000 tracked files. See [CHANGELOG.md](CHANGELOG.md).
 
 Changes in 12.0.0: the deprecated 5.x options `model_odd_*`, `effort_odd_*`, `model_jd_*`, and `effort_jd_*` are removed; set `model_<role>` and `effort_<role>` instead. The publication gate, guards, and band get the audit-round fixes. See [CHANGELOG.md](CHANGELOG.md).
 
