@@ -20,7 +20,7 @@ Objective: for risky work, acceptance tests are written from the specs by an ora
 | T1 | S1, S2, S3 | Oracle agent and role, oracle-record hook, store area, gate lock check (PR 1) | worker | 2, 3 | done | b2a71cb |
 | T2 | S4, S5 | surface-guard and delegation-admission stops, `construct-gate oracle` CLI, command-guard deny (PR 2) | worker | 2, 3 | done | f4f21f6 |
 | T3 | S7 | review-context passes specs and locked oracles; skill-context lists locks (PR 3) | worker | 3 | done | b1bb666 |
-| T4 | S6, S8 | worker `oracle_conflict`, workflow/delegation/review skills, contracts, eval case, README/METHODOLOGY/CHANGELOG (PR 4) | worker | 3 | pending | — |
+| T4 | S6, S8 | worker `oracle_conflict`, workflow/delegation/review skills, contracts, eval case, README/METHODOLOGY/CHANGELOG (PR 4) | worker | 3 | done | 9b8eba1 |
 | T5 | S2, S5 | From T1 review: a lock whose feature is finished on main is replaced by a new oracle run (today it blocks the new lock silently); a corrupt or unreadable lock record must not deny every publication; `oracle list` shows stale locks; an oracle on a path locked for another unfinished feature is denied at admission; a surface that is a directory or symlink when the oracle stops fails closed; a symlink surface is reported, not skipped silently; fix the writeOracle comment (it says a later record replaces the lock); bound the gate's git calls per lock (PR 2, with T2) | worker | 2, 3 | done | f4f21f6 |
 
 ## Log
@@ -31,4 +31,4 @@ Objective: for risky work, acceptance tests are written from the specs by an ora
 - **L4 (2026-10-28):** T2 and T5 in one commit (f4f21f6, ~407 lines). Oracle admission denies a launch over any active lock (S4), not only another feature's; surface-guard would block its writes anyway.
 - **L5 (2026-10-28):** Accepted limit: a symlink or directory surface gets a sentinel lock that protects the path itself, not the symlink target or the files under the directory at the gate; surface-guard covers writes under it. Admission already denies directory surfaces, so this only covers a surface that changed type during the oracle run.
 - **L6 (2026-10-28):** The gate verifies the release ref with `git ls-remote` against the remote URL recorded in the lock, run outside the repository so its config cannot redirect it; a URL that reads as an option is refused (it executed `--upload-pack` before the fix). Accepted limit: the URL is trusted on first use, when the oracle stops; an agent that changed `remote.origin.url` before that pins its own URL. Local edit stops trust the local ref (discipline layer).
-- Next step: review PR 3 (T3), then T4.
+- Next step: review PR 4, run the oracle-conflict eval and the full eval suite against the 12.0.2 baseline, then release 12.1.0.

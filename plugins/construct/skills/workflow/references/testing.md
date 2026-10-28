@@ -6,6 +6,10 @@ Test-first when a runnable, deterministic test and a clear expected outcome exis
 2. Implement until GREEN; refactor with the tests green.
 3. Each existing command or option the change touches gets one test proving its prior behavior.
 
+## Oracle first
+
+A task whose Risk names an item and that has a runnable deterministic test goes oracle first: `construct:oracle` writes the acceptance tests from the task's `S#` and shows them RED, then `construct:worker` implements against them. Never write the oracle brief from the code. The oracle's files are locked (hook, by content hash) until the feature is finished on the remote default branch or the user unlocks them with `construct-gate oracle list | unlock <path>`. A worker never edits one: it returns `oracle_conflict`, and the parent relays it to the user (`construct:delegation`). No runnable test, or Risk `none`: the worker writes its own tests.
+
 ## A test is worth keeping when
 
 - It fails on a real regression, uses the public interface, and no existing test covers it.
