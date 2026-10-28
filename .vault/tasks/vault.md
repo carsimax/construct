@@ -18,6 +18,7 @@ Objective: the per-repository working directory becomes `.vault/` with container
 |---|---|---|---|---|---|---|
 | T1 | S1, S2, S3, S4, S5 | Hooks, CLI, evals, and tests: `.vault/` paths, specs and risk-paths folders, no `odd/` reads | worker | 3 | done | 7b7090c |
 | T2 | S1, S6 | Skills, agents, contracts, README, CLAUDE.md, CONTRIBUTING, METHODOLOGY, CHANGELOG: `.vault/` and ADD text | worker | 3 | done | 706e20d |
+| T5 | S1 | Deny publishing an unmigrated `odd/` without `.vault/`, naming the migration | inline | 2, 3 | done | — |
 | T3 | S7 | Move this repository's `odd/` to `.vault/` | inline | 3 | done | (this commit) |
 
 ## Log
@@ -27,4 +28,5 @@ Objective: the per-repository working directory becomes `.vault/` with container
 - **L3 (2026-10-28):** "Si vamos asi" (plan: level A text rename, `.vault/` with container folders, no backward compatibility, 13.0.0).
 - **L4 (2026-10-28):** T1 did not write its new tests RED first (the rename went in before them). T3 moved this repository with `git mv`; `odd/risk-paths` became `.vault/risk-paths/hooks.txt`.
 - **L5 (2026-10-28):** Moving the 21 old feature documents passed the 400 KB review-context budget (~500 KB of diff). Answer: "Dejar los viejos en odd/": this repository's finished documents stay in `odd/tasks/` as an unused archive, like other projects; only `vault.md`, `spec.md` (now `.vault/specs/README.md`) and `risk-paths` (now `.vault/risk-paths/hooks.txt`) move.
+- **L6 (2026-10-28):** "vamos con las recomendaciones": review-risk and review-resilience found that an unmigrated repository would lose its gating silently. The gate denies a ref with `odd/tasks/` or `odd/risk-paths` and no `.vault/`, naming the migration (T5). The migration branch itself is reviewed without its new `.vault/risk-paths` rules (read from the default branch, by design).
 - Next step: review and the final PR, then release 13.0.0.

@@ -409,6 +409,10 @@ function refVerdict(root, pub, base, ref) {
     return `publication-gate: ${pub.gate} is denied because ${short} is the default branch and no remote-tracking default branch exists to compare it with (fetch origin, or publish a branch), so its review state cannot be checked.`
   }
   const sha = out(root, ['rev-parse', '--verify', `${ref}^{commit}`])
+  // odd/ is never read (S1), so an unmigrated one would drop its Risk cells and rules without a word: deny until it moves.
+  if (out(root, ['ls-tree', '--name-only', sha, '--', 'odd/tasks', 'odd/risk-paths']) !== '' && out(root, ['ls-tree', '--name-only', sha, '--', '.vault']) === '') {
+    return `publication-gate: ${pub.gate} is denied because ${short} still keeps its feature documents or risk rules in odd/, which Construct no longer reads, so their review requirements would silently stop counting. Move them to .vault/ first: git mv odd .vault && git mv .vault/risk-paths .vault/rules.txt && mkdir .vault/specs .vault/risk-paths && git mv .vault/spec.md .vault/specs/README.md && git mv .vault/rules.txt .vault/risk-paths/rules.txt (skip the moves for files you do not have), then commit.`
+  }
   const locked = oracleDenial(root, sha)
   if (locked) return `publication-gate: ${pub.gate} is denied because ${short} changes an oracle that is locked by content hash: ${locked}. The oracle is locked while its feature has unfinished tasks: restore the file, or return \`oracle_conflict\` to the user (the spec and the test disagree) or ask them to unlock it.`
   const { mergeBase, items, required, floor, docs, state } = reviewState(root, base, sha)
