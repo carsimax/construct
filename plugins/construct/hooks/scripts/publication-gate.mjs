@@ -280,8 +280,11 @@ export function activeLocks(root, { verifyRemote = false } = {}) {
     const done = (feature) => {
       if (!finished.has(feature)) {
         let tasks = null
+        let orphaned = false
         if (release && out(root, ['ls-tree', '--name-only', release, '--', feature]) !== '') tasks = unfinishedRows(out(root, ['show', `${release}:${feature}`]).split('\n'))
-        finished.set(feature, tasks !== null && tasks.rows.length === 0)
+        // The document reached the default branch and a merged change removed it there: nothing is left to protect (S1 of oracle-autonomy).
+        else if (release) orphaned = out(root, ['log', '-1', '--format=%H', release, '--', feature]) !== ''
+        finished.set(feature, orphaned || (tasks !== null && tasks.rows.length === 0))
       }
       return finished.get(feature)
     }
