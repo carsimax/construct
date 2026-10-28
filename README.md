@@ -1,7 +1,7 @@
 # Construct
 
 [![Claude Code](https://img.shields.io/badge/Claude_Code-2.1.304%2B-blue)](#requirements)
-[![Plugin version](https://img.shields.io/badge/version-10.0.0-informational)](plugins/construct/.claude-plugin/plugin.json)
+[![Plugin version](https://img.shields.io/badge/version-11.0.0-informational)](plugins/construct/.claude-plugin/plugin.json)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 Construct is a Claude Code plugin that makes every request follow Organic Driven Development (ODD): authorize, explore, size, track, implement test-first, and close with evidence and a Risk line.
@@ -19,7 +19,6 @@ An agent writes code faster than you can check it. Organic Driven Development ke
 - **Skills.** Procedures that load on demand: workflow (sizing included), delegation, debugging, quality bar, migrations, branches, commits and pull requests (`delivery`), review, and more.
 - **Mandatory review.** Work whose Risk names a high-risk item is reviewed by lens agents before it can be published. Hooks build the evidence, record the verdicts, and gate `git push`, `gh pr create`, and `gh release create`.
 - **Status band.** One or two rows above the prompt with the phase, the active feature and its tasks, the permission gate, and the running agents. It leaves the model, branch, context, and plan limits to your status line.
-- **Output style.** The `Principal Engineer` output style.
 
 - **Memory.** Provided by [Engram](https://github.com/Gentleman-Programming/engram), which you install separately. See [Memory](#memory).
 
@@ -37,7 +36,7 @@ An agent writes code faster than you can check it. Organic Driven Development ke
 ### One command
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v10.0.0/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v11.0.0/install.sh | bash
 ```
 
 The installer requires Engram: when the `engram` binary or the `engram@engram` plugin is missing, it stops and installs nothing, and prints `brew install gentleman-programming/tap/engram && engram setup claude-code`. It checks the other requirements above and stops before changing anything if one is missing, or if `~/.claude` or `~/.claude/settings.json` is not writable, or if `settings.json` is a directory. Then it runs the manual steps below for you:
@@ -45,7 +44,7 @@ The installer requires Engram: when the `engram` binary or the `engram@engram` p
 - Adds the construct marketplace and installs `construct@construct`.
 - Removes a `theme` of `custom:construct:construct` left by earlier versions from `~/.claude/settings.json` (any other theme is left alone). It adds no memory permission rules and leaves your existing rules alone. An empty `settings.json` counts as `{}`. Other keys stay as they are, a symlinked file is written through to its target with its mode kept, and the previous file is saved as `settings.json.bak-<timestamp>`; when there is nothing to change, the file is not touched.
 
-If codegraph is installed, the installer says Construct no longer needs it and removes nothing. Every step is skipped when it is already done, so running the installer again changes nothing. It never changes other permissions or your permission mode. The output style needs no setting: the plugin forces `Principal Engineer`, and an `outputStyle` you already have stays in the file but has no effect while construct is enabled.
+If codegraph is installed, the installer says Construct no longer needs it and removes nothing. Every step is skipped when it is already done, so running the installer again changes nothing. It never changes other permissions or your permission mode.
 
 | Option | Meaning |
 |---|---|
@@ -55,7 +54,7 @@ If codegraph is installed, the installer says Construct no longer needs it and r
 Pass options after `bash -s --`, for example `curl -fsSL <url> | bash -s -- --no-mcp`. To read the script before running it:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v10.0.0/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v11.0.0/install.sh -o install.sh
 less install.sh
 bash install.sh
 ```
@@ -71,7 +70,7 @@ The manual steps the installer runs, for when you want to run them yourself:
    claude plugin install construct@construct
    ```
 
-   The installer (`install.sh`) pins this marketplace to the release tag (`carsimax/construct#v10.0.0`); the command above follows the default branch.
+   The installer (`install.sh`) pins this marketplace to the release tag (`carsimax/construct#v11.0.0`); the command above follows the default branch.
 
 2. Optional: inside Claude Code, in `/config`, set each role's model and effort (rows such as `Worker model`).
 
@@ -157,7 +156,6 @@ A plugin cannot ship a `CLAUDE.md`, so Construct loads its rules in layers:
 | Session contract | `SessionStart` hook (startup, resume, clear, compact) | ODD protocol, task size, high-risk list, Risk line, and delegation triggers, under 8,000 characters |
 | Subagent contract | `SubagentStart` hook | Artifact language, edit surfaces, scratch, and the `## Key Learnings` closing block. JSON-only reviewers (`review-*`, `judge-*`) get nothing |
 | Skills | Loaded on demand | `workflow`, `delegation`, `debugging`, `constraints` |
-| Output style | Forced by the plugin (`force-for-plugin`), in every project | Reply tone, language, response length, verification, and working rules (no AI attribution in commits, one question at a time) |
 
 The contract texts live in `plugins/construct/hooks/contract/`.
 
@@ -343,7 +341,9 @@ Risk line: one reply can name several items, `Risk: items 2, 5 (reason)`; the Ri
 
 ## Status
 
-Current version: 10.0.0 (`plugins/construct/.claude-plugin/plugin.json`); a major release. Releases are tagged `vX.Y.Z`.
+Current version: 11.0.0 (`plugins/construct/.claude-plugin/plugin.json`); a major release. Releases are tagged `vX.Y.Z`.
+
+Changes in 11.0.0: the `Principal Engineer` output style is removed; your own output style and CLAUDE.md govern replies, and if you had picked `construct:Principal Engineer` in `/output-style`, pick another. See [CHANGELOG.md](CHANGELOG.md).
 
 Changes in 10.0.0: the docked panel is replaced by a status band above the prompt that leaves the model, branch, context, and plan limits to your status line; `panel_open_on_start` and `/construct close` are removed, and `/construct doctor` no longer checks Engram. See [CHANGELOG.md](CHANGELOG.md).
 

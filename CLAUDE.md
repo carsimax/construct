@@ -6,7 +6,7 @@ The contributor rules live in [CONTRIBUTING.md](CONTRIBUTING.md) and are not rep
 
 ## What this repository is
 
-Construct: a Claude Code plugin (in `plugins/construct/`) plus its local marketplace (`.claude-plugin/marketplace.json`) and a curl installer (`install.sh`). The plugin implements Organic Driven Development (ODD): it injects an orchestration contract through hooks, ships role agents, skills, a mod (model/effort routing and a status band above the prompt), and an output style. Memory comes from Engram (an external MCP server and plugin, a prerequisite); Construct ships no memory store of its own. There is no build step; everything is plain Node.js ESM (Node 22.16+) and Markdown.
+Construct: a Claude Code plugin (in `plugins/construct/`) plus its local marketplace (`.claude-plugin/marketplace.json`) and a curl installer (`install.sh`). The plugin implements Organic Driven Development (ODD): it injects an orchestration contract through hooks, ships role agents, skills, and a mod (model/effort routing and a status band above the prompt). Memory comes from Engram (an external MCP server and plugin, a prerequisite); Construct ships no memory store of its own. There is no build step; everything is plain Node.js ESM (Node 22.16+) and Markdown.
 
 ## Commands
 
@@ -31,7 +31,6 @@ A plugin cannot ship a `CLAUDE.md`, so the ODD rules load in layers:
 - **Feature state**: `hooks/scripts/feature-state.mjs` re-injects unfinished tasks from `odd/tasks/*.md` after compact/resume (read-only, at most 2,500 characters).
 - **Skills** (`plugins/construct/skills/*/SKILL.md`) hold the full procedures and load on demand; the contract only names them: `workflow` (protocol, sizing, Risk line), `delegation` (launching agents, handoffs), `review` (lens and dual review), `delivery` (branches, commits, pull requests, chains), `debugging`, `constraints`, `sources`, and `migration`.
 - **Agents** (`plugins/construct/agents/`): `explorer` (read-only research), `worker` (the only writer), `verifier`, `general`, `judge-a` and `judge-b` (blind dual review), and the four JSON-only lenses `review-risk`, `review-readability`, `review-reliability`, `review-resilience`. The registry is `hooks/scripts/roles.mjs`.
-- **Output style**: `output-styles/principal-engineer.md`, forced with `force-for-plugin`.
 
 Other moving parts:
 
