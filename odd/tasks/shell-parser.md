@@ -33,6 +33,8 @@ Objective: replace the heuristic shell parsing in `shell-words.mjs` (used by pub
 |---|---|---|---|---|---|---|
 | T1 | S1 | Choose the parser (user decision on the dependency) | user | none | done | — |
 | T2 | S1 | Tests for every case above, then the parser, then a clean-context review-risk and review-resilience pass | worker | 2 | in-review | — |
+| T3 | S1 | review-context omits the content of `plugins/construct/hooks/vendor/` paths (keeps them in the manifest, notes the sha256 pin) so the lenses can review T2 | worker | 2 | in-review | — |
+| T4 | S1 | Heredoc bodies are data only when proven: fix the d8dc191 regressions found by an automated security review (heredoc on a compound command, heredoc reaching a shell through a substitution) and the fail-open on a non-parse exception in splitCommands | worker | 2 | pending | — |
 
 ## Log
 
@@ -47,5 +49,6 @@ Objective: replace the heuristic shell parsing in `shell-words.mjs` (used by pub
   - Not covered, as before: brace expansion (`{git,push}`), aliases, variable-built names, interpreter one-liners. The README still calls `shell-words` a tokenizer (outside this unit's surfaces).
 
 - **L6 (2026-10-27):** user chose to always deny an unparseable command. The four conflicting tests in `tests/publication/publication.test.mjs` now expect the "could not be parsed" deny (two renamed or split, each with a comment: bash runs the valid lines before a syntax error). The `esac` reclassification was accepted. `node --test 'tests/**/*.test.mjs'`: 996 tests, 996 pass, 0 fail. T2 is in-review.
+- **L7 (2026-10-27):** T3 worker. `Review subject: faaefcc` failed with "passed the 409600 byte budget at path 11 of 16" because the unmodified 1.5 MB `hooks/vendor/mvdan-sh.cjs` is in the diff. `review-context.mjs` now omits the content of any path starting with the exact prefix `plugins/construct/hooks/vendor/` (paths from `git diff -z` are repository-relative), printing `vendored; content omitted; its sha256 is pinned by tests/band-license.test.mjs`; the path stays in name-status, numstat, and the manifest, so `subject_hash` still binds it. RED first: the new vendored-path test failed; the near-miss test (`scripts/vendor-x.mjs`, `tests/hooks/vendor/a.mjs`, `hooks/vendorx/`, `hooks/scripts/vendor/`) passed already, as a regression guard. GREEN: `node --test 'tests/**/*.test.mjs'`: 998 tests, 998 pass. Probe on a scratch copy of the hook with the pending-record write stubbed (nothing written under the git directory): base faaefcc now gives an allowed 72,131 byte context, path 11 showing the marker. Docs: `skills/review/SKILL.md` and `CLAUDE.md` describe the omission. T3 is in-review. Lenses no longer see later edits to vendored files; the sha256 pin test is the control for that.
 
 Next step: the clean-context review-risk and review-resilience pass.

@@ -395,6 +395,30 @@ describe('ranges, deleted paths, and verdict records (T8)', () => {
     assert.match(prompt, /export const c = 1/)
   })
 
+  test('a vendored path stays in the manifest and the name-status, its content is omitted', () => {
+    const repo = makeRepo({ 'src/a.js': 'export const a = 1\n' })
+    applyFiles(repo, { 'plugins/construct/hooks/vendor/lib.cjs': 'VENDORED_BODY\n', 'src/a.js': 'export const a = 2\n' })
+    commitAll(repo, 'vendor')
+    const r = hook(CONTEXT_HOOK, spawnInput(repo, 'Review subject: HEAD~1'))
+    const prompt = r.json.hookSpecificOutput.updatedInput.prompt
+    assert.ok(bindingOf(r).artifact_subject.changed_path_manifest.includes('plugins/construct/hooks/vendor/lib.cjs'))
+    assert.match(prompt, /^A\tplugins\/construct\/hooks\/vendor\/lib\.cjs$/m)
+    assert.match(prompt, /^1\t0\tplugins\/construct\/hooks\/vendor\/lib\.cjs$/m)
+    assert.match(prompt, /vendored; content omitted; its sha256 is pinned by tests\/band-license\.test\.mjs/)
+    assert.doesNotMatch(prompt, /VENDORED_BODY/)
+    assert.match(prompt, /export const a = 2/)
+  })
+
+  test('only the exact vendor directory is omitted: other paths containing vendor keep their diff', () => {
+    const repo = makeRepo({ 'src/a.js': 'export const a = 1\n' })
+    const paths = ['plugins/construct/hooks/scripts/vendor-x.mjs', 'tests/hooks/vendor/a.mjs', 'plugins/construct/hooks/vendorx/b.mjs', 'plugins/construct/hooks/scripts/vendor/c.mjs']
+    applyFiles(repo, Object.fromEntries(paths.map((p, i) => [p, `KEEP_BODY_${i}\n`])))
+    commitAll(repo, 'near misses')
+    const prompt = hook(CONTEXT_HOOK, spawnInput(repo, 'Review subject: HEAD~1')).json.hookSpecificOutput.updatedInput.prompt
+    paths.forEach((_, i) => assert.match(prompt, new RegExp(`\\+KEEP_BODY_${i}`)))
+    assert.doesNotMatch(prompt, /vendored; content omitted/)
+  })
+
   test('a lens can approve a context with a deleted path: the manifest still matches', () => {
     const repo = three()
     const binding = bindingOf(hook(CONTEXT_HOOK, spawnInput(repo, 'Review subject: HEAD~1')))
