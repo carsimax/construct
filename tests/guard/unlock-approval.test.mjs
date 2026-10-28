@@ -21,10 +21,24 @@ const tick = () => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 
 // A fresh repository per test: the latest recorded answer is per repository.
 const fresh = () => makeRepo({ [PATH_]: 'one\n', 'tests/a': 'two\n' })
 const question = (path = PATH_) => `oracle_conflict: \`${path}\` contradicts S2. Unlock it?`
-// record runs the PostToolUse hook; `extra` overrides the input (a pre-filled tool_input.answers, a missing tool_response).
-const record = (repo, { q = question(), label = 'Unlock', id = 'toolu_1', ...extra } = {}) => {
+// The real Claude Code shapes (captured from a live session): PreToolUse tool_input has only `questions`; PostToolUse tool_input and tool_response
+// both carry questions, answers and annotations (the harness merges the user's choice into tool_input).
+const base = (repo, event, id) => ({ session_id: 's1', cwd: repo, prompt_id: 'p1', permission_mode: 'bypassPermissions', effort: { level: 'medium' }, hook_event_name: event, tool_name: 'AskUserQuestion', tool_use_id: id })
+const run = (input) => spawnSync('node', [RECORDER], { encoding: 'utf8', env, input: JSON.stringify(input) })
+const preInput = (repo, { q = question(), id = 'toolu_1', ...extra } = {}) => ({ ...base(repo, 'PreToolUse', id), tool_input: { questions: [{ question: q, header: 'Unlock', options: [{ label: 'Unlock', description: 'd' }, { label: 'Keep the test', description: 'd' }], multiSelect: false }] }, ...extra })
+const postInput = (repo, { q = question(), label = 'Unlock', id = 'toolu_1', ...extra } = {}) => {
+  const questions = preInput(repo, { q }).tool_input.questions
+  return { ...base(repo, 'PostToolUse', id), tool_input: { questions, answers: { [q]: label }, annotations: {} }, tool_response: { questions, answers: { [q]: label }, annotations: {} }, duration_ms: 0, ...extra }
+}
+const pre = (repo, opts) => run(preInput(repo, opts))
+const post = (repo, opts) => {
   tick()
-  return spawnSync('node', [RECORDER], { encoding: 'utf8', env, input: JSON.stringify({ session_id: 's1', cwd: repo, hook_event_name: 'PostToolUse', tool_name: 'AskUserQuestion', tool_use_id: id, tool_input: { questions: [{ question: q }] }, tool_response: { questions: [], answers: { [q]: label } }, ...extra }) })
+  return run(postInput(repo, opts))
+}
+// record is the whole flow: PreToolUse (clean ask), then PostToolUse (the answer). `extra` overrides the PostToolUse input.
+const record = (repo, { id = 'toolu_1', q = question(), ...rest } = {}) => {
+  pre(repo, { id, q, ...(rest.session_id !== undefined || 'session_id' in rest ? { session_id: rest.session_id } : {}) })
+  return post(repo, { id, q, ...rest })
 }
 const guard = (repo, command, extra = {}) => {
   const r = spawnSync('node', [GUARD], { encoding: 'utf8', input: JSON.stringify({ session_id: 's1', cwd: repo, hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command }, ...extra }), env })
@@ -65,10 +79,8 @@ describe('command-guard: unlock after a recorded AskUserQuestion approval', () =
     record(other)
     denied(guard(other, unlock('a.test.mjs'), { cwd: `${other}/tests` }))
   })
-  test('denied without an answer, with a record from a pre-filled call, and with a malformed or missing tool_response', () => {
+  test('denied without an answer and with a malformed or missing tool_response', () => {
     const repo = fresh()
-    denied(guard(repo, unlock()))
-    record(repo, { tool_input: { questions: [], answers: { [question()]: 'Unlock' } } })
     denied(guard(repo, unlock()))
     for (const bad of [{ tool_response: undefined }, { tool_response: 'User has answered' }, { tool_response: { answers: 'Unlock' } }, { tool_response: { answers: ['Unlock'] } }, { tool_use_id: undefined }]) {
       record(repo, bad)
@@ -98,6 +110,20 @@ describe('command-guard: unlock after a recorded AskUserQuestion approval', () =
       record(repo, { q })
       denied(guard(repo, unlock()))
     }
+  })
+  test('a label marked (Recommended) still counts: Unlock (Recommended) allows, Keep the test (Recommended) denies', () => {
+    let repo = fresh()
+    record(repo, { label: 'Unlock (Recommended)' })
+    allowed(guard(repo, unlock()))
+    repo = fresh()
+    record(repo, { label: ' unlock (RECOMMENDED) ' })
+    allowed(guard(repo, unlock()))
+    repo = fresh()
+    record(repo, { label: 'Keep the test (Recommended)' })
+    denied(guard(repo, unlock()))
+    repo = fresh()
+    record(repo, { label: 'Unlock (Recommended) now' })
+    denied(guard(repo, unlock()))
   })
   test('only the most recent answer counts', () => {
     const repo = fresh()
@@ -144,6 +170,51 @@ describe('unlock-approval recorder', () => {
     assert.equal(groups.length, 1)
     assert.equal(groups[0].matcher, 'AskUserQuestion')
     assert.deepEqual(groups[0].hooks, [{ type: 'command', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/hooks/scripts/unlock-approval.mjs'], timeout: 10 }])
+  })
+  test('is registered on PreToolUse for AskUserQuestion, in exec form, in its own group', () => {
+    const groups = JSON.parse(readFileSync(HOOKS, 'utf8')).hooks.PreToolUse.filter((g) => g.hooks.some((h) => h.args?.[0]?.endsWith('unlock-approval.mjs')))
+    assert.equal(groups.length, 1)
+    assert.equal(groups[0].matcher, 'AskUserQuestion')
+    assert.deepEqual(groups[0].hooks, [{ type: 'command', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/hooks/scripts/unlock-approval.mjs'], timeout: 10 }])
+  })
+  test('real flow: PreToolUse then PostToolUse then command-guard allows, once', () => {
+    const repo = fresh()
+    const p = pre(repo)
+    assert.deepEqual([p.status, p.stdout], [0, ''])
+    post(repo)
+    allowed(guard(repo, unlock()))
+    denied(guard(repo, unlock()))
+  })
+  test('a PostToolUse without a matching PreToolUse record records nothing', () => {
+    const repo = fresh()
+    post(repo)
+    denied(guard(repo, unlock()))
+    pre(repo, { id: 'other' })
+    post(repo, { id: 'toolu_1' })
+    denied(guard(repo, unlock()))
+  })
+  test('the clean-ask record is consumed by its PostToolUse and bound to the session', () => {
+    const repo = fresh()
+    pre(repo)
+    post(repo)
+    post(repo) // replayed: the clean ask is gone
+    allowed(guard(repo, unlock()))
+    const other = fresh()
+    pre(other, { session_id: 's2' })
+    post(other) // answered under another session than the one that was asked
+    denied(guard(other, unlock()))
+  })
+  test('a PreToolUse with pre-filled answers is denied and records nothing', () => {
+    const repo = fresh()
+    const input = preInput(repo)
+    input.tool_input.answers = { [question()]: 'Unlock' }
+    const r = run(input)
+    assert.equal(r.status, 0)
+    const out = JSON.parse(r.stdout).hookSpecificOutput
+    assert.equal(out.permissionDecision, 'deny')
+    assert.match(out.permissionDecisionReason, /answers/)
+    post(repo)
+    denied(guard(repo, unlock()))
   })
   test('writes nothing and exits 0 for another tool or unreadable input', () => {
     const repo = fresh()

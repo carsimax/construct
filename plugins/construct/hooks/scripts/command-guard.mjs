@@ -183,7 +183,7 @@ function unlockApproved(input, paths) {
     const root = repositoryRoot(input.cwd)
     const path = lockPath(root, paths[0])
     if (!path || !plainFile(root, paths[0])) return false
-    return takeApproval(root, (a) => a.session_id === input.session_id && Object.entries(a.answers).some(([q, v]) => quoted(q) !== null && lockPath(root, quoted(q)) === path && plainFile(root, quoted(q)) && [v].flat().some((l) => typeof l === 'string' && l.trim().toLowerCase() === 'unlock'))) !== null
+    return takeApproval(root, (a) => a.session_id === input.session_id && Object.entries(a.answers).some(([q, v]) => quoted(q) !== null && lockPath(root, quoted(q)) === path && plainFile(root, quoted(q)) && [v].flat().some((l) => typeof l === 'string' && /^unlock(\s+\(recommended\))?$/i.test(l.trim())))) !== null
   } catch {
     return false
   }

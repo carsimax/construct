@@ -156,6 +156,21 @@ export function writeApproval(root, record) {
   dropApprovals(dir, name)
 }
 
+// Clean asks: PreToolUse records the tool_use_id of an AskUserQuestion whose tool_input had no `answers`; the PostToolUse hook consumes it,
+// so only an answer the user gave to a call nobody pre-filled becomes an approval. Same session binding and 15-minute expiry as approvals.
+const askFile = (root, id) => join(storeDir(root), 'asks', `${approvalName(id)}.json`)
+export const writeCleanAsk = (root, record) => atomicWrite(askFile(root, record.tool_use_id), `${JSON.stringify(record)}\n`)
+export function takeCleanAsk(root, id, sessionId) {
+  const file = askFile(root, id)
+  try {
+    const r = readJson(file)
+    rmSync(file, { force: true })
+    return r.tool_use_id === id && r.session_id === sessionId && typeof r.at === 'number' && Date.now() - r.at <= APPROVAL_MAX_AGE_MS
+  } catch {
+    return false
+  }
+}
+
 // An approval is good for 15 minutes; expired and used records are deleted when read.
 export const APPROVAL_MAX_AGE_MS = 15 * 60 * 1000
 
