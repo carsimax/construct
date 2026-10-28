@@ -453,6 +453,16 @@ describe('oracle admission', () => {
     denied(launch(repo, env(), ORACLE, surfaces('tests/a.test.mjs')), /Spec/)
     denied(launch(repo, env(), ORACLE, 'no surfaces'), /edit surfaces/)
   })
+  test('an oracle needs a valid Spec line even when no feature document is unfinished', () => {
+    const repo = plain()
+    denied(launch(repo, env(), ORACLE, surfaces('tests/a.test.mjs')), /Spec/)
+    denied(launch(repo, env(), ORACLE, `Spec: odd/tasks/missing.md, T1\n${surfaces('tests/a.test.mjs')}`), /Spec/)
+  })
+  test('an oracle surface that is an existing directory is denied', () => {
+    const repo = withFeature('pending')
+    mkdirSync(join(repo, 'tests/dir'), { recursive: true })
+    denied(launch(repo, env(), ORACLE, spec('tests/dir')), /directory|file/)
+  })
   test('a worker with a glob is still admitted', () => {
     allowed(launch(withFeature('pending'), env(), WORKER, spec('tests/**/*.test.mjs')))
   })

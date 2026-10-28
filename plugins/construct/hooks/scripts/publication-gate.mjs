@@ -15,8 +15,8 @@
 //   - requiredLenses(items) (review-lenses.mjs) says which lenses must have approved the subject, the
 //     hash of the merge-base tree and the ref tree (review-store.mjs). A rejected subject stays
 //     rejected. A required lens without approval: deny, naming the lenses, the `Review subject:` line, and the construct:review skill;
-//   - a locked oracle (oracle-record.mjs) of a feature document that is unfinished at the ref must be unchanged
-//     there: a changed or missing one denies; no oracle is ever required;
+//   - a locked oracle (oracle-record.mjs) must be unchanged at the ref unless its feature document is finished on the default
+//     branch: a changed or missing one denies; no oracle is ever required;
 //   - an error while deciding denies with its reason, including one thrown after the command was
 //     found to be a publication. Only unreadable hook input, a command that is no publication, and a
 //     directory that is no git repository pass. The hook entry sets onFailure: "block" as well.
@@ -238,17 +238,22 @@ function projectFloor(root, commit) {
   })
 }
 
-// oracleDenial (S3, protect only): a locked oracle (oracle-record.mjs) whose feature document exists at the ref with an
-// unfinished task must be unchanged there. Returns the denial text, or null; a lock with no such document is ignored.
-function oracleDenial(root, sha) {
+// oracleDenial (S3, protect only): a locked oracle (oracle-record.mjs) must be unchanged at the ref. A lock applies to a ref
+// that carries the oracle (the path exists there, or its history ever had the locked blob at that path). It is released
+// only when its feature document exists at base (the default branch tip) with no unfinished task; the document at the ref is
+// never read, so one push cannot edit an oracle and finish or delete its document. A table the hook cannot read keeps the lock.
+// Returns the denial text, or null.
+function oracleDenial(root, base, sha) {
   const changed = []
   for (const lock of readOracles(root)) {
-    if (out(root, ['ls-tree', '--name-only', sha, '--', lock.feature]) === '') continue
-    // A table the hook cannot read keeps the lock: breaking the table must not release it.
-    const tasks = unfinishedRows(out(root, ['show', `${sha}:${lock.feature}`]).split('\n'))
-    if (tasks && tasks.rows.length === 0) continue
     const now = git(root, ['rev-parse', '--verify', '-q', `${sha}:${lock.path}`], { okStatuses: [0, 1] }).toString('utf8').trim()
-    if (now !== lock.blob) changed.push(`${lock.path} (${now === '' ? 'missing' : 'changed'} at the ref, locked for ${lock.feature})`)
+    if (now === lock.blob) continue
+    if (now === '' && git(root, ['log', '-1', '--format=%H', `--find-object=${lock.blob}`, sha, '--', lock.path], { okStatuses: [0, 128] }).toString('utf8').trim() === '') continue
+    if (out(root, ['ls-tree', '--name-only', base, '--', lock.feature]) !== '') {
+      const tasks = unfinishedRows(out(root, ['show', `${base}:${lock.feature}`]).split('\n'))
+      if (tasks && tasks.rows.length === 0) continue
+    }
+    changed.push(`${lock.path} (${now === '' ? 'missing' : 'changed'} at the ref, locked for ${lock.feature})`)
   }
   return changed.length === 0 ? null : changed.join('; ')
 }
@@ -308,7 +313,7 @@ function refVerdict(root, pub, base, ref) {
     return `publication-gate: ${pub.gate} is denied because ${short} is the default branch and no remote-tracking default branch exists to compare it with (fetch origin, or publish a branch), so its review state cannot be checked.`
   }
   const sha = out(root, ['rev-parse', '--verify', `${ref}^{commit}`])
-  const locked = oracleDenial(root, sha)
+  const locked = oracleDenial(root, base, sha)
   if (locked) return `publication-gate: ${pub.gate} is denied because ${short} changes an oracle that is locked by content hash: ${locked}. The oracle is locked while its feature has unfinished tasks: restore the file, or return \`oracle_conflict\` to the user (the spec and the test disagree) or ask them to unlock it.`
   const { mergeBase, items, required, floor, state } = reviewState(root, base, sha)
   if (required.length === 0) return null

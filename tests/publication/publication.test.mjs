@@ -873,9 +873,10 @@ describe('errors deny, aliases and shell bodies are seen', () => {
 describe('S3: a locked oracle is protected at the published ref', () => {
   const FEATURE = (status) => `# Feature\n\n## Tasks\n\n| ID | Specs | Task | Route | Risk | Status | Commit |\n|---|---|---|---|---|---|---|\n| T1 | S1 | work | worker | none | ${status} | - |\n\n## Log\n`
   const TEST_PATH = 'tests/a.test.mjs'
-  // lockedRepo: the oracle file is committed on main and locked; feat adds the feature document (and edits).
-  function lockedRepo({ status = 'pending', edit = {}, lockFeature = 'odd/tasks/f.md' } = {}) {
-    const repo = makeRepo({ [TEST_PATH]: 'one\n' })
+  // lockedRepo: main holds the oracle file and (unless mainDoc is null) the feature document, and the oracle is locked;
+  // feat adds the feature document (and edits). The lock is released only by the document's state on main.
+  function lockedRepo({ status = 'pending', mainDoc = FEATURE('pending'), edit = {}, lockFeature = 'odd/tasks/f.md' } = {}) {
+    const repo = makeRepo({ [TEST_PATH]: 'one\n', ...(mainDoc === null ? {} : { 'odd/tasks/f.md': mainDoc }) })
     writeOracle(repo, { path: TEST_PATH, blob: git(repo, 'hash-object', TEST_PATH).trim(), feature: lockFeature, task: 'T1', at: Date.now() })
     git(repo, 'checkout', '-q', '-b', 'feat')
     applyFiles(repo, { 'odd/tasks/f.md': FEATURE(status), 'src/app.js': 'x\n', ...edit })
@@ -904,15 +905,28 @@ describe('S3: a locked oracle is protected at the published ref', () => {
     git(repo, 'checkout', '-q', 'feat')
     lockDenied(hook('git push origin edited', repo))
   })
-  test('ignores the lock of a finished feature document', () => silent(hook('git push', lockedRepo({ status: 'done (ok)', edit: { [TEST_PATH]: 'two\n' } }))))
-  test('ignores the lock of a dropped feature document', () => silent(hook('git push', lockedRepo({ status: 'dropped', edit: { [TEST_PATH]: 'two\n' } }))))
+  const EDIT = { [TEST_PATH]: 'two\n' }
+  test('marking the tasks done in the same push does not release the lock', () => lockDenied(hook('git push', lockedRepo({ status: 'done (ok)', edit: EDIT })), /changed/))
+  test('dropping the tasks in the same push does not release the lock', () => lockDenied(hook('git push', lockedRepo({ status: 'dropped', edit: EDIT })), /changed/))
+  test('deleting the feature document in the same push does not release the lock', () => lockDenied(hook('git push', lockedRepo({ edit: { ...EDIT, 'odd/tasks/f.md': null } })), /changed/))
+  test('a feature document finished on main releases the lock', () => silent(hook('git push', lockedRepo({ mainDoc: FEATURE('done (ok)'), edit: EDIT }))))
+  test('a feature document absent on main keeps the lock', () => lockDenied(hook('git push', lockedRepo({ mainDoc: null, edit: EDIT })), /changed/))
   test('keeps the lock when the Tasks table cannot be read', () => {
-    const repo = lockedRepo({ edit: { [TEST_PATH]: 'two\n' } })
-    applyFiles(repo, { 'odd/tasks/f.md': '# Feature\n\nno table\n' })
-    commitAll(repo, 'break the table')
-    lockDenied(hook('git push', repo), /changed/)
+    lockDenied(hook('git push', lockedRepo({ mainDoc: '# Feature\n\nno table\n', edit: EDIT })), /changed/)
   })
-  test('ignores the lock of a feature document absent at the ref', () => silent(hook('git push', lockedRepo({ lockFeature: 'odd/tasks/gone.md', edit: { [TEST_PATH]: 'two\n' } }))))
+  test('a sibling branch that never had the oracle file is not denied', () => {
+    const repo = makeRepo({ 'odd/tasks/f.md': FEATURE('pending') })
+    git(repo, 'checkout', '-q', '-b', 'oracle-branch')
+    applyFiles(repo, { [TEST_PATH]: 'one\n' })
+    commitAll(repo, 'oracle')
+    writeOracle(repo, { path: TEST_PATH, blob: git(repo, 'hash-object', TEST_PATH).trim(), feature: 'odd/tasks/f.md', task: 'T1', at: Date.now() })
+    git(repo, 'checkout', '-q', 'main')
+    git(repo, 'checkout', '-q', '-b', 'sibling')
+    applyFiles(repo, { 'src/app.js': 'x\n' })
+    commitAll(repo, 'unit')
+    silent(hook('git push', repo))
+  })
+  test('a ref whose history had the locked blob and deleted the file is denied', () => lockDenied(hook('git push', lockedRepo({ edit: { [TEST_PATH]: null } })), /missing/))
   test('a branch with no oracle records behaves as before', () => {
     const repo = makeRepo({ [TEST_PATH]: 'one\n' })
     git(repo, 'checkout', '-q', '-b', 'feat')

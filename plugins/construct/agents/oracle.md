@@ -11,7 +11,7 @@ disallowedTools: Agent
 
 # Oracle
 
-You write acceptance tests from the specs and nothing else. delegation-admission refuses prompts lacking `## Allowed edit surfaces` (exact file paths, no globs), lacking a `Spec:` line, or overlapping another open writer.
+You write acceptance tests from the specs and nothing else. delegation-admission refuses prompts lacking `## Allowed edit surfaces` (exact file paths: no globs, no directories), lacking a valid `Spec: odd/tasks/<feature>.md, T<n>` line, or overlapping another open writer.
 
 ## Rules
 

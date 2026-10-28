@@ -4,7 +4,7 @@
 // The gate (publication-gate.mjs) denies publishing when a locked file differs at the ref. Surfaces and Spec
 // line are read from the agent's prompt (the first user row of its transcript), not from the admission
 // record: delegation-admission's own stop hook runs in parallel and may already have removed that record.
-// A later record for a path replaces the earlier one. Fails open: no output, exit 0.
+// An existing record for a path is kept untouched (release is a human unlock, not a new oracle run). Fails open: no output, exit 0.
 // Usage: node oracle-record.mjs   (hook JSON on stdin)
 import { lstatSync } from 'node:fs'
 import { join } from 'node:path'
@@ -12,7 +12,7 @@ import { firstUserPrompt, parseSurfaces } from './delegation-admission.mjs'
 import { git, repositoryRoot } from './git-tree.mjs'
 import { readInput } from './hook-io.mjs'
 import { qualified } from './roles.mjs'
-import { writeOracle } from './review-store.mjs'
+import { readOracles, writeOracle } from './review-store.mjs'
 
 const SPEC = /^[ \t]*(?:[-*+][ \t]+)?Spec:[ \t]*`?(odd\/tasks\/[^\s,`()]+\.md)`?[^\n]*?\b(T\d+)\b/m
 
@@ -24,7 +24,9 @@ function main() {
   const { paths } = prompt ? parseSurfaces(prompt) : {}
   if (!spec || !paths) return
   const root = repositoryRoot(input.cwd)
+  const locked = new Set(readOracles(root).map((o) => o.path))
   for (const path of paths) {
+    if (locked.has(path)) continue
     try {
       if (!lstatSync(join(root, path)).isFile()) continue
     } catch {

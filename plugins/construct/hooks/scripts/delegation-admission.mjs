@@ -552,7 +552,12 @@ function admit(input) {
   }
   const cwd = typeof input.cwd === 'string' && input.cwd ? input.cwd : process.cwd()
   const root = projectRoot(cwd)
-  if (hasUnfinishedDocument(root) && !namesFeatureDocument(prompt, root)) {
+  // The oracle record hook reads the Spec line, so an oracle needs one whether or not a feature document is unfinished.
+  if (type === ORACLE && parsed.paths.some((path) => { try { return lstatSync(resolve(root, path)).isDirectory() } catch { return false } })) {
+    deny(`${type} edit surfaces must be file paths, not directories: each file is locked by its content hash. List every test file by its full path.`)
+    return
+  }
+  if ((type === ORACLE || hasUnfinishedDocument(root)) && !namesFeatureDocument(prompt, root)) {
     deny(`${type} needs a Spec line: no \`Spec:\` line in the prompt names an existing regular file under odd/tasks/. ${SPEC_FORM}`)
     return
   }

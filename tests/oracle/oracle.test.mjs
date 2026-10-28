@@ -38,15 +38,16 @@ describe('oracle-record', () => {
     }
   })
 
-  test('a later record for the same path replaces the earlier one', () => {
+  test('a later record for the same path leaves the existing lock untouched', () => {
     const repo = makeRepo({})
     write(repo, 'tests/a.test.mjs', 'one\n')
     stop(repo, { text: prompt('tests/a.test.mjs') })
+    const first = readOracles(repo)[0]
     write(repo, 'tests/a.test.mjs', 'two\n')
-    stop(repo, { text: prompt('tests/a.test.mjs') })
-    const records = readOracles(repo)
-    assert.equal(records.length, 1)
-    assert.equal(records[0].blob, git(repo, 'hash-object', 'tests/a.test.mjs').trim())
+    stop(repo, { text: prompt('tests/a.test.mjs').replace('feat.md, T1', 'other.md, T2') })
+    assert.deepEqual(readOracles(repo), [first])
+    assert.equal(first.feature, 'odd/tasks/feat.md')
+    assert.equal(first.task, 'T1')
   })
 
   test('another agent type records nothing', () => {
