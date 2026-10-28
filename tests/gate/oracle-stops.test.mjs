@@ -251,7 +251,7 @@ describe('construct-gate oracle', () => {
 describe('command-guard: oracle unlock', () => {
   const guard = (command) => run(S('command-guard.mjs'), { session_id: 's1', cwd: process.cwd(), hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command } })
   test('denies construct-gate oracle unlock however it is launched', () => {
-    for (const c of ['construct-gate oracle unlock tests/a.test.mjs', '/x/bin/construct-gate oracle unlock a', 'node /x/bin/construct-gate oracle unlock a', 'cd x && construct-gate oracle unlock a', 'sh -c "construct-gate oracle unlock a"', 'node --no-warnings /x/bin/construct-gate oracle unlock a', 'env construct-gate oracle unlock a', 'command construct-gate oracle unlock a', 'xargs construct-gate oracle unlock a', 'npx construct-gate oracle unlock a']) denied(guard(c), /unlock/, /user/)
+    for (const c of ['construct-gate oracle unlock tests/a.test.mjs', '/x/bin/construct-gate oracle unlock a', 'node /x/bin/construct-gate oracle unlock a', 'cd x && construct-gate oracle unlock a', 'sh -c "construct-gate oracle unlock a"', 'node --no-warnings /x/bin/construct-gate oracle unlock a', 'env construct-gate oracle unlock a', 'command construct-gate oracle unlock a', 'xargs construct-gate oracle unlock a', 'npx construct-gate oracle unlock a', 'xargs -I construct-gate construct-gate oracle unlock a']) denied(guard(c), /unlock/, /user/)
   })
   test('oracle list, status and unrelated commands stay allowed', () => {
     for (const c of ['construct-gate oracle list', 'construct-gate status', 'echo oracle unlock', 'ls']) silent(guard(c))
