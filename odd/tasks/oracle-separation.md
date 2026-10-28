@@ -17,7 +17,7 @@ Objective: for risky work, acceptance tests are written from the specs by an ora
 
 | ID | Specs | Task | Route | Risk | Status | Commit |
 |---|---|---|---|---|---|---|
-| T1 | S1, S2, S3 | Oracle agent and role, oracle-record hook, store area, gate lock check (PR 1) | worker | 2, 3 | pending | — |
+| T1 | S1, S2, S3 | Oracle agent and role, oracle-record hook, store area, gate lock check (PR 1) | worker | 2, 3 | done | b2a71cb |
 | T2 | S4, S5 | surface-guard and delegation-admission stops, `construct-gate oracle` CLI, command-guard deny (PR 2) | worker | 2, 3 | pending | — |
 | T3 | S7 | review-context passes specs and locked oracles; skill-context lists locks (PR 3) | worker | 3 | pending | — |
 | T4 | S6, S8 | worker `oracle_conflict`, workflow/delegation/review skills, contracts, eval case, README/METHODOLOGY/CHANGELOG (PR 4) | worker | 3 | pending | — |
@@ -26,4 +26,4 @@ Objective: for risky work, acceptance tests are written from the specs by an ora
 
 - **L1 (2026-10-28):** "Vamos con ello analiza bien la mejor estrategia y dime bien qué se agrega ejemplo (skills, agentes,hooks,etc)"
 - **L2 (2026-10-28):** "1. Solo proteger 2. Dejarlo configurable pero analizar del modelo por defecto entre sonnet haiku o opus 5.5 con nivel de pensamiento medio". Default chosen: opus, medium. Worker defaults to sonnet, so an opus oracle is a different model from the writer (judges favor their own model's output); a wrong locked test costs a user interruption per conflict, so test quality outweighs cost; the oracle runs once per risky task with a small output; haiku is too weak at turning specs into deterministic tests. Same choice as the other checking roles (verifier, review-risk).
-- Next step: T1 through construct:worker.
+- Next step: review T1 (lenses for items 2, 3), then T2.
