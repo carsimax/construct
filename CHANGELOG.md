@@ -4,6 +4,8 @@ Notable changes per release. Versions follow [Semantic Versioning](https://semve
 
 ## Unreleased
 
+## 10.0.0
+
 - **Breaking:** the docked panel is replaced by a band above the prompt: the phase, the active feature and its tasks, the gate, and the running agents. The model, effort, branch, changed files, context, and plan limits are no longer drawn; your status line shows them.
 - **Breaking:** the `panel_open_on_start` option and `/construct close` are removed. `/construct` now prints the setup report, like `/construct doctor`.
 - `/construct doctor` no longer checks Engram; the installer already requires it.
