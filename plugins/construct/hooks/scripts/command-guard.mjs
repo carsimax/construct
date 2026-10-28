@@ -162,19 +162,19 @@ function hitsIn(command, depth = 0) {
   return found
 }
 
-let command = ''
 try {
   const input = readInput()
-  command = input?.tool_input?.command
+  const command = input?.tool_input?.command
   if (input?.tool_name === 'Bash' && typeof command === 'string' && command !== '') {
     const found = hitsIn(command)
     const chosen = found.find((h) => h.decision === 'deny') ?? found[0]
     if (chosen && (chosen.decision === 'deny' || asksOn())) process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: chosen.decision, permissionDecisionReason: chosen.reason } })}\n`)
   }
 } catch (error) {
-  // Fail open, except for a substitution that cannot be delimited in a git command: it can hide a bypass.
-  if (error instanceof UndelimitedSubstitution && /\bgit\b/.test(command)) {
-    process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: 'command-guard: a command substitution in this git command could not be delimited, so a verifier bypass cannot be ruled out. Close every $( with its ) or split the command.' } })}\n`)
+  // Fail open, except for a substitution that cannot be delimited: it can hide any command after it,
+  // however that command is spelled, so it is denied whatever the text says.
+  if (error instanceof UndelimitedSubstitution) {
+    process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: 'command-guard: a quoted command substitution could not be delimited (a `case`, or an unmatched `(`, inside "$( … )"), so a verifier bypass after it cannot be ruled out. Move that part into its own command or a script.' } })}\n`)
   }
 }
 process.exitCode = 0

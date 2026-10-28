@@ -344,6 +344,7 @@ describe('shell wrappers are unwrapped by shell-words', () => {
       `echo "$(echo case 'a"b')"; git push origin feat`,
       `echo "$(grep -i case 'it"s' f)" && git push origin feat`,
       `git commit -m "$(echo use case 'it"s')" ; git push origin feat`,
+    `echo "$(echo case 'a"b')"; g"i"t pu"s"h origin feat`,
       'echo "$(cat <<\\EOF\n)\nEOF\ngit push origin feat)"',
       'echo "$(cat <<EOF\n)\nEOF\ngit push origin feat)"',
   ]
