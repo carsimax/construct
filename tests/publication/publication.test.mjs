@@ -391,7 +391,14 @@ describe('the risk floor', () => {
     }
   })
 
+  test('S1: the migration push keeps the default branch odd/risk-paths floor, so adding .vault/ cannot lower it (L7)', () => {
+    const r = hook('git push', floorRepo({ 'odd/risk-paths': 'src/api/** 2\n' }, { '.vault/specs/README.md': '# Living spec\n', 'src/api/x.js': 'x\n' }))
+    denied(r)
+    assert.match(r.reason, /src\/api\/x\.js/)
+  })
+
   test('S1: odd/ next to .vault/ is an unused archive and is not read', () => {
+    // a migrated default branch: odd/ next to .vault/ is never read
     silent(hook('git push', floorRepo({ 'odd/risk-paths': 'src/api/** 3\n', '.vault/specs/README.md': '# Living spec\n' }, { 'src/api/x.js': 'x\n' })))
   })
 
