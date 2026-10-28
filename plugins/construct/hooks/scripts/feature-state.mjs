@@ -101,7 +101,8 @@ function specBullets(lines) {
 // shortcut: the question ends at the end of its bullet line, upgrade if a spec spans lines.
 export function openClarifications(lines) {
   return specBullets(lines).flatMap(([id, text]) => {
-    const m = /NEEDS CLARIFICATION:\s*(.*)$/.exec(text)
+    // Inline code (`NEEDS CLARIFICATION: <question>`) names the marker; only plain text opens a clarification.
+    const m = /NEEDS CLARIFICATION:\s*(.*)$/.exec(text.replace(/`[^`]*`/g, ''))
     return m ? [{ id, question: m[1].trim() }] : []
   })
 }
@@ -146,8 +147,9 @@ function livingSpecLines(root) {
       const table = unfinishedRows(lines)
       const feature = basename(name, '.md')
       if (!table || table.rows.length > 0 || !lines.some((l) => /^##\s+Specs\s*$/.test(l)) || headings.has(feature)) continue
-      const l1 = /\*\*L1 \((\d{4}-\d{2}-\d{2})\)/.exec(lines.join('\n'))?.[1]
-      if (started && l1 && l1 < started) continue
+      // `**L1 (2026-10-22, user):**` counts; a document with no L1 date predates the rule and is skipped.
+      const l1 = /\*\*L1 \((\d{4}-\d{2}-\d{2})[^)]*\)/.exec(lines.join('\n'))?.[1]
+      if (started && (!l1 || l1 < started)) continue
       missing.push(feature)
     } catch {
       // unreadable document: skip it
