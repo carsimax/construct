@@ -30,6 +30,7 @@
 // built indirectly are not caught. Upgrade if one of them shows up in real use.
 // Usage: node publication-gate.mjs   (hook JSON on stdin)
 import { realpathSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { defaultBranch } from './delivery-signals.mjs'
@@ -298,12 +299,14 @@ export function activeLocks(root, { verifyRemote = false } = {}) {
 // remoteTip: true when the release ref's sha equals the tip of the branch it tracks on url (one ls-remote, with a timeout); false on any failure.
 const remoteTip = (root, release, url) => {
   try {
-    if (!release) return false
+    // Run outside the repository so its config (url.*.insteadOf, core.sshCommand) cannot redirect the check.
+    // A url that reads as an option (--upload-pack=...) would run a command and fall back to the configured remote.
+    if (!release || typeof url !== 'string' || url.startsWith('-')) return false
     const target = release === 'refs/remotes/origin/HEAD' ? git(root, ['symbolic-ref', '-q', release]).toString('utf8').trim() : release
     const branch = target.replace(/^refs\/remotes\/origin\//, '')
     if (branch === target || branch === '') return false
     const sha = git(root, ['rev-parse', '--verify', '-q', `${release}^{commit}`]).toString('utf8').trim()
-    const line = git(root, ['ls-remote', url, `refs/heads/${branch}`], { timeout: 15000 }).toString('utf8').trim().split('\n')[0]
+    const line = git(tmpdir(), ['ls-remote', url, `refs/heads/${branch}`], { timeout: 15000 }).toString('utf8').trim().split('\n')[0]
     return sha !== '' && line.split('\t')[0] === sha
   } catch {
     return false

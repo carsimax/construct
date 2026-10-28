@@ -2,7 +2,7 @@
 // delegation-admission), the `construct-gate oracle` CLI, the command-guard deny, and the fail-closed record rules.
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { mkdirSync, readdirSync, readFileSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, test } from 'node:test'
 import { applyFiles, commitAll, git, makeRepo, scratchDir, write } from '../helpers/repo.mjs'
@@ -358,6 +358,14 @@ describe('publication-gate: the release ref is verified against the recorded rem
     git(repo, 'config', 'remote.origin.url', '.')
     denied(push(repo), /changed/)
   })
+  test('repository config cannot redirect the recorded remote (url.insteadOf)', () => {
+    const repo = setup()
+    git(repo, 'update-ref', 'refs/remotes/origin/main', 'side')
+    git(repo, 'branch', '-f', 'main', 'side')
+    const url = readOracles(repo)[0].remote
+    git(repo, 'config', `url.${repo}.insteadOf`, url)
+    denied(push(repo), /changed/)
+  })
   test('a feature genuinely finished on origin and fetched releases the lock', () => {
     const repo = setup()
     git(repo, 'push', '-q', 'origin', 'side:main')
@@ -370,6 +378,15 @@ describe('publication-gate: the release ref is verified against the recorded rem
     git(repo, 'fetch', '-q', 'origin')
     for (const lock of readOracles(repo)) writeOracle(repo, { ...lock, remote: join(scratchDir('odd-stops-none-'), 'missing.git') })
     denied(push(repo), /changed/)
+  })
+  test('a recorded remote that reads as an option is never passed to git, and keeps the lock', () => {
+    const repo = setup()
+    git(repo, 'push', '-q', 'origin', 'side:main')
+    git(repo, 'fetch', '-q', 'origin')
+    const marker = join(scratchDir('odd-stops-opt-'), 'ran')
+    for (const lock of readOracles(repo)) writeOracle(repo, { ...lock, remote: `--upload-pack=touch ${marker}` })
+    denied(push(repo), /changed/)
+    assert.equal(existsSync(marker), false)
   })
   test('a lock without a recorded remote is kept', () => {
     const repo = setup()
