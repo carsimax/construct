@@ -3,7 +3,7 @@
   "displayName": "Construct",
   "version": "12.3.0",
   "license": "MIT",
-  "description": "Organic Driven Development orchestration, review lenses, and delivery skills for Claude Code",
+  "description": "Agent Driven Development orchestration, review lenses, and delivery skills for Claude Code",
   "author": {
     "name": "Maximiliano Carsi"
   },
@@ -333,7 +333,7 @@
     "inline_edit_max_lines": {
       "type": "number",
       "title": "Inline edit limit (lines)",
-      "description": "Let the main thread edit repository files directly when one Write, Edit, MultiEdit, or NotebookEdit call changes at most this many lines; surface-guard sends bigger changes to construct:worker. 0 restores the old rule: the main thread writes only odd/tasks/",
+      "description": "Let the main thread edit repository files directly when one Write, Edit, MultiEdit, or NotebookEdit call changes at most this many lines; surface-guard sends bigger changes to construct:worker. 0 restores the old rule: the main thread writes only .vault/tasks/",
       "default": 150
     },
     "iteration_cap": {

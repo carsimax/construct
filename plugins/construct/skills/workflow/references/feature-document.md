@@ -1,6 +1,6 @@
 # Feature document
 
-Path `odd/tasks/<feature>.md`, created before the first source write of large work. The feature-state hook re-injects its unfinished tasks after compaction or resume; the publication gate reads its Risk cells. Fixed order:
+Path `.vault/tasks/<feature>.md`, created before the first source write of large work. The feature-state hook re-injects its unfinished tasks after compaction or resume; the publication gate reads its Risk cells. Fixed order:
 
 ```markdown
 # <Feature>
@@ -34,4 +34,4 @@ Objective: <one sentence>. Branch: <branch>. Baseline: <commit>. Test runner: <c
 - Record the baseline commit in the header before the first change; the verifier's baseline comes from it.
 - An `S#` that cannot be fully specified carries `NEEDS CLARIFICATION: <question>`; the gate denies a `done` task naming it. Ask the user, record the answer in the Log, then rewrite the `S#` without the marker.
 - Quote rule: each `S#` quotes its Log entry verbatim in double quotes, or says `Assumption`; the hook warns on an `S#` with neither.
-- Feature documents are never deleted. When all tasks are finished, add the `S#` to `odd/spec.md` under `## <feature>`.
+- Feature documents are never deleted. When all tasks are finished, write the `S#` to `.vault/specs/<feature>.md`.

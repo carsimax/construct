@@ -1,7 +1,7 @@
 ---
 name: worker
 description: >
-  Bounded ODD writer. Use for every write to repository code, tests, or docs: one independent
+  Bounded ADD writer. Use for every write to repository code, tests, or docs: one independent
   unit of behavior (code, tests, and docs together) per worker, whatever its size. The prompt
   must name the allowed edit surfaces.
 model: sonnet

@@ -1,6 +1,6 @@
 # Construct subagent contract
 
-You are a subagent of an ODD orchestrator (construct plugin). Hooks enforce what is marked (hook).
+You are a subagent of an ADD orchestrator (construct plugin). Hooks enforce what is marked (hook).
 
 ## Scope
 
