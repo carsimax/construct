@@ -395,28 +395,45 @@ describe('ranges, deleted paths, and verdict records (T8)', () => {
     assert.match(prompt, /export const c = 1/)
   })
 
-  test('a vendored path stays in the manifest and the name-status, its content is omitted', () => {
+  const PINNED = 'plugins/construct/hooks/vendor/mvdan-sh.cjs'
+  const OMITTED = /content omitted: it matches the sha256 pinned in review-context\.mjs/
+  const vendorCase = (files) => {
     const repo = makeRepo({ 'src/a.js': 'export const a = 1\n' })
-    applyFiles(repo, { 'plugins/construct/hooks/vendor/lib.cjs': 'VENDORED_BODY\n', 'src/a.js': 'export const a = 2\n' })
+    applyFiles(repo, { 'src/a.js': 'export const a = 2\n', ...files })
     commitAll(repo, 'vendor')
     const r = hook(CONTEXT_HOOK, spawnInput(repo, 'Review subject: HEAD~1'))
-    const prompt = r.json.hookSpecificOutput.updatedInput.prompt
-    assert.ok(bindingOf(r).artifact_subject.changed_path_manifest.includes('plugins/construct/hooks/vendor/lib.cjs'))
-    assert.match(prompt, /^A\tplugins\/construct\/hooks\/vendor\/lib\.cjs$/m)
-    assert.match(prompt, /^1\t0\tplugins\/construct\/hooks\/vendor\/lib\.cjs$/m)
-    assert.match(prompt, /vendored; content omitted; its sha256 is pinned by tests\/band-license\.test\.mjs/)
-    assert.doesNotMatch(prompt, /VENDORED_BODY/)
+    return { r, prompt: r.json.hookSpecificOutput.updatedInput.prompt }
+  }
+
+  test('the allowlisted vendored file with the pinned content stays in the manifest, its content is omitted', () => {
+    const { r, prompt } = vendorCase({ [PINNED]: readFileSync(join(PLUGIN, 'hooks/vendor/mvdan-sh.cjs'), 'utf8') })
+    assert.ok(bindingOf(r).artifact_subject.changed_path_manifest.includes(PINNED))
+    assert.match(prompt, /^A\tplugins\/construct\/hooks\/vendor\/mvdan-sh\.cjs$/m)
+    assert.match(prompt, OMITTED)
+    assert.doesNotMatch(prompt, /^\+\/\*\*|^diff --git a\/plugins\/construct\/hooks\/vendor/m)
     assert.match(prompt, /export const a = 2/)
   })
 
-  test('only the exact vendor directory is omitted: other paths containing vendor keep their diff', () => {
+  test('the allowlisted path with different content gets its full diff', () => {
+    const { prompt } = vendorCase({ [PINNED]: 'TAMPERED_BODY\n' })
+    assert.match(prompt, /\+TAMPERED_BODY/)
+    assert.doesNotMatch(prompt, OMITTED)
+  })
+
+  test('a new file under vendor/ gets its full diff', () => {
+    const { prompt } = vendorCase({ 'plugins/construct/hooks/vendor/new.cjs': 'NEW_VENDOR_BODY\n' })
+    assert.match(prompt, /\+NEW_VENDOR_BODY/)
+    assert.doesNotMatch(prompt, OMITTED)
+  })
+
+  test('near-miss paths keep their diff', () => {
     const repo = makeRepo({ 'src/a.js': 'export const a = 1\n' })
     const paths = ['plugins/construct/hooks/scripts/vendor-x.mjs', 'tests/hooks/vendor/a.mjs', 'plugins/construct/hooks/vendorx/b.mjs', 'plugins/construct/hooks/scripts/vendor/c.mjs']
     applyFiles(repo, Object.fromEntries(paths.map((p, i) => [p, `KEEP_BODY_${i}\n`])))
     commitAll(repo, 'near misses')
     const prompt = hook(CONTEXT_HOOK, spawnInput(repo, 'Review subject: HEAD~1')).json.hookSpecificOutput.updatedInput.prompt
     paths.forEach((_, i) => assert.match(prompt, new RegExp(`\\+KEEP_BODY_${i}`)))
-    assert.doesNotMatch(prompt, /vendored; content omitted/)
+    assert.doesNotMatch(prompt, OMITTED)
   })
 
   test('a lens can approve a context with a deleted path: the manifest still matches', () => {
