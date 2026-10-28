@@ -34,6 +34,27 @@ Verifier strength: <strong|weak|none>
 Close with `## Key Learnings:`.
 ```
 
+## Oracle
+
+```markdown
+Spec: odd/tasks/<feature>.md, T<n> (covers S<n>)
+
+Write the acceptance tests for S<n> from the spec text alone. Show them failing against the baseline. Do not implement.
+
+## Allowed edit surfaces
+<exact-test-file-path>
+<another-exact-test-file-path>
+
+## Memory
+<search hits, or omit>
+
+## Verification
+<test command>: RED, failing for the spec's reason
+Verifier strength: strong
+
+Close with `## Key Learnings:`.
+```
+
 ## Explorer
 
 ```markdown

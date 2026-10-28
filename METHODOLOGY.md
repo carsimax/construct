@@ -42,7 +42,7 @@ One agent writes. Others read, test, and review. For risky work, acceptance test
 - **Why:** writers grading their own work is the weakest form of verification, and agents rewrite tests to pass.
 - **Taken from:** TDFlow, AgentCoder, Cognition, Anthropic, the MAST failure study, ODD lenses and blind dual review.
 - **Evidence:** measured. Human-written tests 94.3% vs self-written 69.8% (TDFlow). Agents edit tests to pass impossible tasks 39–76% of the time; locked tests bring that near zero (ImpossibleBench). Models do not self-correct reasoning without outside feedback. Judges favor their own outputs and those of their model family.
-- **Construct today:** single writer and write surfaces are enforced by hooks; review lenses run on hook-built evidence; oracle separation does not exist; the blind judges default to two models of one family.
+- **Construct today:** single writer and write surfaces are enforced by hooks; review lenses run on hook-built evidence; oracle separation exists: the `construct:oracle` agent writes the acceptance tests from the specs and shows them failing, hooks lock their content hashes, stop edits early (surface-guard, delegation-admission), and the publication gate denies a ref that changes one until the feature is finished on the remote default branch (verified against the remote), a worker can only flag a conflict, and the lenses receive the specs. Accepted limits: this is a discipline layer against a same-user agent, not a boundary; the remote URL is trusted on first use, when the oracle stops; the blind judges are opus and sonnet, two models of one vendor.
 
 ### 5. Declared risk with a mechanical floor, publication by evidence
 
