@@ -80,6 +80,72 @@ describe('snapshot budget', () => {
     assert.equal(record(e).noticed, true)
   })
 
+  // Rewrites the record's slow_at (or removes it) to stand for time passing.
+  const setSlowAt = (e, slowAt) => {
+    const file = join(e.CLAUDE_PLUGIN_DATA, 'risk-line', 's1.json')
+    const r = record(e)
+    if (slowAt === undefined) delete r.slow_at
+    else r.slow_at = slowAt
+    writeFileSync(file, JSON.stringify(r))
+  }
+  const HOUR = 3600 * 1000
+
+  test('a slow repository retries the full hash after the window and clears slow on success', () => {
+    const repo = makeRepo({ 'src/a.js': 'export const a = 1\n' })
+    const e = slow(env())
+    run('mark', repo, e)
+    assert.equal(typeof record(e).slow_at, 'number')
+    setSlowAt(e, Date.now() - 2 * HOUR)
+    const r = run('mark', repo, { ...e, CONSTRUCT_SNAPSHOT_BUDGET_MS: '60000' }, { extra: { prompt_id: 'p2' } })
+    assert.equal(r.stdout, '')
+    assert.equal(record(e).slow, undefined)
+    assert.equal(record(e).slow_at, undefined)
+    assert.equal(record(e).noticed, true)
+  })
+
+  test('a slow repository inside the window does not retry and keeps slow_at', () => {
+    const repo = makeRepo({ 'src/a.js': 'export const a = 1\n' })
+    const e = slow(env())
+    run('mark', repo, e)
+    const recent = Date.now() - 1000
+    setSlowAt(e, recent)
+    silent(run('mark', repo, { ...e, CONSTRUCT_SNAPSHOT_BUDGET_MS: '60000' }, { extra: { prompt_id: 'p2' } }))
+    assert.equal(record(e).slow, realpathSync(repo))
+    assert.equal(record(e).slow_at, recent)
+  })
+
+  test('a retry that is still slow refreshes slow_at and does not announce again', () => {
+    const repo = makeRepo({ 'src/a.js': 'export const a = 1\n' })
+    const e = slow(env())
+    run('mark', repo, e)
+    const old = Date.now() - 2 * HOUR
+    setSlowAt(e, old)
+    silent(run('mark', repo, e, { extra: { prompt_id: 'p2' } }))
+    assert.equal(record(e).slow, realpathSync(repo))
+    assert.ok(record(e).slow_at > old + HOUR)
+  })
+
+  test('a 12.0.2 record with slow and no slow_at retries', () => {
+    const repo = makeRepo({ 'src/a.js': 'export const a = 1\n' })
+    const e = slow(env())
+    run('mark', repo, e)
+    setSlowAt(e, undefined)
+    silent(run('mark', repo, { ...e, CONSTRUCT_SNAPSHOT_BUDGET_MS: '60000' }, { extra: { prompt_id: 'p2' } }))
+    assert.equal(record(e).slow, undefined)
+  })
+
+  test('the check path clears slow after a successful retry', () => {
+    const { repo, e } = changed()
+    const s = slow(e)
+    check(repo, s, 'Risk: none')
+    setSlowAt(e, Date.now() - 2 * HOUR)
+    // blocked is spent by the first check; a fresh mark resets nothing here, so write the record the check reads
+    const file = join(e.CLAUDE_PLUGIN_DATA, 'risk-line', 's1.json')
+    writeFileSync(file, JSON.stringify({ ...record(e), blocked: false }))
+    check(repo, { ...e, CONSTRUCT_SNAPSHOT_BUDGET_MS: '60000' }, 'Risk: none')
+    assert.equal(record(e).slow, undefined)
+  })
+
   test('a repository remembered as slow skips the full hash', () => {
     const repo = makeRepo({ 'src/a.js': 'export const a = 1\n' })
     // The rewrite's ctime only differs when it crosses a second boundary; ignore ctime so the stat cache always matches.

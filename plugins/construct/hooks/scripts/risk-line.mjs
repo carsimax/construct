@@ -37,14 +37,21 @@ const RISK_LINE = /^[ \t]*(?:(?:[-*+]|\d+[.)])[ \t]+)?[*_`]*Risk[*_`]*:[*_`]*[ \
 const NOTICE =
   'Construct: this repository is too large to hash fully within the time budget, so the Risk-line gate now trusts the git index stat cache and can miss a same-size rewrite whose mtime was restored.'
 
+// A repository marked slow skips the full hash for this long, then the next snapshot tries it again.
+const SLOW_RETRY_MS = 60 * 60 * 1000
+
 // snapshot freezes the working tree, going straight to the index-seeded one for a repository the record
-// marked slow, and returns the record fields to keep plus the notice to show (once per session).
-function snapshot(freezeWorkingTree, root, record) {
+// marked slow until SLOW_RETRY_MS passed (a record without slow_at, from 12.0.2, is due), and returns the
+// record fields to keep, the notice to show (once per session) and whether a retry ran.
+function snapshot(freezeWorkingTree, root, record, now = Date.now()) {
   const slow = record?.slow === root
-  const frozen = freezeWorkingTree(root, { indexSeeded: slow })
+  const retry = slow && !(now - record.slow_at < SLOW_RETRY_MS)
+  const frozen = freezeWorkingTree(root, { indexSeeded: slow && !retry })
   const noticed = record?.noticed === true
-  const keep = frozen.degraded ? { slow: root, noticed: true } : { ...(record?.slow ? { slow: record.slow } : {}), ...(noticed ? { noticed } : {}) }
-  return { frozen, keep, notice: frozen.degraded && !noticed ? NOTICE : null }
+  const other = record?.slow && !slow ? { slow: record.slow, ...(record.slow_at ? { slow_at: record.slow_at } : {}) } : {}
+  const slowKeep = frozen.degraded ? { slow: root, slow_at: retry || !slow ? now : record.slow_at } : other
+  const keep = { ...slowKeep, ...(frozen.degraded || noticed ? { noticed: true } : {}) }
+  return { frozen, keep, notice: frozen.degraded && !noticed ? NOTICE : null, retried: retry }
 }
 
 const recordFile = (session) => {
@@ -143,14 +150,17 @@ async function main() {
     return
   }
 
-  const { frozen, keep, notice } = snapshot(freezeWorkingTree, root, record)
+  const { frozen, keep, notice, retried } = snapshot(freezeWorkingTree, root, record)
   const { candidateTree } = frozen
   const notify = () => {
     if (notice) process.stdout.write(`${JSON.stringify({ systemMessage: notice })}\n`)
   }
   // A record from another repository, or an old one without a root, is not this turn's.
   if (record.root !== root) return
-  if (notice) write({ ...record, ...keep })
+  // slow and slow_at come only from keep, so a successful retry clears them in every later write.
+  const { slow: _slow, slow_at: _slowAt, ...rest } = record
+  const current = { ...rest, ...keep }
+  if (notice || retried) write(current)
   if (record.tree === candidateTree) return notify()
   const paths = git(root, ['diff', '--no-renames', '--name-only', '-z', record.tree, candidateTree])
     .toString('utf8')
@@ -167,7 +177,7 @@ async function main() {
   if (!riskMissing && hits.length === 0) return notify()
 
   // One block per turn: the next Stop of this turn finds the record spent.
-  write({ ...record, ...keep, blocked: true })
+  write({ ...current, blocked: true })
   const list = (items) => items.slice(0, MAX_PATHS).join(', ') + (items.length > MAX_PATHS ? `, and ${items.length - MAX_PATHS} more` : '')
   const reasons = []
   if (riskMissing) {

@@ -45,6 +45,22 @@ describe('git-tree', () => {
     }
   })
 
+  test('freezeWorkingTree throws a timed-out error when the HEAD-seeded fallback exceeds its budget', () => {
+    const repo = makeRepo({ 'a.txt': 'a\n' })
+    // an assume-unchanged entry forces the fallback to seed from HEAD instead of the real index
+    sh(repo, 'update-index', '--assume-unchanged', 'a.txt')
+    const saved = process.env.TMPDIR
+    process.env.TMPDIR = scratchDir('odd-git-tree-tmp-')
+    try {
+      assert.throws(() => freezeWorkingTree(repo, { budgetMs: 1, fallbackBudgetMs: 1 }), (error) => error.name === 'GitError' && error.timedOut === true)
+      assert.deepEqual(readdirSync(tmpdir()).filter((n) => n.startsWith('construct-index-')), [])
+      assert.equal(freezeWorkingTree(repo, { budgetMs: 1 }).degraded, true)
+    } finally {
+      if (saved === undefined) delete process.env.TMPDIR
+      else process.env.TMPDIR = saved
+    }
+  })
+
   test('freezeWorkingTree gives the right tree with a split index', () => {
     const repo = makeRepo({ 'a.txt': 'a\n', 'b.txt': 'b\n' })
     sh(repo, 'config', 'core.splitIndex', 'true')
