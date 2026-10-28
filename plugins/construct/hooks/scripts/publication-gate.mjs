@@ -219,14 +219,16 @@ function globToRegExp(glob) {
     else if (c === '?') re += '[^/]'
     else re += c.replace(/[\\^$.|+()[\]{}]/g, '\\$&')
   }
-  return new RegExp(`^${glob.includes('/') ? '' : '(?:.*/)?'}${re}$`)
+  // Case-insensitive (a floor errs toward firing), and `s` so `.` also crosses a newline inside a path name.
+  return new RegExp(`^${glob.includes('/') ? '' : '(?:.*/)?'}${re}$`, 'is')
 }
 
 // projectFloor reads `<glob> <items>` lines (items 1-6 joined by commas; `#` comments, blank lines) of odd/risk-paths at
-// the merge base, never at the ref, so a change cannot lower its own floor. An unreadable line throws.
-function projectFloor(root, mergeBase) {
-  if (out(root, ['ls-tree', '--name-only', mergeBase, '--', 'odd/risk-paths']) === '') return []
-  return out(root, ['show', `${mergeBase}:odd/risk-paths`]).split('\n').map((l) => l.trim()).filter((l) => l !== '' && !l.startsWith('#')).flatMap((line) => {
+// one commit, called with the merge base and the default branch tip, never the ref, so a change cannot lower its own
+// floor and a rule added after it branched still applies. An unreadable line throws.
+function projectFloor(root, commit) {
+  if (out(root, ['ls-tree', '--name-only', commit, '--', 'odd/risk-paths']) === '') return []
+  return out(root, ['show', `${commit}:odd/risk-paths`]).split('\n').map((l) => l.trim()).filter((l) => l !== '' && !l.startsWith('#')).flatMap((line) => {
     const m = /^(\S+)\s+([1-6](?:\s*,\s*[1-6])*)$/.exec(line)
     if (!m) throw new Error(`odd/risk-paths has an unreadable line: ${JSON.stringify(line)} (expected "<glob> <items 1-6, comma separated>")`)
     return m[2].split(',').map((n) => [m[1], Number(n)])
@@ -263,7 +265,7 @@ export function reviewState(root, base, sha) {
     for (const item of riskItems(out(root, ['show', `${commit}:${path}`]), path)) items.add(item)
   }
   const floor = new Map()
-  for (const [glob, item] of [...FLOOR, ...projectFloor(root, mergeBase)]) {
+  for (const [glob, item] of [...FLOOR, ...projectFloor(root, mergeBase), ...projectFloor(root, base)]) {
     const re = globToRegExp(glob)
     const hit = [...paths].filter((path) => re.test(path))
     if (hit.length > 0) floor.set(item, [...new Set([...(floor.get(item) ?? []), ...hit])])

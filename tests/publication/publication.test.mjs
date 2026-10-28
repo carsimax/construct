@@ -264,8 +264,7 @@ describe('the decision follows the Risk items and the verdicts', () => {
   })
 })
 
-// A published ref that does not resolve to a commit cannot be judged, so it is denied (it was judged as HEAD).
-// S1, S2: the risk floor. Paths in the published diff add items to the declared ones; odd/risk-paths is read at the merge-base.
+// S1, S2: the risk floor. Paths in the published diff add items to the declared ones; odd/risk-paths is read at the merge-base and the default branch tip.
 describe('the risk floor', () => {
   // floorRepo: main holds `base`; feat commits `change` (a null value deletes the file) with no feature document.
   function floorRepo(base, change) {
@@ -330,6 +329,21 @@ describe('the risk floor', () => {
     silent(hook('git push', floorRepo(base, { 'src/other.js': 'x\n' })))
   })
 
+  test('a rule added to odd/risk-paths on the default branch after the ref branched still applies', () => {
+    const repo = floorRepo({}, { 'src/api/x.js': 'x\n' })
+    git(repo, 'checkout', '-q', 'main')
+    applyFiles(repo, { 'odd/risk-paths': 'src/api/** 3\n' })
+    commitAll(repo, 'rule')
+    git(repo, 'checkout', '-q', 'feat')
+    assert.match(hook('git push', repo).reason, /Risk items 3/)
+  })
+
+  test('the floor matches paths whatever their case, and paths holding a newline', () => {
+    assert.match(hook('git push', floorRepo({}, { 'Install.sh': 'x\n' })).reason, /Risk items 5/)
+    assert.match(hook('git push', floorRepo({}, { 'src/Auth/login.js': 'x\n' })).reason, /Risk items 2/)
+    assert.match(hook('git push', floorRepo({}, { 'db/migrations/a\nb.txt': 'x\n' })).reason, /Risk items 1/)
+  })
+
   test('editing odd/risk-paths in the published diff does not change its own floor', () => {
     // Deleting or emptying the file while touching a declared path still denies.
     const base = { 'odd/risk-paths': 'src/api/** 3\n', 'src/api/x.js': 'a\n' }
@@ -348,6 +362,7 @@ describe('the risk floor', () => {
   })
 })
 
+// A published ref that does not resolve to a commit cannot be judged, so it is denied (it was judged as HEAD).
 describe('an unresolvable push source is denied', () => {
   const repo = featureRepo()
   const cases = [

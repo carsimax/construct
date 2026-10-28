@@ -25,4 +25,6 @@ Objective: ADD P5 — signals in the published diff set a minimum Risk the agent
 
 - **L2 (2026-10-28):** T1 by worker, RED 8/9 new tests (the no-match test passes by design). Parent: skill-context wording now says "feature documents or diff paths". Suite 1103/1103; plugin validate passes. Open: globs in `odd/risk-paths` cannot hold spaces; deny lists 5 paths per item.
 
-Next step: review-risk and review-reliability, then the user decides push and PR.
+- **L3 (2026-10-28):** Automated security review on #79: three findings fixed (RED first): odd/risk-paths also read at the default branch tip; case-insensitive globs; `s` flag so a newline in a path cannot dodge `.*`. Misplaced test comment moved back. Suite 1105/1105.
+
+Next step: re-review (review-risk, review-reliability), push to #79.
