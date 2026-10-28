@@ -35,7 +35,7 @@ import { git, repositoryRoot } from './git-tree.mjs'
 import { readInput } from './hook-io.mjs'
 import { requiredLenses } from './review-lenses.mjs'
 import { pruneStore, readVerdicts, subjectHash } from './review-store.mjs'
-import { GIT_VALUE_FLAGS, heredocScripts, nestedLines, SHELLS, ShellParseError, splitCommands } from './shell-words.mjs'
+import { GIT_VALUE_FLAGS, heredocScripts, nestedLines, parsesAsShell, SHELLS, ShellParseError, splitCommands } from './shell-words.mjs'
 
 const MAX_DEPTH = 4
 const PUSH_VALUE_FLAGS = new Set(['--repo', '-o', '--push-option', '--receive-pack', '--exec'])
@@ -142,7 +142,7 @@ function findPublications(command, cwd, depth = 0) {
     const { name, args, lines } = nestedLines(words)
     for (const line of lines) nested(line, where)
     if (SHELLS.has(name)) for (const w of tokens) if (w.h) nested(w.t, where)
-    for (const body of scripts.get(tokens) ?? []) nested(body, where)
+    for (const { text, strict } of scripts.get(tokens) ?? []) if (strict || parsesAsShell(text)) nested(text, where)
     if (name === 'cd' || name === 'pushd' || name === 'popd') where = changeDir(where, name, args)
     else if (name === 'git') {
       const push = gitPublication(args, where)

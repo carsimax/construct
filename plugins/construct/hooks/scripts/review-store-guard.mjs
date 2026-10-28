@@ -15,7 +15,7 @@ import { basename, dirname, join, relative, resolve } from 'node:path'
 import { git } from './git-tree.mjs'
 import { readInput } from './hook-io.mjs'
 import { storeAt } from './review-store.mjs'
-import { heredocScripts, nestedLines, SHELLS, ShellParseError, splitCommands } from './shell-words.mjs'
+import { heredocScripts, nestedLines, parsesAsShell, SHELLS, ShellParseError, splitCommands } from './shell-words.mjs'
 
 const INTERPRETERS = new Set(['node', 'nodejs', 'bun', 'deno', 'sh', 'bash', 'zsh', 'dash', 'ksh'])
 const HOOK_FILE = /^review-(capture|context)\.mjs$/
@@ -34,7 +34,7 @@ function runsReviewHook(command, depth = 0) {
     const { name, args, lines } = nestedLines(words)
     if (lines.some((line) => runsReviewHook(line, depth + 1))) return true
     if (SHELLS.has(name) && tokens.some((w) => w.h && runsReviewHook(w.t, depth + 1))) return true
-    if ((scripts.get(tokens) ?? []).some((body) => runsReviewHook(body, depth + 1))) return true
+    if ((scripts.get(tokens) ?? []).some(({ text, strict }) => (strict || parsesAsShell(text)) && runsReviewHook(text, depth + 1))) return true
     return HOOK_FILE.test(basename(plain(name))) || (INTERPRETERS.has(name.toLowerCase()) && args.some((a) => HOOK_FILE.test(basename(plain(a)))))
   })
 }

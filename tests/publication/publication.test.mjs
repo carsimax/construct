@@ -157,8 +157,10 @@ describe('other commands are untouched', () => {
   ]
   for (const command of cases) test(`silent: ${JSON.stringify(command)}`, () => silent(hook(command, repo)))
 
-  test('a heredoc body is data', () => {
-    silent(hook("cat <<'EOF'\ngit push\ngh pr create\nEOF", repo))
+  // Accepted cost of reading every body best-effort: a body that parses and holds a push is checked even as data.
+  test('a heredoc body that parses is checked, one that does not is data', () => {
+    denied(hook("cat <<'EOF'\ngit push\ngh pr create\nEOF", featureRepo('2')))
+    silent(hook("cat <<'EOF'\nrun git push (later\nEOF", repo))
   })
 
   test('other tools', () => {
@@ -745,8 +747,9 @@ describe('errors deny, aliases and shell bodies are seen', () => {
   ]
   for (const command of cases) test(`denies without verdicts: ${JSON.stringify(command)}`, () => denied(hook(command, featureRepo('2'))))
 
-  test('a heredoc fed to something else is data', () => {
-    silent(hook('cat <<EOF\ngit push\nEOF', featureRepo('2')))
-    silent(hook('git commit -F - <<EOF\ngit push\nEOF', featureRepo('2')))
+  test('a heredoc fed to something else is read best-effort: a body that parses is checked', () => {
+    denied(hook('cat <<EOF\ngit push\nEOF', featureRepo('2')))
+    denied(hook('git commit -F - <<EOF\ngit push\nEOF', featureRepo('2')))
+    silent(hook('cat <<EOF\nprose: git push (later\nEOF', featureRepo('2')))
   })
 })

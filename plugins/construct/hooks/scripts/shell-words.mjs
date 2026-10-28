@@ -181,10 +181,13 @@ function unwrap(texts) {
 }
 
 
-// heredocScripts maps each command to the heredoc and here-string bodies that run as shell code.
-// A body is data only when proven: it feeds a plain command that is not a shell, `eval`, `source`,
-// or `.`, no command of its pipeline is one, and no enclosing command is one (nor has one in its
-// pipeline). A body on a block, `if`, loop, `case`, subshell, or function is always a script.
+// heredocScripts maps each command to the heredoc and here-string bodies it feeds, as
+// `{ text, strict }`. A body is strict (a script: a parse failure denies) when its command, a
+// command of its pipeline, or an enclosing command is a shell, `eval`, `source`, or `.`, or when
+// the command is not a plain call (block, `if`, loop, `case`, subshell, function). Every other body
+// reaches a consumer the parser cannot name (`f` defined as `bash`, an alias, `su -c`, `ssh`, ...), so
+// it is read best-effort: `parsesAsShell` tells whether to check it. The accepted cost: a body that
+// parses and has a line starting with `git push` is denied even when it was meant as data.
 export function heredocScripts(commands) {
   const groups = new Map()
   for (const command of commands) {
@@ -197,11 +200,22 @@ export function heredocScripts(commands) {
   for (const c of commands) {
     const bodies = [...c.heredocs, ...c.filter((w) => w.h).map((w) => w.t)]
     if (bodies.length === 0) continue
-    let data = c.simple
-    for (let up = c; data && up; up = up.parent) data = !runs(up)
-    if (!data) scripts.set(c, bodies)
+    let strict = !c.simple
+    for (let up = c; !strict && up; up = up.parent) strict = runs(up)
+    scripts.set(c, bodies.map((text) => ({ text, strict })))
   }
   return scripts
+}
+
+// parsesAsShell is true when `text` is valid shell: a best-effort body that is not is data.
+export function parsesAsShell(text) {
+  try {
+    splitCommands(text)
+    return true
+  } catch (error) {
+    if (error instanceof ShellParseError) return false
+    throw error
+  }
 }
 
 // nestedLines lists the command lines one simple command (its live words) runs as a string:

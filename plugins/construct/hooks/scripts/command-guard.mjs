@@ -20,7 +20,7 @@
 // not caught. Upgrade if one of them shows up in real use.
 // Usage: node command-guard.mjs   (hook JSON on stdin)
 import { readInput } from './hook-io.mjs'
-import { GIT_VALUE_FLAGS, heredocScripts, nestedLines, SHELLS, ShellParseError, splitCommands } from './shell-words.mjs'
+import { GIT_VALUE_FLAGS, heredocScripts, nestedLines, parsesAsShell, SHELLS, ShellParseError, splitCommands } from './shell-words.mjs'
 
 const MAX_DEPTH = 4
 // Flags whose value is a word of its own (or the rest of a short cluster): their text is not a flag.
@@ -151,7 +151,7 @@ function hitsIn(command, depth = 0) {
     const { name, args, lines } = nestedLines(words)
     for (const line of lines) nested(line)
     if (SHELLS.has(name)) for (const w of tokens) if (w.h) nested(w.t)
-    for (const body of scripts.get(tokens) ?? []) nested(body)
+    for (const { text, strict } of scripts.get(tokens) ?? []) if (strict || parsesAsShell(text)) nested(text)
     // `export X=...; git ...`: the assignment is its own statement, so it is checked without a `git`.
     if (/^(export|declare|typeset|readonly|local|[A-Za-z_]\w*=)/.test(words[0] ?? '') && words.some(hooksEnv)) found.push(hit('deny', HOOKS_ENV_REASON))
     const h = name === 'git' ? gitHit(args, words) : name === 'rm' ? rmHit(args) : name === 'find' ? findHit(args, nested) : null

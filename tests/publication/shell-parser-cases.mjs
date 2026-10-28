@@ -34,6 +34,14 @@ const heredocShapes = (cmd) => [
   `source <(cat <<'E'\n${cmd}\nE\n)`,
   `. /dev/stdin <<'E'\n${cmd}\nE`,
   `{ bash; } <<< '${cmd}'`,
+  // Bodies fed to a consumer the parser cannot prove is data are read best-effort: a body that parses is checked.
+  `f() { bash; }; f <<'E'\n${cmd}\nE`,
+  `alias c=bash\nc <<'E'\n${cmd}\nE`,
+  `su -c bash <<'E'\n${cmd}\nE`,
+  `busybox sh <<'E'\n${cmd}\nE`,
+  `ssh host <<'E'\n${cmd}\nE`,
+  `ssh host <<'E'\necho hi\n${cmd}\nE`,
+  `ssh host <<'E'\ncat <<'F'\n${cmd}\nF\nE`,
 ]
 
 // `esac` right after `in` closes the case, so the `)` ends the substitution and the rest is literal
@@ -53,6 +61,9 @@ export const allowIdioms = [
   'echo "$(grep -i case README.md)"',
   'VAR="$(git log --oneline | grep case)"',
   'echo "$(git branch --show-current)"',
+  // A body that does not parse as shell, or holds no checked command, is data.
+  `python3 <<'EOF'\nimport os\nprint("git push origin feat")\nfor x in range(3):\n    print(x)\nEOF`,
+  `cat <<'EOF' > notes.md\nRemember to run git push after the review, and node review-capture.mjs is not for you.\nEOF`,
 ]
 
 // Text a parser cannot read at all: every gate must deny it rather than guess.

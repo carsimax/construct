@@ -36,6 +36,7 @@ Objective: replace the heuristic shell parsing in `shell-words.mjs` (used by pub
 | T3 | S1 | review-context omits the content of `plugins/construct/hooks/vendor/` paths (keeps them in the manifest, notes the sha256 pin) so the lenses can review T2 | worker | 2 | in-review | — |
 | T4 | S1 | Heredoc bodies are data only when proven: fix the d8dc191 regressions found by an automated security review (heredoc on a compound command, heredoc reaching a shell through a substitution) and the fail-open on a non-parse exception in splitCommands | worker | 2 | in-review | — |
 | T5 | S1 | Narrow the T3 omission (automated security review on 39d3d17): omit a vendored path's content only when it is listed with its sha256 in review-context.mjs and the head blob matches; any other path, including a new file under vendor/, keeps its full diff | worker | 2 | in-review | — |
+| T6 | S1 | Every heredoc or here-string body not proven data and not fed to a known runner is parsed best-effort: if it parses, its commands are checked; if not, it is data. Closes heredocs fed to a function, an alias, `su -c`, `busybox sh`, and `ssh` (automated security review on 3de15eb, user chose scan-always) | worker | 2 | in-review | — |
 
 ## Log
 
@@ -54,4 +55,6 @@ Objective: replace the heuristic shell parsing in `shell-words.mjs` (used by pub
 
 - **L8 (2026-10-27):** an automated security review on d8dc191 found three regressions, all reproduced against publication-gate (faaefcc denied six heredoc shapes that d8dc191 allowed). T4 (3de15eb): a heredoc or here-string body is data only when proven, and any walk-time exception becomes ShellParseError; RED 43 failures, GREEN. A second automated review on 39d3d17 found the vendor-prefix omission too broad. T5: content is omitted only for an exact path whose head blob matches the sha256 pinned in review-context.mjs; RED 3 failures. `node --test 'tests/**/*.test.mjs'`: 1047/1047.
 
-Next step: the review-risk and review-resilience lenses on faaefcc.
+- **L9 (2026-10-27):** an automated security review on 3de15eb found heredocs fed to a function, an alias, `su -c`, `busybox sh`, and `ssh` still allowed (reproduced). The user chose scan-always. T6: a body that reaches a known runner stays strict (a parse failure denies); every other body is parsed best-effort, and its commands are checked if it parses and it is data if it does not. RED: 28 failures. Two tests in publication.test.mjs that asserted "a heredoc body is data" now assert the accepted cost: a body that parses and holds `git push` is denied. `node --test 'tests/**/*.test.mjs'`: 1081/1081. The lenses cannot run in a session whose hooks come from the installed 12.0.0 plugin, because its review-context lacks T3/T5 and exceeds the budget on mvdan-sh.cjs.
+
+Next step: the review-risk and review-resilience lenses on faaefcc, run from a session that loads the plugin from this branch.
