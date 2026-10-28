@@ -103,3 +103,7 @@ Scratch: <mktemp -d path outside the worktree>
 
 Report each probe as `<command>: <observed result>`. Close with `## Key Learnings:`.
 ```
+
+## Oracle conflict
+
+Ask with AskUserQuestion: the question names the locked path once, in backticks, and the conflict (the spec against the test). Options: `Unlock` and `Keep the test`. Put the one you recommend first with ` (Recommended)` appended to its label and its reason in the description: `Keep the test` when the code is wrong, `Unlock` when the spec changed and the test is stale. Only `Unlock`, with or without the suffix, approves.

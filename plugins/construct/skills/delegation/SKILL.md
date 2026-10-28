@@ -60,4 +60,4 @@ When a subagent or tool hands back a question, a menu, a consent request, or an 
 2. Use AskUserQuestion when the envelope fits; otherwise a plain-text envelope with the answer syntax, then stop. Never choose, default, or launch dependent work while the answer is pending.
 3. Validate the reply: trimmed, case-insensitive label match, exactly one label; ordinals ("first", "2") alias to positions. An invalid answer re-presents the envelope; a valid one is returned once.
 4. A question about a choice is answered from the envelope without recommending, then the choice is re-presented.
-5. A worker's `oracle_conflict` goes to the user through AskUserQuestion (path in backticks, spec against test; `Unlock` or `Keep the test`). On `Unlock` run it, once; a worker never unlocks.
+5. A worker's `oracle_conflict` goes to the user through AskUserQuestion, one option recommended ([form](references/handoffs.md#oracle-conflict)). On `Unlock` run it once; workers never unlock.
