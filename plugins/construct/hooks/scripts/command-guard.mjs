@@ -158,8 +158,9 @@ function hitsIn(command, depth = 0) {
     // `export X=...; git ...`: the assignment is its own statement, so it is checked without a `git`.
     if (/^(export|declare|typeset|readonly|local|[A-Za-z_]\w*=)/.test(words[0] ?? '') && words.some(hooksEnv)) found.push(hit('deny', HOOKS_ENV_REASON))
     const h = name === 'git' ? gitHit(args, words) : name === 'rm' ? rmHit(args) : name === 'find' ? findHit(args, nested) : null
-    const gateArgs = isGate(name) ? args : name === 'node' && isGate(args[0]) ? args.slice(1) : []
-    if (gateArgs[0] === 'oracle' && gateArgs[1] === 'unlock') found.push(hit('deny', 'construct-gate oracle unlock releases a locked oracle, and only the user may: ask them to run it with ! (for example `!construct-gate oracle unlock <path>`), or return `oracle_conflict` to them.'))
+    // Any word with basename construct-gate counts, so node flags, env, command, xargs and npx wrappers are caught; `node -e` importing review-store cannot be seen in text (discipline layer).
+    const at = words.findIndex(isGate)
+    if (at !== -1 && words[at + 1] === 'oracle' && words[at + 2] === 'unlock') found.push(hit('deny', 'construct-gate oracle unlock releases a locked oracle, and only the user may: ask them to run it with ! (for example `!construct-gate oracle unlock <path>`), or return `oracle_conflict` to them.'))
     if (h) found.push(h)
   }
   return found

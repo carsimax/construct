@@ -283,6 +283,9 @@ function oracleDenial(root, sha) {
   const changed = []
   for (const lock of activeLocks(root)) {
     if (lock.blob === UNLOCKABLE) {
+      // Only a ref that carries the path (present at the ref, or touched by its history) is denied.
+      const carries = out(root, ['ls-tree', '--name-only', sha, '--', lock.path]) !== '' || git(root, ['log', '-1', '--format=%H', sha, '--', lock.path]).toString('utf8').trim() !== ''
+      if (!carries) continue
       changed.push(`${lock.path} (could not be locked as a file, locked for ${lock.feature})`)
       continue
     }

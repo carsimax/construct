@@ -2,7 +2,7 @@
 // delegation-admission), the `construct-gate oracle` CLI, the command-guard deny, and the fail-closed record rules.
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { mkdirSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readdirSync, readFileSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, test } from 'node:test'
 import { applyFiles, commitAll, git, makeRepo, scratchDir, write } from '../helpers/repo.mjs'
@@ -105,6 +105,11 @@ describe('delegation-admission: locked oracles', () => {
   })
 })
 
+const featBranch2 = (repo) => {
+  applyFiles(repo, { 'src/a.js': 'x\n' })
+  commitAll(repo, 'unit')
+}
+
 describe('oracle-record: released locks and unlockable surfaces', () => {
   const transcript = (...paths) => {
     const file = join(scratchDir('odd-stops-t-'), 't.jsonl')
@@ -138,6 +143,15 @@ describe('oracle-record: released locks and unlockable surfaces', () => {
     applyFiles(repo, { 'tests-link': 'x\n', 'src/a.js': 'x\n' })
     commitAll(repo, 'unit')
     denied(push(repo), /tests-link/, /locked/)
+  })
+  test('a sentinel lock denies only a ref that carries the path', () => {
+    const repo = makeRepo({ 'odd/tasks/f.md': FEATURE('pending'), 'real.txt': 'r\n' })
+    symlinkSync('real.txt', join(repo, 'tests-link'))
+    stop(repo, 'tests-link')
+    git(repo, 'checkout', '-q', '-b', 'feat')
+    unlinkSync(join(repo, 'tests-link')) // commitAll adds everything: the ref must never carry the path
+    featBranch2(repo)
+    silent(push(repo))
   })
   test('a directory surface is locked with the sentinel too', () => {
     const repo = makeRepo({ 'odd/tasks/f.md': FEATURE('pending') })
@@ -237,7 +251,7 @@ describe('construct-gate oracle', () => {
 describe('command-guard: oracle unlock', () => {
   const guard = (command) => run(S('command-guard.mjs'), { session_id: 's1', cwd: process.cwd(), hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command } })
   test('denies construct-gate oracle unlock however it is launched', () => {
-    for (const c of ['construct-gate oracle unlock tests/a.test.mjs', '/x/bin/construct-gate oracle unlock a', 'node /x/bin/construct-gate oracle unlock a', 'cd x && construct-gate oracle unlock a', 'sh -c "construct-gate oracle unlock a"']) denied(guard(c), /unlock/, /user/)
+    for (const c of ['construct-gate oracle unlock tests/a.test.mjs', '/x/bin/construct-gate oracle unlock a', 'node /x/bin/construct-gate oracle unlock a', 'cd x && construct-gate oracle unlock a', 'sh -c "construct-gate oracle unlock a"', 'node --no-warnings /x/bin/construct-gate oracle unlock a', 'env construct-gate oracle unlock a', 'command construct-gate oracle unlock a', 'xargs construct-gate oracle unlock a', 'npx construct-gate oracle unlock a']) denied(guard(c), /unlock/, /user/)
   })
   test('oracle list, status and unrelated commands stay allowed', () => {
     for (const c of ['construct-gate oracle list', 'construct-gate status', 'echo oracle unlock', 'ls']) silent(guard(c))
