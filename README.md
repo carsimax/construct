@@ -119,7 +119,6 @@ Options are plugin settings, edited in `/config`:
 |---|---|
 | `inline_edit_max_lines` (number, default `150`) | Let the main thread edit repository files directly when one Write, Edit, MultiEdit, or NotebookEdit call changes at most this many lines; `surface-guard` sends bigger changes to `construct:worker`. `0` restores the old rule: the main thread writes only `.vault/tasks/` |
 | `iteration_cap` (number, default `3`) | Deny a Bash command after it failed this many times in a row for one agent (a passing run resets its count) (the main thread counts as one), so the agent stops and reports what it tried, the failure, and its hypothesis instead of looping, and never edits the test to pass. A subagent's count ends when it stops; the main thread's resets on your next prompt. A value that is not a whole number of 1 or more uses `3`; `0` turns the cap off |
-| `command_guard_asks` (boolean, default `false`) | Let `command-guard` ask before destructive commands (`rm -rf`, force push, `reset --hard`, and the rest). Denies of verifier bypasses always apply |
 
 ### Agents
 
@@ -246,7 +245,7 @@ The installer is opt-in and never runs on its own. It writes to the effective ho
 
 **Locked oracles.** While a lock is active (its feature document still has unfinished tasks on the remote-tracking default branch), `surface-guard` denies Write, Edit, MultiEdit, and NotebookEdit of a locked oracle to every agent and to the main thread, `delegation-admission` denies a writer whose surfaces cover one and an oracle launched over one, and `command-guard` denies `construct-gate oracle unlock` to every subagent and to the main thread unless the user's latest AskUserQuestion answer, recorded in the review store by a PostToolUse hook for a call a PreToolUse hook saw without pre-filled `answers`, chose `Unlock` (or `Unlock (Recommended)`) for a question naming that path in backticks (one unlock per answer; one live approval at a time; the unlock must be the whole command, one plain `construct-gate oracle unlock <path>` on an existing regular file with no symlink under the root; no record denies), and denies commands that write `refs/remotes/` locally (`git update-ref`, `git symbolic-ref`, `git remote set-head`, a `git fetch` refspec into it), as a discipline layer. Local edit stops trust the local remote-tracking ref; the publication gate verifies it against the remote URL recorded in the lock (one `git ls-remote`) before releasing a lock, and keeps the lock when the remote is unreachable, differs, or no URL was recorded. A new oracle run replaces a released lock. A symlink or directory surface is locked with a marker the gate always reports as changed (unlock it with `construct-gate oracle unlock`), and a corrupt lock record is skipped by the gate and shown by `oracle list`.
 
-**Command and surface guards.** Two more `PreToolUse` hooks fail open. `command-guard.mjs` on `Bash` denies commands that bypass the verifier (such as `git commit --no-verify`) and, with `command_guard_asks` on, asks before destructive ones. `surface-guard.mjs` on `Write`, `Edit`, `MultiEdit`, and `NotebookEdit` keeps a writer inside its allowed edit surfaces and lets the main thread write under `.vault/tasks/` freely and elsewhere only when one call changes at most `inline_edit_max_lines` lines (default 150); bigger changes are denied and go to `construct:worker`. The Risk-line gate also blocks a turn that adds skipped, focused, or stub test markers. `failure-streak.mjs` on `PostToolUseFailure` tells the model to change strategy when one tool fails five times within ten minutes. `iteration-cap.mjs` counts failed Bash commands on `PostToolUseFailure` and denies, on `PreToolUse`, a command that already failed `iteration_cap` times (default 3) for that agent; `SubagentStop` and `UserPromptSubmit` reset the counts. It fails open.
+**Command and surface guards.** Two more `PreToolUse` hooks fail open. `command-guard.mjs` on `Bash` denies commands that bypass the verifier (such as `git commit --no-verify`) and never asks. `surface-guard.mjs` on `Write`, `Edit`, `MultiEdit`, and `NotebookEdit` keeps a writer inside its allowed edit surfaces and lets the main thread write under `.vault/tasks/` freely and elsewhere only when one call changes at most `inline_edit_max_lines` lines (default 150); bigger changes are denied and go to `construct:worker`. The Risk-line gate also blocks a turn that adds skipped, focused, or stub test markers. `failure-streak.mjs` on `PostToolUseFailure` tells the model to change strategy when one tool fails five times within ten minutes. `iteration-cap.mjs` counts failed Bash commands on `PostToolUseFailure` and denies, on `PreToolUse`, a command that already failed `iteration_cap` times (default 3) for that agent; `SubagentStop` and `UserPromptSubmit` reset the counts. It fails open.
 
 An approval never authorizes delivery. Commit, push, pull request, and merge stay your decisions.
 
@@ -311,7 +310,7 @@ The main thread now makes small edits inline: each edit call may change up to `i
 
 ## Upgrading to 7.0
 
-`command-guard` no longer asks before destructive commands by default, so a fully agentic flow is not interrupted. Set `command_guard_asks` to `true` to keep the 6.x confirmations. Denies (verifier bypasses such as `--no-verify`) apply either way.
+`command-guard` no longer asks before destructive commands by default, so a fully agentic flow is not interrupted. The opt-in that kept the 6.x confirmations was removed later, and `command-guard` never asks; denies (verifier bypasses such as `--no-verify`) always apply.
 
 ## Upgrading to 6.0
 
@@ -364,7 +363,7 @@ Changes in 8.7.0:
 
 Earlier 8.x releases are in [CHANGELOG.md](CHANGELOG.md); older ones follow.
 
-7.0.0 was a major release with one breaking change: `command-guard` no longer asks before destructive commands unless `command_guard_asks` is `true`, and its denies always apply (see "Upgrading to 7.0"). It also covered `find -delete`, `find -exec`, and `xargs rm -rf`, measured panel width by grapheme cluster, and made the mod test suite run green.
+7.0.0 was a major release with one breaking change: `command-guard` no longer asks before destructive commands by default (the opt-in that restored them was removed later), and its denies always apply (see "Upgrading to 7.0"). It also covered `find -delete`, `find -exec`, and `xargs rm -rf`, measured panel width by grapheme cluster, and made the mod test suite run green.
 
 6.1.0 was a minor release: the panel clean-room (#54-#56) and wide-character widths, `command-guard` asks before `git restore ./` and `git restore :/` and denies hooks-path config set through `export`, `declare`, `typeset`, `readonly`, `local`, or a bare assignment, the Risk-line gate flags trailing `// TODO` and `# TODO` comments, and subagents name unrequested work in their report.
 

@@ -47,14 +47,12 @@ test('userConfig declares no model or effort option, and no legacy options', () 
   assert.deepEqual(Object.keys(cfg).filter((k) => /^(model|effort)_/.test(k)), [])
   // The band above the prompt has no switch: the docked panel and its option are gone
   assert.equal(cfg.panel_open_on_start, undefined)
-  assert.equal(cfg.command_guard_asks?.type, 'boolean')
-  assert.equal(cfg.command_guard_asks?.default, false)
   assert.equal(cfg.inline_edit_max_lines?.type, 'number')
   assert.equal(cfg.inline_edit_max_lines?.default, 150)
   assert.equal(cfg.slice_lines, undefined)
   assert.equal(cfg.iteration_cap?.type, 'number')
   assert.equal(cfg.iteration_cap?.default, 3)
-  assert.equal(Object.keys(cfg).length, 3)
+  assert.equal(Object.keys(cfg).length, 2)
 })
 
 test('no userConfig title names a methodology (ODD, RDD, JD)', () => {
