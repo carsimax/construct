@@ -82,7 +82,7 @@ test('a clean machine gets every tool, in order, and the Construct settings', ()
   const run = install(box)
   assert.equal(run.status, 0, run.stderr)
   assert.deepEqual(run.calls.filter((c) => !/--version|list/.test(c)), [
-    'claude plugin marketplace add carsimax/construct#v12.0.1',
+    'claude plugin marketplace add carsimax/construct',
     'claude plugin install construct@construct',
   ])
   assert.ok(!run.calls.some((c) => /context7/.test(c)), 'context7 is never registered')
@@ -206,7 +206,7 @@ test('a marketplace whose name only starts with the repository is not counted as
   writeFileSync(join(box.state, 'marketplaces'), '    Source: GitHub (carsimax/construct-foo)\n')
   const run = install(box)
   assert.equal(run.status, 0, run.stderr)
-  assert.ok(run.calls.some((c) => /^claude plugin marketplace add carsimax\/construct#/.test(c)), 'construct marketplace is added')
+  assert.ok(run.calls.some((c) => /^claude plugin marketplace add carsimax\/construct$/.test(c)), 'construct marketplace is added')
 })
 
 test('--no-mcp is accepted, deprecated, and changes nothing', () => {
@@ -447,13 +447,14 @@ test('an installed construct at this version, a newer one, or with no readable v
   }
 })
 
-test('a marketplace pinned to another ref warns; the same ref skips quietly', () => {
-  for (const [ref, warns] of [['v8.6.1', true], ['v12.0.1', false]]) {
+test('a marketplace pinned to any ref warns with the remove, add, install migration; an unpinned one skips quietly', () => {
+  for (const [source, warns] of [['carsimax/construct#v8.6.1', true], ['carsimax/construct#v12.0.1', true], ['carsimax/construct', false]]) {
     const box = sandbox()
-    writeFileSync(join(box.state, 'marketplaces'), `  ❯ construct\n    Source: GitHub (carsimax/construct#${ref})\n`)
+    writeFileSync(join(box.state, 'marketplaces'), `  ❯ construct\n    Source: GitHub (${source})\n`)
     const run = install(box)
     assert.equal(run.status, 0, run.stderr)
-    assert.equal(/pinned to v8\.6\.1, not v12\.0\.1/.test(run.stderr), warns)
+    assert.ok(!run.calls.some((c) => /marketplace (add|remove)/.test(c)), `${source}: the existing marketplace is never changed`)
+    assert.equal(/is pinned to v[\d.]+.*claude plugin marketplace remove construct, then claude plugin marketplace add carsimax\/construct, then claude plugin install construct@construct/.test(run.stderr), warns, source)
   }
 })
 

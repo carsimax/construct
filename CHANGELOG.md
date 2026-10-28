@@ -4,6 +4,9 @@ Notable changes per release. Versions follow [Semantic Versioning](https://semve
 
 ## Unreleased
 
+- `install.sh` adds the marketplace without pinning it to the release tag, so `claude plugin marketplace update construct` and `claude plugin update construct@construct` upgrade an installer-made install. A pin blocked every update, since `marketplace update` does not move it.
+- On a marketplace pinned to any ref, `install.sh` now warns with the migration that works (`marketplace remove`, `marketplace add carsimax/construct`, `plugin install`) instead of recommending `marketplace update`. The README's Update section documents the same steps.
+
 ## 12.0.1
 
 - The publication gate, `command-guard`, and `review-store-guard` read commands with a real shell parser, mvdan-sh 0.10.1 (BSD-3-Clause, vendored unmodified in `hooks/vendor/`), instead of the heuristic tokenizer. Commands hidden in nested subshells, `case`, comments, `${...}`, heredocs, and quoted spellings (`g"i"t`, `$'\x67it'`) are now found, and the heredoc commit idiom `git commit -m "$(cat <<'EOF' ...)"` is no longer denied.
