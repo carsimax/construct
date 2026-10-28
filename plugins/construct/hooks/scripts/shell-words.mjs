@@ -189,10 +189,11 @@ export function closingBacktick(text, from) {
 // closingParen returns the index of the `)` that closes a `$(` whose body starts at `from`, or -1.
 // The body is scanned with quote state: a `)` inside single or double quotes, after a backslash,
 // or inside a nested `$(...)` or backtick span does not close it. Neither does the `)` of a bare
-// `(...)` group, of a `case` pattern, or inside a `#` comment, so a command after them stays inside the body.
+// `(...)` group or inside a `#` comment, so a command after them stays inside the body. A `case`
+// word returns -1: its pattern `)`s cannot be told apart without a full parser, so the caller
+// reads the rest of the command as the body (fail closed).
 export function closingParen(text, from) {
   let depth = 0
-  let cases = 0
   for (let i = from; i < text.length; i++) {
     const c = text[i]
     if (c === '\\') i++
@@ -215,9 +216,8 @@ export function closingParen(text, from) {
     } else if (c === '(') depth++
     else if (c === ')') {
       if (depth > 0) depth--
-      else if (cases === 0) return i
-    } else if (keywordAt(text, i, 'case')) cases++
-    else if (keywordAt(text, i, 'esac') && cases > 0) cases--
+      else return i
+    } else if (keywordAt(text, i, 'case')) return -1
   }
   return -1
 }
