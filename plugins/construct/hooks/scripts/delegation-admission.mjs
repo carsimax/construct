@@ -559,7 +559,7 @@ function admit(input) {
     return
   }
   // S4: no writer may cover an active locked oracle, and an oracle may not be launched over one (T5: another feature's lock).
-  const covered = activeLocks(root).find((lock) => parsed.paths.some((path) => (type === ORACLE ? path === lock.path : surfaceContains(path, lock.path))))
+  const covered = activeLocks(root).find((lock) => parsed.paths.some((path) => surfaceContains(path, lock.path)))
   if (covered) {
     deny(`${type} edit surfaces cover ${covered.path}, a locked oracle for ${covered.feature} (task ${covered.task}). Keep the surfaces off it; if the test and the spec disagree, return \`oracle_conflict\` to the user, who can run \`construct-gate oracle unlock ${covered.path}\`.`)
     return
