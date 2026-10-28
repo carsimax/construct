@@ -4,10 +4,12 @@ Notable changes per release. Versions follow [Semantic Versioning](https://semve
 
 ## Unreleased
 
+## 12.0.2
+
 - `install.sh` adds the marketplace without pinning it to the release tag, so `claude plugin marketplace update construct` and `claude plugin update construct@construct` upgrade an installer-made install. A pin blocked every update, since `marketplace update` does not move it.
 - On a marketplace pinned to any ref, `install.sh` now warns with the migration that works (`marketplace remove`, `marketplace add carsimax/construct`, `plugin install`) instead of recommending `marketplace update`. The README's Update section documents the same steps.
 - The Risk-line snapshot hashes every file from HEAD again, so a same-size rewrite whose mtime was restored is seen, under a 5 s budget. When the budget runs out the snapshot falls back to the real index's stat cache (with `core.fsmonitor` and `core.untrackedCache` off), the repository is remembered as slow in the session's risk-line record so later calls skip the full hash, and the user gets one `systemMessage` per session; the hook never blocks on it.
-- `pruneState` also removes `construct-index-*` temporary directories older than seven days, left behind when a snapshot was killed.
+- `pruneState` also removes `construct-index-*` temporary directories older than seven days, left behind when a snapshot was killed; only directories owned by the user with no group or other permissions are removed.
 
 ## 12.0.1
 
