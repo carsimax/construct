@@ -8,9 +8,7 @@ import { allowIdioms, dataShapes, denyShapes, NO_VERIFY, NO_VERIFY_LONG, unparse
 
 const HOOK = join(new URL('../../plugins/construct/', import.meta.url).pathname, 'hooks/scripts/command-guard.mjs')
 function run(command) {
-  const env = { ...process.env }
-  delete env.CLAUDE_PLUGIN_OPTION_COMMAND_GUARD_ASKS
-  const r = spawnSync('node', [HOOK], { env, encoding: 'utf8', input: JSON.stringify({ session_id: 's1', cwd: process.cwd(), hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command } }) })
+  const r = spawnSync('node', [HOOK], { encoding: 'utf8', input: JSON.stringify({ session_id: 's1', cwd: process.cwd(), hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command } }) })
   const json = r.stdout ? JSON.parse(r.stdout) : null
   return { status: r.status, stdout: r.stdout, decision: json?.hookSpecificOutput?.permissionDecision, reason: json?.hookSpecificOutput?.permissionDecisionReason }
 }

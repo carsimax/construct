@@ -16,12 +16,6 @@
   ],
   "types": "./types/construct.d.ts",
   "userConfig": {
-    "command_guard_asks": {
-      "type": "boolean",
-      "title": "Ask before destructive commands",
-      "description": "Let command-guard ask before destructive commands (rm -rf, force push, reset --hard, and the rest); off by default. Denies of verifier bypasses such as git commit --no-verify always apply",
-      "default": false
-    },
     "inline_edit_max_lines": {
       "type": "number",
       "title": "Inline edit limit (lines)",

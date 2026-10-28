@@ -24,7 +24,7 @@ A quality bar is a short file of rules that a command can check. The Floor never
 - No credentials in the repository.
 - No weakening of `CONSTRAINTS.md`.
 
-Construct backs the Floor with hooks. The Risk-line gate blocks a reply when added lines carry skipped, focused, or stub test markers. command-guard always denies verifier bypasses such as `git commit --no-verify`, and asks before destructive commands only with `command_guard_asks` on. Neither reads `CONSTRAINTS.md`, so the file still holds the rules those hooks do not see.
+Construct backs the Floor with hooks. The Risk-line gate blocks a reply when added lines carry skipped, focused, or stub test markers. command-guard denies verifier bypasses such as `git commit --no-verify`. Neither reads `CONSTRAINTS.md`, so the file still holds the rules those hooks do not see.
 
 ## Flow
 

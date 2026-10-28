@@ -4,6 +4,7 @@ Notable changes per release. Versions follow [Semantic Versioning](https://semve
 
 ## Unreleased
 
+- Breaking: the `command_guard_asks` option is removed, and `command-guard` never asks before destructive commands (`rm -rf`, force push, `reset --hard`, `git clean -f`, `find -delete`, and the rest). Its denies (`--no-verify`, hook bypasses, oracle unlock, review store) are unchanged.
 - Breaking: the per-role `model_<role>` and `effort_<role>` options are removed from `/config`, and saved values have no effect. Construct agents run on their own frontmatter model and effort; the built-in `general-purpose` still runs on `sonnet` with effort `medium`.
 
 ## 13.2.1

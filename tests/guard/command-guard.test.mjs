@@ -1,5 +1,5 @@
 // S1: the command guard hook, driven as a real PreToolUse hook on Bash: deny for verifier bypasses,
-// ask for destructive commands, silence for everything else.
+// silence for everything else, destructive commands included (the guard never asks).
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
@@ -7,13 +7,8 @@ import { join } from 'node:path'
 
 const HOOK = join(new URL('../../plugins/construct/', import.meta.url).pathname, 'hooks/scripts/command-guard.mjs')
 
-// Asks are opt-in (command_guard_asks), so rows run with them on unless a row sets `asks` (null: unset).
-function run(command, { input, tool_name = 'Bash', asks = 'true' } = {}) {
-  const env = { ...process.env }
-  delete env.CLAUDE_PLUGIN_OPTION_COMMAND_GUARD_ASKS
-  if (asks !== null) env.CLAUDE_PLUGIN_OPTION_COMMAND_GUARD_ASKS = asks
+function run(command, { input, tool_name = 'Bash' } = {}) {
   const result = spawnSync('node', [HOOK], {
-    env,
     input: input ?? JSON.stringify({ session_id: 's1', cwd: process.cwd(), hook_event_name: 'PreToolUse', tool_name, tool_input: { command } }),
     encoding: 'utf8',
   })
@@ -66,7 +61,7 @@ describe('deny: verifier bypasses', () => {
     'eval "git commit -n"',
     'git commit -n -m x # hi',
   ])
-  test('deny wins over ask in one command', () => {
+  test('deny is reported when a destructive command shares the line', () => {
     const r = run('rm -rf build && git commit --no-verify -m x')
     assert.equal(r.decision, 'deny')
     assert.match(r.reason, /no-verify/)
@@ -85,8 +80,8 @@ describe('T6 corrections: deny', () => {
   ])
 })
 
-describe('T6 corrections: ask', () => {
-  expect('ask', [
+describe('T6 corrections: destructive, no output', () => {
+  silent([
     'git reset --har HEAD~1',
     'git push --forc',
     'git push --force --force-with-lease --no-force-with-lease',
@@ -116,8 +111,8 @@ describe('T6 corrections: allowed', () => {
   ])
 })
 
-describe('ask: destructive commands', () => {
-  expect('ask', [
+describe('destructive commands: no output', () => {
+  silent([
     'rm -rf build',
     'rm -fr build',
     'rm -r -f build',
@@ -139,7 +134,7 @@ describe('ask: destructive commands', () => {
 })
 
 describe('debt-round S3: find and xargs deletes', () => {
-  expect('ask', [
+  silent([
     'find . -name x -exec rm -rf {} \\;',
     'find . -exec rm -rf {} +',
     'find /tmp/x -execdir rm -fr {} \\;',
@@ -162,7 +157,7 @@ describe('debt-round S3: find and xargs deletes', () => {
 })
 
 describe('pending-round S1: git restore at the root', () => {
-  expect('ask', ['git restore ./', 'git restore :/', 'git restore -- ./', 'git restore -- :/', 'git restore --worktree :/', 'git restore -s HEAD :/'])
+  silent(['git restore ./', 'git restore :/', 'git restore -- ./', 'git restore -- :/', 'git restore --worktree :/', 'git restore -s HEAD :/'])
   silent(['git restore --staged ./', 'git restore -S :/', 'git restore --staged :/', 'git restore --staged -- ./ :/'])
 })
 
@@ -180,38 +175,10 @@ describe('pending-round S2: exported hooks-path config', () => {
   silent(["export GIT_CONFIG_PARAMETERS=\"'user.name=x'\"", 'export FOO=core.hooksPath', 'echo GIT_CONFIG_KEY_0=core.hooksPath', 'readonly PATH'])
 })
 
-describe('debt-round S4: asks are opt-in', () => {
-  for (const asks of [null, 'false', '0', '', 'yes']) {
-    for (const command of ['rm -rf x', 'git reset --hard', 'find . -delete']) {
-      test(`no output with asks=${JSON.stringify(asks)}: ${command}`, () => {
-        const r = run(command, { asks })
-        assert.equal(r.status, 0)
-        assert.equal(r.stdout, '')
-      })
-    }
-    test(`deny holds with asks=${JSON.stringify(asks)}`, () => {
-      assert.equal(run('git commit --no-verify -m x', { asks }).decision, 'deny')
-      assert.equal(run('git reset --hard && git commit -n -m x', { asks }).decision, 'deny')
-    })
-  }
-  for (const asks of ['TRUE', '1', ' True ']) {
-    test(`asks on with asks=${JSON.stringify(asks)}`, () => {
-      assert.equal(run('rm -rf x', { asks }).decision, 'ask')
-    })
-  }
-  // Regression guards: these already passed against the current code.
-  for (const command of ['git push --force', 'git clean -fd', 'git checkout .', 'git restore ./', 'find . -exec sudo rm -rf {} \\;', 'ls | xargs -i rm -rf {}']) {
-    test(`no output with asks unset: ${command}`, () => {
-      const r = run(command, { asks: null })
-      assert.equal(r.status, 0)
-      assert.equal(r.stdout, '')
-    })
-  }
-  test('asks=on leaves asks off', () => {
-    assert.equal(run('rm -rf x', { asks: 'on' }).stdout, '')
-  })
-  test('deny holds with asks unset after a destructive command', () => {
-    assert.equal(run('rm -rf x; git push --no-verify', { asks: null }).decision, 'deny')
+describe('debt-round S4: destructive commands never ask', () => {
+  test('deny holds after a destructive command', () => {
+    assert.equal(run('rm -rf x; git push --no-verify').decision, 'deny')
+    assert.equal(run('git reset --hard && git commit -n -m x').decision, 'deny')
   })
 })
 
