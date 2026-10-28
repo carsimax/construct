@@ -5,7 +5,7 @@
 // Interrupts are not failures. Never blocks on error: any error means no output, exit 0.
 // shortcut: concurrent failures of one agent may race (a lost update delays the cap), upgrade if it matters.
 import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
-import { randomBytes } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 import { join } from 'node:path'
 import { dataDir, readInput, safeName } from './hook-io.mjs'
 
@@ -30,7 +30,8 @@ function main() {
     return
   }
   if (input.tool_name !== 'Bash' || typeof input.tool_input?.command !== 'string') return
-  const command = input.tool_input.command.trim().split(/\s+/).join(' ')
+  // Keyed by a hash: a failing command can carry a secret inline, so its text is never stored.
+  const command = createHash('sha256').update(input.tool_input.command.trim().split(/\s+/).join(' ')).digest('hex')
   let counts = {}
   try {
     counts = JSON.parse(readFileSync(file, 'utf8'))
@@ -47,10 +48,10 @@ function main() {
   }
   if (event !== 'PostToolUseFailure' || input.is_interrupt === true) return
   counts[command] = (counts[command] || 0) + 1
-  mkdirSync(dir, { recursive: true })
+  mkdirSync(dir, { recursive: true, mode: 0o700 })
   const temporary = join(dir, `.${randomBytes(6).toString('hex')}.tmp`)
   try {
-    writeFileSync(temporary, JSON.stringify(counts))
+    writeFileSync(temporary, JSON.stringify(counts), { mode: 0o600 })
     renameSync(temporary, file)
   } catch (error) {
     rmSync(temporary, { force: true })
