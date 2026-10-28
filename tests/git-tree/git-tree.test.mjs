@@ -59,6 +59,18 @@ describe('git-tree', () => {
     assert.notEqual(freezeWorkingTree(repo).candidateTree, baseTree)
   })
 
+  // security-review S1, finding 3: the real index's stat cache is not trusted.
+  test('freezeWorkingTree sees a same-size change whose mtime was restored (index not racy)', () => {
+    const repo = makeRepo({ 'a.txt': 'a\n' })
+    const second = Math.floor(Date.now() / 1000) - 100
+    utimesSync(join(repo, 'a.txt'), second, second)
+    sh(repo, 'update-index', '--refresh')
+    const { baseTree } = freezeWorkingTree(repo)
+    writeFileSync(join(repo, 'a.txt'), 'b\n')
+    utimesSync(join(repo, 'a.txt'), second, second)
+    assert.notEqual(freezeWorkingTree(repo).candidateTree, baseTree)
+  })
+
   test('headCommit is null on an unborn repository and freezeWorkingTree uses the empty tree', () => {
     const repo = scratchDir('odd-git-tree-')
     sh(repo, 'init', '-q', '-b', 'main')

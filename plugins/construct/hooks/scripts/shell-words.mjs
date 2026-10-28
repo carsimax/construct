@@ -188,8 +188,11 @@ export function closingBacktick(text, from) {
 
 // closingParen returns the index of the `)` that closes a `$(` whose body starts at `from`, or -1.
 // The body is scanned with quote state: a `)` inside single or double quotes, after a backslash,
-// or inside a nested `$(...)` or backtick span does not close it.
+// or inside a nested `$(...)` or backtick span does not close it. Neither does the `)` of a bare
+// `(...)` group, of a `case` pattern, or inside a `#` comment, so a command after them stays inside the body.
 export function closingParen(text, from) {
+  let depth = 0
+  let cases = 0
   for (let i = from; i < text.length; i++) {
     const c = text[i]
     if (c === '\\') i++
@@ -205,9 +208,24 @@ export function closingParen(text, from) {
     } else if (c === '$' && text[i + 1] === '(') {
       i = closingParen(text, i + 2)
       if (i < 0) return -1
-    } else if (c === ')') return i
+    } else if (c === '#' && (i === from || /[\s;&|()]/.test(text[i - 1]))) {
+      // a comment runs to the end of the line; with no newline the body cannot close
+      i = text.indexOf('\n', i)
+      if (i < 0) return -1
+    } else if (c === '(') depth++
+    else if (c === ')') {
+      if (depth > 0) depth--
+      else if (cases === 0) return i
+    } else if (keywordAt(text, i, 'case')) cases++
+    else if (keywordAt(text, i, 'esac') && cases > 0) cases--
   }
   return -1
+}
+
+// keywordAt reports whether the shell word `word` starts at index i.
+function keywordAt(text, i, word) {
+  const end = i + word.length
+  return text.startsWith(word, i) && (i === 0 || /[\s;&|(]/.test(text[i - 1])) && (end === text.length || /[\s;&|)]/.test(text[end]))
 }
 
 // closingDouble returns the index of the `"` that closes a double-quoted string whose body starts

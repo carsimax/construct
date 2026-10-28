@@ -257,6 +257,8 @@ const promptKey = (text) => createHash('sha256').update(text.trim()).digest('hex
 // openWriters lists the live records of the session in this repository; a stale
 // record (older than SUBAGENT_MAX_IDLE_MS, a crashed writer) is removed. The unstarted
 // record of `key` is skipped: it is this same prompt's earlier launch, which never started.
+// shortcut: two identical prompts launched before either starts are both admitted (the same
+// task twice); telling that apart from a resend after a declined launch needs a launch id.
 function openWriters(session, root, key, now = Date.now()) {
   const dir = recordDir(session)
   let names

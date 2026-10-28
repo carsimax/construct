@@ -317,6 +317,18 @@ describe('shell wrappers are unwrapped by shell-words', () => {
     'echo "$(git push origin feat)"',
     "eval 'git push origin feat'",
     "bash -c 'git push origin feat'",
+    // security-review S1: a bare `(` or a case pattern `)` inside $(...) does not end the body.
+    'echo "$( (true); git push origin feat )"',
+    'echo $( (true) && git push origin feat )',
+    'echo $(case x in x) git push origin feat;; esac)',
+    'echo $(case x in (x) true;; esac; git push origin feat)',
+    'echo "$(case x in x) git push origin feat;; esac)"',
+    'echo "$(case x in x) true;; esac; git push origin feat)"',
+    'echo "$( ( (true) ); git push origin feat )"',
+    'echo "$(true #)\ngit push origin feat)"',
+    'echo "$(true # a ) b\ngit push origin feat)"',
+    'echo "$(cat <<EOF\n)\nEOF\ngit push origin feat)"',
+    'cat <( (true); git push origin feat )',
   ]
   for (const command of cases) test(`denies: ${command}`, () => denied(hook(command, repo)))
   test('denies: printf x | xargs -i git push', () => denied(hook('printf x | xargs -i git push', repo)))

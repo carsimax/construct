@@ -2,9 +2,9 @@
 // a frozen working tree, the HEAD commit, and an atomic file write.
 import { spawnSync } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
-import { copyFileSync, mkdirSync, mkdtempSync, renameSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { join } from 'node:path'
 
 const DEFAULT_OUTPUT_LIMIT = 64 << 20
 
@@ -78,27 +78,15 @@ function emptyTree(root) {
 // freezeWorkingTree builds an immutable tree of the current working state
 // (tracked plus untracked, not ignored) through a temporary index, so the user's
 // real index is never read for writing or changed. The base is the HEAD tree, or
-// the empty tree on an unborn branch. The temporary index starts as a copy of the
-// real one, whose stat cache lets `add -A` skip rehashing unchanged files, unless an
-// entry is assume-unchanged or skip-worktree: `add -A` would skip its changes.
+// the empty tree on an unborn branch. The temporary index starts from HEAD, with no
+// stat cache, so `add -A` hashes every file: the real index's cache is not trusted,
+// since a same-size rewrite with its mtime restored would match it.
 export function freezeWorkingTree(root) {
   const dir = mkdtempSync(join(tmpdir(), 'construct-index-'))
   try {
     const env = { GIT_INDEX_FILE: join(dir, 'index') }
     const head = headTree(root)
-    let seeded = false
-    // `ls-files -v` tags assume-unchanged entries with a lowercase letter and skip-worktree ones with S
-    if (!/^([a-z]|S) /m.test(text(git(root, ['ls-files', '-v'])))) try {
-      const index = resolve(root, text(git(root, ['rev-parse', '--git-path', 'index'])))
-      copyFileSync(index, env.GIT_INDEX_FILE)
-      // Keep the index mtime (floored, never later) so git still rehashes racily clean entries.
-      const second = Math.floor(statSync(index).mtimeMs / 1000)
-      utimesSync(env.GIT_INDEX_FILE, second, second)
-      seeded = true
-    } catch {
-      // no real index yet (fresh repository): seed from HEAD below
-    }
-    if (!seeded && head !== null) git(root, ['read-tree', 'HEAD'], { env })
+    if (head !== null) git(root, ['read-tree', 'HEAD'], { env })
     git(root, ['add', '-A'], { env })
     const candidateTree = text(git(root, ['write-tree'], { env }))
     return { baseTree: head ?? emptyTree(root), candidateTree }
