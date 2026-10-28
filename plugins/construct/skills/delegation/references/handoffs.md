@@ -7,7 +7,7 @@ Verifier strength: strong (a deterministic command with a clear expected outcome
 ## Worker
 
 ```markdown
-Spec: odd/tasks/<feature>.md, T<n> (covers S<n>)
+Spec: .vault/tasks/<feature>.md, T<n> (covers S<n>)
 
 <task: the one unit of behavior, with its acceptance rule>
 
@@ -37,7 +37,7 @@ Close with `## Key Learnings:`.
 ## Oracle
 
 ```markdown
-Spec: odd/tasks/<feature>.md, T<n> (covers S<n>)
+Spec: .vault/tasks/<feature>.md, T<n> (covers S<n>)
 
 Write the acceptance tests for S<n> from the spec text alone. Show them failing against the baseline. Do not implement.
 
@@ -92,7 +92,7 @@ Report each command as `<command>: <observed result>`. Close with `## Key Learni
 ```markdown
 Risk: item N (<reason>)
 
-Feature document: odd/tasks/<feature>.md (read in full)
+Feature document: .vault/tasks/<feature>.md (read in full)
 Baseline: <ref before>
 Candidate: <ref or worktree after>
 Probes: <commands or forms that exercise each Risk-named unit>

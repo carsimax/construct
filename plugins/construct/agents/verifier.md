@@ -1,7 +1,7 @@
 ---
 name: verifier
 description: >
-  Independent ODD verifier. Use only after a change whose Risk line names a high-risk item,
+  Independent ADD verifier. Use only after a change whose Risk line names a high-risk item,
   once the change's own checks ran. Receives the whole feature document, the baseline commit,
   and probe command forms, and returns a verdict per spec.
 model: opus

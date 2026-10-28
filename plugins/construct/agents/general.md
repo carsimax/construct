@@ -1,7 +1,7 @@
 ---
 name: general
 description: >
-  General ODD delegate for bounded tasks that fit no specialized construct agent: research,
+  General ADD delegate for bounded tasks that fit no specialized construct agent: research,
   per-action work such as running a long test suite, a build, or an install, and other
   self-contained jobs the parent wants out of its context.
 model: sonnet

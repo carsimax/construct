@@ -1,7 +1,7 @@
 ---
 name: delegation
 user-invocable: false
-description: "When and how the ODD orchestrator delegates to construct agents: role mapping, allowed edit surfaces, parallel writers, verifier timing, handoff prompts, and relaying a subagent's blocking question or choice menu. Trigger: deciding to delegate, launching an agent, writing a handoff, or a subagent or tool returns a question, menu, or consent request."
+description: "When and how the ADD orchestrator delegates to construct agents: role mapping, allowed edit surfaces, parallel writers, verifier timing, handoff prompts, and relaying a subagent's blocking question or choice menu. Trigger: deciding to delegate, launching an agent, writing a handoff, or a subagent or tool returns a question, menu, or consent request."
 license: MIT
 metadata:
   author: Construct
@@ -14,7 +14,7 @@ The parent orchestrates; agents do the work. Copy the role's template from `refe
 
 ## Mapping
 
-Small work is done inline: the parent edits directly when each call changes at most `inline_edit_max_lines` lines (default 150; 0 restores worker-only). Large work and any bigger edit go to `construct:worker` (surface-guard denies a main-thread edit over the limit); reads, answers, and `odd/tasks/` stay with the parent.
+Small work is done inline: the parent edits directly when each call changes at most `inline_edit_max_lines` lines (default 150; 0 restores worker-only). Large work and any bigger edit go to `construct:worker` (surface-guard denies a main-thread edit over the limit); reads, answers, and `.vault/tasks/` stay with the parent.
 
 - Worker: one per independent unit, code, tests, and docs together. Disjoint units launch in one message; dependent ones in order, never a second agent of one role and task in a turn.
 - Workflows launch only read-only agents, each `agent()` naming its `agentType` (hook); writes go through `construct:worker`.
@@ -30,7 +30,7 @@ Small work is done inline: the parent edits directly when each call changes at m
 delegation-admission denies a `construct:worker` launch that lacks:
 
 - The exact heading `## Allowed edit surfaces`, then one bare repository-relative path or narrow glob per line, nothing else. No `.`, root, absolute path, `..`, leading glob, or notes; prose goes under the next heading.
-- While a feature document is unfinished: `Spec: odd/tasks/<feature>.md, T<n>` pointing at a real file, not a symlink, under `odd/tasks/`.
+- While a feature document is unfinished: `Spec: .vault/tasks/<feature>.md, T<n>` pointing at a real file, not a symlink, under `.vault/tasks/`.
 - Surfaces disjoint from every writer still open. An entry it cannot interpret counts as overlap. A shared file has one owner; run writers in sequence or `isolation: worktree` when files overlap.
 
 surface-guard then denies writes outside those entries. A worker given no list returns `needs_interaction` with candidate paths; the parent offers approve or decline, and paths change only on a human instruction. Writers run no repo-wide formatters, generators, or installs; other-repository work goes in a fresh worktree.
