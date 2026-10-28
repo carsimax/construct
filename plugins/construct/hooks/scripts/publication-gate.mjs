@@ -34,7 +34,7 @@ import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { defaultBranch } from './delivery-signals.mjs'
-import { unfinishedRows } from './feature-state.mjs'
+import { openClarifications, specIds, unfinishedRows } from './feature-state.mjs'
 import { git, repositoryRoot } from './git-tree.mjs'
 import { readInput } from './hook-io.mjs'
 import { requiredLenses } from './review-lenses.mjs'
@@ -359,10 +359,13 @@ export function reviewState(root, base, sha) {
     }
   }
   const items = new Set()
+  const docs = [] // [path, text] of each feature document read at the ref
   for (const [commit, path] of reads) {
     if (!/^odd\/tasks\/[^/]+\.md$/.test(path)) continue
     if (out(root, ['ls-tree', '--name-only', commit, '--', path]) === '') continue
-    for (const item of riskItems(out(root, ['show', `${commit}:${path}`]), path)) items.add(item)
+    const text = out(root, ['show', `${commit}:${path}`])
+    if (commit === sha) docs.push([path, text])
+    for (const item of riskItems(text, path)) items.add(item)
   }
   const floor = new Map()
   for (const [glob, item] of [...FLOOR, ...projectFloor(root, mergeBase), ...projectFloor(root, base)]) {
@@ -372,12 +375,28 @@ export function reviewState(root, base, sha) {
   }
   for (const item of floor.keys()) items.add(item)
   const required = requiredLenses(items)
-  if (required.length === 0) return { mergeBase, items, required, floor, state: () => 'missing' }
+  if (required.length === 0) return { mergeBase, items, required, floor, docs, state: () => 'missing' }
   const baseTree = out(root, ['rev-parse', `${mergeBase}^{tree}`])
   const headTree = out(root, ['rev-parse', `${sha}^{tree}`])
   const direct = readVerdicts(root, subjectHash(baseTree, headTree))
   const state = (lens) => (direct[lens] ? (direct[lens].approved === true ? 'ok' : 'rejected') : 'missing')
-  return { mergeBase, items, required, floor, state }
+  return { mergeBase, items, required, floor, docs, state }
+}
+
+// clarificationDenial (S1): a `done` task whose Specs cell names an S# still marked NEEDS CLARIFICATION denies. Null when none.
+function clarificationDenial(docs) {
+  const found = []
+  for (const [path, text] of docs) {
+    const lines = text.split('\n')
+    const open = openClarifications(lines)
+    if (open.length === 0) continue
+    for (const [task, cell, status] of unfinishedRows(lines)?.taskSpecs ?? []) {
+      if (!/^done\b/i.test(status.replace(/[*`]/g, '').trim())) continue
+      const ids = specIds(cell)
+      for (const c of open) if (ids.has(Number(c.id.slice(1)))) found.push(`${path} task ${task} is done but ${c.id} still needs clarification: ${c.question}`)
+    }
+  }
+  return found.length === 0 ? null : found.join('; ')
 }
 
 // refVerdict judges one published ref: null when it may go, else the denial reason.
@@ -392,7 +411,9 @@ function refVerdict(root, pub, base, ref) {
   const sha = out(root, ['rev-parse', '--verify', `${ref}^{commit}`])
   const locked = oracleDenial(root, sha)
   if (locked) return `publication-gate: ${pub.gate} is denied because ${short} changes an oracle that is locked by content hash: ${locked}. The oracle is locked while its feature has unfinished tasks: restore the file, or return \`oracle_conflict\` to the user (the spec and the test disagree) or ask them to unlock it.`
-  const { mergeBase, items, required, floor, state } = reviewState(root, base, sha)
+  const { mergeBase, items, required, floor, docs, state } = reviewState(root, base, sha)
+  const unclear = clarificationDenial(docs)
+  if (unclear) return `publication-gate: ${pub.gate} is denied because ${short} finishes work on an open question: ${unclear}. Ask the user, record the answer in the Log, and remove the NEEDS CLARIFICATION marker from the spec (a review does not lift this).`
   if (required.length === 0) return null
   const missing = required.filter((lens) => state(lens) === 'missing')
   const rejected = required.filter((lens) => state(lens) === 'rejected')
