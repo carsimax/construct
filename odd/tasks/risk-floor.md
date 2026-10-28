@@ -27,4 +27,6 @@ Objective: ADD P5 — signals in the published diff set a minimum Risk the agent
 
 - **L3 (2026-10-28):** Automated security review on #79: three findings fixed (RED first): odd/risk-paths also read at the default branch tip; case-insensitive globs; `s` flag so a newline in a path cannot dodge `.*`. Misplaced test comment moved back. Suite 1105/1105.
 
-Next step: re-review (review-risk, review-reliability), push to #79.
+- **L4 (2026-10-28):** Reliability suggestions done: tests for a malformed line at the base tip and the 5-path cap in the denial (both pass on existing behavior), and the review skill context now names the floor paths (RED first). Suite 1108/1108.
+
+Next step: re-review, push to #79.

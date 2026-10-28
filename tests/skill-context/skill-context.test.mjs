@@ -95,6 +95,17 @@ test('review reports a rejected lens and no requirement when the Risk cells are 
   assert.match(run(repo, 'review').stdout, /no review required/i)
 })
 
+test('review shows the risk floor on a branch with no feature document', () => {
+  const repo = makeRepo()
+  git(repo, 'checkout', '-q', '-b', 'feat/x')
+  write(repo, 'install.sh', '#!/bin/sh\n')
+  commitAll(repo, 'installer')
+  const out = run(repo, 'review').stdout
+  assert.match(out, /Risk items 5 \(floor: item 5 from install\.sh\)/)
+  assert.match(out, /review-resilience: missing/)
+  assert.match(out, /review-risk: missing/)
+})
+
 // The skill reads the gate's own reviewState, so a range expands and a malformed cell fails as the gate would.
 test('review shares the gate parser: ranges expand, a malformed Risk cell is unavailable', () => {
   const repo = featureRepo()

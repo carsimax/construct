@@ -344,6 +344,24 @@ describe('the risk floor', () => {
     assert.match(hook('git push', floorRepo({}, { 'db/migrations/a\nb.txt': 'x\n' })).reason, /Risk items 1/)
   })
 
+  test('a malformed odd/risk-paths line at the default branch tip denies, as one at the merge-base does', () => {
+    const repo = floorRepo({}, { 'src/x.js': 'x\n' })
+    git(repo, 'checkout', '-q', 'main')
+    applyFiles(repo, { 'odd/risk-paths': 'src/** nine\n' })
+    commitAll(repo, 'bad rule')
+    git(repo, 'checkout', '-q', 'feat')
+    const r = hook('git push', repo)
+    assert.equal(r.decision, 'deny')
+    assert.match(r.reason, /odd\/risk-paths has an unreadable line/)
+  })
+
+  test('the denial lists at most five floor paths per item', () => {
+    const change = Object.fromEntries([1, 2, 3, 4, 5, 6, 7].map((n) => [`db/migrations/00${n}.sql`, 'x\n']))
+    const r = hook('git push', floorRepo({}, change))
+    assert.match(r.reason, /item 1 from db\/migrations\/001\.sql, db\/migrations\/002\.sql, db\/migrations\/003\.sql, db\/migrations\/004\.sql, db\/migrations\/005\.sql, \.\.\.\)/)
+    assert.doesNotMatch(r.reason, /006\.sql/)
+  })
+
   test('editing odd/risk-paths in the published diff does not change its own floor', () => {
     // Deleting or emptying the file while touching a declared path still denies.
     const base = { 'odd/risk-paths': 'src/api/** 3\n', 'src/api/x.js': 'a\n' }
