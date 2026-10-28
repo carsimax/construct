@@ -8,7 +8,6 @@ import { kindOf } from '../scripts/roles.mjs'
 export const SCHEMA_VERSION = 1
 
 const MAX_AGENTS = 20
-const MAX_PENDING = 100
 
 const isObj = (x) => typeof x === 'object' && x !== null && !Array.isArray(x)
 const str = (x) => (typeof x === 'string' && x !== '' ? x : null)
@@ -16,37 +15,23 @@ const last = (list, max) => (list.length > max ? list.slice(list.length - max) :
 
 // ---- state shape ---------------------------------------------------------
 
-const tally = () => ({ rule: 0, ask: 0, cleared: 0, deny: 0 })
-
 export function initialState() {
   return {
     v: SCHEMA_VERSION,
     agents: [],
-    inline: { count: 0 },
-    gate: { verdicts: tally(), pending: {} },
     turn: null,
     blocked: false,
   }
 }
 
-// A section over its defaults: numeric fields must be numbers, the rest take the stored value when set.
-const fill = (def, v) => {
-  const from = isObj(v) ? v : {}
-  return Object.fromEntries(Object.entries(def).map(([k, d]) => [k, typeof d === 'number' ? (isNum(from[k]) ? from[k] : d) : (from[k] ?? d)]))
-}
-
-// Repairs a stored value: another version resets. A section of the wrong type takes its default,
-// and a field outside the schema is dropped.
+// Repairs a stored value: another version resets. A field outside the schema (an older `gate` or
+// `inline`) is dropped.
 export function merge(stored) {
   const base = initialState()
   if (!isObj(stored) || stored.v !== SCHEMA_VERSION) return base
-  const g = isObj(stored.gate) ? stored.gate : {}
-  const gate = { verdicts: fill(base.gate.verdicts, g.verdicts), pending: isObj(g.pending) ? g.pending : {} }
   return {
     v: SCHEMA_VERSION,
     agents: (Array.isArray(stored.agents) ? stored.agents : []).filter(isObj),
-    inline: fill(base.inline, stored.inline),
-    gate,
     turn: isObj(stored.turn) ? stored.turn : null,
     blocked: stored.blocked === true,
   }
@@ -54,34 +39,6 @@ export function merge(stored) {
 
 // merge is idempotent on a sound value, so every reducer repairs nested damage in a current value too
 const open = merge
-
-// ---- paths ---------------------------------------------------------------
-
-// The path a tool call touches: a top-level file_path on the call, else the one in its input.
-export function filePathOf(e) {
-  const input = isObj(e?.input) ? e.input : {}
-  return str(e?.file_path) ?? str(input.file_path) ?? str(e?.notebook_path) ?? str(input.notebook_path) ?? str(e?.path) ?? str(input.path) ?? undefined
-}
-
-// Lexical normalization against cwd, so `sub/../.vault/tasks/x` and `./.vault/tasks/x` resolve alike.
-function resolve(path, cwd) {
-  const full = path.startsWith('/') ? path : `${typeof cwd === 'string' ? cwd : ''}/${path}`
-  const parts = []
-  for (const part of full.split('/')) {
-    if (part === '..') parts.pop()
-    else if (part !== '' && part !== '.') parts.push(part)
-  }
-  return parts
-}
-
-export function isOutsideTasks(path, cwd) {
-  if (typeof path !== 'string' || path === '') return false
-  const parts = resolve(path, cwd)
-  // with no cwd, an `.vault/tasks` segment pair anywhere in the path counts as inside tasks
-  if (typeof cwd !== 'string') return !parts.some((p, i) => p === '.vault' && parts[i + 1] === 'tasks')
-  const tasks = resolve('.vault/tasks', cwd)
-  return !tasks.every((p, i) => parts[i] === p)
-}
 
 // ---- agents --------------------------------------------------------------
 
@@ -124,62 +81,7 @@ export function onTurnComplete(state, e) {
   return s.turn ? { ...s, turn: null } : s
 }
 
-// ---- gate ----------------------------------------------------------------
-
-const FILE_TOOLS = ['Read', 'Edit', 'MultiEdit', 'Write', 'NotebookEdit', 'Glob', 'Grep']
-const SHELL_TOOLS = ['Bash', 'PowerShell']
-const WRITE_TOOLS = ['Write', 'Edit', 'MultiEdit', 'NotebookEdit']
-
-export function bucketOf(tool) {
-  if (FILE_TOOLS.includes(tool)) return 'file'
-  return SHELL_TOOLS.includes(tool) ? 'shell' : 'other'
-}
-
-const bump = (counts, key, by = 1) => ({ ...counts, [key]: Math.max(0, counts[key] + by) })
-
-// Moves one verdict from `from` to `to`.
-const shift = (gate, from, to) => ({ ...gate, verdicts: bump(bump(gate.verdicts, from, -1), to) })
-
-const VERDICT = { allow: 'rule', ask: 'ask', deny: 'deny' }
-
-export function onToolCheck(state, e) {
-  const s = open(state)
-  const decision = e?.decision
-  // a query carries no tool_use_id: it asks what would happen and decides nothing
-  if (e?.isQuery || !VERDICT[decision]) return s
-  // the same call asked again (a re-check while it waits) is one ask, not two
-  if (decision === 'ask' && str(e.callId) && Object.hasOwn(s.gate.pending ?? {}, e.callId)) return s
-  const g = s.gate
-  let gate = { ...g, verdicts: bump(g.verdicts, VERDICT[decision]) }
-  if (decision === 'ask') {
-    // asks without a call id still need a unique slot; the running total of verdicts is one
-    const key = str(e.callId) ?? `anon${Object.values(g.verdicts).reduce((a, b) => a + b, 0)}`
-    const keys = Object.keys(gate.pending ?? {}).concat(key).slice(-MAX_PENDING)
-    gate = { ...gate, pending: Object.fromEntries(keys.map((k) => [k, k === key ? bucketOf(e.tool) : gate.pending[k]])) }
-  }
-  return { ...s, gate }
-}
-
-// The ask got its answer: it ran (cleared) or it did not (deny).
-export function onToolSettle(state, e) {
-  const s = open(state)
-  const pending = s.gate.pending ?? {}
-  const id = str(e?.callId)
-  const bucket = bucketOf(e?.tool)
-  const key = id ?? Object.keys(pending).find((k) => pending[k] === bucket)
-  if (key === undefined || !Object.hasOwn(pending, key)) return s
-  const { [key]: _settled, ...rest } = pending
-  const gate = shift({ ...s.gate, pending: rest }, 'ask', e.didRun ? 'cleared' : 'deny')
-  return { ...s, gate }
-}
-
-// ---- inline writes, blocked flag ----------------------------------------
-
-export function onToolCall(state, e) {
-  const s = open(state)
-  if (str(e?.agentId) !== null || !WRITE_TOOLS.includes(e?.tool) || !isOutsideTasks(e.path, e.cwd)) return s
-  return { ...s, inline: { count: s.inline.count + 1 } }
-}
+// ---- blocked flag --------------------------------------------------------
 
 const BLOCKING = ['AskUserQuestion', 'ExitPlanMode']
 export const isBlockingTool = (tool) => BLOCKING.includes(tool)

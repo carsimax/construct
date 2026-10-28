@@ -18,7 +18,7 @@ An agent writes code faster than you can check it. Organic Driven Development ke
 - **Role agents with model routing.** 11 agents (explorer, worker, oracle, verifier, judges, review lenses). You choose each role's model and effort in `/config`.
 - **Skills.** Procedures that load on demand: workflow (sizing included), delegation, debugging, quality bar, migrations, feature branch with local sub-branches, commits, and the final pull request (`delivery`), review, and more.
 - **Mandatory review.** Work whose Risk names a high-risk item is reviewed by lens agents before it can be published. Hooks build the evidence, record the verdicts, and gate `git push`, `gh pr create`, and `gh release create`.
-- **Status band.** One or two rows above the prompt with the phase, the active feature and its tasks, the permission gate, and the running agents. It leaves the model, branch, context, and plan limits to your status line.
+- **Status band.** One row above the prompt with the phase, the active feature with its checkpoints, and the running agents. It leaves the model, branch, context, and plan limits to your status line.
 
 - **Memory.** Provided by [Engram](https://github.com/Gentleman-Programming/engram), which you install separately. See [Memory](#memory).
 
@@ -269,17 +269,15 @@ The `PostToolBatch` signal fails open (no output, exit 0).
 
 ### Construct band (mod)
 
-The mod draws one thing: a **band** above the prompt (the `AbovePrompt` render site), at most two rows, shaped to the ADD flow. It shows only what Construct knows; the model, effort, branch, diff, context, and plan limits belong to your status line and are not repeated. It needs Claude Code 2.1.304 or later, draws in the terminal and the Desktop app, and does not appear in `claude -p` runs, which draw no interface.
+The mod draws one thing: a **band** above the prompt (the `AbovePrompt` render site), one row, shaped to the ADD flow. It shows only what Construct knows; the model, effort, branch, diff, context, and plan limits belong to your status line and are not repeated. It needs Claude Code 2.1.304 or later, draws in the terminal and the Desktop app, and does not appear in `claude -p` runs, which draw no interface.
 
-**Row one.** The status, the active feature, and the gate, separated by ` · `:
+**The row.** The status, the active feature, and the running agents, separated by ` · `, each present only when it has content:
 
 - **Status**: `○ ready` when idle; `● building`, `● mapping`, `● verifying`, `● reviewing`, or `● working` while a turn runs (named by the ADD phase of the running agents; plain `● busy` with none running); `◆ waiting on you` (warning color) while Claude waits on you: a `tool.check` verdict of `ask` on a real call (the permission prompt), or a `tool.call` on `AskUserQuestion` or `ExitPlanMode` while it is open. The next settled `tool.call`, `turn.start`, or `turn.complete` clears it.
-- **Feature** (only with one): `ADD <feature>` (the newest `.vault/tasks/*.md` with an unfinished task, the rule of `feature-state.mjs`), one checkpoint per task (done filled, current highlighted, the latest kept behind `…` when there are many), and the current task id and title.
-- **Gate** (only after a permission verdict or an inline write): `gate N pending` (warning color) while asks wait on you, else `gate ✓ N` for the calls that passed; `✗ N` for denials; `⚠ N inline` for main-thread `Edit`, `Write`, `MultiEdit`, or `NotebookEdit` calls outside `.vault/tasks/`. It only observes and never blocks.
+- **Feature** (only with one): `ADD <feature>` (the newest `.vault/tasks/*.md` with an unfinished task, the rule of `feature-state.mjs`), and one checkpoint per task (done filled, current highlighted, the latest kept behind `…` when there are many). The current task's id and title are not drawn.
+- **Agents** (only while subagents run): with one, its glyph by role, short name, and elapsed time (`⚒ worker 1:42`; glyphs `⌕` explorer, `⚒` worker, `⊨` verifier, `⚖` judge, `◎` review lens, and `•` for a subagent type with no construct role); with several, their count and the oldest one's elapsed time (`N agents 1:42`). The routed models are not drawn. Elapsed time is static text.
 
-**Row two** (only while subagents run): one segment per running agent, oldest first: a glyph and verb by role (`⌕ explorer mapping`, `⚒ worker building`, `⊨ verifier verifying`, `⚖ judge judging`, `◎ review-risk reviewing`; the subagent type with `•` when it has no construct role), the routed model, and the elapsed time as static text.
-
-**Width.** The band draws to the width Claude Code gives it. When a row does not fit, the task title goes first, then the agents' models, then the row is clipped with `…`. When the band has room for one row only, row two is left out. With nothing to show (idle, no open feature, no gate activity) the band draws nothing. Other mods share the band: what they draw stays below Construct's rows. You can collapse the band with Ctrl+X Ctrl+A; the mod cannot tell, so it is never the only place something that needs your answer appears.
+**Width.** The band draws to the width Claude Code gives it. When the row does not fit it is clipped with `…`. With nothing to show (idle, no open feature, no agents) the band draws nothing. Other mods share the band: what they draw stays below Construct's row. You can collapse the band with Ctrl+X Ctrl+A; the mod cannot tell, so it is never the only place something that needs your answer appears.
 
 **Colors.** The text colors are theme keys, so they follow the active theme.
 

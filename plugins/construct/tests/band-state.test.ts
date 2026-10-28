@@ -4,16 +4,11 @@ import {
   agentsView,
   initialState,
   isBlockingTool,
-  isOutsideTasks,
   merge,
   mainBusy,
   onAgentSpawn,
   onBlocked,
   onUnblocked,
-  onToolSettle,
-  bucketOf,
-  onToolCall,
-  onToolCheck,
   onTurnComplete,
   onTurnStart,
   phaseOf,
@@ -29,23 +24,29 @@ test('initialState carries the schema version and empty sections', () => {
   const s = initialState()
   expect(s.v).toBe(SCHEMA_VERSION)
   expect(s.agents).toEqual([])
-  expect(s.inline).toEqual({ count: 0 })
-  expect(s.gate).toEqual({ verdicts: { rule: 0, ask: 0, cleared: 0, deny: 0 }, pending: {} })
+  expect('inline' in s).toBe(false)
+  expect('gate' in s).toBe(false)
   expect(s.turn).toBe(null)
   expect('receipt' in s).toBe(false)
 })
 
 test('merge keeps a valid stored value over defaults', () => {
-  const stored = { ...initialState(), inline: { count: 3 } }
-  expect(merge(stored).inline.count).toBe(3)
-  // a path stored by an older version is dropped
-  expect(merge({ ...initialState(), inline: { count: 1, last: 'a' } }).inline).toEqual({ count: 1 })
-  expect(merge({ v: SCHEMA_VERSION, inline: { count: 2 } }).gate.pending).toEqual({})
+  const stored = { ...initialState(), blocked: true, turn: { turnId: 't' } }
+  expect(merge(stored)).toEqual(stored)
+})
+
+test('merge of a stored v1 value that still has gate and inline drops them without error (S6)', () => {
+  const old = { ...initialState(), inline: { count: 3 }, gate: { verdicts: { rule: 1, ask: 2, cleared: 0, deny: 1 }, pending: { c: 'file' } }, blocked: true }
+  const m: any = merge(old)
+  expect('gate' in m).toBe(false)
+  expect('inline' in m).toBe(false)
+  expect(m).toEqual({ ...initialState(), blocked: true })
+  expect(merge({ v: SCHEMA_VERSION, gate: 3, inline: 'x' })).toEqual(initialState())
 })
 
 test('merge returns defaults on a version change or a malformed value', () => {
   expect(merge({ ...initialState(), v: SCHEMA_VERSION + 1, blocked: true })).toEqual(initialState())
-  for (const bad of [null, undefined, 5, 'x', [], { v: SCHEMA_VERSION, agents: 'no' }, { v: SCHEMA_VERSION, gate: 3 }]) {
+  for (const bad of [null, undefined, 5, 'x', [], { v: SCHEMA_VERSION, agents: 'no' }]) {
     expect(merge(bad)).toEqual(initialState())
   }
 })
@@ -102,51 +103,6 @@ test('agentsView gives the elapsed time from the start to now', () => {
   expect(agentsView(initialState(), 1)).toEqual([])
 })
 
-// ---- S3 inline writes --------------------------------------------------
-
-test('isOutsideTasks handles absolute, relative and .vault/tasks paths', () => {
-  expect(isOutsideTasks('/repo/src/a.js', '/repo')).toBe(true)
-  expect(isOutsideTasks('src/a.js', '/repo')).toBe(true)
-  expect(isOutsideTasks('/repo/.vault/tasks/x.md', '/repo')).toBe(false)
-  expect(isOutsideTasks('.vault/tasks/x.md', '/repo')).toBe(false)
-  expect(isOutsideTasks('./.vault/tasks/x.md', '/repo')).toBe(false)
-  expect(isOutsideTasks('/repo/.vault/tasks', '/repo')).toBe(false)
-  expect(isOutsideTasks('/repo/.vault/tasksx/a.md', '/repo')).toBe(true)
-  expect(isOutsideTasks('/other/.vault/tasks/x.md', '/repo')).toBe(true)
-  expect(isOutsideTasks('/repo/sub/../.vault/tasks/x.md', '/repo')).toBe(false)
-  expect(isOutsideTasks('', '/repo')).toBe(false)
-  expect(isOutsideTasks(undefined, '/repo')).toBe(false)
-})
-
-test('a main-thread write outside .vault/tasks counts as inline', () => {
-  let s = initialState()
-  s = onToolCall(s, { tool: 'Edit', path: '/repo/src/a.js', cwd: '/repo' })
-  s = onToolCall(s, { tool: 'NotebookEdit', path: 'n.ipynb', cwd: '/repo' })
-  expect(s.inline).toEqual({ count: 2 })
-  for (const tool of ['Write', 'MultiEdit']) s = onToolCall(s, { tool, path: 'b.js', cwd: '/repo' })
-  expect(s.inline.count).toBe(4)
-})
-
-test('.vault/tasks writes, reads and subagent writes are not inline', () => {
-  let s = initialState()
-  s = onToolCall(s, { tool: 'Write', path: '/repo/.vault/tasks/f.md', cwd: '/repo' })
-  s = onToolCall(s, { tool: 'Read', path: 'a.js', cwd: '/repo' })
-  s = onToolCall(s, { tool: 'Bash', path: undefined, cwd: '/repo' })
-  s = onToolCall(s, { tool: 'Edit', path: 'a.js', agentId: 'a1', cwd: '/repo' })
-  expect(s.inline).toEqual({ count: 0 })
-})
-
-// ---- S4 gate -----------------------------------------------------------
-
-test('onToolCheck ignores a query that carries no tool_use_id when the wiring flags it', () => {
-  const s = onToolCheck(initialState(), { tool: 'Bash', decision: 'deny', isQuery: true })
-  expect(s.gate.verdicts).toEqual({ rule: 0, ask: 0, cleared: 0, deny: 0 })
-})
-
-test('a denied verdict inside a subagent is still a deny', () => {
-  expect(onToolCheck(initialState(), { tool: 'Bash', decision: 'deny', agentId: 'a1' }).gate.verdicts.deny).toBe(1)
-})
-
 // ---- main turn busy flag (the receipt is gone) ---------------------------
 
 test('a main turn marks the band busy and completing it clears the flag; no receipt is kept', () => {
@@ -154,11 +110,9 @@ test('a main turn marks the band busy and completing it clears the flag; no rece
   expect(s.turn).toEqual({ turnId: 't1' })
   expect('receipt' in s).toBe(false)
   s = spawn(s, 'a1')
-  s = onToolCall(s, { tool: 'Edit', path: 'a.js', cwd: '/r' })
   s = onTurnComplete(s, { turnId: 't1', nowMs: 4000 })
   expect(s.turn).toBe(null)
   expect('receipt' in s).toBe(false)
-  expect(s.inline.count).toBe(1)
 })
 
 test('subagent turns do not touch the busy flag; a turn id mismatch does not close it', () => {
@@ -186,7 +140,7 @@ test('complete with no start is safe, and merge drops a stored receipt', () => {
 
 test('odd input never throws', () => {
   const odd: any[] = [undefined, null, 5, 'x', [], {}, { agentId: 5 }, { usage: 'no' }, { tool: {}, path: 3, decision: 9, input: null }]
-  const reducers: any[] = [onAgentSpawn, onTurnStart, onTurnComplete, onToolCall, onToolCheck]
+  const reducers: any[] = [onAgentSpawn, onTurnStart, onTurnComplete]
   for (const r of reducers) {
     for (const e of odd) {
       for (const st of [initialState(), null, undefined, {}, 7]) {
@@ -197,7 +151,6 @@ test('odd input never throws', () => {
     }
   }
   expect(agentsView(null as any, NaN)).toEqual([])
-  expect(isOutsideTasks(5 as any, null as any)).toBe(false)
 })
 
 // ---- S3 main vitals ------------------------------------------------------
@@ -210,79 +163,15 @@ test('mainBusy is true only while a main turn is open', () => {
   expect(mainBusy(null)).toBe(false)
 })
 
-// ---- S6 gate by decider and bucket ---------------------------------------
-
-test('bucketOf sorts tools into file, shell and other', () => {
-  expect(['Read', 'Edit', 'Write', 'NotebookEdit', 'Glob', 'Grep'].map(bucketOf)).toEqual(Array(6).fill('file'))
-  expect(['Bash', 'PowerShell'].map(bucketOf)).toEqual(['shell', 'shell'])
-  expect(['WebFetch', 'mcp__x__y', undefined].map(bucketOf as any)).toEqual(['other', 'other', 'other'])
-})
-
-test('verdicts count per decider, a subagent verdict included', () => {
-  let s = initialState()
-  s = onToolCheck(s, { tool: 'Read', decision: 'allow' })
-  s = onToolCheck(s, { tool: 'Bash', decision: 'ask' })
-  s = onToolCheck(s, { tool: 'Bash', decision: 'deny' })
-  s = onToolCheck(s, { tool: 'WebFetch', decision: 'allow', agentId: 'a1' })
-  expect(s.gate.verdicts).toEqual({ rule: 2, ask: 1, cleared: 0, deny: 1 })
-})
-
-test('a query adds no verdict', () => {
-  const s = onToolCheck(initialState(), { tool: 'Read', decision: 'allow', isQuery: true })
-  expect(s.gate.verdicts).toEqual({ rule: 0, ask: 0, cleared: 0, deny: 0 })
-})
-
-test('an ask settles as cleared when the call ran and as deny when it did not', () => {
-  let s = onToolCheck(onToolCheck(initialState(), { tool: 'Bash', decision: 'ask' }), { tool: 'Bash', decision: 'ask' })
-  s = onToolSettle(s, { tool: 'Bash', didRun: true })
-  expect(s.gate.verdicts).toMatchObject({ ask: 1, cleared: 1, deny: 0 })
-  s = onToolSettle(s, { tool: 'Bash', didRun: false })
-  expect(s.gate.verdicts).toMatchObject({ ask: 0, cleared: 1, deny: 1 })
-  // nothing pending: unchanged
-  expect(onToolSettle(s, { tool: 'Bash', didRun: true })).toEqual(s)
-  expect(onToolSettle(s, { tool: 'Read', didRun: true })).toEqual(s)
-})
-
-test('an ask settles by its call id: a run of another call in the same bucket does not clear it', () => {
-  let s = onToolCheck(initialState(), { tool: 'Bash', decision: 'ask', callId: 'rm1' })
-  s = onToolCheck(s, { tool: 'Bash', decision: 'allow', callId: 'ls1' })
-  s = onToolSettle(s, { tool: 'Bash', didRun: true, callId: 'ls1' })
-  expect(s.gate.verdicts).toMatchObject({ rule: 1, ask: 1, cleared: 0, deny: 0 })
-  s = onToolSettle(s, { tool: 'Bash', didRun: false, callId: 'rm1' })
-  expect(s.gate.verdicts).toMatchObject({ rule: 1, ask: 0, cleared: 0, deny: 1 })
-  // settled once: a repeat changes nothing
-  expect(onToolSettle(s, { tool: 'Bash', didRun: true, callId: 'rm1' })).toEqual(s)
-})
-
-test('an ask with a call id clears by that id; without an id the bucket fallback still works', () => {
-  let s = onToolCheck(initialState(), { tool: 'Bash', decision: 'ask', callId: 'a' })
-  s = onToolSettle(s, { tool: 'Bash', didRun: true, callId: 'a' })
-  expect(s.gate.verdicts).toMatchObject({ ask: 0, cleared: 1 })
-  s = onToolCheck(s, { tool: 'Bash', decision: 'ask' })
-  s = onToolSettle(s, { tool: 'Bash', didRun: true })
-  expect(s.gate.verdicts).toMatchObject({ ask: 0, cleared: 2 })
-})
-
 test('merge drops the fields outside the schema', () => {
-  const old: any = { ...initialState(), inline: { count: 1, last: 'a' }, gate: { cells: ['allowed'], verdicts: { rule: 1 }, lastDenied: null }, receipt: null, compactions: 2, main: {} }
+  const old: any = { ...initialState(), receipt: null, compactions: 2, main: {} }
   const m: any = merge(old)
-  expect(m.inline).toEqual({ count: 1 })
-  expect(m.gate).toEqual({ verdicts: { rule: 1, ask: 0, cleared: 0, deny: 0 }, pending: {} })
   for (const k of ['main', 'compactions', 'receipt', 'log']) expect(k in m).toBe(false)
 })
 
 test('the schema is version 1 and any other version resets', () => {
   expect(SCHEMA_VERSION).toBe(1)
-  for (const v of [0, 2, 3, '1']) expect(merge({ ...initialState(), v, inline: { count: 4 } })).toEqual(initialState())
-})
-
-test('spawn, done, denied and inline write no longer touch a log', () => {
-  let s: any = spawn(initialState(), 'a1', { nowMs: 1000 })
-  s = onTurnComplete(s, { agentId: 'a1', nowMs: 66000 })
-  s = onToolCheck(s, { tool: 'Bash', decision: 'deny', input: { command: 'x' }, nowMs: 7 })
-  s = onToolCall(s, { tool: 'Edit', path: '/p/src/a.ts', cwd: '/p', nowMs: 9 })
-  expect('log' in s).toBe(false)
-  expect(s.inline).toEqual({ count: 1 })
+  for (const v of [0, 2, 3, '1']) expect(merge({ ...initialState(), v, blocked: true })).toEqual(initialState())
 })
 
 // ---- S8b blocked state -------------------------------------------------
@@ -346,13 +235,6 @@ test('a main turn start keeps its start time; a stored turn without one is read 
   expect(onTurnComplete(old, { turnId: 't9', nowMs: 5 }).turn).toBe(null)
 })
 
-// ---- L4 regressions ----------------------------------------------------
-
-test('MultiEdit and NotebookEdit are file tools', () => {
-  expect(bucketOf('MultiEdit')).toBe('file')
-  expect(bucketOf('NotebookEdit')).toBe('file')
-})
-
 test('a duplicate spawn id replaces the card; naming falls back and normalizes', () => {
   let s = spawn(initialState(), 'a1')
   s = spawn(s, 'a1', { model: 'opus' })
@@ -372,42 +254,14 @@ test('a main turn without an id ends on a completion with one', () => {
 })
 
 test('damaged nested stored shapes are repaired and no reducer throws', () => {
-  const damaged = {
-    v: SCHEMA_VERSION,
-    agents: [null, { id: 'a1', status: 'running' }],
-    gate: { verdicts: { rule: 'z' }, pending: 'p' },
-  }
+  const damaged = { v: SCHEMA_VERSION, agents: [null, { id: 'a1', status: 'running' }] }
   let s: any = merge(damaged)
-  s = onToolCheck(s, { decision: 'ask', tool: 'Bash', callId: 'c1' })
-  s = onToolSettle(s, { callId: 'c1', tool: 'Bash', didRun: true })
-  s = onToolCheck(s, { decision: 'allow', tool: 'Read' })
   s = onTurnStart(s, { agentId: 'a1' })
   const view = agentsView(s, 5)
   expect(view.length).toBe(1)
   expect(Number.isFinite(view[0].elapsedMs)).toBe(true)
-  expect(s.gate.verdicts).toEqual({ rule: 1, ask: 0, cleared: 1, deny: 0 })
-})
-
-test('a damaged value is repaired by every reducer and selector (L10)', () => {
-  const bad: any = { ...initialState(), gate: { verdicts: 'x' }, agents: [null] }
-  const finite = (s: any) => {
-    for (const v of Object.values(s.gate.verdicts)) expect(Number.isFinite(v)).toBe(true)
-  }
-  finite(onToolCheck(bad, { decision: 'ask', tool: 'Bash', callId: 'c' }))
-  finite(onToolSettle({ ...bad, gate: { ...bad.gate, pending: { c: 'file' } } }, { callId: 'c', tool: 'Read', didRun: true }))
-  expect(() => onTurnStart(bad, { agentId: 'a' })).not.toThrow()
-  expect(agentsView(bad, 5)).toEqual([])
-})
-
-test('damaged state: counts stay at or above 0, an unknown pending bucket and odd agents do not throw (L9)', () => {
-  const s0: any = merge({ v: SCHEMA_VERSION, gate: { pending: { c1: 'file', c2: 'weird' } } })
-  const s1 = onToolSettle(s0, { callId: 'c1', tool: 'Read', didRun: true })
-  for (const v of Object.values(s1.gate.verdicts)) expect(v as number).toBeGreaterThanOrEqual(0)
-  expect(() => onToolSettle(s0, { callId: 'c2', tool: 'Read', didRun: false })).not.toThrow()
-  const view = agentsView({ agents: [null, 7, { id: 'a', status: 'running', startedMs: 1 }] }, 5)
-  expect(view.length).toBe(1)
-  expect(isOutsideTasks('/proj/.vault/tasks/x.md', undefined)).toBe(false)
-  expect(isOutsideTasks('/proj/src/a.js', undefined)).toBe(true)
+  expect(agentsView({ agents: [null, 7, { id: 'a', status: 'running', startedMs: 1 }] }, 5).length).toBe(1)
+  expect(agentsView({ ...initialState(), agents: [null] }, 5)).toEqual([])
 })
 
 test('L13 onUnblocked and onBlocked return the input object when the flag already matches, before any repair', () => {

@@ -4,11 +4,6 @@
 export type ConstructBand = {
   v: number
   agents: readonly Record<string, unknown>[]
-  inline: { count: number }
-  gate: {
-    verdicts: { rule: number; ask: number; cleared: number; deny: number }
-    pending: Record<string, string>
-  }
   turn: { turnId: string | null } | null
   blocked: boolean
 }
