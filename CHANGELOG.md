@@ -4,6 +4,20 @@ Notable changes per release. Versions follow [Semantic Versioning](https://semve
 
 ## Unreleased
 
+## 12.0.0
+
+- **Breaking:** the 12 deprecated 5.x options (`model_odd_*`, `effort_odd_*`, `model_jd_*`, `effort_jd_*`) are removed and no longer read. Set `model_<role>` and `effort_<role>` instead. The built-in `general-purpose` keeps `sonnet`/`medium` while `model_general` and `effort_general` are `inherit`.
+- The mod no longer overrides a construct agent's effort when its `effort_<role>` is `inherit`, so the effort the caller asked for stands.
+- The publication gate now gates `git push --branches`, the matching refspec `:`, a push after `( cd … )`, and a push hidden behind a quoted `)` inside `$( … )`.
+- `command-guard` no longer reads `git commit -uno` as `--no-verify`.
+- `surface-guard` counts the lines an Edit changes, not the lines it quotes, the same way it counts a Write.
+- The Risk-line gate no longer flags a marker in a Markdown file whose name has a space, and hashes only changed files when it records the tree.
+- Resending a writer launch that never started is no longer denied as overlapping itself.
+- A Tasks heading of any level 2–6, or with trailing text, counts for feature state and the band, as it already did for the gate.
+- `review-context` stops building a lens context as soon as it passes the 400 KB budget.
+- The band no longer counts a denied or failed write as inline, never leaves an ask pending after a tool that throws, keeps the open task in the progress row, and draws another plugin's `worker` agent as a plain agent. Resuming a construct agent no longer reports a hook failure.
+- The review lenses no longer mention the removed memory hints, and the `delivery` skill carries the contract's exception for work-unit commits on authorized large work.
+
 ## 11.0.0
 
 - **Breaking:** the plugin no longer ships or forces the `Principal Engineer` output style. Replies follow your own output style and CLAUDE.md; the session contract still carries the reply-language, one-question, and Risk-line rules, and the `delivery` skill the commit rules. If you had picked `construct:Principal Engineer` in `/output-style`, pick another.

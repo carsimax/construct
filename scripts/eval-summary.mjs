@@ -34,6 +34,8 @@ for (const c of aggregate.cases) {
   for (const arm of ['with', 'without']) {
     const runs = c.arms?.[arm] ?? [];
     if (!runs.length) continue;
+    // An unknown result format would otherwise read as every run failing.
+    if (runs.some((r) => r.error == null && typeof r.passed !== 'boolean')) fail(`case ${c.name} (${arm}) has a run without a boolean passed`);
     const checked = outcomes.cases?.find((o) => o.name === c.name)?.arms?.[arm] ?? [];
     rows.push({
       case: c.name,

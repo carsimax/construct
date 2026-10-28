@@ -14,7 +14,7 @@ Work reaches the remote as small, reviewable units. The publication gate and the
 
 ## Authority
 
-- Commit, push, PR, and merge each run only on an explicit user instruction for that exact action. The publication gate denies `git push`, `gh pr create`, and `gh release create` until the review lenses required by the task's Risk approve the published ref (`construct:review`).
+- Commit, push, PR, and merge each run only on an explicit user instruction for that exact action, except work-unit commits on the feature branch of authorized large work. The publication gate denies `git push`, `gh pr create`, and `gh release create` until the review lenses required by the task's Risk approve the published ref (`construct:review`).
 - A remote read or write needs authorization naming the repository, the operation, and the credential. Never probe ambient credentials.
 - The target repository's own rules win: PR template, CONTRIBUTING, branch protection. The defaults below apply only where the repository defines none.
 - Read the base branch from repository metadata (remote HEAD, branch protection, the PR's target). Never assume it.

@@ -455,6 +455,9 @@ describe('the published refs are judged, not HEAD', () => {
     'git push --all origin',
     'git push --mirror origin',
     'git push --tags origin',
+    'git push --branches origin',
+    'git push origin :',
+    'git push origin +:',
   ]
   for (const command of cases) test(`denies from main: ${command}`, () => denied(hook(command, fromMain())))
 
@@ -486,6 +489,20 @@ describe('the published refs are judged, not HEAD', () => {
     assert.equal(r.decision, 'deny')
     assert.match(r.reason, /does not resolve/)
   })
+})
+
+// A `cd` inside a subshell or a substitution ends with it; a quoted `)` does not close a `$(`.
+describe('a subshell does not move the push to another directory', () => {
+  const cases = [
+    '(cd /tmp && ls); git push origin feat',
+    '(cd /tmp && ls) && git push origin feat',
+    'echo $(cd /tmp; pwd); git push origin feat',
+    'echo `cd /tmp; pwd`; git push origin feat',
+    'echo "`cd /tmp`" && git push origin feat',
+    `echo "$(echo ')'; git push origin feat)"`,
+    'echo "$(echo ")"; git push origin feat)"',
+  ]
+  for (const command of cases) test(command, () => denied(hook(command, featureRepo('2'))))
 })
 
 describe('the Risk cell is read whole', () => {

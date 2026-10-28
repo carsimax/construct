@@ -11,9 +11,11 @@ export const GIT_VALUE_FLAGS = new Set(['-C', '-c', '--git-dir', '--work-tree', 
 // `cat <.env` yields the word `.env`. A bare digit word glued to < or > is the redirection's
 // file descriptor and is dropped (`2>&1`), and `&>` / `&>>` redirect instead of ending the
 // command. Each returned word keeps whether it was quoted (`r`: redirection target) and its raw source text (`s`, quotes intact).
+// Each command keeps the unquoted `(` and `)` seen since the previous command, in order (`parens`), so a caller can end a subshell.
 export function splitCommands(input) {
   const commands = []
   let words = []
+  let parens = ''
   let cur = ''
   let has = false
   let plain = true // no quote or backslash went into the current word
@@ -32,6 +34,8 @@ export function splitCommands(input) {
     redir = false
     if (words.length) {
       words.piped = piped
+      words.parens = parens
+      parens = ''
       commands.push(words)
     }
     words = []
@@ -50,6 +54,13 @@ export function splitCommands(input) {
       has = true
       plain = false
       for (i++; i < input.length && input[i] !== '"'; i++) {
+        // A `$(...)` inside double quotes is one span: its own quotes do not close the string.
+        const end = input[i] === '$' && input[i + 1] === '(' ? closingParen(input, i + 2) : -1
+        if (end > 0) {
+          cur += input.slice(i, end + 1)
+          i = end
+          continue
+        }
         // Inside double quotes bash drops a backslash only before $ ` " \ or newline.
         if (input[i] === '\\' && input[i + 1] === '\n') { i++; continue }
         if (input[i] === '\\' && i + 1 < input.length && '$`"\\'.includes(input[i + 1])) i++
@@ -65,6 +76,7 @@ export function splitCommands(input) {
       endWord(i)
     } else if (';|&()`\n'.includes(c) && !(c === '&' && input[i + 1] === '>')) {
       endCommand(i)
+      if (c === '(' || c === ')') parens += c
       // `|` and `|&` feed the next command; `||` does not.
       if (c === '|') {
         if (input[i + 1] === '|') i++
@@ -165,8 +177,59 @@ export function extractHeredocs(command) {
   return { text, bodies }
 }
 
+// closingBacktick returns the index of the backtick that closes the span opened before `from`, or -1.
+export function closingBacktick(text, from) {
+  for (let i = from; i < text.length; i++) {
+    if (text[i] === '\\') i++
+    else if (text[i] === '`') return i
+  }
+  return -1
+}
+
+// closingParen returns the index of the `)` that closes a `$(` whose body starts at `from`, or -1.
+// The body is scanned with quote state: a `)` inside single or double quotes, after a backslash,
+// or inside a nested `$(...)` or backtick span does not close it.
+export function closingParen(text, from) {
+  for (let i = from; i < text.length; i++) {
+    const c = text[i]
+    if (c === '\\') i++
+    else if (c === "'") {
+      i = text.indexOf("'", i + 1)
+      if (i < 0) return -1
+    } else if (c === '"') {
+      i = closingDouble(text, i + 1)
+      if (i < 0) return -1
+    } else if (c === '`') {
+      i = closingBacktick(text, i + 1)
+      if (i < 0) return -1
+    } else if (c === '$' && text[i + 1] === '(') {
+      i = closingParen(text, i + 2)
+      if (i < 0) return -1
+    } else if (c === ')') return i
+  }
+  return -1
+}
+
+// closingDouble returns the index of the `"` that closes a double-quoted string whose body starts
+// at `from`, or -1. Substitutions inside it are skipped whole.
+function closingDouble(text, from) {
+  for (let i = from; i < text.length; i++) {
+    const c = text[i]
+    if (c === '\\') i++
+    else if (c === '"') return i
+    else if (c === '`') {
+      i = closingBacktick(text, i + 1)
+      if (i < 0) return -1
+    } else if (c === '$' && text[i + 1] === '(') {
+      i = closingParen(text, i + 2)
+      if (i < 0) return -1
+    }
+  }
+  return -1
+}
+
 // substitutionBodies lists the bodies of $(...), <(...), >(...), and backticks outside
-// single quotes. A body is a command line of its own.
+// single quotes. A body is a command line of its own (its own substitutions are found when it is read).
 export function substitutionBodies(command) {
   const out = []
   let quote = null
@@ -178,13 +241,9 @@ export function substitutionBodies(command) {
     else if (c === "'" && quote === null) quote = "'"
     else if (c === '"') quote = quote === '"' ? null : '"'
     else if ((c === '$' || c === '<' || c === '>') && command[i + 1] === '(' && (c === '$' || quote === null)) {
-      let depth = 1
-      let j = i + 2
-      for (; j < command.length && depth > 0; j++) {
-        if (command[j] === '(') depth++
-        else if (command[j] === ')') depth--
-      }
-      out.push(command.slice(i + 2, depth === 0 ? j - 1 : j))
+      const end = closingParen(command, i + 2)
+      out.push(command.slice(i + 2, end < 0 ? command.length : end))
+      i = end < 0 ? command.length : end
     } else if (c === '`') {
       let j = i + 1
       while (j < command.length && command[j] !== '`') j += command[j] === '\\' ? 2 : 1

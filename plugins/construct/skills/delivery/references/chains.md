@@ -28,3 +28,5 @@ Child PRs also carry a dependency diagram marking the current PR.
 ## Over budget
 
 A PR above the budget without `size:exception` gets a split request, not a quiet merge. Pick the tracker when the work must integrate first, stacked when slices merge on their own. After one honest slicing pass, report the overage and recommend `size:exception`.
+
+The push gate reviews every branch of a chain cumulatively against the default branch, not against its parent, so the review subject grows with each child. When that cumulative diff passes the 400 KB review-context budget, no child can be pushed until earlier slices merge into the default branch, so a feature larger than that budget uses `stacked-to-main`, not `feature-branch-chain`.

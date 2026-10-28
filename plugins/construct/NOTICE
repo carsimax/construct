@@ -4,7 +4,7 @@ Adapted code
 ------------
 Code adapted from MIT-licensed projects. Each project's copyright and permission
 notice is in its LICENSE file and in the header of each adapted file
-(tests/panel-license.test.mjs checks both).
+(tests/band-license.test.mjs checks both).
 
 - gentle-shell (https://github.com/Gentleman-Programming/gentle-shell), Mario
   Zechner: hooks/scripts/delegation-admission.mjs and

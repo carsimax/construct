@@ -3,9 +3,8 @@
 // running agents. Nothing the user's own status line shows (model, effort, branch, diff, context,
 // plan limits) is drawn here.
 
-import { kindOf } from '../scripts/roles.mjs'
 import { isNum, text } from '../status/format.js'
-import { agentsView, initialState, mainBusy, phaseOf } from './state.js'
+import { agentsView, initialState, kindOfAgent, mainBusy, phaseOf } from './state.js'
 
 // Roles to theme keys (never raw colors, so the band follows the user's theme).
 export const PALETTE = {
@@ -115,12 +114,14 @@ function statusSeg(state) {
   return seg(`● ${phase ? (PHASE_VERB[phase] ?? phase) : 'busy'}`, { color: PALETTE.main, bold: true })
 }
 
-// One glyph per task joined by `━`; too many keep the latest behind a leading `…`.
+// One glyph per task joined by `━`; too many keep a window from the last done task on, behind a leading `…`.
 function checkpoints(tasks, max) {
   const open = tasks.findIndex((t) => !t.done)
   const glyphs = tasks.map((t, i) => (t.done ? seg('●', { color: PALETTE.odd }) : i === open ? seg('◆', { color: PALETTE.odd, bold: true }) : seg('○', { dim: true })))
   const fits = Math.floor((max + 1) / 2)
-  const shown = glyphs.length <= fits ? glyphs : glyphs.slice(glyphs.length - Math.floor((max - 1) / 2))
+  const count = Math.floor((max - 1) / 2)
+  const from = Math.max(0, Math.min((open < 0 ? glyphs.length : open) - 1, glyphs.length - count))
+  const shown = glyphs.length <= fits ? glyphs : glyphs.slice(from, from + count)
   const joined = shown.flatMap((g, i) => (i ? [seg('━', { color: PALETTE.faint }), g] : [g]))
   return shown === glyphs ? joined : [seg('…━', { dim: true }), ...joined]
 }
@@ -174,7 +175,7 @@ const LOOKS = {
 const OTHER_LOOK = ['•', 'working']
 
 function agentSegs(a, withModel) {
-  const [glyph, verb] = LOOKS[kindOf(a.name)] ?? OTHER_LOOK
+  const [glyph, verb] = LOOKS[kindOfAgent(a)] ?? OTHER_LOOK
   const model = withModel && typeof a.model === 'string' && a.model ? [seg(` ${prettyModel(a.model)}`, { dim: true })] : []
   return [seg(`${glyph} ${cut(clean(a.name), MAX_NAME)} ${verb}`, { color: PALETTE.agent }), ...model, seg(` ${clock(a.elapsedMs)}`, { dim: true })]
 }
@@ -195,8 +196,7 @@ export function buildBand({ state: stored, odd, nowMs, columns, maxRows }) {
   const now = isNum(nowMs) ? nowMs : Date.now()
   const feature = odd?.feature ? odd : null
   const gate = gateSegs(state)
-  const { cards } = agentsView(state, now, Infinity)
-  const running = cards.filter((a) => a.status === 'running').sort((a, b) => (isNum(a.startedMs) ? a.startedMs : 0) - (isNum(b.startedMs) ? b.startedMs : 0))
+  const running = agentsView(state, now)
   if (!state.blocked && !mainBusy(state) && !feature && gate.length === 0 && running.length === 0) return null
   const rows = [statusRow(state, feature, gate, max)]
   if (running.length > 0 && !(isNum(maxRows) && maxRows < 2)) rows.push(agentsRow(running, max))

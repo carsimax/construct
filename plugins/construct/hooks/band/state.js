@@ -99,7 +99,6 @@ export function onAgentSpawn(state, e) {
     id,
     role: roleFor(type) ?? type,
     type,
-    description: typeof e.description === 'string' ? e.description : '',
     model: str(e.model),
     startedMs: isNum(e.nowMs) ? e.nowMs : 0,
     endedMs: null,
@@ -213,22 +212,20 @@ const PHASES = [
   ['reader', 'exploring'],
 ]
 
+// The construct kind of an agent; null for another plugin's agent, even one named like a construct role.
+export const kindOfAgent = (agent) => (roleFor(agent?.type) ? kindOf(agent.type) : null)
+
 // What the running agents are doing, the most advanced phase winning; null with none running.
 export function phaseOf(state) {
   const running = (isObj(state) && Array.isArray(state.agents) ? state.agents : []).filter((a) => a?.status === 'running')
   if (running.length === 0) return null
-  const kinds = running.map((a) => kindOf(shortName(a)))
+  const kinds = running.map(kindOfAgent)
   return PHASES.find(([kind]) => kinds.includes(kind))?.[1] ?? 'working'
 }
 
-// Cards for the agents section: running ones first, then the latest finished, finished by most recent end.
-export function agentsView(state, nowMs, max = 3) {
-  const agents = (isObj(state) && Array.isArray(state.agents) ? state.agents : []).filter(isObj)
-  const running = agents.filter((a) => a.status === 'running').sort((a, b) => b.startedMs - a.startedMs)
-  const done = agents.filter((a) => a.status !== 'running').sort((a, b) => (b.endedMs ?? 0) - (a.endedMs ?? 0))
-  const cards = [...running, ...done].slice(0, max).map((a) => {
-    const end = a.status === 'running' ? nowMs : a.endedMs
-    return { ...a, name: shortName(a), elapsedMs: isNum(end) && isNum(a.startedMs) ? Math.max(0, end - a.startedMs) : 0 }
-  })
-  return { cards, rest: agents.length - cards.length, running: running.length }
+// The running agents, oldest first, each with its short name and time running.
+export function agentsView(state, nowMs) {
+  const agents = (isObj(state) && Array.isArray(state.agents) ? state.agents : []).filter((a) => isObj(a) && a.status === 'running')
+  const start = (a) => (isNum(a.startedMs) ? a.startedMs : 0)
+  return agents.sort((a, b) => start(a) - start(b)).map((a) => ({ ...a, name: shortName(a), elapsedMs: isNum(nowMs) && isNum(a.startedMs) ? Math.max(0, nowMs - a.startedMs) : 0 }))
 }

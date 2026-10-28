@@ -189,10 +189,11 @@ export function register(on, options) {
   // If this hook fails, the agent keeps its frontmatter model.
   on('agent.spawn', async ($, e, next) => {
     const role = roleFor(e.subagentType)
-    const model = e.model ? null : modelFor(role, options)
+    // a resumed agent keeps its model (a hook can only refuse its run); a fork always inherits
+    const model = e.model || e.resume || e.fork ? null : modelFor(role, options, e.subagentType)
     const result = await next(model ? { ...e, model } : e)
     if (role && result?.agentId) {
-      roleByAgent.set(result.agentId, role)
+      roleByAgent.set(result.agentId, { role, type: e.subagentType })
       // Never deleted on turn.complete (a resumed subagent needs its role); the oldest go past the cap.
       if (roleByAgent.size > MAX_ROLES) roleByAgent.delete(roleByAgent.keys().next().value)
     }
@@ -202,7 +203,8 @@ export function register(on, options) {
 
   // Apply the role's effort to every request a routed subagent makes
   on('turn.step', async function* ($, e, next) {
-    const effort = effortFor(roleByAgent.get(e.agentId), options)
+    const routed = roleByAgent.get(e.agentId)
+    const effort = effortFor(routed?.role, options, routed?.type)
     return yield* next(effort ? { ...e, effort } : e)
   })
 
@@ -244,15 +246,23 @@ export function register(on, options) {
   // returns; any settled call clears a block.
   on('tool.call', async ($, e, next) => {
     if (isBlockingTool(e.tool)) await feed($, onBlocked)
-    const result = await next(e)
+    let result
     try {
-      const cwd = await projectRoot($)
-      const didRun = result?.deny === undefined
-      await feed($, (s) => onToolCall(onToolSettle(onUnblocked(s), { tool: e.tool, didRun, callId: e.tool_use_id }), { tool: e.tool, path: filePathOf(e), cwd, agentId: e.agentId }))
-    } catch {
-      // observe only
+      result = await next(e)
+      return result
+    } finally {
+      // also when next throws, so an ask never stays pending
+      try {
+        const cwd = await projectRoot($)
+        const didRun = result !== undefined && result.deny === undefined
+        await feed($, (s) => {
+          const settled = onToolSettle(onUnblocked(s), { tool: e.tool, didRun, callId: e.tool_use_id })
+          return didRun && !result.isError ? onToolCall(settled, { tool: e.tool, path: filePathOf(e), cwd, agentId: e.agentId }) : settled
+        })
+      } catch {
+        // observe only
+      }
     }
-    return result
   }).catch(($, e, next) => next(e))
 
   // The permission verdict, whoever decided it. An ask on a real call is the permission prompt (S8b).
@@ -278,7 +288,7 @@ export function register(on, options) {
 async function noteSpawn($, e, result) {
   try {
     const at = await nowMs($)
-    await feed($, (s) => onAgentSpawn(s, { agentId: result?.agentId, subagentType: e.subagentType, description: e.description, model: result?.model, nowMs: at }))
+    await feed($, (s) => onAgentSpawn(s, { agentId: result?.agentId, subagentType: e.subagentType, model: result?.model, nowMs: at }))
   } catch {
     // observe only
   }

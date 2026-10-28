@@ -5,7 +5,7 @@
 import { spawnSync } from 'node:child_process'
 import { activeDocuments } from './feature-state.mjs'
 import { commitSliceReport, defaultBranch, git } from './delivery-signals.mjs'
-import { defaultBranch as gateDefaultBranch, reviewState } from './publication-gate.mjs'
+import { reviewState } from './publication-gate.mjs'
 
 const MAX = 1500
 const MAX_STATUS_LINES = 12
@@ -46,7 +46,7 @@ function workflow(cwd, root) {
 // The same read-only review state the publication gate judges (reviewState), for HEAD against the default branch.
 function review(cwd, root) {
   const branch = git(cwd, ['symbolic-ref', '-q', '--short', 'HEAD'])
-  const base = gateDefaultBranch(root)
+  const base = defaultBranch(root)
   if (!base) throw new Error('no default branch (origin/HEAD, origin or local main or master)')
   const target = base.replace(/^refs\/(remotes\/|heads\/)/, '')
   // The gate's own refusal (refVerdict): a local default branch with nothing remote to compare it with.

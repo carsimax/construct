@@ -255,8 +255,9 @@ const qualify = (type) => (typeof type === 'string' && !type.includes(':') ? `co
 const promptKey = (text) => createHash('sha256').update(text.trim()).digest('hex')
 
 // openWriters lists the live records of the session in this repository; a stale
-// record (older than SUBAGENT_MAX_IDLE_MS, a crashed writer) is removed.
-function openWriters(session, root, now = Date.now()) {
+// record (older than SUBAGENT_MAX_IDLE_MS, a crashed writer) is removed. The unstarted
+// record of `key` is skipped: it is this same prompt's earlier launch, which never started.
+function openWriters(session, root, key, now = Date.now()) {
   const dir = recordDir(session)
   let names
   try {
@@ -273,7 +274,7 @@ function openWriters(session, root, now = Date.now()) {
         continue
       }
       const entry = JSON.parse(readFileSync(join(dir, name), 'utf8'))
-      if (entry.started === false && now - Date.parse(entry.at) > START_GRACE_MS) continue
+      if (entry.started === false && (name === key || now - Date.parse(entry.at) > START_GRACE_MS)) continue
       if (entry.root === root && Array.isArray(entry.surfaces)) live.push(entry)
     } catch {
       // unreadable record: ignore it (fail open)
@@ -550,7 +551,7 @@ function admit(input) {
   }
   withLock(input.session_id, () => {
     const pairs = []
-    for (const open of openWriters(input.session_id, root)) {
+    for (const open of openWriters(input.session_id, root, promptKey(prompt))) {
       for (const mine of parsed.paths) for (const theirs of open.surfaces) if (surfacesOverlap(mine, theirs)) pairs.push(`${mine} / ${theirs}`)
     }
     if (pairs.length > 0) {

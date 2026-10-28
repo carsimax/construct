@@ -18,7 +18,7 @@ function leaves(node, out: { text: string; props: any }[] = []) {
 // The band's rows: each child of the root column is one row.
 const rowsOf = (tree) => (tree?.children ?? []).map(flat)
 
-const agent = (o: any = {}) => ({ id: 'a1', role: 'worker', type: 'construct:worker', description: '', model: 'claude-sonnet-5-5', startedMs: NOW - 102_000, endedMs: null, status: 'running', ...o })
+const agent = (o: any = {}) => ({ id: 'a1', role: 'worker', type: 'construct:worker', model: 'claude-sonnet-5-5', startedMs: NOW - 102_000, endedMs: null, status: 'running', ...o })
 const odd = {
   feature: 'engram-only-memory', open: 2, task: { id: 'T3', title: 'Explorer recall tools' },
   tasks: [{ id: 'T1', done: true }, { id: 'T2', done: true }, { id: 'T3', done: false }, { id: 'T4', done: false }],
@@ -70,7 +70,7 @@ test('gate: pending asks win over the passed count; denials and inline writes fo
 })
 
 test('only running agents are listed, oldest first; a done agent leaves the band', () => {
-  const agents = [agent({ id: 'b', startedMs: NOW - 5_000 }), agent({ id: 'c', role: 'explorer', status: 'done', endedMs: NOW }), agent({ id: 'a', role: 'review-risk', startedMs: NOW - 9_000 })]
+  const agents = [agent({ id: 'b', startedMs: NOW - 5_000 }), agent({ id: 'c', role: 'explorer', status: 'done', endedMs: NOW }), agent({ id: 'a', role: 'review_risk', type: 'construct:review-risk', startedMs: NOW - 9_000 })]
   expect(rowsOf(band({ state: busy({ agents }) }))[1]).toBe('◎ review-risk reviewing Sonnet 5.5 0:09 · ⚒ worker building Sonnet 5.5 0:05')
   expect(rowsOf(band({ state: busy({ agents: [agent({ status: 'done', endedMs: NOW })] }) }))).toHaveLength(1)
 })
@@ -114,6 +114,18 @@ test('many tasks keep the latest checkpoints behind a leading ellipsis', () => {
   const tasks = Array.from({ length: 20 }, (_, i) => ({ id: `T${i + 1}`, done: i < 15 }))
   const row = rowsOf(band({ odd: { ...odd, tasks } }))[0]
   expect(row).toContain('…━●━')
+})
+
+test('many tasks keep the open checkpoint in view', () => {
+  const tasks = Array.from({ length: 30 }, (_, i) => ({ id: `T${i + 1}`, done: i < 4 }))
+  const row = rowsOf(band({ odd: { ...odd, tasks } }))[0]
+  expect(row).toContain('●━◆━○')
+})
+
+test('an agent of another plugin named like a construct role is drawn as a plain agent', () => {
+  const row = rowsOf(band({ state: busy({ agents: [agent({ role: 'worker', type: 'worker' })] }) }))[1]
+  expect(row).toContain('• worker working')
+  expect(row).not.toContain('⚒')
 })
 
 test('clock shows m:ss, then XhYY from an hour on', () => {

@@ -1,7 +1,7 @@
 # Construct
 
 [![Claude Code](https://img.shields.io/badge/Claude_Code-2.1.304%2B-blue)](#requirements)
-[![Plugin version](https://img.shields.io/badge/version-11.0.0-informational)](plugins/construct/.claude-plugin/plugin.json)
+[![Plugin version](https://img.shields.io/badge/version-12.0.0-informational)](plugins/construct/.claude-plugin/plugin.json)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 Construct is a Claude Code plugin that makes every request follow Organic Driven Development (ODD): authorize, explore, size, track, implement test-first, and close with evidence and a Risk line.
@@ -27,7 +27,7 @@ An agent writes code faster than you can check it. Organic Driven Development ke
 | Requirement | Why |
 |---|---|
 | Claude Code 2.1.304 or later, signed in | The status band is a mod, and the mod needs 2.1.304. Tested on 2.1.304 |
-| Node.js 22.16 or later (Node 23 is not supported) | The plugin's scripts and hooks. Claude Code's native install does not bundle Node.js |
+| Node.js 22.16 or later | The plugin's scripts and hooks. Claude Code's native install does not bundle Node.js |
 | `git` on the PATH | The review and publication hooks read the repository |
 | [Engram](https://github.com/Gentleman-Programming/engram) | The memory: recall and save through its `mem_*` tools |
 
@@ -36,7 +36,7 @@ An agent writes code faster than you can check it. Organic Driven Development ke
 ### One command
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v11.0.0/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v12.0.0/install.sh | bash
 ```
 
 The installer requires Engram: when the `engram` binary or the `engram@engram` plugin is missing, it stops and installs nothing, and prints `brew install gentleman-programming/tap/engram && engram setup claude-code`. It checks the other requirements above and stops before changing anything if one is missing, or if `~/.claude` or `~/.claude/settings.json` is not writable, or if `settings.json` is a directory. Then it runs the manual steps below for you:
@@ -54,7 +54,7 @@ If codegraph is installed, the installer says Construct no longer needs it and r
 Pass options after `bash -s --`, for example `curl -fsSL <url> | bash -s -- --no-mcp`. To read the script before running it:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v11.0.0/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v12.0.0/install.sh -o install.sh
 less install.sh
 bash install.sh
 ```
@@ -70,7 +70,7 @@ The manual steps the installer runs, for when you want to run them yourself:
    claude plugin install construct@construct
    ```
 
-   The installer (`install.sh`) pins this marketplace to the release tag (`carsimax/construct#v11.0.0`); the command above follows the default branch.
+   The installer (`install.sh`) pins this marketplace to the release tag (`carsimax/construct#v12.0.0`); the command above follows the default branch.
 
 2. Optional: inside Claude Code, in `/config`, set each role's model and effort (rows such as `Worker model`).
 
@@ -92,7 +92,7 @@ Open Claude Code in a git repository and make a request. Construct applies the s
 
 Commit, push, pull request, and merge stay your decisions. A change whose task in the feature document has a Risk column naming a high-risk item is reviewed before it can be published; see [Mandatory review](#mandatory-review-and-the-publication-gate). There is no switch to turn the review off.
 
-To confirm the install works, see step 4 of [Manual install](#manual-install).
+To confirm the install works, see step 3 of [Manual install](#manual-install).
 
 ## Update
 
@@ -140,7 +140,8 @@ How the routing works:
 - An effort of `default` keeps the model's own effort.
 - Turn budgets: `construct:explorer` stops after 30 turns, `construct:verifier` after 50, and each lens after 2. A capped agent returns its output marked partial, and it can be resumed.
 - The `delegation`, `review`, and `workflow` skills are model-only (`user-invocable: false`): the orchestrator loads them, and they do not appear in the `/` menu. Ask for a review in plain words.
-- The 5.x options `model_odd_*`, `effort_odd_*`, `model_jd_*`, and `effort_jd_*` are deprecated and still read while the matching `model_<role>` / `effort_<role>` is `inherit` (for example `model_odd_worker` for `model_worker`); set the new keys instead.
+- An `inherit` option leaves the agent's frontmatter model, and the effort the call asks for, untouched. The built-in `general-purpose` has no frontmatter, so with those options on `inherit` it gets `construct:general`'s sonnet and medium.
+- The 5.x options `model_odd_*`, `effort_odd_*`, `model_jd_*`, and `effort_jd_*` are no longer read; set `model_<role>` / `effort_<role>` instead.
 - If the mod cannot run, each agent keeps the model and effort in its own frontmatter.
 
 ## Reference
@@ -182,7 +183,7 @@ The installer no longer registers context7 or codegraph. Earlier registrations c
 
 ### Memory
 
-Memory comes from [Engram](https://github.com/Gentleman-Programming/engram), a prerequisite that Construct does not install or bundle. Claude recalls and saves through Engram's `mem_*` MCP tools (`mem_search`, `mem_save`, `mem_context`, `mem_session_summary`), and the `engram:memory` skill describes how. Engram's own hooks inject session context and capture a subagent's `## Key Learnings:` section. `/construct doctor` checks that `engram` is installed.
+Memory comes from [Engram](https://github.com/Gentleman-Programming/engram), a prerequisite that Construct does not install or bundle. Claude recalls and saves through Engram's `mem_*` MCP tools (`mem_search`, `mem_save`, `mem_context`, `mem_session_summary`), and the `engram:memory` skill describes how. Engram's own hooks inject session context and capture a subagent's `## Key Learnings:` section.
 
 ### Quality and recovery skills
 
@@ -341,7 +342,9 @@ Risk line: one reply can name several items, `Risk: items 2, 5 (reason)`; the Ri
 
 ## Status
 
-Current version: 11.0.0 (`plugins/construct/.claude-plugin/plugin.json`); a major release. Releases are tagged `vX.Y.Z`.
+Current version: 12.0.0 (`plugins/construct/.claude-plugin/plugin.json`); a major release. Releases are tagged `vX.Y.Z`.
+
+Changes in 12.0.0: the deprecated 5.x options `model_odd_*`, `effort_odd_*`, `model_jd_*`, and `effort_jd_*` are removed; set `model_<role>` and `effort_<role>` instead. The publication gate, guards, and band get the audit-round fixes. See [CHANGELOG.md](CHANGELOG.md).
 
 Changes in 11.0.0: the `Principal Engineer` output style is removed; your own output style and CLAUDE.md govern replies, and if you had picked `construct:Principal Engineer` in `/output-style`, pick another. See [CHANGELOG.md](CHANGELOG.md).
 
@@ -425,7 +428,7 @@ Ideas, with no text or code copied, from these projects:
 
 - Gentle AI, https://github.com/Gentleman-Programming/gentle-ai: orchestrator and delegation routing, review lenses and dual review, ledger-style review.
 - agent-skills, https://github.com/addyosmani/agent-skills: root-cause debugging, the written quality bar, source-grounded code, migrations, the security checklist, and the Definition of Done.
-- engram, https://github.com/Gentleman-Programming/engram: memory behavior (write rules, search ranking, context format, passive capture) and the export format the import command reads.
+- engram, https://github.com/Gentleman-Programming/engram: memory behavior (write rules, search ranking, context format, passive capture).
 - BMAD-METHOD, https://github.com/bmad-code-org/BMAD-METHOD: verification-gap shapes, evidence rules, claim and deletion checks, the Baseline field.
 - get-shit-done, https://github.com/gsd-build/get-shit-done: wiring levels, orphaned-code checks, scope-reduction checks, the failed-install rule.
 - gstack, https://github.com/garrytan/gstack: the test value bar.

@@ -320,6 +320,11 @@ describe('verifier-weakening markers (S2)', () => {
     silent(r)
   })
 
+  test('a Markdown path with a space is still Markdown (git ends its +++ header with a tab)', () => {
+    const { r } = marked({ 'docs/my notes.md': '# TODO later\n' })
+    silent(r)
+  })
+
   test('anchored TODO and skipif do not false-positive', () => {
     const { r } = marked({
       'src/a.js': "const t = '// TODO'\nconst u = 'https://example.com/TODO'\nconst v = 1 // mentions TODO mid-sentence\n",

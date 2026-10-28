@@ -1,7 +1,7 @@
 // Publication gate (PreToolUse on Bash). Before `git push`, `gh pr create`, or
 // `gh release create` it judges every ref being published, from the feature documents the ref changed:
 //   - the refs are the push sources (`feat`, `feat:main` -> feat, `HEAD:x` -> HEAD; no refspec -> HEAD;
-//     `--all`, `--mirror`, `--tags` -> every local branch), `gh pr create --head` and
+//     `--all`, `--branches`, `--mirror`, `--tags`, the matching refspec `:` -> every local branch), `gh pr create --head` and
 //     `gh release create --target` (the default branch when none: that is what gh tags), HEAD when
 //     none is named for the others; a ref that does not resolve denies; the default branch itself
 //     with no remote-tracking default to compare with denies;
@@ -30,67 +30,16 @@
 import { realpathSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { defaultBranch } from './delivery-signals.mjs'
 import { git, repositoryRoot } from './git-tree.mjs'
 import { readInput } from './hook-io.mjs'
 import { requiredLenses } from './review-lenses.mjs'
 import { pruneStore, readVerdicts, subjectHash } from './review-store.mjs'
-import { extractHeredocs, GIT_VALUE_FLAGS, nestedLines, SHELLS, splitCommands, substitutionBodies } from './shell-words.mjs'
+import { closingBacktick, closingParen, extractHeredocs, GIT_VALUE_FLAGS, nestedLines, SHELLS, splitCommands, substitutionBodies } from './shell-words.mjs'
 
 const MAX_DEPTH = 4
-const PUSH_VALUE_FLAGS = new Set(['--repo', '-o', '--push-option', '--receive-pack', '--exec', '--force-with-lease-value'])
+const PUSH_VALUE_FLAGS = new Set(['--repo', '-o', '--push-option', '--receive-pack', '--exec'])
 const GH_VALUE_FLAGS = new Set(['-R', '--repo', '--hostname'])
-const RELEASE_VALUE_FLAGS = new Set(['-t', '--title', '-n', '--notes', '-F', '--notes-file', '--target', '--notes-start-tag', '--discussion-category', '-R', '--repo'])
-
-// closingBacktick returns the index of the backtick that closes the span opened before `from`, or -1.
-function closingBacktick(text, from) {
-  for (let i = from; i < text.length; i++) {
-    if (text[i] === '\\') i++
-    else if (text[i] === '`') return i
-  }
-  return -1
-}
-
-// closingParen returns the index of the `)` that closes a `$(` whose body starts at `from`, or -1.
-// The body is scanned with quote state: a `)` inside single or double quotes, after a backslash,
-// or inside a nested `$(...)` or backtick span does not close it.
-function closingParen(text, from) {
-  for (let i = from; i < text.length; i++) {
-    const c = text[i]
-    if (c === '\\') i++
-    else if (c === "'") {
-      i = text.indexOf("'", i + 1)
-      if (i < 0) return -1
-    } else if (c === '"') {
-      i = closingDouble(text, i + 1)
-      if (i < 0) return -1
-    } else if (c === '`') {
-      i = closingBacktick(text, i + 1)
-      if (i < 0) return -1
-    } else if (c === '$' && text[i + 1] === '(') {
-      i = closingParen(text, i + 2)
-      if (i < 0) return -1
-    } else if (c === ')') return i
-  }
-  return -1
-}
-
-// closingDouble returns the index of the `"` that closes a double-quoted string whose body starts
-// at `from`, or -1. Substitutions inside it are skipped whole.
-function closingDouble(text, from) {
-  for (let i = from; i < text.length; i++) {
-    const c = text[i]
-    if (c === '\\') i++
-    else if (c === '"') return i
-    else if (c === '`') {
-      i = closingBacktick(text, i + 1)
-      if (i < 0) return -1
-    } else if (c === '$' && text[i + 1] === '(') {
-      i = closingParen(text, i + 2)
-      if (i < 0) return -1
-    }
-  }
-  return -1
-}
 
 // quoteSubstitutions wraps each unquoted `$(...)` or backtick span in double quotes, because the
 // tokenizer would split such a span into commands of its own and `git -C $(pwd)` would lose its
@@ -200,12 +149,13 @@ function gitPublication(args, cwd) {
   const rest = args.slice(i + 1)
   if (rest.some((a) => a === '--dry-run' || (/^-[^-]/.test(a) && a.slice(1).includes('n')) || a === '--delete' || (/^-[^-]/.test(a) && a.slice(1).includes('d')))) return null
   const [remote, ...all] = positionals(rest, PUSH_VALUE_FLAGS)
-  // `:dst` deletes a remote ref and publishes no work.
+  // `:` alone pushes every matching branch; `:dst` deletes a remote ref and publishes no work.
+  const matching = all.some((spec) => spec.replace(/^\+/, '') === ':')
   const refspecs = all.filter((spec) => !spec.replace(/^\+/, '').startsWith(':'))
-  if (all.length > 0 && refspecs.length === 0) return null
+  if (all.length > 0 && refspecs.length === 0 && !matching) return null
   // The source side of each refspec is what leaves the machine.
   const sources = refspecs.map((spec) => spec.replace(/^\+/, '').split(':')[0])
-  const refs = rest.some((a) => ['--all', '--mirror', '--tags'].includes(a)) ? 'all' : sources.length > 0 ? sources : ['HEAD']
+  const refs = matching || rest.some((a) => ['--all', '--branches', '--mirror', '--tags'].includes(a)) ? 'all' : sources.length > 0 ? sources : ['HEAD']
   return { gate: 'pre-push', dir, remote, refs }
 }
 
@@ -244,7 +194,12 @@ function publicationsIn(text, cwd, depth) {
   const found = []
   const nested = (line, at) => found.push(...findPublications(line, at, depth + 1))
   let where = cwd
+  const saved = [] // the directory before each open subshell: a `cd` inside `( ... )` ends with it
   for (const tokens of splitCommands(text)) {
+    for (const p of tokens.parens) {
+      if (p === '(') saved.push(where)
+      else if (saved.length > 0) where = saved.pop()
+    }
     // A redirection target is not a word.
     const words = tokens.filter((w) => !w.r).map((w) => w.t)
     // Raw source, not the unquoted text: a backtick or `$(` inside single quotes is literal.
@@ -267,15 +222,6 @@ function publicationsIn(text, cwd, depth) {
 
 const out = (root, args) => git(root, args).toString('utf8').trim()
 const ok = (root, ref) => git(root, ['rev-parse', '--verify', '-q', `${ref}^{commit}`], { okStatuses: [0, 1] }).toString('utf8').trim() !== ''
-
-// defaultBranch returns the first resolvable candidate: a `gh pr create --base` branch, origin's HEAD,
-// then origin or local main and master; null when none exists. skill-context.mjs reuses it.
-export function defaultBranch(root, base) {
-  const head = git(root, ['symbolic-ref', '-q', 'refs/remotes/origin/HEAD'], { okStatuses: [0, 1] }).toString('utf8').trim()
-  const named = base && !base.startsWith('-') ? [`refs/remotes/origin/${base.replace(/^refs\/heads\//, '')}`, `refs/heads/${base.replace(/^refs\/heads\//, '')}`] : []
-  const candidates = [...named, head, ...['main', 'master'].flatMap((b) => [`refs/remotes/origin/${b}`, `refs/heads/${b}`])]
-  return candidates.find((ref) => ref && ok(root, ref)) ?? null
-}
 
 // riskItems reads the Risk column of the Tasks table (a heading of level 2-6): `none` names no item, any other cell must hold
 // an integer 1-6. An unreadable cell or a missing column throws, so the gate denies.

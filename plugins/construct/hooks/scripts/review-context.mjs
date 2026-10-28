@@ -49,17 +49,21 @@ async function buildContext(root, lens, base, head) {
     'numstat:',
     ...numstat,
   ].join('\n') + '\n'
-  manifest.forEach((path, index) => {
+  const SPLIT = 'split the delivery into smaller pull requests, each under the budget'
+  let bytes = Buffer.byteLength(text)
+  for (const [index, path] of manifest.entries()) {
     // A deleted file's body is noise to a reviewer and can alone exceed the budget.
     const patch = nameStatus[index].status.startsWith('D') ? 'deleted; content omitted\n' : withNewline(out(root, ['diff', ...DIFF_FLAGS, baseTree, headTree, '--', `:(literal)${path}`]))
-    text += `ODD_REVIEW_PATH ${JSON.stringify({ index, path })}\n${patch}ODD_REVIEW_PATH_END ${index}\n`
-  })
+    const chunk = `ODD_REVIEW_PATH ${JSON.stringify({ index, path })}\n${patch}ODD_REVIEW_PATH_END ${index}\n`
+    text += chunk
+    bytes += Buffer.byteLength(chunk)
+    // Stop at the first path past the budget: one diff per path is what makes a huge subject slow.
+    if (bytes > MAX_CONTEXT_BYTES) throw new Error(`the review context passed the ${MAX_CONTEXT_BYTES} byte budget at path ${index + 1} of ${manifest.length}; ${SPLIT}`)
+  }
   if (lens === 'review-risk') text += `ODD_REVIEW_CHECKLIST_BEGIN\n${withNewline(readFileSync(CHECKLIST, 'utf8'))}ODD_REVIEW_CHECKLIST_END\n`
   text += 'ODD_REVIEW_CONTEXT_END\n'
-  const bytes = Buffer.byteLength(text)
-  if (bytes > MAX_CONTEXT_BYTES) {
-    throw new Error(`the review context is ${bytes} bytes, above the ${MAX_CONTEXT_BYTES} byte budget; split the delivery into smaller pull requests, each under the budget`)
-  }
+  bytes = Buffer.byteLength(text)
+  if (bytes > MAX_CONTEXT_BYTES) throw new Error(`the review context is ${bytes} bytes, above the ${MAX_CONTEXT_BYTES} byte budget; ${SPLIT}`)
   return { text, subject, manifest, baseTree, headTree }
 }
 

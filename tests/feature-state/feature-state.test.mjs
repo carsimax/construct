@@ -140,6 +140,17 @@ test('task cells are truncated to 160 characters', () => {
   assert.doesNotMatch(text, /x{161}/)
 })
 
+test('a Tasks heading of level 2-6 with trailing text is read, as the publication gate reads it', () => {
+  for (const heading of ['### Tasks', '## Tasks (phase 2)']) {
+    const repo = makeRepo()
+    write(repo, 'odd/tasks/a.md', doc({ rows: [['T1', 'Open thing', 'pending']] }).replace('## Tasks', heading))
+    assert.match(context(run(repo)), /T1 — Open thing/)
+  }
+  const repo = makeRepo()
+  write(repo, 'odd/tasks/a.md', doc({ rows: [['T1', 'Open thing', 'pending']] }).replace('## Tasks\n', '### Tasks\n\n## Other\n'))
+  assert.equal(run(repo).stdout, '')
+})
+
 test('a malformed table yields no output and exit 0', () => {
   const repo = makeRepo()
   write(repo, 'odd/tasks/a.md', '# Broken\n\n## Tasks\n\n| ID | Task |\n| T1 | only |\n| T2\n\n## Log\n')

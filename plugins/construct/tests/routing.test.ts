@@ -1,11 +1,11 @@
 import { expect, test } from 'claude-code/testing'
 import { effortFor, modelFor, roleFor } from '../hooks/routing.js'
 
-// Answers what Claude Code would do after the mod passes the spawn on
+// Answers what Claude Code would do after the mod passes the spawn on: no model given means the frontmatter one
 function spawnStub(seen: unknown[]) {
   return ($, e) => {
     seen.push(e)
-    return { model: e.model, agentId: 'agent-' + e.subagentType }
+    return { model: e.model ?? 'frontmatter', agentId: 'agent-' + e.subagentType }
   }
 }
 
@@ -42,11 +42,19 @@ test('modelFor and effortFor read the role options, and effort default means no 
   expect(effortFor(null, options)).toBe(null)
 })
 
-test('agent.spawn sends the configured model for a construct agent that names none', async ($, on) => {
+test('agent.spawn with no model option leaves the model to the agent frontmatter', async ($, on) => {
   const seen = []
   on('agent.spawn', spawnStub(seen))
   await $.agent.spawn({ subagentType: 'construct:explorer', prompt: 'map it' })
-  expect(seen[0].model).toBe('haiku')
+  expect(seen[0].model).toBe(undefined)
+})
+
+test('agent.spawn sets no model on a resumed agent, which a hook can only refuse', { options: { model_worker: 'opus' } }, async ($, on) => {
+  const seen = []
+  on('agent.spawn', ($, e) => (seen.push(e), { model: e.model ?? 'sonnet', agentId: 'a1' }))
+  await $.agent.spawn({ subagentType: 'construct:worker', prompt: 'go on', resume: { agentId: 'a1' } } as any)
+  await $.agent.spawn({ subagentType: 'construct:worker', prompt: 'build' })
+  expect(seen.map((e) => e.model)).toEqual([undefined, 'opus'])
 })
 
 test('agent.spawn keeps an explicit model over the configured one', async ($, on) => {
@@ -56,7 +64,7 @@ test('agent.spawn keeps an explicit model over the configured one', async ($, on
   expect(seen[0].model).toBe('opus')
 })
 
-test('agent.spawn sends the general delegation model for general-purpose that names none', async ($, on) => {
+test('agent.spawn sends the configured general model for general-purpose that names none', { options: { model_general: 'sonnet' } }, async ($, on) => {
   const seen = []
   on('agent.spawn', spawnStub(seen))
   await $.agent.spawn({ subagentType: 'general-purpose', prompt: 'research' })
@@ -70,7 +78,29 @@ test('agent.spawn leaves other agent types unchanged', async ($, on) => {
   expect(seen[0].model).toBe('opus')
 })
 
-test('turn.step applies the configured effort to a routed subagent only', async ($, on) => {
+test('turn.step keeps the caller effort when the role has no effort option', async ($, on) => {
+  const steps = []
+  on('agent.spawn', spawnStub([]))
+  on('turn.step', stepStub(steps))
+  await $.agent.spawn({ subagentType: 'construct:worker', model: 'sonnet', prompt: 'build' })
+  await runStep($, { turnId: 't1', index: 0, model: 'claude-sonnet', effort: 'max', messageCount: 1, agentId: 'agent-construct:worker' })
+  expect(steps[0].effort).toBe('max')
+})
+
+test('general-purpose with unset options keeps the construct:general frontmatter model and effort', async ($, on) => {
+  const spawns = []
+  const steps = []
+  on('agent.spawn', spawnStub(spawns))
+  on('turn.step', stepStub(steps))
+  await $.agent.spawn({ subagentType: 'general-purpose', prompt: 'research' })
+  await $.agent.spawn({ subagentType: 'construct:general', prompt: 'research' })
+  await runStep($, { turnId: 't1', index: 0, model: 'claude-sonnet', messageCount: 1, agentId: 'agent-general-purpose' })
+  await runStep($, { turnId: 't2', index: 0, model: 'claude-sonnet', messageCount: 1, agentId: 'agent-construct:general' })
+  expect(spawns.map((e) => e.model)).toEqual(['sonnet', undefined])
+  expect(steps.map((e) => e.effort)).toEqual(['medium', undefined])
+})
+
+test('turn.step applies the configured effort to a routed subagent only', { options: { effort_worker: 'medium' } }, async ($, on) => {
   const spawned = []
   const steps = []
   on('agent.spawn', spawnStub(spawned))
@@ -94,7 +124,7 @@ test('turn.step keeps the model effort when the role effort is default', async (
   expect(steps[0].effort).toBe('medium')
 })
 
-test('the role map keeps the newest 256 subagents and drops the oldest', async ($, on) => {
+test('the role map keeps the newest 256 subagents and drops the oldest', { options: { effort_worker: 'medium' } }, async ($, on) => {
   let n = 0
   on('agent.spawn', ($, e) => ({ model: e.model, agentId: `a${n++}` }))
   const steps = []
@@ -106,21 +136,13 @@ test('the role map keeps the newest 256 subagents and drops the oldest', async (
   expect(steps.map((s) => s.effort)).toEqual(['low', 'medium', 'medium'])
 })
 
-test('modelFor and effortFor fall back to the legacy key, and the new key wins when both are set', async () => {
-  expect(modelFor('worker', { model_odd_worker: 'opus' })).toBe('opus')
-  expect(effortFor('worker', { effort_odd_worker: 'high' })).toBe('high')
-  expect(modelFor('worker', { model_worker: 'haiku', model_odd_worker: 'opus' })).toBe('haiku')
-  expect(effortFor('worker', { effort_worker: 'low', effort_odd_worker: 'high' })).toBe('low')
-  expect(effortFor('worker', { effort_worker: 'default', effort_odd_worker: 'high' })).toBe(null)
-  expect(modelFor('worker', { model_worker: '', model_odd_worker: 'opus' })).toBe('opus')
-  expect(effortFor('worker', { effort_worker: '', effort_odd_worker: 'high' })).toBe('high')
-  expect(modelFor('worker', { model_worker: 'inherit', model_odd_worker: 'opus' })).toBe('opus')
-  expect(effortFor('worker', { effort_worker: 'inherit', effort_odd_worker: 'high' })).toBe('high')
-  expect(effortFor('worker', { effort_worker: 'inherit', effort_odd_worker: 'default' })).toBe(null)
-  expect(modelFor('worker', { model_worker: 'sonnet', model_odd_worker: 'opus' })).toBe('sonnet')
-  expect(modelFor('review_risk', { model_review_risk: 'inherit' })).toBe(null)
-  expect(effortFor('review_risk', { effort_review_risk: 'inherit' })).toBe(null)
+test('modelFor and effortFor read only model_<role> and effort_<role>; inherit and empty mean unset', async () => {
+  expect(modelFor('worker', { model_odd_worker: 'opus' })).toBe(null)
+  expect(effortFor('worker', { effort_odd_worker: 'high' })).toBe(null)
+  expect(modelFor('worker', { model_worker: '' })).toBe(null)
+  expect(modelFor('worker', { model_worker: 'inherit' })).toBe(null)
+  expect(effortFor('worker', { effort_worker: 'inherit' })).toBe(null)
+  expect(effortFor('worker', { effort_worker: 'default' })).toBe(null)
   expect(modelFor('review_risk', { model_review_risk: 'haiku' })).toBe('haiku')
-  expect(modelFor('judge_a', { model_jd_judge_a: 'opus' })).toBe('opus')
-  expect(modelFor('review_risk', { model_odd_worker: 'opus' })).toBe(null)
+  expect(modelFor('judge_a', { model_jd_judge_a: 'opus' })).toBe(null)
 })

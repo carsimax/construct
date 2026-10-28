@@ -14,6 +14,7 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 case_dir="$repo_root/plugins/construct/evals/review-fires"
 runs=1
 if [ "${1:-}" = "--runs" ]; then runs="${2:?--runs needs a number}"; fi
+[[ "$runs" =~ ^[1-9][0-9]*$ ]] || { echo "--runs needs a positive integer" >&2; exit 2; }
 
 # Prompt body: everything after the closing frontmatter delimiter, without surrounding blank lines.
 prompt="$(awk 'c>=2{print} /^---$/{c++}' "$case_dir/prompt.md" | sed '/./,$!d')"

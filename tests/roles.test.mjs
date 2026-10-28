@@ -5,7 +5,7 @@ import { spawnSync } from 'node:child_process'
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { checkLensResult } from '../plugins/construct/hooks/scripts/review-store.mjs'
-import { LEGACY, ROLES, kindOf, namesOf, qualified, roleKey } from '../plugins/construct/hooks/scripts/roles.mjs'
+import { BUILTIN_DEFAULTS, BUILTINS, ROLES, kindOf, namesOf, qualified, roleKey } from '../plugins/construct/hooks/scripts/roles.mjs'
 
 const pluginRoot = new URL('../plugins/construct/', import.meta.url).pathname
 const read = (...p) => readFileSync(join(pluginRoot, ...p), 'utf8')
@@ -19,6 +19,14 @@ function frontmatter(name) {
   const list = (key) => (field(key) ?? '').replace(/^\[|\]$/g, '').split(',').map((s) => s.trim()).filter(Boolean)
   return { name: field('name'), tools: field('tools') === undefined ? null : list('tools'), disallowed: list('disallowedTools'), omitClaudeMd: field('omitClaudeMd'), maxTurns: field('maxTurns'), background: field('background') }
 }
+
+test('a built-in type follows the frontmatter of the agent it maps to', () => {
+  for (const [type, name] of Object.entries(BUILTINS)) {
+    const block = read('agents', `${name}.md`).split('---')[1]
+    const field = (key) => block.match(new RegExp(`^${key}: *(.*)$`, 'm'))?.[1]?.trim()
+    assert.deepEqual(BUILTIN_DEFAULTS[type], { model: field('model'), effort: field('effort') }, type)
+  }
+})
 
 test('the registry names exactly the agent files, each with one kind', () => {
   const files = readdirSync(join(pluginRoot, 'agents')).filter((f) => f.endsWith('.md')).map((f) => f.replace(/\.md$/, ''))
@@ -41,8 +49,8 @@ test('helpers: construct type, role key, kind with or without the prefix', () =>
   assert.equal(kindOf(undefined), null)
 })
 
-test('plugin.json declares model_ and effort_ options for exactly the registry roles and the legacy names', () => {
-  const keys = [...names, ...Object.values(LEGACY)].flatMap((n) => [`model_${roleKey(n)}`, `effort_${roleKey(n)}`])
+test('plugin.json declares model_ and effort_ options for exactly the registry roles', () => {
+  const keys = names.flatMap((n) => [`model_${roleKey(n)}`, `effort_${roleKey(n)}`])
   assert.deepEqual(Object.keys(manifest.userConfig).filter((k) => /^(model|effort)_/.test(k)).sort(), keys.sort())
 })
 

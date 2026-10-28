@@ -61,10 +61,14 @@ export function git(cwd, args) {
   return run.error || run.status !== 0 ? undefined : run.stdout.trim()
 }
 
-export function defaultBranch(cwd) {
-  const remote = git(cwd, ['symbolic-ref', '-q', '--short', 'refs/remotes/origin/HEAD'])
-  if (remote) return remote
-  return ['main', 'master'].find((name) => git(cwd, ['rev-parse', '--verify', '-q', `refs/heads/${name}`]) !== undefined)
+// defaultBranch returns the first resolvable candidate as a full ref: a `gh pr create --base` branch, origin's HEAD,
+// then origin or local main and master; undefined when none exists. The publication gate and skill-context.mjs share it.
+export function defaultBranch(cwd, base) {
+  const name = base && !base.startsWith('-') ? base.replace(/^refs\/heads\//, '') : null
+  const named = name ? [`refs/remotes/origin/${name}`, `refs/heads/${name}`] : []
+  const head = git(cwd, ['symbolic-ref', '-q', 'refs/remotes/origin/HEAD'])
+  const candidates = [...named, head, ...['main', 'master'].flatMap((b) => [`refs/remotes/origin/${b}`, `refs/heads/${b}`])]
+  return candidates.find((ref) => ref && git(cwd, ['rev-parse', '--verify', '-q', `${ref}^{commit}`]) !== undefined)
 }
 
 const isGenerated = (path) => GENERATED.some((pattern) => pattern.test(path)) || isGeneratedGoldenPath(path)
@@ -86,7 +90,7 @@ function authoredLines(numstat) {
 // commitSliceReport: one line after a commit on a feature branch, or null when there is no slice to report.
 export function commitSliceReport(cwd) {
   const branch = git(cwd, ['symbolic-ref', '-q', '--short', 'HEAD'])
-  const target = branch === undefined ? undefined : defaultBranch(cwd)
+  const target = branch === undefined ? undefined : defaultBranch(cwd)?.replace(/^refs\/(remotes\/|heads\/)/, '')
   if (!branch || !target || branch === target || `origin/${branch}` === target) return null
   const base = git(cwd, ['merge-base', 'HEAD', target])
   const commits = base ? Number(git(cwd, ['rev-list', '--count', `${base}..HEAD`])) : 0

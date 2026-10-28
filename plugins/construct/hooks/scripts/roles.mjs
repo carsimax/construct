@@ -22,8 +22,8 @@ export const ROLES = {
 // Built-in subagent types that follow a construct role
 export const BUILTINS = { 'general-purpose': 'general' }
 
-// Legacy agent names of the six renamed roles (S7): saved model_<old>/effort_<old> values keep applying through 6.x
-export const LEGACY = { explorer: 'odd-explorer', worker: 'odd-worker', verifier: 'odd-verify', general: 'odd-general', 'judge-a': 'jd-judge-a', 'judge-b': 'jd-judge-b' }
+// A built-in type has no construct frontmatter, so with its options unset it gets the one of the agent it maps to
+export const BUILTIN_DEFAULTS = { 'general-purpose': { model: 'sonnet', effort: 'medium' } }
 
 export const qualified = (name) => `${PREFIX}${name}`
 export const roleKey = (name) => name.replaceAll('-', '_')

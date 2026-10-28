@@ -20,25 +20,20 @@ const ok = (stdout: string) => ({ exitCode: 0, stdout, stderr: '', isStdoutTrunc
 const value = (v: unknown) => ({ value: v })
 const entry = (name: string) => ({ name, kind: 'file', size: 1, mtimeMs: 5, isLink: false })
 
-// Stubs for everything the wiring reads. `usage` overrides the session usage.
+// Stubs for everything the wiring reads; `o` overrides pieces.
 function world($, on, o: any = {}) {
-  on('session.usage', () => value({ startedAt: 0, context: { window: 200000, tokens: 66000, percent: 33 }, rateLimits: o.rateLimits ?? [], cost: { usd: o.cost ?? 1 } }))
   on('session.model', () => value('claude-opus-4'))
   on('session.cwd', () => value('/home/me/proj'))
   on('session.id', () => value('sess-1'))
-  on('settings.read', () => (o.hang?.() ? new Promise(() => {}) : value(o.settings ?? {})))
   on('env.get', () => value('/home/me'))
   on('fs.exists', () => value(o.exists ?? false))
-  on('session.version', () => value({ version: o.version ?? '2.1.304', base: o.version ?? '2.1.304' }))
+  on('session.version', () => (o.hang?.() ? new Promise(() => {}) : value({ version: o.version ?? '2.1.304', base: o.version ?? '2.1.304' })))
   on('clock.now', () => value(o.clock ? o.clock() : NOW))
   on('fs.list', () => value([entry('feat.md')]))
   on('fs.read', () => value(o.tasks ? o.tasks() : TASKS))
   on('process.run', (_$, e) => {
     const a = e.argv
     if (o.run) return value(o.run(a))
-    if (a[0] === 'git' && a.includes('status')) return value(ok(o.git ?? '# branch.oid abc1234\n# branch.head main\n'))
-    if (a[0] === 'git' && a.includes('--no-index')) return value(o.untrackedCount ? { ...ok(o.untrackedCount), exitCode: 1 } : { ...ok(''), exitCode: 128 })
-    if (a[0] === 'git' && a.includes('--numstat')) return value(ok(o.numstat ?? ''))
     if (a[0] === 'git' && a.includes('rev-parse')) return value(ok('/home/me/proj\n.git\n.git\n'))
     return value({ ...ok(''), exitCode: 1 })
   })
@@ -48,9 +43,15 @@ function world($, on, o: any = {}) {
   const seen = o.seen ?? {}
   on('turn.start', (_$, e) => ((seen.start = e), { turnId: e.turnId }))
   on('turn.complete', ($, e) => ({ text: e.answer }))
-  on('tool.call', async (_$, e) => ((seen.call = e), await o.hold?.(), { ref: 'r', result: {}, text: 'ok', ...(o.isError ? { isError: true } : {}) }))
+  on('tool.call', async (_$, e) => {
+    seen.call = e
+    await o.hold?.()
+    if (o.throws) throw new Error('tool failed')
+    return o.deny ? { deny: o.deny } : { ref: 'r', result: {}, text: 'ok', ...(o.isError ? { isError: true } : {}) }
+  })
   on('tool.check', (_$, e) => ((seen.check = e), { decision: (typeof o.decision === 'function' ? o.decision() : o.decision) ?? 'allow' }))
-  on('agent.spawn', (_$, e) => ({ model: e.model, agentId: 'ag-1' }))
+  // no model given means the agent's frontmatter one (sonnet for the worker)
+  on('agent.spawn', (_$, e) => ({ model: e.model ?? 'sonnet', agentId: 'ag-1' }))
   on('turn.step', async function* (_$, e) {
     return { turnId: e.turnId, index: e.index, answer: 'ok', toolUses: [], stopReason: 'end_turn', usage: null }
   })
@@ -108,7 +109,7 @@ async function band($) {
 }
 
 test('/construct doctor returns a report even when every process fails', async ($, on) => {
-  await start($, on, { run: () => ({ ...ok(''), exitCode: 1 }), settings: undefined })
+  await start($, on, { run: () => ({ ...ok(''), exitCode: 1 }) })
   const out = await $.command.run({ command: 'construct', args: 'doctor' })
   const text = String(out?.text ?? '')
   expect(text).toContain('Construct doctor')
@@ -124,6 +125,7 @@ test('/construct doctor turns a hanging in-process probe into a failed row', asy
   hang = true
   const text = String((await $.command.run({ command: 'construct', args: 'doctor' }))?.text ?? '')
   expect(text).toContain('Construct doctor')
+  expect(text).toContain('✗ Claude Code')
   expect(text).toContain('✗ Node')
 })
 
@@ -183,6 +185,28 @@ test('a main-thread Write outside odd/tasks shows the inline alert', async ($, o
   const p = await band($)
   await p.redraw()
   expect(await joined(p)).toContain('⚠ 1 inline')
+})
+
+for (const [why, o] of [['denied', { deny: 'surface-guard: too big' }], ['failed', { isError: true }]] as const) {
+  test(`a ${why} main-thread Write is not an inline write`, async ($, on) => {
+    await start($, on, o)
+    await $.turn.start({ text: 'go', turnId: 't1' })
+    await $.tool.call({ tool: 'Write', file_path: '/home/me/proj/src/a.js', content: 'x' })
+    await settle()
+    const p = await band($)
+    await p.redraw()
+    expect(await joined(p)).not.toContain('inline')
+  })
+}
+
+test('an ask whose tool.call throws is settled, not left pending', async ($, on) => {
+  await start($, on, { decision: askingGate, throws: true })
+  await checkAsk($, { tool: 'Bash', input: { command: 'ls' }, tool_use_id: 'tu-1' })
+  await $.tool.call({ tool: 'Bash', command: 'ls', tool_use_id: 'tu-1' } as any).catch(() => {})
+  await settle()
+  const p = await band($)
+  await p.redraw()
+  expect(await joined(p)).not.toContain('pending')
 })
 
 test('a write under odd/tasks is not an inline write', async ($, on) => {

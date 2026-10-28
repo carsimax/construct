@@ -15,7 +15,6 @@ Include the Construct version (`claude plugin list`), the Claude Code and Node.j
 In scope:
 
 - `install.sh`: what it writes to `~/.claude/settings.json`.
-- The memory store and its MCP server: reading or writing memory of another repository, or a pre-approved command reaching a destructive one.
 - Hooks that leak data, run commands they should not, or write outside the repository and `~/.claude`.
 
 Guards and gates are a discipline layer, not a security boundary. `publication-gate`, `pre-push`, `command-guard`, `surface-guard`, and `delegation-admission` keep an agent on the workflow inside Claude Code; they do not stop a user, another tool, or an indirect command, and `git push --no-verify` skips the pre-push hook by design (see the README). A way to get past a guard is a welcome bug report, as a public issue, unless it also reaches one of the in-scope items above.

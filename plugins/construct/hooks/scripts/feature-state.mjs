@@ -31,11 +31,13 @@ function splitRow(line) {
 // Returns { rows, taskSpecs } for the `## Tasks` table (rows: unfinished only; taskSpecs: every row's
 // [id, Specs cell], or null without a `Specs` column), or null when the table is missing or malformed.
 function unfinishedRows(lines) {
-  const start = lines.findIndex((l) => /^##\s+Tasks\s*$/.test(l))
+  // A Tasks heading of any level 2-6, as publication-gate.mjs reads it; a heading of the same or a higher level ends it.
+  const start = lines.findIndex((l) => /^#{2,6}\s+Tasks\b/i.test(l))
   if (start < 0) return null
+  const level = lines[start].match(/^#+/)[0].length
   let i = start + 1
   while (i < lines.length && !lines[i].trim().startsWith('|')) {
-    if (/^##\s/.test(lines[i])) return null
+    if ((lines[i].match(/^(#{1,6})\s/)?.[1].length ?? 7) <= level) return null
     i++
   }
   if (i >= lines.length) return null

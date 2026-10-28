@@ -10,7 +10,7 @@ Construct is a Claude Code plugin (`plugins/construct/`), its local marketplace 
 
 ## Setup
 
-- Node.js 22.16 or later (Node 23 is not supported), `git`, Claude Code 2.1.304 or later, and [Engram](https://github.com/Gentleman-Programming/engram) (the memory the contract and skills call). Install Engram with `brew install gentleman-programming/tap/engram && engram setup claude-code`.
+- Node.js 22.16 or later, `git`, Claude Code 2.1.304 or later, and [Engram](https://github.com/Gentleman-Programming/engram) (the memory the contract and skills call). Install Engram with `brew install gentleman-programming/tap/engram && engram setup claude-code`.
 - Load the plugin for one session without installing it:
 
 ```bash
@@ -51,7 +51,7 @@ scripts/eval.sh                          # all cases
 scripts/eval.sh --case small-inline   # one case
 ```
 
-The `small-inline-pressure` case reuses the `small-inline` fixture and graders with a prompt that pushes against the rules through urgency; `claude plugin eval` runs a no-plugin baseline arm by default, and `scripts/eval.sh` keeps it on.
+The `small-inline-pressure` case copies the `small-inline` fixture and graders (edit both; `tests/evals.test.mjs` checks they match) with a prompt that pushes against the rules through urgency; `claude plugin eval` runs a no-plugin baseline arm by default, and `scripts/eval.sh` keeps it on.
 
 `scripts/eval.sh` runs each case in an isolated `claude -p` session. It may grant only the commands the eval cases need.
 
@@ -81,7 +81,7 @@ Many tests cross-check text against code, so a change in one place usually needs
 
 - `main` is protected. Work on a feature branch and open a pull request.
 - Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/). Do not add AI attribution lines.
-- Keep a pull request to about 400 changed lines. Split larger work into chained pull requests (see the `construct:delivery` skill).
+- Keep a pull request within the delivery slice, about 1500 authored changed lines. Split larger work into chained pull requests (see the `construct:delivery` skill).
 - Technical artifacts (code, comments, docs, commit messages) are written in English.
 - Commit, push, pull request, and merge are the maintainer's decisions.
 

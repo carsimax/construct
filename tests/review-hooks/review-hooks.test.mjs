@@ -268,6 +268,16 @@ describe('capture hook', () => {
     assert.ok(!existsSync(file))
   })
 
+  test('a context over the byte budget is denied at the first path past it, without diffing the rest', () => {
+    const big = 'x'.repeat(300 * 1024) + '\n'
+    const repo = makeRepo({ 'src/a.js': 'a\n' })
+    applyFiles(repo, { 'src/p1.txt': big, 'src/p2.txt': big, 'src/p3.txt': big })
+    commitAll(repo, 'big')
+    const r = hook(CONTEXT_HOOK, spawnInput(repo, 'Review subject: HEAD~1'))
+    assert.equal(r.json.hookSpecificOutput.permissionDecision, 'deny')
+    assert.match(r.json.hookSpecificOutput.permissionDecisionReason, /byte budget at path 2 of 3/)
+  })
+
   test('pending and verdict records older than 30 days are pruned when capture runs (F20)', () => {
     const repo = reviewed()
     const binding = prepare(repo)
@@ -280,9 +290,14 @@ describe('capture hook', () => {
     const past = new Date(Date.now() - 31 * 24 * 3600 * 1000)
     utimesSync(old, past, past)
     utimesSync(verdict, past, past)
+    utimesSync(join(store, 'verdicts', 'oldsubject'), past, past)
+    // A subject directory another capture just created, before it writes its verdict, stays.
+    mkdirSync(join(store, 'verdicts', 'newsubject'))
     hook(CAPTURE_HOOK, stopInput(repo, 'not json'))
     assert.ok(!existsSync(old))
     assert.ok(!existsSync(verdict))
+    assert.ok(!existsSync(join(store, 'verdicts', 'oldsubject')))
+    assert.ok(existsSync(join(store, 'verdicts', 'newsubject')))
     assert.ok(existsSync(join(store, 'pending', `review-risk.${binding.subject_hash}.json`)))
   })
 
