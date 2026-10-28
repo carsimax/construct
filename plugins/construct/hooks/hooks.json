@@ -190,6 +190,19 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/iteration-cap.mjs"
+            ],
+            "timeout": 10
+          }
+        ]
       }
     ],
     "PostToolBatch": [
