@@ -84,7 +84,7 @@ Open Claude Code in a git repository and make a request. Construct applies the s
 
 1. **Authorize.** Questions, reviews, and planning stay read-only. Files change only when you explicitly ask for a change.
 2. **Explore.** Claude reads the existing code first, in proportion to the task.
-3. **Size.** A task is small or large. Small work goes to one worker agent. Large work is tracked in `odd/tasks/<feature>.md` (specs, tasks, log) before the first source write.
+3. **Size.** A task is small or large. Small work goes to one worker agent. Large work is tracked in `odd/tasks/<feature>.md` (specs, tasks, log) before the first source write. An `S#` carrying `NEEDS CLARIFICATION: <question>` blocks its task from `done` (the publication gate denies it; at most 3 open per document), and finished `S#` are merged into the living spec `odd/spec.md`.
 4. **Implement test-first.** A worker writes a failing test, makes it pass, then refactors, inside the edit surfaces it was given.
 5. **Close with evidence.** One report: what was verified, what failed or was skipped, the next step, and a Risk line (`Risk: none` or `Risk: item N (reason)`).
 
@@ -167,7 +167,7 @@ A plugin cannot ship a `CLAUDE.md`, so Construct loads its rules in layers:
 
 The contract texts live in `plugins/construct/hooks/contract/`.
 
-After a compaction or a resume, a second `SessionStart` hook (matcher `compact|resume`) re-injects the active feature state. It reads `odd/tasks/*.md` under the project root and, for up to three documents with unfinished tasks (newest first), emits the path, title, branch line, unfinished task rows, and the last `Next step:` from the log, in at most 2,500 characters. It is read-only and prints nothing when no document is active. Task-to-document sync hooks were dropped: native tasks have no link to the document's `T#` rows, so a hook could corrupt the feature document. The orchestrator keeps the document current, and the re-injection tells it where it was.
+After a compaction or a resume, a second `SessionStart` hook (matcher `compact|resume`) re-injects the active feature state. It reads `odd/tasks/*.md` under the project root and, for up to three documents with unfinished tasks (newest first), emits the path, title, branch line, unfinished task rows, and the last `Next step:` from the log, in at most 2,500 characters. It also lists open `NEEDS CLARIFICATION` questions (warning past 3 per document), warns on an `S#` without a quote found in the Log or an `Assumption`, and warns when a finished document has no heading in `odd/spec.md`. It is read-only and prints nothing when no document is active. Task-to-document sync hooks were dropped: native tasks have no link to the document's `T#` rows, so a hook could corrupt the feature document. The orchestrator keeps the document current, and the re-injection tells it where it was.
 
 ### Delegation admission
 
@@ -305,6 +305,7 @@ The mod draws one thing: a **band** above the prompt (the `AbovePrompt` render s
 | `plugins/construct/tests/` | Mod tests run by `claude plugin test` |
 | `tests/` | Repository tests run by `node --test` |
 | `odd/tasks/` | ODD feature documents (specs, tasks, log) |
+| `odd/spec.md` | Living spec: the `S#` of finished features, each under `## <feature>` |
 
 ## Contributing
 
