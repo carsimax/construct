@@ -4,6 +4,10 @@ Notable changes per release. Versions follow [Semantic Versioning](https://semve
 
 ## Unreleased
 
+- Breaking: the `inline_edit_max_lines` and `iteration_cap` options are removed, and saved values have no effect. The orchestrator sets the limits per session with the new `construct-limits set inline=<N> cap=<N>` (defaults 150 and 3, ceilings 500 and 10; `show` prints them). While a feature document has an unfinished task, `surface-guard` denies every main-thread write outside `.vault/tasks/` and names `construct:worker`. Subagents cannot run `construct-limits set` (`command-guard` denies it; `show` stays allowed), and when a session file exists in both the plugin data directory and the fallback directory the newer one applies. The plugin now has no `userConfig`.
+- Breaking: the `command_guard_asks` option is removed, and `command-guard` never asks before destructive commands (`rm -rf`, force push, `reset --hard`, `git clean -f`, `find -delete`, and the rest). Its denies (`--no-verify`, hook bypasses, oracle unlock, review store) are unchanged.
+- Breaking: the per-role `model_<role>` and `effort_<role>` options are removed from `/config`, and saved values have no effect. Construct agents run on their own frontmatter model and effort; the built-in `general-purpose` still runs on `sonnet` with effort `medium`.
+
 ## 13.2.1
 
 - Fix: `unlock-approval` recorded no approval in real Claude Code, because the PostToolUse `tool_input` of `AskUserQuestion` always carries `answers` and `annotations`, so every unlock was denied. It now also runs on PreToolUse (denies a call that pre-fills `answers`, otherwise records the `tool_use_id` as a clean ask), and PostToolUse records the approval from `tool_response.answers` only for a clean ask of the same `tool_use_id` and session. A chosen label of `Unlock (Recommended)` counts as `Unlock`.

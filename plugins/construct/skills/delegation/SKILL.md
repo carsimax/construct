@@ -14,7 +14,7 @@ The parent orchestrates; agents do the work. Copy the role's template from `refe
 
 ## Mapping
 
-Small work is done inline: the parent edits directly when each call changes at most `inline_edit_max_lines` lines (default 150; 0 restores worker-only). Large work and any bigger edit go to `construct:worker` (surface-guard denies a main-thread edit over the limit); reads, answers, and `.vault/tasks/` stay with the parent.
+Small work is done inline: each edit call changes at most the session inline limit (default 150; `construct-limits set inline=<N>`). Bigger edits and any write while a feature document has an unfinished task go to `construct:worker` (surface-guard denies them); reads, answers, `.vault/tasks/` stay with the parent.
 
 - Worker: one per independent unit, code, tests, and docs together. Disjoint units launch in one message; dependent ones in order, never a second agent of one role and task in a turn.
 - Workflows launch only read-only agents, each `agent()` naming its `agentType` (hook); writes go through `construct:worker`.
@@ -22,7 +22,7 @@ Small work is done inline: the parent edits directly when each call changes at m
 - `construct:explorer`: mapping beyond one batch or about 5 sequential lookups, one per front, at most 3 per message; dependents wait.
 - `construct:general`: long suites, builds, installs, broad research.
 - `construct:verifier`: only for a Risk-named item (see Verification).
-- Model and effort come from plugin config (`model_<role>`, `effort_<role>`), never a prompt.
+- Agents keep their own model and effort; never set them in a prompt.
 - Keep parent output bounded: counts, stat, tails, summaries.
 
 ## Writer handoff

@@ -23,7 +23,7 @@ export const ROLES = {
 // Built-in subagent types that follow a construct role
 export const BUILTINS = { 'general-purpose': 'general' }
 
-// A built-in type has no construct frontmatter, so with its options unset it gets the one of the agent it maps to
+// A built-in type has no construct frontmatter, so the mod applies these defaults to the built-in type
 export const BUILTIN_DEFAULTS = { 'general-purpose': { model: 'sonnet', effort: 'medium' } }
 
 export const qualified = (name) => `${PREFIX}${name}`

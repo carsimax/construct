@@ -42,34 +42,17 @@ test('agent frontmatter matches the S6 table and the file name', () => {
   }
 })
 
-test('userConfig declares model and effort options defaulting to inherit, and no legacy options', () => {
-  const cfg = manifest.userConfig
-  for (const agent of Object.keys(S6)) {
-    const role = agent.replaceAll('-', '_')
-    assert.equal(cfg[`model_${role}`].default, 'inherit', `model_${role} default`)
-    assert.equal(cfg[`effort_${role}`].default, 'inherit', `effort_${role} default`)
-    assert.deepEqual(cfg[`model_${role}`].options, ['inherit', 'haiku', 'sonnet', 'opus', 'fable'])
-    assert.deepEqual(cfg[`effort_${role}`].options, ['inherit', 'default', 'low', 'medium', 'high', 'xhigh', 'max'])
-    assert.match(cfg[`model_${role}`].description, /inherit/)
-  }
-  for (const old of ['odd_explorer', 'odd_worker', 'odd_verify', 'odd_general', 'jd_judge_a', 'jd_judge_b', 'jd_fix_agent']) {
-    assert.equal(cfg[`model_${old}`], undefined, old)
-    assert.equal(cfg[`effort_${old}`], undefined, old)
-  }
+test('userConfig declares no model or effort option, and no legacy options', () => {
+  const cfg = manifest.userConfig ?? {}
+  assert.deepEqual(Object.keys(cfg).filter((k) => /^(model|effort)_/.test(k)), [])
   // The band above the prompt has no switch: the docked panel and its option are gone
   assert.equal(cfg.panel_open_on_start, undefined)
-  assert.equal(cfg.command_guard_asks?.type, 'boolean')
-  assert.equal(cfg.command_guard_asks?.default, false)
-  assert.equal(cfg.inline_edit_max_lines?.type, 'number')
-  assert.equal(cfg.inline_edit_max_lines?.default, 150)
   assert.equal(cfg.slice_lines, undefined)
-  assert.equal(cfg.iteration_cap?.type, 'number')
-  assert.equal(cfg.iteration_cap?.default, 3)
-  assert.equal(Object.keys(cfg).length, Object.keys(S6).length * 2 + 3)
+  assert.equal(Object.keys(cfg).length, 0)
 })
 
 test('no userConfig title names a methodology (ODD, RDD, JD)', () => {
-  for (const [key, opt] of Object.entries(manifest.userConfig)) {
+  for (const [key, opt] of Object.entries(manifest.userConfig ?? {})) {
     assert.doesNotMatch(opt.title, /\b(ODD|RDD|JD)\b/, key)
   }
 })

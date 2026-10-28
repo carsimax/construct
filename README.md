@@ -15,7 +15,7 @@ An agent writes code faster than you can check it. Organic Driven Development ke
 ## What you get
 
 - **ADD workflow.** A session contract, injected by hooks, that Claude follows on every request without being asked.
-- **Role agents with model routing.** 11 agents (explorer, worker, oracle, verifier, judges, review lenses). You choose each role's model and effort in `/config`.
+- **Role agents.** 11 agents (explorer, worker, oracle, verifier, judges, review lenses), each on its own model and effort.
 - **Skills.** Procedures that load on demand: workflow (sizing included), delegation, debugging, quality bar, migrations, feature branch with local sub-branches, commits, and the final pull request (`delivery`), review, and more.
 - **Mandatory review.** Work whose Risk names a high-risk item is reviewed by lens agents before it can be published. Hooks build the evidence, record the verdicts, and gate `git push`, `gh pr create`, and `gh release create`.
 - **Status band.** One row above the prompt with the phase, the active feature with its checkpoints, and the running agents. It leaves the model, branch, context, and plan limits to your status line.
@@ -113,18 +113,25 @@ claude plugin install construct@construct
 
 ## Configuration
 
-Options are plugin settings, edited in `/config`:
+Construct has no `/config` options. Two limits are set per session by the orchestrator with `construct-limits` (the plugin's `bin/`, on the Bash PATH of a session); the user can also run it with `!`, but a subagent cannot run `set` (`command-guard` denies it; `show` is allowed):
 
-| Option | Effect |
-|---|---|
-| Model and effort per role | See the routing table below. Each option defaults to `inherit`: use the deprecated key of the same role if it is set, else the agent's own frontmatter |
-| `inline_edit_max_lines` (number, default `150`) | Let the main thread edit repository files directly when one Write, Edit, MultiEdit, or NotebookEdit call changes at most this many lines; `surface-guard` sends bigger changes to `construct:worker`. `0` restores the old rule: the main thread writes only `.vault/tasks/` |
-| `iteration_cap` (number, default `3`) | Deny a Bash command after it failed this many times in a row for one agent (a passing run resets its count) (the main thread counts as one), so the agent stops and reports what it tried, the failure, and its hypothesis instead of looping, and never edits the test to pass. A subagent's count ends when it stops; the main thread's resets on your next prompt. A value that is not a whole number of 1 or more uses `3`; `0` turns the cap off |
-| `command_guard_asks` (boolean, default `false`) | Let `command-guard` ask before destructive commands (`rm -rf`, force push, `reset --hard`, and the rest). Denies of verifier bypasses always apply |
+```bash
+construct-limits set inline=300 cap=5   # either key alone is fine; the other keeps its earlier value
+construct-limits show                   # inline=300 cap=5
+```
 
-### Agents and model routing
+| Limit | Default | Ceiling | Effect |
+|---|---|---|---|
+| `inline` | `150` | `500` | The most lines one Write, Edit, MultiEdit, or NotebookEdit call of the main thread may change; `surface-guard` sends bigger changes to `construct:worker`. `0` means the main thread writes only `.vault/tasks/` |
+| `cap` | `3` | `10` | Deny a Bash command after it failed this many times in a row for one agent (a passing run resets its count; the main thread counts as one), so the agent stops and reports what it tried, the failure, and its hypothesis instead of looping, and never edits the test to pass. A subagent's count ends when it stops; the main thread's resets on your next prompt. `0` turns the cap off |
 
-The plugin ships 11 agents. Each role's model and effort can be changed in `/config`, where every option appears as a row such as `Worker model` or `Review risk effort`.
+A value over its ceiling is clamped; invalid input (not a whole number, an unknown key, a missing `CLAUDE_CODE_SESSION_ID`) exits non-zero and changes nothing. The limits belong to the session that set them and are not saved per project.
+
+**Tracked work is never edited inline.** While a `.vault/tasks/*.md` feature document has an unfinished task, `surface-guard` denies every main-thread write outside `.vault/tasks/`, whatever `inline` says, and names `construct:worker`; writers keep their allowed edit surfaces. With every task done, the `inline` limit applies again.
+
+### Agents
+
+The plugin ships 11 agents. Their model and effort are not configurable: each runs on its own frontmatter.
 
 | Role | Agent | Model | Effort |
 |---|---|---|---|
@@ -140,16 +147,12 @@ The plugin ships 11 agents. Each role's model and effort can be changed in `/con
 | Review resilience | `construct:review-resilience` | sonnet | medium |
 | General | `construct:general` and the built-in `general-purpose` | sonnet | medium |
 
-How the routing works:
+How it works:
 
-- The plugin's mod (`hooks/register.js`) applies the configured model when a subagent spawns and the configured effort on each of its requests.
-- A model passed explicitly on the Agent call wins; the configured model applies only when the call names none.
-- An effort of `default` keeps the model's own effort.
+- The mod (`hooks/register.js`) sets no model and no effort for a construct agent. It sends a built-in `general-purpose` launch on `sonnet` with effort `medium`; a model passed explicitly on the Agent call wins.
 - Turn budgets: `construct:explorer` stops after 30 turns, `construct:verifier` after 50, and each lens after 2. A capped agent returns its output marked partial, and it can be resumed.
 - The `delegation`, `review`, and `workflow` skills are model-only (`user-invocable: false`): the orchestrator loads them, and they do not appear in the `/` menu. Ask for a review in plain words.
-- An `inherit` option leaves the agent's frontmatter model, and the effort the call asks for, untouched. The built-in `general-purpose` has no frontmatter, so with those options on `inherit` it gets `construct:general`'s sonnet and medium.
-- The 5.x options `model_odd_*`, `effort_odd_*`, `model_jd_*`, and `effort_jd_*` are no longer read; set `model_<role>` / `effort_<role>` instead.
-- If the mod cannot run, each agent keeps the model and effort in its own frontmatter.
+- Saved per-role model and effort options from earlier versions have no effect.
 
 ## Reference
 
@@ -251,7 +254,7 @@ The installer is opt-in and never runs on its own. It writes to the effective ho
 
 **Locked oracles.** While a lock is active (its feature document still has unfinished tasks on the remote-tracking default branch), `surface-guard` denies Write, Edit, MultiEdit, and NotebookEdit of a locked oracle to every agent and to the main thread, `delegation-admission` denies a writer whose surfaces cover one and an oracle launched over one, and `command-guard` denies `construct-gate oracle unlock` to every subagent and to the main thread unless the user's latest AskUserQuestion answer, recorded in the review store by a PostToolUse hook for a call a PreToolUse hook saw without pre-filled `answers`, chose `Unlock` (or `Unlock (Recommended)`) for a question naming that path in backticks (one unlock per answer; one live approval at a time; the unlock must be the whole command, one plain `construct-gate oracle unlock <path>` on an existing regular file with no symlink under the root; no record denies), and denies commands that write `refs/remotes/` locally (`git update-ref`, `git symbolic-ref`, `git remote set-head`, a `git fetch` refspec into it), as a discipline layer. Local edit stops trust the local remote-tracking ref; the publication gate verifies it against the remote URL recorded in the lock (one `git ls-remote`) before releasing a lock, and keeps the lock when the remote is unreachable, differs, or no URL was recorded. A new oracle run replaces a released lock. A symlink or directory surface is locked with a marker the gate always reports as changed (unlock it with `construct-gate oracle unlock`), and a corrupt lock record is skipped by the gate and shown by `oracle list`.
 
-**Command and surface guards.** Two more `PreToolUse` hooks fail open. `command-guard.mjs` on `Bash` denies commands that bypass the verifier (such as `git commit --no-verify`) and, with `command_guard_asks` on, asks before destructive ones. `surface-guard.mjs` on `Write`, `Edit`, `MultiEdit`, and `NotebookEdit` keeps a writer inside its allowed edit surfaces and lets the main thread write under `.vault/tasks/` freely and elsewhere only when one call changes at most `inline_edit_max_lines` lines (default 150); bigger changes are denied and go to `construct:worker`. The Risk-line gate also blocks a turn that adds skipped, focused, or stub test markers. `failure-streak.mjs` on `PostToolUseFailure` tells the model to change strategy when one tool fails five times within ten minutes. `iteration-cap.mjs` counts failed Bash commands on `PostToolUseFailure` and denies, on `PreToolUse`, a command that already failed `iteration_cap` times (default 3) for that agent; `SubagentStop` and `UserPromptSubmit` reset the counts. It fails open.
+**Command and surface guards.** Two more `PreToolUse` hooks fail open. `command-guard.mjs` on `Bash` denies commands that bypass the verifier (such as `git commit --no-verify`) and never asks. `surface-guard.mjs` on `Write`, `Edit`, `MultiEdit`, and `NotebookEdit` keeps a writer inside its allowed edit surfaces and lets the main thread write under `.vault/tasks/` freely and elsewhere only when one call changes at most the session's `inline` limit (default 150; see [Configuration](#configuration)), and not at all while a feature document has an unfinished task; those writes are denied and go to `construct:worker`. The Risk-line gate also blocks a turn that adds skipped, focused, or stub test markers. `failure-streak.mjs` on `PostToolUseFailure` tells the model to change strategy when one tool fails five times within ten minutes. `iteration-cap.mjs` counts failed Bash commands on `PostToolUseFailure` and denies, on `PreToolUse`, a command that already failed the session's `cap` times (default 3) for that agent; `SubagentStop` and `UserPromptSubmit` reset the counts. It fails open.
 
 An approval never authorizes delivery. Commit, push, pull request, and merge stay your decisions.
 
@@ -298,6 +301,7 @@ The mod draws one thing: a **band** above the prompt (the `AbovePrompt` render s
 | `plugins/construct/skills/` | Delivery and review skills (`delivery`, `review`, `debugging`, `constraints`, ...) |
 | `plugins/construct/hooks/` | `hooks.json`, the mod (`register.js`), its routing helpers, the status modules (`status/`), the band modules (`band/`), and the command hooks (`scripts/`: contract, feature state, the `shell-words` command reader over the vendored mvdan-sh parser (`hooks/vendor/`), delivery signals, publication gate, review store guard, command and surface guards, Risk line gate, subagent count, delegation admission, review context and capture) |
 | `plugins/construct/bin/construct-gate` | Installs, removes, or reports the git pre-push hook (`hooks/scripts/pre-push.mjs`) |
+| `plugins/construct/bin/construct-limits` | Sets or shows the session's inline edit limit and iteration cap (`hooks/scripts/limits.mjs`) |
 | `plugins/construct/hooks/contract/` | Session and subagent contract texts injected by hooks |
 | `plugins/construct/evals/` | Behavior eval cases run by `claude plugin eval` (`scripts/eval.sh` also writes `summary.json` with ritual and outcome pass rates, cost, duration, and turns, and keeps the run dirs under /private/tmp; `scripts/probe-review.sh` is the live check for the review behavior; `scripts/eval.sh` leaves the `review-fires` case out because the eval sandbox cannot run git (the macOS `xcrun` shim cannot write its cache) or the review skill's context command (denied in don't-ask mode); recorded results are in [docs/evals/results.md](docs/evals/results.md)) |
 | `plugins/construct/tests/` | Mod tests run by `claude plugin test` |
@@ -312,11 +316,11 @@ Feedback and bug reports go in [issues](https://github.com/carsimax/construct/is
 
 ## Upgrading to 8.0
 
-The main thread now makes small edits inline: each edit call may change up to `inline_edit_max_lines` lines (default 150); bigger ones go to `construct:worker`. Set `inline_edit_max_lines` to `0` to restore the 7.x rule (the main thread writes only `odd/tasks/`). The evals `small-delegated*` were renamed `small-inline*`, and `scripts/eval.sh` now writes `summary.json` with outcome and cost.
+The main thread now makes small edits inline: each edit call may change up to the inline limit (default 150); bigger ones go to `construct:worker`. The 7.x rule (the main thread writes only `odd/tasks/`) is the inline limit `0`. The evals `small-delegated*` were renamed `small-inline*`, and `scripts/eval.sh` now writes `summary.json` with outcome and cost.
 
 ## Upgrading to 7.0
 
-`command-guard` no longer asks before destructive commands by default, so a fully agentic flow is not interrupted. Set `command_guard_asks` to `true` to keep the 6.x confirmations. Denies (verifier bypasses such as `--no-verify`) apply either way.
+`command-guard` no longer asks before destructive commands by default, so a fully agentic flow is not interrupted. The opt-in that kept the 6.x confirmations was removed later, and `command-guard` never asks; denies (verifier bypasses such as `--no-verify`) always apply.
 
 ## Upgrading to 6.0
 
@@ -346,7 +350,7 @@ Skills:
 | `memory`, `debugging`, `migration` | unchanged |
 | `go-testing`, `comment-writer`, `cognitive-doc-design`, `skill-creator`, `skill-improver` | removed |
 
-Options: each role has `model_<role>` and `effort_<role>`, where the role is the agent name with dashes turned into underscores (`model_worker`, `effort_review_risk`). Both default to `inherit`, which defers to the deprecated 5.x option of the same role (`model_odd_*`, `effort_odd_*`, `model_jd_*`, `effort_jd_*`) and then to the agent's own setting. The deprecated options still apply through 6.x; set the new ones and drop the old. The `jd_fix_agent` options are gone.
+Options: the 5.x per-role model and effort options were replaced by per-role options in 6.x, and those are removed (see CHANGELOG.md). The `jd_fix_agent` options are gone.
 
 Risk line: one reply can name several items, `Risk: items 2, 5 (reason)`; the Risk-line gate and the verifier admission both accept it. `Risk: item N` and `Risk: none` are unchanged, and a trailing comma or an item outside 1-6 is still rejected.
 
@@ -354,7 +358,7 @@ Risk line: one reply can name several items, `Risk: items 2, 5 (reason)`; the Ri
 
 Current version: 12.0.0 (`plugins/construct/.claude-plugin/plugin.json`); a major release. Releases are tagged `vX.Y.Z`.
 
-Changes in 12.0.0: the deprecated 5.x options `model_odd_*`, `effort_odd_*`, `model_jd_*`, and `effort_jd_*` are removed; set `model_<role>` and `effort_<role>` instead. The publication gate, guards, and band get the audit-round fixes. See [CHANGELOG.md](CHANGELOG.md).
+Changes in 12.0.0: the deprecated 5.x per-role model and effort options are removed. The publication gate, guards, and band get the audit-round fixes. See [CHANGELOG.md](CHANGELOG.md).
 
 Changes in 11.0.0: the `Principal Engineer` output style is removed; your own output style and CLAUDE.md govern replies, and if you had picked `construct:Principal Engineer` in `/output-style`, pick another. See [CHANGELOG.md](CHANGELOG.md).
 
@@ -365,11 +369,11 @@ Changes in 9.0.0: the built-in `construct-memory` CLI and `memory` MCP server ar
 Changes in 8.7.0:
 
 - New option `slice_lines` (default `1500`, was a fixed 400): the commit-slice budget of authored changed lines.
-- `inline_edit_max_lines` now defaults to `150` (was `20`); set it back to `20` for the old limit.
+- The inline edit limit now defaults to `150` (was `20`).
 
 Earlier 8.x releases are in [CHANGELOG.md](CHANGELOG.md); older ones follow.
 
-7.0.0 was a major release with one breaking change: `command-guard` no longer asks before destructive commands unless `command_guard_asks` is `true`, and its denies always apply (see "Upgrading to 7.0"). It also covered `find -delete`, `find -exec`, and `xargs rm -rf`, measured panel width by grapheme cluster, and made the mod test suite run green.
+7.0.0 was a major release with one breaking change: `command-guard` no longer asks before destructive commands by default (the opt-in that restored them was removed later), and its denies always apply (see "Upgrading to 7.0"). It also covered `find -delete`, `find -exec`, and `xargs rm -rf`, measured panel width by grapheme cluster, and made the mod test suite run green.
 
 6.1.0 was a minor release: the panel clean-room (#54-#56) and wide-character widths, `command-guard` asks before `git restore ./` and `git restore :/` and denies hooks-path config set through `export`, `declare`, `typeset`, `readonly`, `local`, or a bare assignment, the Risk-line gate flags trailing `// TODO` and `# TODO` comments, and subagents name unrequested work in their report.
 
@@ -424,7 +428,7 @@ Upgrading from 1.3.1:
 - Plain `odd-assess` (no `--json`) exits 1 on an unassessable candidate.
 - `odd-review` mutating commands refuse with `rdd_disabled` while RDD is off.
 - Lens results with a location outside the candidate's paths, line 0, or a reversed range are refused (`invalid_result`), and a severe claim on unchanged lines is downgraded to `unknown`.
-- A `model` passed on the Agent call now wins over `model_<role>`.
+- A `model` passed on the Agent call now wins over the configured per-role model.
 
 Upgrading from 1.1.0:
 

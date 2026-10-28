@@ -9,7 +9,6 @@ import { BUILTIN_DEFAULTS, BUILTINS, ROLES, kindOf, namesOf, qualified, roleKey 
 
 const pluginRoot = new URL('../plugins/construct/', import.meta.url).pathname
 const read = (...p) => readFileSync(join(pluginRoot, ...p), 'utf8')
-const manifest = JSON.parse(read('.claude-plugin/plugin.json'))
 const hooks = JSON.parse(read('hooks/hooks.json')).hooks
 const names = Object.keys(ROLES)
 
@@ -47,11 +46,6 @@ test('helpers: construct type, role key, kind with or without the prefix', () =>
   assert.equal(kindOf('review-risk'), 'lens')
   assert.equal(kindOf('construct:nope'), null)
   assert.equal(kindOf(undefined), null)
-})
-
-test('plugin.json declares model_ and effort_ options for exactly the registry roles', () => {
-  const keys = names.flatMap((n) => [`model_${roleKey(n)}`, `effort_${roleKey(n)}`])
-  assert.deepEqual(Object.keys(manifest.userConfig).filter((k) => /^(model|effort)_/.test(k)).sort(), keys.sort())
 })
 
 test('the README agent table lists every registry agent', () => {

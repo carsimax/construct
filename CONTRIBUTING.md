@@ -65,8 +65,8 @@ Many tests cross-check text against code, so a change in one place usually needs
 
 | If you change | Also update |
 |---|---|
-| An agent (add or remove) | Start at the role registry `plugins/construct/hooks/scripts/roles.mjs` (name and kind; `tests/roles.test.mjs` cross-checks it against `agents/`, `plugin.json`, `hooks.json`, and `README.md`), then the S6 table in `tests/agents-config.test.mjs`, the `userConfig` options in `plugins/construct/.claude-plugin/plugin.json`, and the agent table in `README.md` |
-| The role registry (`hooks/scripts/roles.mjs`) | The agents, `plugin.json` `userConfig`, `hooks.json`, and the agent table in `README.md`; `tests/roles.test.mjs` cross-checks all of them |
+| An agent (add or remove) | Start at the role registry `plugins/construct/hooks/scripts/roles.mjs` (name and kind; `tests/roles.test.mjs` cross-checks it against `agents/`, `hooks.json`, and `README.md`), then the S6 table in `tests/agents-config.test.mjs` and the agent table in `README.md` |
+| The role registry (`hooks/scripts/roles.mjs`) | The agents, `hooks.json`, and the agent table in `README.md`; `tests/roles.test.mjs` cross-checks all of them |
 | Delivery's branch model or vocabulary (the `feat/<feature>-t<n>` sub-branches, the single final PR, the feature-document header) | `skills/delivery/` and the feature-document reference in `skills/workflow/`; `tests/delivery.test.mjs` checks them |
 | A regex eval grader | The case's `case.yaml` and its grader file; `tests/evals.test.mjs` pins what each regex grader matches and rejects |
 | `skill-context.mjs` or the `## Current state` line of `workflow`, `review`, or `delivery` | The `!` line and `allowed-tools` entry in all three skills, the `Skill state` section of `README.md`; `tests/skill-context/` and `tests/skills.test.mjs` check them. The script must always exit 0 and stay under 1,500 characters |
@@ -75,7 +75,7 @@ Many tests cross-check text against code, so a change in one place usually needs
 | A command, option, or message | Its help text and `README.md`, together |
 | The lens mapping (`LENSES_BY_RISK` in `hooks/scripts/review-lenses.mjs`) | The table in `skills/review/SKILL.md`; `tests/skills.test.mjs` compares them |
 | A hook | Register it in exec form (`command: "node"`, `args: [...]`); tests check this |
-| Agent routing | Role names are the agent name with dashes turned into underscores (`model_<role>`, `effort_<role>`; see `plugins/construct/hooks/routing.js`) |
+| Agent routing | Construct agents run on their frontmatter model and effort; only the built-in `general-purpose` gets defaults (`BUILTIN_DEFAULTS` in `roles.mjs`, applied by `plugins/construct/hooks/routing.js`) |
 
 ## Branches and pull requests
 

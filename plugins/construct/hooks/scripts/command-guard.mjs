@@ -1,23 +1,17 @@
-// Command guard (PreToolUse on Bash). Denies commands that bypass a verifier and, only when the
-// `command_guard_asks` option is on, asks before destructive ones, in the main thread and in
-// subagents. With the option off (the default) an ask match gives no output; denies always apply:
+// Command guard (PreToolUse on Bash). Denies commands that bypass a verifier, in the main thread and in
+// subagents. It never asks: destructive commands (rm -rf, force push, reset --hard, ...) give no output.
 //   - deny: `git commit --no-verify` / `-n`, `--no-verify` on push, merge, rebase, am and
 //     cherry-pick, `--no-gpg-sign`, and `git -c core.hooksPath=...` on any subcommand;
-//   - ask (opt-in): `rm` with recursive and force flags, `git push` with `--force`, `-f`, or a `+refspec`
-//     and no `--force-with-lease`, `git reset --hard`, `git clean -f`, `git checkout -- .`,
-//     `git checkout .`, and `git restore .`, `./`, or `:/` (unless it only touches the index),
-//     `find ... -exec rm` / `-execdir rm` with those flags, `find ... -delete`, and
-//     `xargs [flags] rm` with those flags.
 //   - deny also: `construct-gate oracle unlock`, except when it is the whole command (one plain `construct-gate oracle unlock <path>`, no
 //     separator, redirection, expansion, or wrapper) on an existing regular file with no symlink under the root, in the main thread right
 //     after the user answered an AskUserQuestion with `Unlock` for a question naming that path in backticks (recorded in the review store by unlock-approval.mjs; one unlock per answer; see unlockApproved);
+//   - deny also: `construct-limits set` from a subagent (hook input has `agent_id`); only the main thread declares session limits;
 //   - deny also: a statement that sets `GIT_CONFIG_PARAMETERS` or `GIT_CONFIG_KEY_<n>` to
 //     core.hooksPath through `export`, `declare` or `typeset` (any flags), `readonly`, `local`,
 //     or a bare assignment, even with no `git` in that statement.
 // Commands are found by the shell parser in shell-words.mjs (`sh -c`, `eval`, `env -S`, wrappers,
 // `$(...)`, backticks, heredoc bodies and here-strings fed to a shell), so compounds and `git -C dir`
-// are covered. Text the parser rejects is denied: bash can run the part before a syntax error. When a
-// deny and an ask both match, deny is reported. Unreadable input or any other error: no output (fail open).
+// are covered. Text the parser rejects is denied: bash can run the part before a syntax error. Unreadable input or any other error: no output (fail open).
 // Long options match as git does: any prefix at least as long as the minimum in `abbr` calls.
 // shortcut: git aliases, interpreter one-liners, brace expansion, and variable-built commands are
 // not caught. Upgrade if one of them shows up in real use.
@@ -71,11 +65,6 @@ function parse(args, stop = '') {
 // abbr: some argument is a prefix of `full` that is at least `min` long (the shortest unambiguous
 // form among that subcommand's real options; keep the table of calls small).
 const abbr = (flags, full, min) => [...flags].some((a) => a.length >= min && full.startsWith(a))
-const ROOTS = ['.', './', ':/']
-const LEASE = '--force-with-lease'
-
-// The docs do not say how a boolean option is serialized, so only `true` or `1` turns asks on.
-const asksOn = () => ['true', '1'].includes((process.env.CLAUDE_PLUGIN_OPTION_COMMAND_GUARD_ASKS ?? '').trim().toLowerCase())
 
 const hit = (decision, reason) => ({ decision, reason: `command-guard: ${reason}` })
 
@@ -94,7 +83,7 @@ function gitHit(args, words = []) {
   }
   const sub = args[i]
   if (sub === undefined) return null
-  const { long, short, pos, after, order } = parse(args.slice(i + 1), sub === 'commit' ? 'uS' : '')
+  const { long, short, pos } = parse(args.slice(i + 1), sub === 'commit' ? 'uS' : '')
   if (abbr(long, '--no-gpg-sign', 6)) return hit('deny', `git ${sub} --no-gpg-sign skips signing. Sign the commit or fix the signing setup instead of bypassing it.`)
   if (NO_VERIFY.has(sub) && (abbr(long, '--no-verify', 7) || (sub === 'commit' && short.has('n')))) {
     return hit('deny', `git ${sub} --no-verify skips the hooks. Fix the failing hook instead of bypassing it.`)
@@ -107,27 +96,6 @@ function gitHit(args, words = []) {
     (sub === 'remote' && pos[0] === 'set-head') ||
     (sub === 'fetch' && pos.some((p) => p.includes(':') && remote(p.slice(p.lastIndexOf(':') + 1))))
   if (writesRemote) return hit('deny', `git ${sub} writes a remote-tracking ref, and the publication gate reads it as the release ref. Release refs should only move by fetching from the remote (git fetch, git pull); the gate also verifies them against the remote.`)
-  // The last of --force-with-lease / --no-force-with-lease wins; a lease prefix is the lease, not --force.
-  let lease = false
-  for (const a of order) {
-    if (a.length >= 9 && LEASE.startsWith(a)) lease = true
-    else if (a.length >= 12 && `--no-${LEASE.slice(2)}`.startsWith(a)) lease = false
-  }
-  if (sub === 'push' && !lease && (order.some((a) => a.length >= 6 && '--force'.startsWith(a)) || short.has('f') || pos.some((p) => p.startsWith('+')))) {
-    return hit('ask', 'git push with --force, -f, or a +refspec can overwrite remote work. Use --force-with-lease instead.')
-  }
-  if (sub === 'reset' && abbr(long, '--hard', 5)) return hit('ask', 'git reset --hard discards uncommitted work. Confirm, or use git stash or git reset --soft instead.')
-  if (sub === 'clean' && (abbr(long, '--force', 4) || short.has('f')) && !long.has('--dry-run') && !short.has('n')) return hit('ask', 'git clean -f deletes untracked files for good. Run git clean -n first to list them.')
-  if (sub === 'checkout' && (after.some((p) => ROOTS.includes(p)) || (pos.length === 1 && ROOTS.includes(pos[0]) && after.length === 0))) return hit('ask', 'git checkout . discards uncommitted changes. Confirm, or name the files to restore.')
-  if (sub === 'restore' && [...pos, ...after].some((p) => ROOTS.includes(p)) && (!(long.has('--staged') || short.has('S')) || long.has('--worktree') || short.has('W'))) return hit('ask', 'git restore at the root discards uncommitted changes. Confirm, or name the files to restore.')
-  return null
-}
-
-function rmHit(args) {
-  const { long, short } = parse(args)
-  if ((long.has('--recursive') || short.has('r') || short.has('R')) && (long.has('--force') || short.has('f'))) {
-    return hit('ask', 'rm with recursive and force flags deletes without a way back. Confirm, or delete the named paths without -f.')
-  }
   return null
 }
 
@@ -135,13 +103,11 @@ function rmHit(args) {
 const FIND_VALUE_PRIMARIES = new Set(['-name', '-iname', '-path', '-ipath', '-regex', '-iregex', '-newer', '-user', '-group', '-type', '-perm', '-size', '-mtime', '-maxdepth', '-mindepth'])
 const shQuote = (w) => `'${w.replace(/'/g, "'\\''")}'`
 
-// findHit: `-delete` asks; each `-exec`/`-execdir` command (up to `;` or `+`) is a command line of
+// findNested: each `-exec`/`-execdir` command (up to `;` or `+`) is a command line of
 // its own, handed to `nested` so wrappers, absolute paths, and `sh -c` bodies get the top-level checks.
-function findHit(args, nested) {
-  let found = null
+function findNested(args, nested) {
   for (let i = 0; i < args.length; i++) {
     if (FIND_VALUE_PRIMARIES.has(args[i])) i++
-    else if (args[i] === '-delete') found ??= hit('ask', 'find -delete removes every match without a way back. Run the find without -delete first to list them.')
     else if (args[i] === '-exec' || args[i] === '-execdir') {
       const end = args.findIndex((a, k) => k > i && (a === ';' || a === '+'))
       nested(args.slice(i + 1, end === -1 ? args.length : end).map(shQuote).join(' '))
@@ -149,7 +115,6 @@ function findHit(args, nested) {
       i = end
     }
   }
-  return found
 }
 
 const UNLOCK_REASON = 'construct-gate oracle unlock releases a locked oracle, and only the user may approve it. Ask them with AskUserQuestion: a question that puts the path in backticks (once) and names the `oracle_conflict` (the spec against the test), with the options `Unlock` and `Keep the test`; on `Unlock` run the command from the main thread, once. A subagent never unlocks: it returns `oracle_conflict`.'
@@ -195,6 +160,9 @@ const LONE_UNLOCK = /^(?:node )?(?:[\w.@%+=:,/-]*\/)?construct-gate oracle unloc
 const lonePath = (command) => LONE_UNLOCK.exec(command.trim().replace(/ +/g, ' '))?.[1] ?? null
 
 const isGate = (word) => /(^|\/)construct-gate$/.test(word ?? '')
+const isLimits = (word) => /(^|\/)construct-limits$/.test(word ?? '')
+const LIMITS_REASON = 'only the main thread declares session limits: a subagent cannot run construct-limits set. `construct-limits show` is allowed; ask the orchestrator to change a limit.'
+let subagent = false
 
 // hitsIn returns every hit of a command line; splitCommands finds the commands nested in
 // substitutions and heredoc expansions, and the lines a command runs as a string are read again.
@@ -213,10 +181,12 @@ function hitsIn(command, depth = 0) {
     for (const { text, strict } of scripts.get(tokens) ?? []) if (strict || parsesAsShell(text)) nested(text)
     // `export X=...; git ...`: the assignment is its own statement, so it is checked without a `git`.
     if (/^(export|declare|typeset|readonly|local|[A-Za-z_]\w*=)/.test(words[0] ?? '') && words.some(hooksEnv)) found.push(hit('deny', HOOKS_ENV_REASON))
-    const h = name === 'git' ? gitHit(args, words) : name === 'rm' ? rmHit(args) : name === 'find' ? findHit(args, nested) : null
+    if (name === 'find') findNested(args, nested)
+    const h = name === 'git' ? gitHit(args, words) : null
     // Any word with basename construct-gate counts, so node flags, env, command, xargs and npx wrappers are caught; `node -e` importing review-store cannot be seen in text (discipline layer).
     const at = words.findIndex((w, i) => isGate(w) && words[i + 1] === 'oracle' && words[i + 2] === 'unlock')
     if (at !== -1) found.push({ ...hit('deny', UNLOCK_REASON), unlock: true })
+    if (subagent && words.some((w, i) => isLimits(w) && words[i + 1] === 'set')) found.push(hit('deny', LIMITS_REASON))
     if (h) found.push(h)
   }
   return found
@@ -226,11 +196,12 @@ try {
   const input = readInput()
   const command = input?.tool_input?.command
   if (input?.tool_name === 'Bash' && typeof command === 'string' && command !== '') {
+    subagent = Boolean(input.agent_id)
     let found = hitsIn(command)
     const unlocks = found.filter((h) => 'unlock' in h)
     if (unlocks.length === 1 && lonePath(command) !== null && unlockApproved(input, [lonePath(command)])) found = found.filter((h) => !('unlock' in h))
-    const chosen = found.find((h) => h.decision === 'deny') ?? found[0]
-    if (chosen && (chosen.decision === 'deny' || asksOn())) process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: chosen.decision, permissionDecisionReason: chosen.reason } })}\n`)
+    const chosen = found[0]
+    if (chosen) process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: chosen.decision, permissionDecisionReason: chosen.reason } })}\n`)
   }
 } catch (error) {
   // Fail open, except on text that is not valid shell: bash can run the part before a syntax error.
