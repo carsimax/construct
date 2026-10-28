@@ -16,7 +16,7 @@ An agent writes code faster than you can check it. Organic Driven Development ke
 
 - **ODD workflow.** A session contract, injected by hooks, that Claude follows on every request without being asked.
 - **Role agents with model routing.** 11 agents (explorer, worker, oracle, verifier, judges, review lenses). You choose each role's model and effort in `/config`.
-- **Skills.** Procedures that load on demand: workflow (sizing included), delegation, debugging, quality bar, migrations, branches, commits and pull requests (`delivery`), review, and more.
+- **Skills.** Procedures that load on demand: workflow (sizing included), delegation, debugging, quality bar, migrations, feature branch with local sub-branches, commits, and the final pull request (`delivery`), review, and more.
 - **Mandatory review.** Work whose Risk names a high-risk item is reviewed by lens agents before it can be published. Hooks build the evidence, record the verdicts, and gate `git push`, `gh pr create`, and `gh release create`.
 - **Status band.** One or two rows above the prompt with the phase, the active feature and its tasks, the permission gate, and the running agents. It leaves the model, branch, context, and plan limits to your status line.
 
@@ -120,7 +120,6 @@ Options are plugin settings, edited in `/config`:
 | Model and effort per role | See the routing table below. Each option defaults to `inherit`: use the deprecated key of the same role if it is set, else the agent's own frontmatter |
 | `inline_edit_max_lines` (number, default `150`) | Let the main thread edit repository files directly when one Write, Edit, MultiEdit, or NotebookEdit call changes at most this many lines; `surface-guard` sends bigger changes to `construct:worker`. `0` restores the old rule: the main thread writes only `odd/tasks/` |
 | `iteration_cap` (number, default `3`) | Deny a Bash command after it failed this many times in a row for one agent (a passing run resets its count) (the main thread counts as one), so the agent stops and reports what it tried, the failure, and its hypothesis instead of looping, and never edits the test to pass. A subagent's count ends when it stops; the main thread's resets on your next prompt. A value that is not a whole number of 1 or more uses `3`; `0` turns the cap off |
-| `slice_lines` (number, default `1500`) | Authored changed lines on a feature branch after which the commit-slice notice asks you to apply the delivery strategy. A target, not a cap. A value that is not a whole number of 1 or more falls back to the default |
 | `command_guard_asks` (boolean, default `false`) | Let `command-guard` ask before destructive commands (`rm -rf`, force push, `reset --hard`, and the rest). Denies of verifier bypasses always apply |
 
 ### Agents and model routing
@@ -258,16 +257,15 @@ An approval never authorizes delivery. Commit, push, pull request, and merge sta
 
 ### Skill state
 
-`workflow`, `review`, and `delivery` open with a `## Current state` line that Claude Code runs when the skill loads (`hooks/scripts/skill-context.mjs <workflow|review|delivery>`): `workflow` shows the unfinished tasks of `odd/tasks/*.md` first, then `git status --short` (at most 12 lines, with a count of the rest; read without taking the index lock); `review` shows the lenses the Risk cells of the feature documents changed on the branch require (`LENSES_BY_RISK`) and which of them approved HEAD; `delivery` shows the same authored-lines number as the commit-slice signal. The script is read-only (it never writes the review store), prints at most 1,500 characters, and always exits 0: any failure (not a repository, no default branch, unknown kind) prints one `(state unavailable: <reason>)` line, because a non-zero exit would abort the skill.
+`workflow`, `review`, and `delivery` open with a `## Current state` line that Claude Code runs when the skill loads (`hooks/scripts/skill-context.mjs <workflow|review|delivery>`): `workflow` shows the unfinished tasks of `odd/tasks/*.md` first, then `git status --short` (at most 12 lines, with a count of the rest; read without taking the index lock); `review` shows the lenses the Risk cells of the feature documents changed on the branch require (`LENSES_BY_RISK`) and which of them approved HEAD; `delivery` shows the feature branch, the current sub-branch, and the local sub-branches merged or unmerged into it. The script is read-only (it never writes the review store), prints at most 1,500 characters, and always exits 0: any failure (not a repository, no default branch, unknown kind) prints one `(state unavailable: <reason>)` line, because a non-zero exit would abort the skill.
 
 ### Delivery signals
 
-Two deterministic checks that used to be prompt-only (ports of gentle-shell's `commit-slice-signal` and `context-backstop`).
+One deterministic check that used to be prompt-only (a port of gentle-shell's `context-backstop`).
 
-- **Commit slice** (`hooks/scripts/delivery-signals.mjs post`, `PostToolUse` on Bash calls that run `git`, main thread and subagents). After a successful `git commit` on a branch other than the default branch (`origin/HEAD`, else `main` or `master`), the hook adds context with the authored changed lines from the merge base to `HEAD` (added plus deleted, renames counted by what changed; lock files such as `package-lock.json`, `yarn.lock`, `Cargo.lock`, `go.sum`, minified `.min.js`/`.min.css`, and generated golden files excluded) and the number of lines left before the ~1500-line slice (option `slice_lines`). Past it, the hook asks you to apply the feature's delivery strategy before the next commit. Failed, interrupted, and background commands, text that only mentions `git commit`, and commits on the default branch add nothing. `git -C DIR` and a preceding `cd DIR` pick the repository.
 - **Context backstop** (`delivery-signals.mjs batch`, `PostToolBatch`, once per batch of tool calls, main thread only). When the latest assistant usage in the transcript (input, cache read, cache write, and output tokens) reaches 150,000 tokens, one notice asks you to delegate the next multi-step unit to `construct:worker`. It fires once per crossing: a later reading below the threshold (after compaction) re-arms it. The hook reads only the last 256 KB of `transcript_path`. The hook payload and transcript give no context window and the model id does not reveal it, so the window is treated as unknown and the absolute cap applies (as in gentle-shell, where an unknown window leaves the cap alone). The notice is advice, not a gate.
 
-Both `PostToolUse` signals fail open (no output, exit 0).
+The `PostToolBatch` signal fails open (no output, exit 0).
 
 ### Construct band (mod)
 

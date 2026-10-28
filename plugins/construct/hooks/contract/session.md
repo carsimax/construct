@@ -51,4 +51,4 @@ Destructive git operations and irreversible changes need explicit confirmation; 
 - `construct:migration`: stored-data or schema changes, removing or renaming public surface.
 - `construct:constraints`: a quality bar, or a change that silences a check.
 - `construct:sources`: a named version-dependent API uncertainty.
-- `construct:delivery`: commits, branches, PR contents or size, chained PRs, and release prep.
+- `construct:delivery`: commits, branches, PR contents or size, sub-branches of a feature branch, and release prep.
