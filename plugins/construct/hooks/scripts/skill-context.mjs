@@ -76,11 +76,18 @@ function delivery(cwd, root) {
   const feature = /^(.+)-t\d+$/.exec(branch)?.[1] ?? branch
   const merged = new Set(git(cwd, ['branch', '--format=%(refname:short)', '--merged', feature])?.split('\n'))
   const subs = (git(cwd, ['branch', '--format=%(refname:short)', '--list', `${feature}-t*`]) ?? '').split('\n').filter((b) => /-t\d+$/.test(b))
+  // A branch cut from the feature and never committed to (its only reflog entry is its creation) is `empty`, not `merged`, even though its tip is an ancestor.
+  // shortcut: without a reflog (a fresh clone, an expired entry) an empty sub-branch reads as merged, upgrade if that shows up.
+  const empty = (b) => {
+    const log = (git(cwd, ['reflog', 'show', '--format=%gs', `refs/heads/${b}`]) ?? '').split('\n').filter(Boolean)
+    return log.length === 1 && log[0].startsWith('branch: Created from')
+  }
+  const state = (b) => (merged.has(b) ? (empty(b) ? 'empty' : 'merged') : 'unmerged')
   return [
     `Feature branch: ${feature}`,
     `Current sub-branch: ${feature === branch ? 'none' : branch}`,
     subs.length === 0 ? `Sub-branches (${feature}-t*): none` : `Sub-branches (${feature}-t*):`,
-    ...subs.map((b) => `- ${b}: ${merged.has(b) ? 'merged' : 'unmerged'}`),
+    ...subs.map((b) => `- ${b}: ${state(b)}`),
   ]
 }
 

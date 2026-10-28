@@ -1010,3 +1010,22 @@ describe('S3: a locked oracle is protected at the published ref', () => {
     denied(hook('git push', featureRepo('2')))
   })
 })
+
+describe('hardening S4(c): a marker written in inline code is not an open clarification', () => {
+  const doc = (spec) => `# F\n\n## Specs\n\n- **S1 — One.** "do it" ${spec}\n\n${TABLE('none').replace('# Feature\n\n', '')}`
+  const push = (spec) => {
+    const repo = makeRepo({ 'src/app.js': 'export const a = 1\n' })
+    git(repo, 'checkout', '-q', '-b', 'feat')
+    applyFiles(repo, { '.vault/tasks/f.md': doc(spec), 'src/app.js': 'export const a = 2\n' })
+    commitAll(repo, 'unit')
+    return hook('git push', repo)
+  }
+  test('a done task whose spec names the marker only in inline code publishes', () => {
+    silent(push('An `S#` may carry `NEEDS CLARIFICATION: <question>`.'))
+  })
+  test('the same marker outside inline code still denies', () => {
+    const r = push('NEEDS CLARIFICATION: which port?')
+    assert.equal(r.decision, 'deny', r.stdout)
+    assert.match(r.reason, /still needs clarification: which port\?/)
+  })
+})
