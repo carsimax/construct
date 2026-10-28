@@ -37,7 +37,7 @@ import { unfinishedRows } from './feature-state.mjs'
 import { git, repositoryRoot } from './git-tree.mjs'
 import { readInput } from './hook-io.mjs'
 import { requiredLenses } from './review-lenses.mjs'
-import { pruneStore, readOracles, readVerdicts, subjectHash } from './review-store.mjs'
+import { pruneStore, readOracles, readVerdicts, subjectHash, UNLOCKABLE } from './review-store.mjs'
 import { GIT_VALUE_FLAGS, heredocScripts, nestedLines, parsesAsShell, SHELLS, ShellParseError, splitCommands } from './shell-words.mjs'
 
 const MAX_DEPTH = 4
@@ -256,23 +256,40 @@ function releaseRef(root) {
   return [head, 'refs/remotes/origin/main', 'refs/remotes/origin/master'].find((ref) => ref && git(root, ['rev-parse', '--verify', '-q', `${ref}^{commit}`], { okStatuses: [0, 1] }).length > 0) ?? ''
 }
 
-// oracleDenial (S3, protect only): a locked oracle (oracle-record.mjs) must be unchanged at the ref. A lock applies to a ref
-// that carries the oracle (the path exists there, or its history ever had the locked blob at that path). It is released
-// only when its feature document exists at the remote-tracking default branch (never a `--base` or a local branch; none means no release) with no unfinished task; the document at the ref is
-// never read, so one push cannot edit an oracle and finish or delete its document. A table the hook cannot read keeps the lock.
-// Returns the denial text, or null.
-function oracleDenial(root, sha) {
+// activeLocks lists the oracle locks still in force: a lock is released only when its feature document exists at the
+// remote-tracking default branch (never a `--base` or a local branch; none means no release) with no unfinished task. The
+// document at a published ref is never read, so one push cannot edit an oracle and finish or delete its document. A table the hook
+// cannot read keeps the lock. Each feature document is read once. The gate, surface-guard, admission, oracle-record and the CLI share it.
+export function activeLocks(root) {
+  const locks = readOracles(root)
+  if (locks.length === 0) return []
   const release = releaseRef(root)
+  const finished = new Map()
+  const done = (feature) => {
+    if (!finished.has(feature)) {
+      let tasks = null
+      if (release && out(root, ['ls-tree', '--name-only', release, '--', feature]) !== '') tasks = unfinishedRows(out(root, ['show', `${release}:${feature}`]).split('\n'))
+      finished.set(feature, tasks !== null && tasks.rows.length === 0)
+    }
+    return finished.get(feature)
+  }
+  return locks.filter((lock) => !done(lock.feature))
+}
+
+// oracleDenial (S3, protect only): an active lock (activeLocks) must be unchanged at the ref. A lock applies to a ref
+// that carries the oracle (the path exists there, or its history ever had the locked blob at that path); a lock whose blob is
+// UNLOCKABLE (a symlink or directory surface) is always reported changed. Returns the denial text, or null.
+function oracleDenial(root, sha) {
   const changed = []
-  for (const lock of readOracles(root)) {
+  for (const lock of activeLocks(root)) {
+    if (lock.blob === UNLOCKABLE) {
+      changed.push(`${lock.path} (could not be locked as a file, locked for ${lock.feature})`)
+      continue
+    }
     const now = git(root, ['rev-parse', '--verify', '-q', `${sha}:${lock.path}`], { okStatuses: [0, 1] }).toString('utf8').trim()
     if (now === lock.blob) continue
     // A blob that does not exist (status 1) cannot be in any history; any other git failure throws and denies.
     if (now === '' && (!objectExists(root, lock.blob) || git(root, ['log', '-1', '--format=%H', `--find-object=${lock.blob}`, sha, '--', lock.path]).toString('utf8').trim() === '')) continue
-    if (release && out(root, ['ls-tree', '--name-only', release, '--', lock.feature]) !== '') {
-      const tasks = unfinishedRows(out(root, ['show', `${release}:${lock.feature}`]).split('\n'))
-      if (tasks && tasks.rows.length === 0) continue
-    }
     changed.push(`${lock.path} (${now === '' ? 'missing' : 'changed'} at the ref, locked for ${lock.feature})`)
   }
   return changed.length === 0 ? null : changed.join('; ')

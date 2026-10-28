@@ -8,6 +8,7 @@
 //     `git checkout .`, and `git restore .`, `./`, or `:/` (unless it only touches the index),
 //     `find ... -exec rm` / `-execdir rm` with those flags, `find ... -delete`, and
 //     `xargs [flags] rm` with those flags.
+//   - deny also: `construct-gate oracle unlock` (the user releases a locked oracle with `!`, which skips this hook);
 //   - deny also: a statement that sets `GIT_CONFIG_PARAMETERS` or `GIT_CONFIG_KEY_<n>` to
 //     core.hooksPath through `export`, `declare` or `typeset` (any flags), `readonly`, `local`,
 //     or a bare assignment, even with no `git` in that statement.
@@ -137,6 +138,8 @@ function findHit(args, nested) {
   return found
 }
 
+const isGate = (word) => /(^|\/)construct-gate$/.test(word ?? '')
+
 // hitsIn returns every hit of a command line; splitCommands finds the commands nested in
 // substitutions and heredoc expansions, and the lines a command runs as a string are read again.
 // Throws ShellParseError for text that is not valid shell.
@@ -155,6 +158,8 @@ function hitsIn(command, depth = 0) {
     // `export X=...; git ...`: the assignment is its own statement, so it is checked without a `git`.
     if (/^(export|declare|typeset|readonly|local|[A-Za-z_]\w*=)/.test(words[0] ?? '') && words.some(hooksEnv)) found.push(hit('deny', HOOKS_ENV_REASON))
     const h = name === 'git' ? gitHit(args, words) : name === 'rm' ? rmHit(args) : name === 'find' ? findHit(args, nested) : null
+    const gateArgs = isGate(name) ? args : name === 'node' && isGate(args[0]) ? args.slice(1) : []
+    if (gateArgs[0] === 'oracle' && gateArgs[1] === 'unlock') found.push(hit('deny', 'construct-gate oracle unlock releases a locked oracle, and only the user may: ask them to run it with ! (for example `!construct-gate oracle unlock <path>`), or return `oracle_conflict` to them.'))
     if (h) found.push(h)
   }
   return found
