@@ -17,11 +17,12 @@ Objective: an agent stops and reports after a check fails a fixed number of time
 | ID | Specs | Task | Route | Risk | Status | Commit |
 |---|---|---|---|---|---|---|
 | T1 | S1, S2, S3, S4, S5 | Acceptance tests by construct:oracle (RED) | oracle | 2, 3 | done | 0b00247 |
-| T2 | S1, S2, S3, S4, S5 | iteration-cap hook, hooks.json, userConfig, README, CHANGELOG | worker | 2, 3 | pending | — |
-| T3 | S6, S7 | workflow skill, contract, worker.md, METHODOLOGY P3, eval case | worker | 3 | pending | — |
+| T2 | S1, S2, S3, S4, S5 | iteration-cap hook, hooks.json, userConfig, README, CHANGELOG | worker | 2, 3 | done | 29f7ab6 |
+| T3 | S6, S7 | workflow skill, contract, worker.md, METHODOLOGY P3, eval case | worker | 3 | done | a004bc6 |
 
 ## Log
 
 - **L1 (2026-10-28):** "Vamos con P3"; design approved: "Vamos asi" (configurable cap, default 3).
 - **L2 (2026-10-28):** First live oracle run: 21 tests RED, lock recorded (construct-gate oracle list: active, matches). The deny reason must contain "never edit the test" and "hypothesis"; failures without session_id are never counted.
-- Next step: T2 through construct:worker.
+- **L3 (2026-10-28):** T2 made the 21 locked tests pass without touching them (oracle list: matches). T3 removed two descriptive hook lines from the workflow skill to fit 700 words (listed, accepted).
+- Next step: review, PR, then run the iteration-cap eval.
