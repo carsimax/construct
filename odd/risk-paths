@@ -1,0 +1,2 @@
+# Hook scripts are guards and gates: a change to them always needs the security lens.
+plugins/construct/hooks/scripts/** 2
