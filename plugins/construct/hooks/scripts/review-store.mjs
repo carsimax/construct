@@ -96,6 +96,10 @@ export function oracleEntries(root) {
 export function hasOracleFiles(root) {
   try {
     if (!statSync(join(root, '.git')).isDirectory()) return true
+  } catch {
+    return true // no .git entry at the root (GIT_DIR, core.worktree): only git knows where the store is
+  }
+  try {
     return readdirSync(join(storeAt('.git', root), 'oracles')).some((n) => n.endsWith('.json'))
   } catch (error) {
     return error?.code !== 'ENOENT'

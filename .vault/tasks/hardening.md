@@ -17,6 +17,7 @@ Objective: make the evals measure what they claim, record a three-run baseline f
 | T2 | S4 | Follow-ups (a)-(f) in hooks, CLI, and tests | worker | 2, 3 | done | fea9929 |
 | T4 | S1 | The session contract names the feature-document sections, since agents skipped `## Log` when only the reference had them | inline | 3 | done | e14d68b |
 | T5 | S2 | Correct the documented review-fires cause (README, CONTRIBUTING, CLAUDE.md, results, plugin-evals skill) | inline | none | done | e14d68b |
+| T6 | S4 | hasOracleFiles fails closed when the root has no `.git` entry (review-risk) | inline | 2 | done | — |
 | T3 | S3 | Three-run baseline and `docs/evals/results.md` | inline | none | done | (this commit) |
 
 ## Log
@@ -24,4 +25,5 @@ Objective: make the evals measure what they claim, record a three-run baseline f
 - **L1 (2026-10-28):** "Vamos con el punto 1 y 2" (point 1: fix the measurement and a three-run baseline; point 2: the accumulated small follow-ups).
 - **L2 (2026-10-28):** T1 found the large-tracked grader correct: the agent wrote the feature document without `## Log` because only `references/feature-document.md` lists it and the agent never read it (T4 names the sections in the session contract). review-fires cannot run in the sandbox: the macOS git shim exits 72 (cannot write its `xcrun` cache) and the review skill's `!` line is denied in don't-ask mode; `scripts/eval.sh` leaves it out (its fixture stays for `scripts/probe-review.sh`).
 - **L3 (2026-10-28):** Three-run baseline: 48 runs, $3.99, mean Δ +0.29; large-tracked 1.00 vs 0.00 after T4; iteration-cap 0.83 vs 1.00 and oracle-conflict 1.00 vs 1.00 do not separate the arms (open item).
-- Next step: review and the PR.
+- **L4 (2026-10-28):** review-risk: the (f) shortcut skipped lock checks when the root has no `.git` entry (GIT_DIR, core.worktree); T6 makes that case fall back to git. Open (reliability): `oracle unlock` resolves a relative path from the repository root, not the caller's directory.
+- Next step: review recheck and the PR.
