@@ -18,7 +18,7 @@ Objective: an agent stops and reports after a check fails a fixed number of time
 |---|---|---|---|---|---|---|
 | T1 | S1, S2, S3, S4, S5 | Acceptance tests by construct:oracle (RED) | oracle | 2, 3 | done | 0b00247 |
 | T2 | S1, S2, S3, S4, S5 | iteration-cap hook, hooks.json, userConfig, README, CHANGELOG | worker | 2, 3 | done | 29f7ab6 |
-| T4 | S1 | Count consecutive failures: a passing run (PostToolUse) resets the command's count; registration test for all events | inline | 2, 3 | done | — |
+| T4 | S1 | Count consecutive failures: a passing run (PostToolUse) resets the command's count; registration test for all events | inline | 2, 3 | done | f39ca01 |
 | T3 | S6, S7 | workflow skill, contract, worker.md, METHODOLOGY P3, eval case | worker | 3 | done | a004bc6 |
 
 ## Log
