@@ -4,6 +4,8 @@ Notable changes per release. Versions follow [Semantic Versioning](https://semve
 
 ## Unreleased
 
+- Living spec: the publication gate denies a ref whose feature document has a `done` task naming an `S#` still marked `NEEDS CLARIFICATION: <question>`. `feature-state.mjs` lists each active document's open clarifications (warning above 3), warns on specs with no quote found in the `## Log` and no `Assumption`, and warns when a finished document with `## Specs` has no `## <feature>` heading in `odd/spec.md` (skipped when `odd/spec.md` is missing or the document's L1 date is before its `Started:` line).
+
 ## 12.2.0
 
 - The `delivery` skill describes one model for large work: a feature branch `feat/<feature>`, a local sub-branch `feat/<feature>-t<n>` per task or cohesive group (split by work unit, never by line count) merged with `git merge --no-ff`, and one final pull request that the publication gate reviews cumulatively. Sub-branches are never pushed. The delivery strategies (`ask-on-risk`, `auto-chain`, `single-pr`, `exception-ok`), the chain shapes, and `size:exception` are removed, as is `Delivery strategy` from the feature-document header; `references/chains.md` is now the sub-branch reference. Limit: a feature whose whole diff passes the 400 KB review-context budget cannot publish in one PR.
