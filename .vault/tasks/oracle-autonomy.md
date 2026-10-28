@@ -13,11 +13,13 @@ Objective: locks no longer need a typed command: orphaned locks release themselv
 | ID | Specs | Task | Route | Risk | Status | Commit |
 |---|---|---|---|---|---|---|
 | T1 | S1 | Orphaned-lock release in `activeLocks` | inline | 2, 3 | done | 5cf3903 |
-| T2 | S2, S3 | command-guard allows an unlock the user approved through AskUserQuestion; docs | worker | 2, 3 | pending | — |
+| T3 | S1, S2 | Review fixes: literal pathspecs and a strict feature form for orphan release; exact backticked path; one shared path normalization; approvals recorded by a PostToolUse hook in the review store, not read from the transcript | worker | 2, 3 | done | 3cdd1bb |
+| T2 | S2, S3 | command-guard allows an unlock the user approved through AskUserQuestion; docs | worker | 2, 3 | done | 56f406e |
 
 ## Log
 
 - **L1 (2026-10-28):** "Ahora sobre ese punto de los candados hay algo que podamos hacer para que no sea explicito con comandos y que si sea algo que pueda decidir el orquestador o un agente"
 - **L2 (2026-10-28):** "Haz los das partes lan idea es que el flujo de desarrollo sea lo mas autonomo posible" (part 1: orphaned locks release themselves; part 2: an agent's unlock asks the user in the permission prompt).
 - **L3 (2026-10-28):** The docs do not say whether a hook `ask` prompts in `bypassPermissions` (the user's mode) and imply `dontAsk` denies it, so a permission-prompt design could either unlock silently or never reach the user. S2 uses an AskUserQuestion answer instead, which reaches the user in every mode.
-- Next step: T2 on feat/oracle-autonomy-t2 through construct:worker.
+- **L4 (2026-10-28):** Security review of T1/T2: glob pathspec in the orphan check; substring path match; cwd vs root normalization; an agent-writable transcript as the approval source. T3 fixes all four; the approval now comes from a PostToolUse hook on AskUserQuestion writing to the review store. Unverified: the AskUserQuestion PostToolUse `tool_response` shape (assumed equal to the transcript's `toolUseResult`); if it differs, approvals are not recorded and unlock stays denied (fail closed) until checked in a live session.
+- Next step: review and the PR; after release, confirm one approval end to end.
