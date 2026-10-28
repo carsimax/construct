@@ -15,7 +15,7 @@ Objective: the user's words stay the spec: ambiguity is a visible state that blo
 
 | ID | Specs | Task | Route | Risk | Status | Commit |
 |---|---|---|---|---|---|---|
-| T1 | S1, S2, S3, S4, S5 | Acceptance tests by construct:oracle (RED) | oracle | 3 | pending | — |
+| T1 | S1, S2, S3, S4, S5 | Acceptance tests by construct:oracle (RED) | oracle | 3 | done | 27dcac9 |
 | T2 | S1, S2, S3, S4, S5 | Gate clarification check; feature-state clarifications, quote and living-spec warnings | worker | 3 | pending | — |
 | T3 | S6 | Docs and `odd/spec.md` | worker | 3 | pending | — |
 
@@ -23,4 +23,5 @@ Objective: the user's words stay the spec: ambiguity is a visible state that blo
 
 - **L1 (2026-10-28):** "ok sigamos" (P1 of the ADD plan, design proposed in conversation: clarification state, quote provenance check, living spec).
 - **L2 (2026-10-28):** "De las decisiones que recomiendas": the open clarification blocks at the gate; `odd/spec.md` starts empty, no backfill.
-- Next step: T1 on feat/living-spec-t1 through construct:oracle.
+- **L3 (2026-10-28):** "mantener odd/spec.md". T1: 18 RED tests, locked.
+- Next step: T2 on feat/living-spec-t2 and T3 on feat/living-spec-t3.
