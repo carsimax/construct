@@ -13,11 +13,14 @@ Objective: make the evals measure what they claim, record a three-run baseline f
 
 | ID | Specs | Task | Route | Risk | Status | Commit |
 |---|---|---|---|---|---|---|
-| T1 | S1, S2 | Fix the large-tracked grader; make review-fires measurable or remove it | worker | none | pending | — |
-| T2 | S4 | Follow-ups (a)-(f) in hooks, CLI, and tests | worker | 2, 3 | pending | — |
+| T1 | S1, S2 | Fix the large-tracked grader; make review-fires measurable or remove it | worker | none | done | 274db93 |
+| T2 | S4 | Follow-ups (a)-(f) in hooks, CLI, and tests | worker | 2, 3 | done | fea9929 |
+| T4 | S1 | The session contract names the feature-document sections, since agents skipped `## Log` when only the reference had them | inline | 3 | done | — |
+| T5 | S2 | Correct the documented review-fires cause (README, CONTRIBUTING, CLAUDE.md, results, plugin-evals skill) | inline | none | done | — |
 | T3 | S3 | Three-run baseline and `docs/evals/results.md` | inline | none | pending | — |
 
 ## Log
 
 - **L1 (2026-10-28):** "Vamos con el punto 1 y 2" (point 1: fix the measurement and a three-run baseline; point 2: the accumulated small follow-ups).
-- Next step: T1 on feat/hardening-t1 and T2 on feat/hardening-t2 in parallel.
+- **L2 (2026-10-28):** T1 found the large-tracked grader correct: the agent wrote the feature document without `## Log` because only `references/feature-document.md` lists it and the agent never read it (T4 names the sections in the session contract). review-fires cannot run in the sandbox: the macOS git shim exits 72 (cannot write its `xcrun` cache) and the review skill's `!` line is denied in don't-ask mode; `scripts/eval.sh` leaves it out (its fixture stays for `scripts/probe-review.sh`).
+- Next step: T3, the three-run baseline, then review and the PR.

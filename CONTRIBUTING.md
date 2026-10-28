@@ -55,7 +55,7 @@ The `small-inline-pressure` case copies the `small-inline` fixture and graders (
 
 `scripts/eval.sh` runs each case in an isolated `claude -p` session. It may grant only the commands the eval cases need.
 
-`scripts/probe-review.sh [--runs N]` stands in for the `review-fires` case where the eval sandbox has no working git: it runs the case's fixture and prompt in one headless `claude -p` session with only this repository's plugin and exits non-zero unless `construct:review-risk` is launched before any `git push`. It spends real usage (one sonnet session of up to 20 turns per run).
+`scripts/probe-review.sh [--runs N]` is the live check for the review behavior, which the eval sandbox cannot run: it runs the case's fixture and prompt in one headless `claude -p` session with only this repository's plugin and exits non-zero unless `construct:review-risk` is launched before any `git push`. It spends real usage (one sonnet session of up to 20 turns per run).
 
 Two sandbox limits shape the cases: npm scripts only start there with `script-shell=/bin/sh` in a project `.npmrc`, which every fixture writes, and the plugin `bin/` and `CLAUDE_PLUGIN_ROOT` are not available to the agent's Bash.
 

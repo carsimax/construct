@@ -44,8 +44,8 @@ All eight cases scored 1.00 with the plugin. Mean Δ +0.50, $1.54, 288 s, 0 erro
 | review-fires | 0.44 | 0.33 | +0.11 | 0/3 | $0.41 |
 
 - **iteration-cap:** in one run with the plugin, the judges split on whether the reply stopped and reported (FAIL FAIL PASS). The test file was byte-identical in all six runs. The case measures behavior only: the eval sandbox runs the cap hook, but the agent rarely reaches three failures of one command.
-- **large-tracked:** with the plugin the feature document is created in 3/3 runs; without it, in 0/3. The `document-sections` regex grader fails in all six runs. It probably does not match how the trace records the document, not a missing section. Fix the grader before reading this case.
-- **review-fires:** `review-risk` was never launched in six runs. The eval sandbox has no usable git, so the publication flow cannot start. `scripts/probe-review.sh` is the live check for this behavior.
+- **large-tracked:** with the plugin the feature document is created in 3/3 runs; without it, in 0/3. The `document-sections` regex grader fails in all six runs. (Corrected in the 13.x section below: the grader was right; the agent wrote no `## Log`.) It probably does not match how the trace records the document, not a missing section. Fix the grader before reading this case.
+- **review-fires:** `review-risk` was never launched in six runs. (Corrected below: git exits 72 in the sandbox because the macOS `xcrun` shim cannot write its cache, and the review skill's `!` line is denied in don't-ask mode.) `scripts/probe-review.sh` is the live check for this behavior.
 
 ## Open
 
