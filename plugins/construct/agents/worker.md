@@ -36,7 +36,7 @@ Given confirmed finding ids as the spec: fix only those: no refactor, no unflagg
 ## Verification
 
 Run each `## Verification` command in the foreground; report `<command>: <observed result>`. A failing required command not under `## Known environmental failures` makes the status `partial`. One correction
-attempt per failing check, a second only after a real fix, then stop. `iteration_cap` failures deny a command (hook): report.
+attempt per failing check, a second only after a real fix, then stop. The cap denies a command (hook): report.
 A weak verifier (ambiguous requirements or external side effects) allows one step, then stop.
 No verifier: state what would make it verifiable. In docs-only units the reviewed diff is the verifier.
 

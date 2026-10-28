@@ -224,6 +224,19 @@ describe('allowed', () => {
   })
 })
 
+describe('construct-limits set (S3)', () => {
+  const as = (command, agent_id) => run(command, { input: JSON.stringify({ session_id: 's1', cwd: process.cwd(), hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command }, ...(agent_id ? { agent_id } : {}) }) })
+  for (const command of ['construct-limits set inline=300', '/opt/p/bin/construct-limits set cap=5']) {
+    test(`subagent denied: ${command}`, () => {
+      const r = as(command, 'a1')
+      assert.equal(r.decision, 'deny', r.stdout)
+      assert.match(r.reason, /^command-guard: .*main thread/)
+    })
+  }
+  test('subagent show is allowed', () => assert.equal(as('construct-limits show', 'a1').stdout, ''))
+  test('main-thread set is allowed', () => assert.equal(as('construct-limits set inline=300').stdout, ''))
+})
+
 describe('registration (S5)', () => {
   test('hooks.json registers command-guard on Bash in exec form, failing open', async () => {
     const { readFileSync } = await import('node:fs')

@@ -43,20 +43,16 @@ test('agent frontmatter matches the S6 table and the file name', () => {
 })
 
 test('userConfig declares no model or effort option, and no legacy options', () => {
-  const cfg = manifest.userConfig
+  const cfg = manifest.userConfig ?? {}
   assert.deepEqual(Object.keys(cfg).filter((k) => /^(model|effort)_/.test(k)), [])
   // The band above the prompt has no switch: the docked panel and its option are gone
   assert.equal(cfg.panel_open_on_start, undefined)
-  assert.equal(cfg.inline_edit_max_lines?.type, 'number')
-  assert.equal(cfg.inline_edit_max_lines?.default, 150)
   assert.equal(cfg.slice_lines, undefined)
-  assert.equal(cfg.iteration_cap?.type, 'number')
-  assert.equal(cfg.iteration_cap?.default, 3)
-  assert.equal(Object.keys(cfg).length, 2)
+  assert.equal(Object.keys(cfg).length, 0)
 })
 
 test('no userConfig title names a methodology (ODD, RDD, JD)', () => {
-  for (const [key, opt] of Object.entries(manifest.userConfig)) {
+  for (const [key, opt] of Object.entries(manifest.userConfig ?? {})) {
     assert.doesNotMatch(opt.title, /\b(ODD|RDD|JD)\b/, key)
   }
 })

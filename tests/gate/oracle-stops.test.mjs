@@ -77,7 +77,14 @@ describe('surface-guard: a locked oracle', () => {
     denied(guard(lockedRepo(), 'Write', { file_path: PATH_, content: 'x\n' }), /locked oracle/)
   })
   test('another path stays allowed, and so does the oracle when its lock is released', () => {
-    silent(guard(lockedRepo(), 'Write', { file_path: 'src/a.js', content: 'x\n' }))
+    // Main thread: the unfinished feature denies inline writes (config-surface S4); a writer over src/a.js is not blocked by the lock.
+    const repo = lockedRepo()
+    denied(guard(repo, 'Write', { file_path: 'src/a.js', content: 'x\n' }), /construct:worker/)
+    const data = { CLAUDE_PLUGIN_DATA: scratchDir('odd-stops-writer-') }
+    const spawn = (args, input) => spawnSync('node', [S('delegation-admission.mjs'), ...args], { input: JSON.stringify(input), encoding: 'utf8', env: { ...process.env, ...data } })
+    spawn([], { session_id: 's1', cwd: repo, tool_name: 'Agent', tool_input: { subagent_type: 'construct:worker', prompt: 'Spec: .vault/tasks/f.md, T1, S1\n\n## Allowed edit surfaces\nsrc/a.js\n\n## Verification\n- x\n', description: 'u' } })
+    spawn(['start'], { session_id: 's1', agent_id: 'a1', agent_type: 'construct:worker' })
+    silent(run(S('surface-guard.mjs'), { session_id: 's1', cwd: repo, agent_id: 'a1', tool_name: 'Write', tool_input: { file_path: 'src/a.js', content: 'x\n' } }, data))
     silent(guard(released(), 'Write', { file_path: PATH_, content: 'x\n' }))
   })
   test('fails open on bad input', () => {

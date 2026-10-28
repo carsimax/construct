@@ -135,7 +135,7 @@ describe('surface-guard', () => {
   })
 })
 
-// S5: the main thread edits small changes inline, up to inline_edit_max_lines changed lines per call.
+// S5: the main thread edits small changes inline, up to the session inline limit (default 150, set by construct-limits in tests/limits/) changed lines per call.
 const lines = (n, tag = 'l') => Array.from({ length: n }, (_, i) => `${tag}${i}`).join('\n')
 const tool = (repo, tool_name, tool_input, env = {}) => run(GUARD, [], { session_id: 's1', cwd: repo, tool_name, tool_input }, env)
 const edit = (repo, old_string, new_string, extra = {}, env) => tool(repo, 'Edit', { file_path: join(repo, 'src/a.js'), old_string, new_string, ...extra }, env)
@@ -182,17 +182,6 @@ describe('inline edit limit (S5)', () => {
   })
   test('.vault/tasks/ is allowed at any size', () => {
     isAllowed(tool(repo, 'Write', { file_path: join(repo, '.vault/tasks/f.md'), content: lines(500) }))
-  })
-  test('the option sets the limit; 0 restores the .vault/tasks/-only rule; invalid values fall back to 150', () => {
-    const env = (v) => ({ CLAUDE_PLUGIN_OPTION_INLINE_EDIT_MAX_LINES: v })
-    isAllowed(edit(repo, 'a', lines(50, 'n'), {}, env('50')))
-    isDenied(edit(repo, 'a', lines(51, 'n'), {}, env('50')), /51/, /50/)
-    isDenied(edit(repo, 'a', 'b', {}, env('0')), /construct:worker/)
-    isAllowed(tool(repo, 'Write', { file_path: join(repo, '.vault/tasks/f.md'), content: 'x' }, env('0')))
-    for (const bad of ['', 'abc', '-3', '2.5']) {
-      isAllowed(edit(repo, 'a', lines(150, 'n'), {}, env(bad)))
-      isDenied(edit(repo, 'a', lines(151, 'n'), {}, env(bad)), /150/)
-    }
   })
   test('a writer subagent keeps its surface rule regardless of size', () => {
     const r = makeRepo({ 'src/a.js': 'a\n' })

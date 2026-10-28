@@ -32,7 +32,7 @@ Small means all hold:
 
 Large means failing the resume test: several sessions, outside parties, separate deliverables, or requirements not surviving compaction. Never size by file counts, command counts, or a todo list.
 
-- Small: done inline (edit calls up to `inline_edit_max_lines` lines, default 150; bigger go to `construct:worker`), no feature document, no commits unless asked.
+- Small: done inline (edits within the `construct-limits` limit; bigger go to `construct:worker`), no feature document, no commits unless asked.
 - Large: feature document first, then work-unit commits on a feature branch.
 
 ## Risk
@@ -52,7 +52,7 @@ Code changes close with `Risk: item N (reason)`, `Risk: items 2, 5 (reason)`, or
 
 ## Autonomy
 
-During implementation, with a strong check (deterministic, runnable now, not written or loosened in the loop; a locked oracle counts), loop until it passes, up to `iteration_cap` failed runs of one command (default 3; a hook denies the next). Then stop, reporting attempts, failure, hypothesis; never edit the test to pass. With a weak verifier (no tests, ambiguous requirements, external effects), take one small step, show it, and stop. With none, state what would make the work verifiable; docs-only: the reviewed diff verifies. Approval never carries over. Commit, push, PR, merge are the user's, except work-unit commits on a feature branch.
+During implementation, with a strong check (deterministic, runnable now, not written or loosened in the loop; a locked oracle counts), loop until it passes, up to the `construct-limits` cap (default 3) of failed runs of one command; a hook denies the next. Then stop, reporting attempts, failure, hypothesis; never edit the test to pass. With a weak verifier (no tests, ambiguous requirements, external effects), take one small step, show it, and stop. With none, state what would make the work verifiable; docs-only: the reviewed diff verifies. Approval never carries over. Commit, push, PR, merge are the user's, except work-unit commits on a feature branch.
 
 ## Resume
 

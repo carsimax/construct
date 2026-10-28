@@ -1,4 +1,4 @@
-// Iteration cap: a Bash command that already failed `iteration_cap` times (default 3) for one agent
+// Iteration cap: a Bash command that already failed the session's cap times (limits.mjs, set with construct-limits; default 3) for one agent
 // in one session is denied, so the agent stops and reports instead of looping. PostToolUseFailure
 // counts, PostToolUse (a passing run) resets that command, so only consecutive failures count, PreToolUse denies, SubagentStop ends that agent's counters, UserPromptSubmit resets the main thread's.
 // One file per agent under dataDir()/iteration-cap/<session>, written to a temp name and renamed.
@@ -8,15 +8,10 @@ import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node
 import { createHash, randomBytes } from 'node:crypto'
 import { join } from 'node:path'
 import { dataDir, readInput, safeName } from './hook-io.mjs'
+import { readLimits } from './limits.mjs'
 
-const DEFAULT_CAP = 3
 const REASON =
   'Iteration cap: this command already failed %N% times. Stop and report what you tried, the failure, and your hypothesis for the cause, then wait for direction. Never edit the test to make it pass.'
-
-function cap() {
-  const value = process.env.CLAUDE_PLUGIN_OPTION_ITERATION_CAP
-  return typeof value === 'string' && /^(0|[1-9]\d*)$/.test(value) ? Number(value) : DEFAULT_CAP
-}
 
 function main() {
   const input = readInput()
@@ -39,7 +34,7 @@ function main() {
     // No state yet.
   }
   if (event === 'PreToolUse') {
-    const limit = cap()
+    const limit = readLimits(input.session_id).cap
     if (limit > 0 && (counts[command] || 0) >= limit) {
       const permissionDecisionReason = REASON.replace('%N%', String(counts[command]))
       process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason } })}\n`)
