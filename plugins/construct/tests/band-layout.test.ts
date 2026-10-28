@@ -1,5 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 import { BAND_COLUMNS, PALETTE, buildBand, clock } from '../hooks/band/layout.js'
+import { VERSION } from '../hooks/status/version.js'
 import { initialState } from '../hooks/band/state.js'
 import { activeWork } from '../hooks/status/tasks.js'
 
@@ -208,8 +209,8 @@ test('activeWork joins surplus cells from an unescaped pipe into the task column
 test('the plugin version sits at the right edge of the row, dim', () => {
   const [row] = rawRowsOf(band({ columns: 140 }))
   expect(row.length).toBe(140)
-  expect(row.endsWith(' v13.0.0')).toBe(true)
-  expect(leaves(band({ columns: 140 })).at(-1)).toEqual({ text: 'v13.0.0', props: expect.objectContaining({ dimColor: true }) })
+  expect(row.endsWith(` v${VERSION}`)).toBe(true)
+  expect(leaves(band({ columns: 140 })).at(-1)).toEqual({ text: `v${VERSION}`, props: expect.objectContaining({ dimColor: true }) })
 })
 
 test('the version is not drawn when the band is null', () => {
@@ -219,7 +220,7 @@ test('the version is not drawn when the band is null', () => {
 test('the version is the first thing dropped when the row is narrow', () => {
   const content = '● building · ADD engram-only-memory ●━●━◆━○ · 2 agents 1:42'
   const w = [...content].length
-  expect(rawRowsOf(band({ columns: w + 8 }))).toEqual([`${content} v13.0.0`])
+  expect(rawRowsOf(band({ columns: w + 8 }))).toEqual([`${content} v${VERSION}`])
   expect(rawRowsOf(band({ columns: w + 7 }))).toEqual([content])
   expect(rawRowsOf(band({ columns: w }))).toEqual([content])
 })
