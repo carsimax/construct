@@ -33,7 +33,7 @@ With a strong check (deterministic, runnable now, not written or loosened in the
 - **Why:** this rule adapts as models improve: a better verifier earns more autonomy. An uncapped loop with no exit is where agents cheat.
 - **Taken from:** ODD, the Ralph loop's back pressure, TDD Guard, Kent Beck's augmented coding, Anthropic's "give Claude a check to run".
 - **Evidence:** measured. Agents cheated on 76% of tasks where spec and tests conflict, retries raised cheating, and an explicit "flag it" exit cut it from 54% to 9% (ImpossibleBench). The cap of three is a judgment, not a measured optimum.
-- **Construct today:** a prompt rule without a cap or a definition of a strong check; test-first is self-reported; `failure-streak` adds a note after five failures, which is not a cap.
+- **Construct today:** the workflow skill defines a strong check, and the `iteration-cap` hook denies the next run of a Bash command after `iteration_cap` failed runs of it (default 3, configurable, 0 turns it off), counted per agent and reset when a subagent stops or the user sends a prompt, with a message to stop and report. A changed command string is a new check, so the cap is a discipline layer, not a boundary. Test-first is self-reported; `failure-streak` adds a note after five failures.
 
 ### 4. Independent oracles, one writer, clean reviewers
 

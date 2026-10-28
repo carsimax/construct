@@ -29,7 +29,7 @@ Launch prompts: a writer needs `Spec: odd/tasks/<feature>.md, T<n>` while a feat
 
 ## Autonomy and stopping
 
-Autonomy matches the strength of the verifier, not confidence. Strong verifier (deterministic check you can run): loop until it passes. Weak verifier (ambiguous requirements or external side effects): one small step, then stop and report. No verifier: say what would make the work verifiable. Docs-only: the reviewed diff is the verifier.
+Autonomy matches the strength of the verifier, not confidence. Strong verifier (deterministic check you can run): loop until it passes, up to `iteration_cap` failed runs of one command (default 3), then stop and report; the next run is denied (hook). Weak verifier (ambiguous requirements or external side effects): one small step, then stop and report. No verifier: say what would make the work verifiable. Docs-only: the reviewed diff is the verifier.
 
 A text-only progress report ("Next, I'll <step>", "Shall I apply this?") is not a stop while steps remain. Stop only for an open decision, a needed consent, a denial, missing proof, or a user stop. Background agents may be awaited; completion notifications end the wait. After repeated failures of one tool, change approach (failure-streak note).
 
