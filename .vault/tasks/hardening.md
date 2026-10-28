@@ -15,8 +15,8 @@ Objective: make the evals measure what they claim, record a three-run baseline f
 |---|---|---|---|---|---|---|
 | T1 | S1, S2 | Fix the large-tracked grader; make review-fires measurable or remove it | worker | none | done | 274db93 |
 | T2 | S4 | Follow-ups (a)-(f) in hooks, CLI, and tests | worker | 2, 3 | done | fea9929 |
-| T4 | S1 | The session contract names the feature-document sections, since agents skipped `## Log` when only the reference had them | inline | 3 | done | — |
-| T5 | S2 | Correct the documented review-fires cause (README, CONTRIBUTING, CLAUDE.md, results, plugin-evals skill) | inline | none | done | — |
+| T4 | S1 | The session contract names the feature-document sections, since agents skipped `## Log` when only the reference had them | inline | 3 | done | e14d68b |
+| T5 | S2 | Correct the documented review-fires cause (README, CONTRIBUTING, CLAUDE.md, results, plugin-evals skill) | inline | none | done | e14d68b |
 | T3 | S3 | Three-run baseline and `docs/evals/results.md` | inline | none | pending | — |
 
 ## Log
