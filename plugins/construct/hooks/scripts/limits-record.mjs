@@ -36,8 +36,12 @@ try {
         const { values, error } = parseSet(args)
         if (error) notes.push(`set rejected, nothing written: ${error}`)
         else {
-          writeLimits(input.session_id, values)
-          notes.push('set recorded')
+          try {
+            writeLimits(input.session_id, values)
+            notes.push('set recorded')
+          } catch (e) {
+            notes.push(`set failed, nothing written: ${e instanceof Error ? e.message : String(e)}`)
+          }
         }
       }
     }
