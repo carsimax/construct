@@ -16,7 +16,9 @@ function leaves(node, out: { text: string; props: any }[] = []) {
   return out
 }
 // The band's rows: each child of the root column is one row.
-const rowsOf = (tree) => (tree?.children ?? []).map(flat)
+const rawRowsOf = (tree) => (tree?.children ?? []).map(flat)
+// The same rows without the version tag at the right edge.
+const rowsOf = (tree) => rawRowsOf(tree).map((r) => r.replace(/\s+v\d+\.\d+\.\d+$/, ''))
 
 const agent = (o: any = {}) => ({ id: 'a1', role: 'worker', type: 'construct:worker', model: 'claude-sonnet-5-5', startedMs: NOW - 102_000, endedMs: null, status: 'running', ...o })
 const odd = {
@@ -201,4 +203,23 @@ test('activeWork joins surplus cells from an unescaped pipe into the task column
     task: { id: 'T2', title: 'x|y' },
     tasks: [{ id: 'T1', done: true }, { id: 'T2', done: false }],
   })
+})
+
+test('the plugin version sits at the right edge of the row, dim', () => {
+  const [row] = rawRowsOf(band({ columns: 140 }))
+  expect(row.length).toBe(140)
+  expect(row.endsWith(' v13.0.0')).toBe(true)
+  expect(leaves(band({ columns: 140 })).at(-1)).toEqual({ text: 'v13.0.0', props: expect.objectContaining({ dimColor: true }) })
+})
+
+test('the version is not drawn when the band is null', () => {
+  expect(buildBand({ state: initialState(), odd: null, nowMs: NOW, columns: 140 })).toBe(null)
+})
+
+test('the version is the first thing dropped when the row is narrow', () => {
+  const content = '● building · ADD engram-only-memory ●━●━◆━○ · 2 agents 1:42'
+  const w = [...content].length
+  expect(rawRowsOf(band({ columns: w + 8 }))).toEqual([`${content} v13.0.0`])
+  expect(rawRowsOf(band({ columns: w + 7 }))).toEqual([content])
+  expect(rawRowsOf(band({ columns: w }))).toEqual([content])
 })

@@ -3,6 +3,7 @@
 // plan limits) is drawn here.
 
 import { isNum, text } from '../status/format.js'
+import { VERSION } from '../status/version.js'
 import { agentsView, initialState, kindOfAgent, mainBusy, phaseOf } from './state.js'
 
 // Roles to theme keys (never raw colors, so the band follows the user's theme).
@@ -148,5 +149,10 @@ export function buildBand({ state: stored, odd, nowMs, columns }) {
   const running = agentsView(state, now)
   if (!state.blocked && !mainBusy(state) && !feature && running.length === 0) return null
   const parts = [[statusSeg(state)], ...(feature ? [oddSegs(feature)] : []), ...(running.length ? [agentsSegs(running)] : [])]
-  return { type: 'Box', props: { flexDirection: 'column' }, children: [row(join(parts), max)] }
+  const content = join(parts)
+  // The plugin version sits at the right edge; it is the first part dropped, and one space stays before it.
+  const tag = `v${VERSION}`
+  const gap = max - width(content) - cols(tag)
+  const segs = gap >= 1 ? [...content, seg(' '.repeat(gap)), seg(tag, { dim: true })] : content
+  return { type: 'Box', props: { flexDirection: 'column' }, children: [row(segs, max)] }
 }

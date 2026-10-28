@@ -13,6 +13,7 @@ import {
   onUnblocked,
 } from './band/state.js'
 import { checkClaude, checkNode, formatReport } from './status/doctor.js'
+import { VERSION } from './status/version.js'
 import { activeWork } from './status/tasks.js'
 import { parseRevParse } from './status/data.js'
 
@@ -166,7 +167,7 @@ async function runDoctor($) {
     probe(async () => (await $.session.version()).version),
     probe(() => runText($, ['node', '--version'], cwd ?? undefined, GIT_MS)),
   ])
-  return formatReport([checkClaude(version), checkNode(node)])
+  return formatReport([checkClaude(version), checkNode(node)], VERSION)
 }
 
 export function register(on, options) {
@@ -267,7 +268,7 @@ async function noteSpawn($, e, result) {
 // Registers /construct. Detached from session.start.
 async function registerCommand($) {
   try {
-    await $.command.register({ name: 'construct', description: 'Check the Construct setup (Claude Code and Node versions)', argumentHint: '[doctor]' })
+    await $.command.register({ name: 'construct', description: 'Show the Construct version and check the setup (Claude Code and Node versions)', argumentHint: '[doctor]' })
   } catch {
     // the command stays unavailable
   }

@@ -31,6 +31,6 @@ export function checkNode(text) {
   return { ok: have !== null && atLeast(have, triple(`${MIN_NODE}.0`)), label, hint: `install Node ${MIN_NODE} or later; the hooks need it` }
 }
 
-export function formatReport(rows) {
-  return ['Construct doctor', ...rows.map((r) => (r.ok ? `✓ ${r.label}` : `✗ ${r.label} — ${r.hint}`))].join('\n')
+export function formatReport(rows, version) {
+  return [`Construct doctor${version ? ` v${version}` : ''}`, ...rows.map((r) => (r.ok ? `✓ ${r.label}` : `✗ ${r.label} — ${r.hint}`))].join('\n')
 }
