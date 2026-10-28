@@ -176,6 +176,17 @@ describe('publication-gate: record faults and bounded work', () => {
     featBranch(repo)
     denied(push(repo), /could not be checked/)
   })
+  test('a lock whose release state cannot be read is kept alone: an unrelated ref still publishes', () => {
+    const repo = withRemote(makeRepo({ 'odd/tasks/f.md': FEATURE('pending'), 'tests/a.test.mjs': 'one\n', 'src/a.js': 'a\n' }))
+    writeOracle(repo, { path: 'tests/zzz.test.mjs', blob: '1'.repeat(40), feature: 'odd/tasks/f\u0000.md', task: 'T1', at: Date.now() })
+    writeOracle(repo, { path: PATH_, blob: git(repo, 'hash-object', PATH_).trim(), feature: 'odd/tasks/f.md', task: 'T1', at: Date.now() })
+    featBranch(repo)
+    silent(push(repo))
+    const r = spawnSync('node', [GATE, 'oracle', 'list'], { cwd: repo, encoding: 'utf8' })
+    assert.equal(r.status, 0, r.stderr)
+    assert.match(r.stdout, /tests\/zzz\.test\.mjs.*\terror\b/)
+    assert.match(r.stdout, /tests\/a\.test\.mjs\s+odd\/tasks\/f\.md\s+T1\s+active/)
+  })
   test('the feature document is read once per feature, however many locks share it', () => {
     const tests = ['tests/a.test.mjs', 'tests/b.test.mjs', 'tests/c.test.mjs']
     const repo = withRemote(makeRepo({ 'odd/tasks/f.md': FEATURE('pending'), 'tests/a.test.mjs': '1\n', 'tests/b.test.mjs': '2\n', 'tests/c.test.mjs': '3\n' }))
@@ -255,5 +266,30 @@ describe('command-guard: oracle unlock', () => {
   })
   test('oracle list, status and unrelated commands stay allowed', () => {
     for (const c of ['construct-gate oracle list', 'construct-gate status', 'echo oracle unlock', 'ls']) silent(guard(c))
+  })
+})
+
+describe('delegation-admission: an error in the lock check', () => {
+  // The lock check throws when the lock's feature path cannot be read once a release ref exists (a NUL byte).
+  const adm = (repo, prompt) => run(S('delegation-admission.mjs'), { session_id: 's1', cwd: repo, hook_event_name: 'PreToolUse', tool_name: 'Agent', tool_input: { subagent_type: 'construct:worker', prompt, description: 'u' } })
+  const repoBroken = () => {
+    const repo = withRemote(makeRepo({ [PATH_]: 'one\n', 'odd/tasks/f.md': FEATURE('pending') }))
+    writeOracle(repo, { path: PATH_, blob: git(repo, 'hash-object', PATH_).trim(), feature: 'odd/tasks/f\u0000.md', task: 'T1', at: Date.now() })
+    return repo
+  }
+  test('a writer over a recorded lock is denied, and a writer without a Spec line still is', () => {
+    const repo = repoBroken()
+    denied(adm(repo, `Spec: odd/tasks/f.md, T1, S1\n\n## Allowed edit surfaces\n${PATH_}\n\n## Verification\n- x\n`), /locked oracle/)
+    denied(adm(repo, '## Allowed edit surfaces\nsrc/a.js\n\n## Verification\n- x\n'), /Spec/)
+  })
+})
+
+describe('command-guard: moving the release ref', () => {
+  const guard = (command) => run(S('command-guard.mjs'), { session_id: 's1', cwd: process.cwd(), hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command } })
+  test('denies writing refs/remotes locally', () => {
+    for (const c of ['git update-ref refs/remotes/origin/main HEAD', 'git update-ref -d refs/remotes/origin/main', 'git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/x', 'git remote set-head origin main', 'git remote set-head origin -d', 'git fetch origin +HEAD:refs/remotes/origin/main', 'git fetch origin HEAD:refs/remotes/origin/main', 'git -C x update-ref refs/remotes/origin/master abc', 'sh -c "git update-ref refs/remotes/origin/main HEAD"']) denied(guard(c), /Release refs/, /fetching/)
+  })
+  test('plain fetch, pull, and a local update-ref stay allowed', () => {
+    for (const c of ['git fetch', 'git fetch origin', 'git fetch origin main', 'git pull', 'git pull origin main', 'git update-ref refs/heads/x HEAD', 'git symbolic-ref HEAD refs/heads/x', 'git symbolic-ref refs/remotes/origin/HEAD', 'git fetch origin x:refs/heads/y']) silent(guard(c))
   })
 })

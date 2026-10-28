@@ -93,6 +93,14 @@ function gitHit(args, words = []) {
   if (NO_VERIFY.has(sub) && (abbr(long, '--no-verify', 7) || (sub === 'commit' && short.has('n')))) {
     return hit('deny', `git ${sub} --no-verify skips the hooks. Fix the failing hook instead of bypassing it.`)
   }
+  // The publication gate trusts refs/remotes/origin/{HEAD,main,master} as the release ref: only a fetch from the remote may move it.
+  const remote = (r) => r.startsWith('refs/remotes/')
+  const writesRemote =
+    (sub === 'update-ref' && pos.some(remote)) ||
+    (sub === 'symbolic-ref' && remote(pos[0] ?? '') && (pos.length > 1 || short.has('d') || long.has('--delete'))) ||
+    (sub === 'remote' && pos[0] === 'set-head') ||
+    (sub === 'fetch' && pos.some((p) => p.includes(':') && remote(p.slice(p.lastIndexOf(':') + 1))))
+  if (writesRemote) return hit('deny', `git ${sub} writes a remote-tracking ref, and the publication gate reads it as the release ref. Release refs are only moved by fetching from the remote (git fetch, git pull).`)
   // The last of --force-with-lease / --no-force-with-lease wins; a lease prefix is the lease, not --force.
   let lease = false
   for (const a of order) {

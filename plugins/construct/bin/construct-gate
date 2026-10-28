@@ -95,14 +95,14 @@ async function oracle(sub, path) {
   const entries = oracleEntries(root)
   if (entries.length === 0) return 'no oracle locks'
   const { activeLocks } = await import('../hooks/scripts/publication-gate.mjs')
-  const active = new Set(activeLocks(root).map((l) => l.path))
+  const active = new Map(activeLocks(root).map((l) => [l.path, l]))
   return entries
     .map(({ name, record: r }) => {
       if (!r) return `corrupt\t${name}\t(unreadable record; unlock it with: construct-gate oracle unlock ${name})`
       const hash = git('-C', root, 'hash-object', `--path=${r.path}`, '--', r.path)
       const file = lstatSync(join(root, r.path), { throwIfNoEntry: false })
       const state = !file ? 'missing' : file.isFile() && hash.status === 0 && hash.stdout.trim() === r.blob ? 'matches' : 'differs'
-      return [r.path, r.feature, r.task, active.has(r.path) ? 'active' : 'released', state].join('\t')
+      return [r.path, r.feature, r.task, active.has(r.path) ? (active.get(r.path).error ? `error\t${active.get(r.path).error}` : 'active') : 'released', state].join('\t')
     })
     .join('\n')
 }

@@ -259,7 +259,7 @@ function releaseRef(root) {
 // activeLocks lists the oracle locks still in force: a lock is released only when its feature document exists at the
 // remote-tracking default branch (never a `--base` or a local branch; none means no release) with no unfinished task. The
 // document at a published ref is never read, so one push cannot edit an oracle and finish or delete its document. A table the hook
-// cannot read keeps the lock. Each feature document is read once. The gate, surface-guard, admission, oracle-record and the CLI share it.
+// cannot read keeps the lock, and so does one whose own release state cannot be read (marked `error`, so the others are judged normally). Each feature document is read once. The gate, surface-guard, admission, oracle-record and the CLI share it.
 export function activeLocks(root) {
   const locks = readOracles(root)
   if (locks.length === 0) return []
@@ -273,7 +273,13 @@ export function activeLocks(root) {
     }
     return finished.get(feature)
   }
-  return locks.filter((lock) => !done(lock.feature))
+  return locks.flatMap((lock) => {
+    try {
+      return done(lock.feature) ? [] : [lock]
+    } catch (e) {
+      return [{ ...lock, error: e?.message ?? String(e) }]
+    }
+  })
 }
 
 // oracleDenial (S3, protect only): an active lock (activeLocks) must be unchanged at the ref. A lock applies to a ref
