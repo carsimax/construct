@@ -8,6 +8,8 @@ import { createRequire } from 'node:module'
 import { basename } from 'node:path'
 
 export const SHELLS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh'])
+// Commands whose arguments or input run as shell code.
+const RUNNERS = new Set([...SHELLS, 'eval', 'source', '.'])
 // Flags of `git` that take a value, so the next word is not the subcommand.
 export const GIT_VALUE_FLAGS = new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace', '--exec-path', '--super-prefix', '--config-env'])
 
@@ -43,16 +45,23 @@ const ansiC = (text) =>
 // Assignments (`FOO=1 git`) and `export`/`declare` arguments are words too. Properties of the array:
 //   parens     the `(` and `)` of subshells and substitutions opened or closed since the previous command, in order;
 //   heredocs   the source of each heredoc body fed to the command;
-//   pipeline   the same object for every command of one pipeline.
+//   pipeline   the same object for every command of one pipeline;
+//   simple     true when the command is a plain call (not a block, `if`, loop, `case`, subshell, or function);
+//   parent     the command whose substitution or body holds this one.
 // Throws ShellParseError when the text is not valid shell.
 export function splitCommands(input) {
-  const sh = parser()
-  let file
+  // Any failure (parse, walk, or word extraction) is a ShellParseError, so no caller fails open on it.
   try {
-    file = sh.NewParser().Parse(input, '')
+    return readCommands(input)
   } catch (error) {
-    throw new ShellParseError(typeof error?.Error === 'function' ? error.Error() : String(error))
+    if (error instanceof ShellParseError) throw error
+    throw new ShellParseError(typeof error?.Error === 'function' ? error.Error() : (error?.message ?? String(error)))
   }
+}
+
+function readCommands(input) {
+  const sh = parser()
+  const file = sh.NewParser().Parse(input, '')
   const bytes = Buffer.from(input) // node offsets are UTF-8 byte offsets
   const raw = (node) => bytes.subarray(node.Pos().Offset(), node.End().Offset()).toString()
   const part = (p, quoted) => {
@@ -73,12 +82,14 @@ export function splitCommands(input) {
   }
   const commands = []
   const stack = []
+  const stmts = [] // the enclosing Stmt commands, innermost last
   let parens = ''
   let pipeline = null
   let pipeDepth = 0
   sh.Walk(file, (node) => {
     if (node === null) {
       const type = stack.pop()
+      if (type === 'Stmt') stmts.pop()
       if (type === 'Subshell' || type === 'CmdSubst' || type === 'ProcSubst') parens += ')'
       else if (type === 'Pipe' && --pipeDepth === 0) pipeline = null
       return true
@@ -99,8 +110,9 @@ export function splitCommands(input) {
         if (redir.Op === HERE_STRING) words.push(word(redir.Word, { h: true }))
         else words.push(word(redir.Word, { r: true }))
       }
+      Object.assign(words, { parens: words.length > 0 ? parens : '', heredocs, pipeline, simple: cmdType === 'CallExpr', parent: stmts.at(-1) ?? null })
+      stmts.push(words)
       if (words.length > 0) {
-        Object.assign(words, { parens, heredocs, pipeline })
         parens = ''
         commands.push(words)
       }
@@ -169,18 +181,25 @@ function unwrap(texts) {
 }
 
 
-// heredocScripts maps each command to the heredoc bodies that run as shell code: a body is data
-// unless a command of its pipeline is a shell (`cat <<E | bash`, `bash <<E`).
+// heredocScripts maps each command to the heredoc and here-string bodies that run as shell code.
+// A body is data only when proven: it feeds a plain command that is not a shell, `eval`, `source`,
+// or `.`, no command of its pipeline is one, and no enclosing command is one (nor has one in its
+// pipeline). A body on a block, `if`, loop, `case`, subshell, or function is always a script.
 export function heredocScripts(commands) {
   const groups = new Map()
   for (const command of commands) {
     const key = command.pipeline ?? command
     groups.set(key, [...(groups.get(key) ?? []), command])
   }
+  const runner = (c) => c.simple && RUNNERS.has(nestedLines(c.filter((w) => !w.r).map((w) => w.t)).name)
+  const runs = (c) => runner(c) || (c.pipeline !== null && (groups.get(c.pipeline) ?? []).some(runner))
   const scripts = new Map()
-  for (const members of groups.values()) {
-    if (!members.some((c) => SHELLS.has(nestedLines(c.filter((w) => !w.r).map((w) => w.t)).name))) continue
-    for (const c of members) if (c.heredocs.length > 0) scripts.set(c, c.heredocs)
+  for (const c of commands) {
+    const bodies = [...c.heredocs, ...c.filter((w) => w.h).map((w) => w.t)]
+    if (bodies.length === 0) continue
+    let data = c.simple
+    for (let up = c; data && up; up = up.parent) data = !runs(up)
+    if (!data) scripts.set(c, bodies)
   }
   return scripts
 }

@@ -1,7 +1,8 @@
 // T2 of odd/tasks/shell-parser.md: the commands the real shell parser must see through (deny) and
 // the idioms it must let pass (allow). `denyShapes(cmd, spelled)` hides one command in each shape:
 // `cmd` is the plain text, `spelled` the same command with quoted pieces (`g"i"t pu"s"h`).
-export const denyShapes = (cmd, spelled) => [
+export const denyShapes = (cmd, spelled) => [...shapes(cmd, spelled), ...heredocShapes(cmd)]
+const shapes = (cmd, spelled) => [
   `echo "$( (true); ${cmd} )"`,
   `echo "$( ( (true) ); ${cmd} )"`,
   `echo "$(case x in x) ${cmd};; esac)"`,
@@ -17,6 +18,22 @@ export const denyShapes = (cmd, spelled) => [
   `cat <<<E\n${cmd}\nE`,
   `echo "<<E"\n${cmd}\nE`,
   `echo "$(cat <<\\EOF\n)\nEOF\n${cmd})"`,
+]
+
+// A heredoc body is a script unless proven data: these hand it to a shell through a compound command,
+// a loop, or an enclosing substitution, and must be denied.
+const heredocShapes = (cmd) => [
+  `{ bash; } <<'E'\n${cmd}\nE`,
+  `if true; then bash; fi <<'E'\n${cmd}\nE`,
+  `while read l; do bash -c "$l"; done <<'E'\n${cmd}\nE`,
+  `bash -c "$(cat <<'E'\n${cmd}\nE\n)"`,
+  `bash <(cat <<'E'\n${cmd}\nE\n)`,
+  `bash < <(cat <<'E'\n${cmd}\nE\n)`,
+  `echo "$(cat <<'E'\n${cmd}\nE\n)" | bash`,
+  `eval "$(cat <<'E'\n${cmd}\nE\n)"`,
+  `source <(cat <<'E'\n${cmd}\nE\n)`,
+  `. /dev/stdin <<'E'\n${cmd}\nE`,
+  `{ bash; } <<< '${cmd}'`,
 ]
 
 // `esac` right after `in` closes the case, so the `)` ends the substitution and the rest is literal
@@ -39,4 +56,5 @@ export const allowIdioms = [
 ]
 
 // Text a parser cannot read at all: every gate must deny it rather than guess.
-export const unparseable = ['echo "unterminated', 'echo $(git status', 'git status )', 'if true; then']
+// The last one is valid shell the parser reads, but `$'\U..'` is not a code point, so reading the word throws.
+export const unparseable = ['echo "unterminated', 'echo $(git status', 'git status )', 'if true; then', "echo $'\\UFFFFFFFF'"]
