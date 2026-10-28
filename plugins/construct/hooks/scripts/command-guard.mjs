@@ -8,6 +8,7 @@
 //     `git checkout .`, and `git restore .`, `./`, or `:/` (unless it only touches the index),
 //     `find ... -exec rm` / `-execdir rm` with those flags, `find ... -delete`, and
 //     `xargs [flags] rm` with those flags.
+//   - deny also: `construct-gate oracle unlock` (the user releases a locked oracle with `!`, which skips this hook);
 //   - deny also: a statement that sets `GIT_CONFIG_PARAMETERS` or `GIT_CONFIG_KEY_<n>` to
 //     core.hooksPath through `export`, `declare` or `typeset` (any flags), `readonly`, `local`,
 //     or a bare assignment, even with no `git` in that statement.
@@ -92,6 +93,14 @@ function gitHit(args, words = []) {
   if (NO_VERIFY.has(sub) && (abbr(long, '--no-verify', 7) || (sub === 'commit' && short.has('n')))) {
     return hit('deny', `git ${sub} --no-verify skips the hooks. Fix the failing hook instead of bypassing it.`)
   }
+  // The publication gate trusts refs/remotes/origin/{HEAD,main,master} as the release ref: only a fetch from the remote should move it. This deny is a discipline layer (config, ref files, and other commands can still move it); the gate verifies the ref against the remote recorded in the lock.
+  const remote = (r) => r.startsWith('refs/remotes/')
+  const writesRemote =
+    (sub === 'update-ref' && pos.some(remote)) ||
+    (sub === 'symbolic-ref' && remote(pos[0] ?? '') && (pos.length > 1 || short.has('d') || long.has('--delete'))) ||
+    (sub === 'remote' && pos[0] === 'set-head') ||
+    (sub === 'fetch' && pos.some((p) => p.includes(':') && remote(p.slice(p.lastIndexOf(':') + 1))))
+  if (writesRemote) return hit('deny', `git ${sub} writes a remote-tracking ref, and the publication gate reads it as the release ref. Release refs should only move by fetching from the remote (git fetch, git pull); the gate also verifies them against the remote.`)
   // The last of --force-with-lease / --no-force-with-lease wins; a lease prefix is the lease, not --force.
   let lease = false
   for (const a of order) {
@@ -137,6 +146,8 @@ function findHit(args, nested) {
   return found
 }
 
+const isGate = (word) => /(^|\/)construct-gate$/.test(word ?? '')
+
 // hitsIn returns every hit of a command line; splitCommands finds the commands nested in
 // substitutions and heredoc expansions, and the lines a command runs as a string are read again.
 // Throws ShellParseError for text that is not valid shell.
@@ -155,6 +166,8 @@ function hitsIn(command, depth = 0) {
     // `export X=...; git ...`: the assignment is its own statement, so it is checked without a `git`.
     if (/^(export|declare|typeset|readonly|local|[A-Za-z_]\w*=)/.test(words[0] ?? '') && words.some(hooksEnv)) found.push(hit('deny', HOOKS_ENV_REASON))
     const h = name === 'git' ? gitHit(args, words) : name === 'rm' ? rmHit(args) : name === 'find' ? findHit(args, nested) : null
+    // Any word with basename construct-gate counts, so node flags, env, command, xargs and npx wrappers are caught; `node -e` importing review-store cannot be seen in text (discipline layer).
+    if (words.some((w, i) => isGate(w) && words[i + 1] === 'oracle' && words[i + 2] === 'unlock')) found.push(hit('deny', 'construct-gate oracle unlock releases a locked oracle, and only the user may: ask them to run it with ! (for example `!construct-gate oracle unlock <path>`), or return `oracle_conflict` to them.'))
     if (h) found.push(h)
   }
   return found

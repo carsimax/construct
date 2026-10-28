@@ -5,11 +5,13 @@ import { chmodSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync
 import { dirname, join, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const USAGE = `usage: construct-gate <install|uninstall|status>   (run inside a repository)
+const USAGE = `usage: construct-gate <install|uninstall|status|oracle list|oracle unlock <path>>   (run inside a repository)
 
   install     write a pre-push hook into the repository's hooks directory (core.hooksPath is honored); refuses a hook that is not Construct's
   uninstall   remove the pre-push hook if it is Construct's
-  status      print whether the hook is installed and which pre-push.mjs it runs`
+  status      print whether the hook is installed and which pre-push.mjs it runs
+  oracle list           list the locked oracles: path, feature, task, active or released, and whether the file matches its recorded blob (a corrupt record is listed by file name)
+  oracle unlock <path>  remove the lock of that path (or of a corrupt record, by the file name that list shows); only you run this, agents are denied`
 
 const MARKER = '# construct-gate: Construct pre-push hook'
 const RECORDED = /^recorded='(.*)'$/m
@@ -77,7 +79,36 @@ function warnings({ root, common, file }) {
   return [`construct-gate: warning: ${dir} is outside this repository's git directory, so the hook applies to every repository using it; uninstall removes it for all.`]
 }
 
-function run(command) {
+// oracle: `list` and `unlock <path>` over the oracle locks of the current repository (S5 of odd/tasks/oracle-separation.md).
+async function oracle(sub, path) {
+  const top = git('rev-parse', '--show-toplevel')
+  if (top.status !== 0) throw new Error('not inside a git repository')
+  const root = top.stdout.trim()
+  const { oracleEntries, removeOracle } = await import('../hooks/scripts/review-store.mjs')
+  if (sub === 'unlock') {
+    if (!path) throw new Error('usage: construct-gate oracle unlock <path>')
+    const lock = oracleEntries(root).find((e) => e.record?.path === path)?.record
+    if (!removeOracle(root, path)) throw new Error(`no oracle lock for ${path} (construct-gate oracle list shows them)`)
+    return lock ? `unlocked ${path} (locked for ${lock.feature}, ${lock.task})` : `unlocked ${path} (a corrupt record)`
+  }
+  if (sub !== 'list') throw new Error('usage: construct-gate oracle <list|unlock <path>>')
+  const entries = oracleEntries(root)
+  if (entries.length === 0) return 'no oracle locks'
+  const { activeLocks } = await import('../hooks/scripts/publication-gate.mjs')
+  const active = new Map(activeLocks(root).map((l) => [l.path, l]))
+  return entries
+    .map(({ name, record: r }) => {
+      if (!r) return `corrupt\t${name}\t(unreadable record; unlock it with: construct-gate oracle unlock ${name})`
+      const hash = git('-C', root, 'hash-object', `--path=${r.path}`, '--', r.path)
+      const file = lstatSync(join(root, r.path), { throwIfNoEntry: false })
+      const state = !file ? 'missing' : file.isFile() && hash.status === 0 && hash.stdout.trim() === r.blob ? 'matches' : 'differs'
+      return [r.path, r.feature, r.task, active.has(r.path) ? (active.get(r.path).error ? `error\t${active.get(r.path).error}` : 'active') : 'released', state].join('\t')
+    })
+    .join('\n')
+}
+
+async function run(command, ...rest) {
+  if (command === 'oracle') return oracle(...rest)
   if (command === undefined || command === 'help' || command === '--help' || command === '-h') return USAGE
   if (!['install', 'uninstall', 'status'].includes(command)) throw new Error(`unknown command: ${command} (run construct-gate help)`)
   const where = locate()
@@ -108,7 +139,7 @@ function run(command) {
 }
 
 try {
-  process.stdout.write(`${run(process.argv[2])}\n`)
+  process.stdout.write(`${await run(...process.argv.slice(2))}\n`)
 } catch (error) {
   process.stderr.write(`construct-gate: ${error.message}\n`)
   process.exitCode = 1

@@ -60,30 +60,51 @@ export function writeVerdict(root, record) {
   }
 }
 
-// Oracle locks (oracle-record.mjs): one record per locked test path, { path, blob, feature, task, at }; a later
-// record for the same path replaces it. Never pruned: a lock lives until its feature finishes or the user unlocks it.
+// Oracle locks (oracle-record.mjs): one record per locked test path, { path, blob, feature, task, at }. oracle-record.mjs
+// writes a path only when it has no active lock (activeLocks in publication-gate.mjs), so a record is replaced only once
+// its feature is finished; the user's `construct-gate oracle unlock` removes one. Never pruned.
+// A blob of UNLOCKABLE marks a path that cannot be hashed as a file (a symlink or directory): the gate always reports it changed.
+export const UNLOCKABLE = 'unlockable'
 const oracleFile = (root, path) => join(storeDir(root), 'oracles', `${createHash('sha256').update(path).digest('hex')}.json`)
 export const writeOracle = (root, record) => atomicWrite(oracleFile(root, record.path), `${JSON.stringify(record)}\n`)
 
-// readOracles lists the oracle lock records; an unreadable one is skipped.
-export function readOracles(root) {
+// oracleEntries lists every file of the oracles/ area as { name, record }; record is null when the file is unreadable or not a lock.
+export function oracleEntries(root) {
   const dir = join(storeDir(root), 'oracles')
-  const records = []
+  const entries = []
   let names = []
   try {
     names = readdirSync(dir)
   } catch {
     // No locks yet.
   }
-  for (const name of names) {
+  for (const name of names.filter((n) => n.endsWith('.json')).sort()) {
+    let record = null
     try {
-      const record = readJson(join(dir, name))
-      if (typeof record?.path === 'string' && typeof record.blob === 'string' && typeof record.feature === 'string') records.push(record)
+      const parsed = readJson(join(dir, name))
+      if (typeof parsed?.path === 'string' && typeof parsed.blob === 'string' && typeof parsed.feature === 'string') record = parsed
     } catch {
       // Unreadable record: not a lock.
     }
+    entries.push({ name, record })
   }
-  return records
+  return entries
+}
+
+// readOracles lists the valid oracle lock records; a corrupt one is skipped (oracleEntries shows it).
+export const readOracles = (root) => oracleEntries(root).flatMap((e) => (e.record ? [e.record] : []))
+
+// removeOracle deletes the record of a locked path, or the file named `path` in the oracles/ area (a corrupt record); false when none.
+export function removeOracle(root, path) {
+  const named = oracleEntries(root).find((e) => e.name === path || e.name === `${path}.json`)
+  const file = named ? join(storeDir(root), 'oracles', named.name) : oracleFile(root, path)
+  try {
+    statSync(file)
+  } catch {
+    return false
+  }
+  rmSync(file)
+  return true
 }
 
 const MAX_AGE_MS = 30 * 24 * 3600 * 1000

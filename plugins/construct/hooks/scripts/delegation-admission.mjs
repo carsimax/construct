@@ -28,6 +28,8 @@ import { homedir } from 'node:os'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { activeDocuments, projectRoot } from './feature-state.mjs'
+import { activeLocks } from './publication-gate.mjs'
+import { readOracles } from './review-store.mjs'
 import { kindOf, namesOf, qualified } from './roles.mjs'
 import { dataDir, readInput, safeName, SUBAGENT_MAX_IDLE_MS } from './hook-io.mjs'
 
@@ -555,6 +557,23 @@ function admit(input) {
   // The oracle record hook reads the Spec line, so an oracle needs one whether or not a feature document is unfinished.
   if (type === ORACLE && parsed.paths.some((path) => { try { return lstatSync(resolve(root, path)).isDirectory() } catch { return false } })) {
     deny(`${type} edit surfaces must be file paths, not directories: each file is locked by its content hash. List every test file by its full path.`)
+    return
+  }
+  // S4: no writer may cover an active locked oracle, and an oracle may not be launched over one (T5: another feature's lock).
+  let locks = []
+  try {
+    locks = activeLocks(root)
+  } catch {
+    // Fail closed for this check only (as surface-guard does): every recorded lock counts as active.
+    try {
+      locks = readOracles(root)
+    } catch {
+      // No lock readable: the Spec-line and surface checks still run.
+    }
+  }
+  const covered = locks.find((lock) => parsed.paths.some((path) => surfaceContains(path, lock.path)))
+  if (covered) {
+    deny(`${type} edit surfaces cover ${covered.path}, a locked oracle for ${covered.feature} (task ${covered.task}). Keep the surfaces off it; if the test and the spec disagree, return \`oracle_conflict\` to the user, who can run \`construct-gate oracle unlock ${covered.path}\`.`)
     return
   }
   if ((type === ORACLE || hasUnfinishedDocument(root)) && !namesFeatureDocument(prompt, root)) {

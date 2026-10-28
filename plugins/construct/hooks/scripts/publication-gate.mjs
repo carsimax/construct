@@ -30,6 +30,7 @@
 // built indirectly are not caught. Upgrade if one of them shows up in real use.
 // Usage: node publication-gate.mjs   (hook JSON on stdin)
 import { realpathSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { defaultBranch } from './delivery-signals.mjs'
@@ -37,7 +38,7 @@ import { unfinishedRows } from './feature-state.mjs'
 import { git, repositoryRoot } from './git-tree.mjs'
 import { readInput } from './hook-io.mjs'
 import { requiredLenses } from './review-lenses.mjs'
-import { pruneStore, readOracles, readVerdicts, subjectHash } from './review-store.mjs'
+import { pruneStore, readOracles, readVerdicts, subjectHash, UNLOCKABLE } from './review-store.mjs'
 import { GIT_VALUE_FLAGS, heredocScripts, nestedLines, parsesAsShell, SHELLS, ShellParseError, splitCommands } from './shell-words.mjs'
 
 const MAX_DEPTH = 4
@@ -256,23 +257,79 @@ function releaseRef(root) {
   return [head, 'refs/remotes/origin/main', 'refs/remotes/origin/master'].find((ref) => ref && git(root, ['rev-parse', '--verify', '-q', `${ref}^{commit}`], { okStatuses: [0, 1] }).length > 0) ?? ''
 }
 
-// oracleDenial (S3, protect only): a locked oracle (oracle-record.mjs) must be unchanged at the ref. A lock applies to a ref
-// that carries the oracle (the path exists there, or its history ever had the locked blob at that path). It is released
-// only when its feature document exists at the remote-tracking default branch (never a `--base` or a local branch; none means no release) with no unfinished task; the document at the ref is
-// never read, so one push cannot edit an oracle and finish or delete its document. A table the hook cannot read keeps the lock.
-// Returns the denial text, or null.
+// activeLocks lists the oracle locks still in force: a lock is released only when its feature document exists at the
+// remote-tracking default branch (never a `--base` or a local branch; none means no release) with no unfinished task. The
+// document at a published ref is never read, so one push cannot edit an oracle and finish or delete its document. A table the hook
+// cannot read keeps the lock, and so does one whose own release state cannot be read (marked `error`, so the others are judged normally). Each feature document is read once. The gate, surface-guard, admission, oracle-record and the CLI share it.
+// It never throws: when the release ref itself cannot be read, every lock stays active with the error.
+// With { verifyRemote: true } (the publication gate only; the others stay offline) the release ref is trusted only when it equals
+// the branch tip `git ls-remote <url recorded in the lock>` reports; any failure, mismatch or lock without a recorded url keeps the lock.
+export function activeLocks(root, { verifyRemote = false } = {}) {
+  try {
+    const locks = readOracles(root)
+    if (locks.length === 0) return []
+    const release = releaseRef(root)
+    const trusted = new Map()
+    const verified = (url) => {
+      if (!trusted.has(url)) trusted.set(url, remoteTip(root, release, url))
+      return trusted.get(url)
+    }
+    const finished = new Map()
+    const done = (feature) => {
+      if (!finished.has(feature)) {
+        let tasks = null
+        if (release && out(root, ['ls-tree', '--name-only', release, '--', feature]) !== '') tasks = unfinishedRows(out(root, ['show', `${release}:${feature}`]).split('\n'))
+        finished.set(feature, tasks !== null && tasks.rows.length === 0)
+      }
+      return finished.get(feature)
+    }
+    return locks.flatMap((lock) => {
+      try {
+        if (verifyRemote && done(lock.feature) && !(typeof lock.remote === 'string' && lock.remote !== '' && verified(lock.remote))) return [{ ...lock, error: 'the release ref could not be verified against the remote recorded in the lock' }]
+        return done(lock.feature) ? [] : [lock]
+      } catch (e) {
+        return [{ ...lock, error: e?.message ?? String(e) }]
+      }
+    })
+  } catch (e) {
+    return readOracles(root).map((lock) => ({ ...lock, error: e?.message ?? String(e) }))
+  }
+}
+
+// remoteTip: true when the release ref's sha equals the tip of the branch it tracks on url (one ls-remote, with a timeout); false on any failure.
+const remoteTip = (root, release, url) => {
+  try {
+    // Run outside the repository so its config (url.*.insteadOf, core.sshCommand) cannot redirect the check.
+    // A url that reads as an option (--upload-pack=...) would run a command and fall back to the configured remote.
+    if (!release || typeof url !== 'string' || url.startsWith('-')) return false
+    const target = release === 'refs/remotes/origin/HEAD' ? git(root, ['symbolic-ref', '-q', release]).toString('utf8').trim() : release
+    const branch = target.replace(/^refs\/remotes\/origin\//, '')
+    if (branch === target || branch === '') return false
+    const sha = git(root, ['rev-parse', '--verify', '-q', `${release}^{commit}`]).toString('utf8').trim()
+    const line = git(tmpdir(), ['ls-remote', url, `refs/heads/${branch}`], { timeout: 15000 }).toString('utf8').trim().split('\n')[0]
+    return sha !== '' && line.split('\t')[0] === sha
+  } catch {
+    return false
+  }
+}
+
+// oracleDenial (S3, protect only): an active lock (activeLocks) must be unchanged at the ref. A lock applies to a ref
+// that carries the oracle (the path exists there, or its history ever had the locked blob at that path); a lock whose blob is
+// UNLOCKABLE (a symlink or directory surface) is always reported changed. Returns the denial text, or null.
 function oracleDenial(root, sha) {
-  const release = releaseRef(root)
   const changed = []
-  for (const lock of readOracles(root)) {
+  for (const lock of activeLocks(root, { verifyRemote: true })) {
+    if (lock.blob === UNLOCKABLE) {
+      // Only a ref that carries the path (present at the ref, or touched by its history) is denied.
+      const carries = out(root, ['ls-tree', '--name-only', sha, '--', lock.path]) !== '' || git(root, ['log', '-1', '--format=%H', sha, '--', lock.path]).toString('utf8').trim() !== ''
+      if (!carries) continue
+      changed.push(`${lock.path} (could not be locked as a file, locked for ${lock.feature})`)
+      continue
+    }
     const now = git(root, ['rev-parse', '--verify', '-q', `${sha}:${lock.path}`], { okStatuses: [0, 1] }).toString('utf8').trim()
     if (now === lock.blob) continue
     // A blob that does not exist (status 1) cannot be in any history; any other git failure throws and denies.
     if (now === '' && (!objectExists(root, lock.blob) || git(root, ['log', '-1', '--format=%H', `--find-object=${lock.blob}`, sha, '--', lock.path]).toString('utf8').trim() === '')) continue
-    if (release && out(root, ['ls-tree', '--name-only', release, '--', lock.feature]) !== '') {
-      const tasks = unfinishedRows(out(root, ['show', `${release}:${lock.feature}`]).split('\n'))
-      if (tasks && tasks.rows.length === 0) continue
-    }
     changed.push(`${lock.path} (${now === '' ? 'missing' : 'changed'} at the ref, locked for ${lock.feature})`)
   }
   return changed.length === 0 ? null : changed.join('; ')

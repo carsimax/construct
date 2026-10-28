@@ -1,4 +1,5 @@
-// Edit-surface guard (PreToolUse on Write, Edit, MultiEdit, NotebookEdit). A construct writer
+// Edit-surface guard (PreToolUse on Write, Edit, MultiEdit, NotebookEdit). A path with an active oracle lock (activeLocks) is denied to
+// every agent and to the main thread (S4 of odd/tasks/oracle-separation.md). A construct writer
 // (agent_id present) may only write inside the `## Allowed edit surfaces` recorded at its launch
 // by delegation-admission.mjs; the main thread may write under odd/tasks/ at any size and
 // elsewhere only a call that changes at most `inline_edit_max_lines` lines (option, default 150;
@@ -13,6 +14,8 @@ import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { surfaceContains, writerRecord } from './delegation-admission.mjs'
 import { repositoryRoot } from './git-tree.mjs'
 import { readInput } from './hook-io.mjs'
+import { activeLocks } from './publication-gate.mjs'
+import { readOracles } from './review-store.mjs'
 
 // real resolves symlinks in the deepest existing ancestor and appends the rest.
 function real(path) {
@@ -74,6 +77,25 @@ function main() {
   const root = real(repositoryRoot(input.cwd))
   const rel = relative(root, real(resolve(input.cwd, path)))
   if (rel === '' || rel === '..' || rel.startsWith('../') || isAbsolute(rel)) return
+  // A lock on a symlink or directory covers the target and what lies under it, by its stored and its canonical path.
+  const raw = relative(root, resolve(input.cwd, path))
+  const under = (p, l) => p === l || p.startsWith(`${l}/`)
+  let locks = []
+  try {
+    locks = activeLocks(root)
+  } catch {
+    // Fail closed for this check only: every recorded lock counts as active; the rest of the guard still runs.
+    try {
+      locks = readOracles(root)
+    } catch {
+      // No lock readable: continue with the rest of the guard.
+    }
+  }
+  const lock = locks.find((l) => [l.path, relative(root, real(join(root, l.path)))].some((p) => under(rel, p) || under(raw, p)))
+  if (lock) {
+    deny(`surface-guard: ${rel} is a locked oracle for ${lock.feature} (task ${lock.task}). Do not edit it: return \`oracle_conflict\` (path, test, spec) to the user, or ask them to unlock it with \`construct-gate oracle unlock ${rel}\`.`)
+    return
+  }
   if (typeof input.agent_id === 'string' && input.agent_id !== '') {
     const entry = writerRecord(input.session_id, input.agent_id)
     if (!entry || entry.surfaces.some((surface) => surfaceContains(surface, rel))) return
