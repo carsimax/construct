@@ -55,7 +55,7 @@ function review(cwd, root) {
   }
   const { mergeBase, items, required, state } = reviewState(root, base, git(cwd, ['rev-parse', 'HEAD']))
   const head = `Branch ${branch ?? '(detached HEAD)'} against ${target}:`
-  if (required.length === 0) return [head, 'no review required (no Risk items in the feature documents changed on this branch).']
+  if (required.length === 0) return [head, 'no review required (no Risk items in the feature documents or diff paths of this branch).']
   const label = { ok: 'approved', rejected: 'rejected', missing: 'missing' }
   return [head, `Risk items ${[...items].sort().join(', ')}; required lenses for HEAD (Review subject: ${mergeBase}):`, ...required.map((lens) => `- ${lens}: ${label[state(lens)]}`)]
 }

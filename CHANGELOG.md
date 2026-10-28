@@ -4,6 +4,7 @@ Notable changes per release. Versions follow [Semantic Versioning](https://semve
 
 ## Unreleased
 
+- The publication gate applies a risk floor: paths in the published diff (migrations and `*.sql`, auth and secret paths, `.env*`, lockfiles, CI workflows, `Dockerfile`, `install.sh`) and the globs in `odd/risk-paths` (read at the merge-base, one `<glob> <items>` per line) add Risk items to the declared ones, even with no feature document. The denial names the matched paths; an unreadable `odd/risk-paths` line denies.
 - A repository the Risk-line snapshot marked slow retries the full hash from HEAD after one hour (`slow_at` in the session record) instead of staying degraded for the whole session, and the index-seeded fallback's `add -A` is bounded to 20 s, past which the hook fails open.
 
 ## 12.0.2

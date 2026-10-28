@@ -265,6 +265,89 @@ describe('the decision follows the Risk items and the verdicts', () => {
 })
 
 // A published ref that does not resolve to a commit cannot be judged, so it is denied (it was judged as HEAD).
+// S1, S2: the risk floor. Paths in the published diff add items to the declared ones; odd/risk-paths is read at the merge-base.
+describe('the risk floor', () => {
+  // floorRepo: main holds `base`; feat commits `change` (a null value deletes the file) with no feature document.
+  function floorRepo(base, change) {
+    const repo = makeRepo({ 'src/app.js': 'export const a = 1\n', ...base })
+    git(repo, 'checkout', '-q', '-b', 'feat')
+    if (Object.keys(change).length > 0) {
+      applyFiles(repo, change)
+      commitAll(repo, 'change')
+    }
+    return repo
+  }
+
+  test('an installer change with no feature document requires review-risk and review-resilience and names the path', () => {
+    const r = hook('git push', floorRepo({ 'install.sh': '#!/bin/sh\n' }, { 'install.sh': '#!/bin/sh\necho hi\n' }))
+    denied(r)
+    assert.match(r.reason, /review-resilience/)
+    assert.match(r.reason, /install\.sh/)
+    assert.match(r.reason, /Risk items 5/)
+  })
+
+  test('a deleted migration is item 1', () => {
+    const r = hook('git push', floorRepo({ 'db/migrations/001.txt': 'x\n' }, { 'db/migrations/001.txt': null }))
+    denied(r)
+    assert.match(r.reason, /Risk items 1/)
+    assert.match(r.reason, /review-resilience/)
+    assert.match(r.reason, /db\/migrations\/001\.txt/)
+  })
+
+  test('the old side of a rename counts', () => {
+    const repo = floorRepo({ 'schema.sql': 'select 1;\n'.repeat(20) }, {})
+    git(repo, 'mv', 'schema.sql', 'schema.txt')
+    commitAll(repo, 'rename')
+    denied(hook('git push', repo))
+  })
+
+  test('the default table maps auth, secrets, env files, lockfiles, workflows, and a bare *.sql at any depth', () => {
+    for (const [path, item] of [['src/auth/x.js', 2], ['config/my-secret.json', 2], ['.env.local', 2], ['web/pnpm-lock.yaml', 5], ['.github/workflows/ci.yml', 5], ['svc/Dockerfile', 5], ['a/b/q.sql', 1]]) {
+      const r = hook('git push', floorRepo({}, { [path]: 'x\n' }))
+      assert.equal(r.decision, 'deny', path)
+      assert.match(r.reason, new RegExp(`Risk items ${item}`), path)
+    }
+  })
+
+  test('a path matching nothing changes nothing', () => {
+    silent(hook('git push', floorRepo({}, { 'src/app.js': 'export const a = 2\n', 'docs/sqlnotes.md': 'x\n', 'authors.txt': 'x\n' })))
+  })
+
+  test('the floor adds to the declared items', () => {
+    const repo = featureRepo('3')
+    applyFiles(repo, { 'install.sh': 'x\n' })
+    commitAll(repo, 'installer')
+    assert.match(hook('git push', repo).reason, /Risk items 3, 5/)
+  })
+
+  test('odd/risk-paths at the merge-base adds items, a comment and blank lines are ignored', () => {
+    const base = { 'odd/risk-paths': '# contracts\n\nsrc/api/** 3\n*.proto 3,4\n' }
+    const r = hook('git push', floorRepo(base, { 'src/api/v1/x.js': 'x\n' }))
+    assert.equal(r.decision, 'deny')
+    assert.match(r.reason, /Risk items 3/)
+    assert.match(r.reason, /src\/api\/v1\/x\.js/)
+    assert.match(hook('git push', floorRepo(base, { 'deep/m.proto': 'x\n' })).reason, /Risk items 3, 4/)
+    silent(hook('git push', floorRepo(base, { 'src/other.js': 'x\n' })))
+  })
+
+  test('editing odd/risk-paths in the published diff does not change its own floor', () => {
+    // Deleting or emptying the file while touching a declared path still denies.
+    const base = { 'odd/risk-paths': 'src/api/** 3\n', 'src/api/x.js': 'a\n' }
+    assert.match(hook('git push', floorRepo(base, { 'odd/risk-paths': null, 'src/api/x.js': 'b\n' })).reason, /Risk items 3/)
+    assert.match(hook('git push', floorRepo(base, { 'odd/risk-paths': '# none\n', 'src/api/x.js': 'b\n' })).reason, /Risk items 3/)
+    // A rule added at the ref does not apply to that ref, and a malformed one added there is not read.
+    silent(hook('git push', floorRepo({}, { 'odd/risk-paths': 'src/api/** 3\nbad\n', 'src/api/x.js': 'b\n' })))
+  })
+
+  test('a malformed odd/risk-paths line denies', () => {
+    for (const line of ['src/api/**', 'src/api/** x', 'src/api/** 7', 'src/api/** 0']) {
+      const r = hook('git push', floorRepo({ 'odd/risk-paths': `${line}\n` }, { 'src/app.js': 'export const a = 2\n' }))
+      assert.equal(r.decision, 'deny', line)
+      assert.match(r.reason, /odd\/risk-paths/, line)
+    }
+  })
+})
+
 describe('an unresolvable push source is denied', () => {
   const repo = featureRepo()
   const cases = [

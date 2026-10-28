@@ -19,7 +19,7 @@ Run this when a unit whose Risk names an item is committed and ready, when `publ
 
 ## Which lenses
 
-The required lenses are the union of the rows for every Risk item in the feature documents the branch changed (`publication-gate` reads the Risk column of the Tasks tables).
+The required lenses are the union of the rows for every Risk item in the feature documents the branch changed (`publication-gate` reads the Risk column of the Tasks tables) and in the risk floor: items the gate adds from the diff paths (migrations and `*.sql` 1; auth, secrets, `.env*` 2; lockfiles, CI workflows, `Dockerfile`, `install.sh` 5, plus the globs of `odd/risk-paths` at the merge-base). A lower declared Risk, or none, does not remove them.
 
 | Risk item | Lenses |
 |---|---|
