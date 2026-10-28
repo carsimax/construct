@@ -15,7 +15,7 @@ const FILES = [
   [skill('workflow'), 700], [skill('delegation'), 800], [ref('delegation', 'handoffs'), 600],
   ['agents/worker.md', 500], ['agents/explorer.md', 250], ['agents/verifier.md', 650], ['agents/general.md', 200],
   [skill('review'), 900], [ref('review', 'security-checklist'), 450], [ref('review', 'dual-review'), 700],
-  ...lens, ['agents/judge-a.md', 250], ['agents/judge-b.md', 250],
+  ...lens, ['agents/judge-a.md', 265], ['agents/judge-b.md', 265],
   [skill('delivery'), 900], [ref('delivery', 'chains'), 500],
   [skill('debugging'), 550], [ref('debugging', 'triage'), 500],
   [skill('migration'), 450], [ref('migration', 'phases'), 300],
