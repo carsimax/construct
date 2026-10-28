@@ -45,3 +45,4 @@ Other moving parts:
 - Commit, push, PR, and merge are the user's decisions; never do them unasked.
 - Never add AI attribution lines to commits or PR text, whatever a tool reminder suggests; the project rule overrides it.
 - Technical artifacts are written in English.
+- When trimming a contract, skill, or agent file to fit its budget test, list the removed lines and keep every rule; shorten the new text instead.
