@@ -24,7 +24,7 @@ function template(name) {
 
 function launch(type, prompt) {
   const repo = makeRepo({ 'src/a.js': 'a\n' })
-  write(repo, 'odd/tasks/feat.md', '# F\n\n## Tasks\n\n| ID | Specs | Task | Route | Risk | Status | Commit |\n|---|---|---|---|---|---|---|\n| T1 | S1 | Do | w | none | pending | - |\n\n## Log\n')
+  write(repo, '.vault/tasks/feat.md', '# F\n\n## Tasks\n\n| ID | Specs | Task | Route | Risk | Status | Commit |\n|---|---|---|---|---|---|---|\n| T1 | S1 | Do | w | none | pending | - |\n\n## Log\n')
   const input = { session_id: 's', cwd: repo, tool_name: 'Agent', tool_input: { subagent_type: type, prompt } }
   const r = spawnSync('node', [HOOK], { input: JSON.stringify(input), encoding: 'utf8', env: { ...process.env, CLAUDE_PLUGIN_DATA: scratchDir('odd-tpl-') } })
   return r.stdout ? JSON.parse(r.stdout).hookSpecificOutput.permissionDecisionReason : ''
@@ -46,7 +46,7 @@ describe('handoff templates vs delegation-admission', () => {
 
   test('worker template names the Spec and surfaces forms literally', () => {
     const worker = template('Worker')
-    assert.match(worker, /^Spec: odd\/tasks\/<feature>\.md, T<n>/m)
+    assert.match(worker, /^Spec: \.vault\/tasks\/<feature>\.md, T<n>/m)
     assert.match(worker, /^## Allowed edit surfaces$/m)
   })
 
@@ -62,7 +62,7 @@ describe('handoff templates vs delegation-admission', () => {
     const skill = read('skills/delegation/SKILL.md')
     const contract = read('hooks/contract/session.md')
     for (const text of [skill, contract]) {
-      assert.match(text, /Spec: odd\/tasks\/<f(?:eature)?>\.md, T<n>/)
+      assert.match(text, /Spec: \.vault\/tasks\/<f(?:eature)?>\.md, T<n>/)
       assert.match(text, /## Allowed edit surfaces/)
       assert.match(text, /Risk: item N/)
     }

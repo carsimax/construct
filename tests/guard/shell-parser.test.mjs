@@ -1,4 +1,4 @@
-// T2 of odd/tasks/shell-parser.md: command-guard on the shell shapes that hid a verifier bypass from
+// T2 of .vault/tasks/shell-parser.md: command-guard on the shell shapes that hid a verifier bypass from
 // the heuristic parser, and on the common idioms that must keep passing.
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'

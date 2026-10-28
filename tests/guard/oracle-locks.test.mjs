@@ -1,4 +1,4 @@
-// T2 security fixes (odd/tasks/oracle-separation.md, S4): lock matching in delegation-admission and surface-guard.
+// T2 security fixes (.vault/tasks/oracle-separation.md, S4): lock matching in delegation-admission and surface-guard.
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { mkdirSync, readdirSync, symlinkSync, writeFileSync } from 'node:fs'
@@ -19,11 +19,11 @@ const run = (script, args, input, env = {}) => {
   }
   return { status: r.status, stdout: r.stdout, decision: json?.hookSpecificOutput?.permissionDecision, reason: json?.hookSpecificOutput?.permissionDecisionReason }
 }
-const lock = (repo, path, blob, feature = 'odd/tasks/f.md') => writeOracle(repo, { path, blob, feature, task: 'T1', at: Date.now() })
-const repoWith = () => makeRepo({ 'tests/a.test.mjs': 'one\n', 'odd/tasks/f.md': DOC, 'src/a.js': 'a\n' })
+const lock = (repo, path, blob, feature = '.vault/tasks/f.md') => writeOracle(repo, { path, blob, feature, task: 'T1', at: Date.now() })
+const repoWith = () => makeRepo({ 'tests/a.test.mjs': 'one\n', '.vault/tasks/f.md': DOC, 'src/a.js': 'a\n' })
 
 describe('delegation-admission: an oracle over an equivalent spelling of a locked path', () => {
-  const launch = (repo, surface) => run(S('delegation-admission.mjs'), [], { session_id: 's1', cwd: repo, hook_event_name: 'PreToolUse', tool_name: 'Agent', tool_input: { subagent_type: 'construct:oracle', prompt: `Spec: odd/tasks/g.md, T1\n## Allowed edit surfaces\n${surface}\n`, description: 'u' } })
+  const launch = (repo, surface) => run(S('delegation-admission.mjs'), [], { session_id: 's1', cwd: repo, hook_event_name: 'PreToolUse', tool_name: 'Agent', tool_input: { subagent_type: 'construct:oracle', prompt: `Spec: .vault/tasks/g.md, T1\n## Allowed edit surfaces\n${surface}\n`, description: 'u' } })
   test('is denied for ./path, a doubled slash and a dot segment', () => {
     const repo = repoWith()
     lock(repo, 'tests/a.test.mjs', git(repo, 'hash-object', 'tests/a.test.mjs').trim())
@@ -77,7 +77,7 @@ describe('surface-guard: an error in the lock check', () => {
     git(repo, 'remote', 'add', 'origin', bare)
     git(repo, 'fetch', '-q', 'origin')
     git(repo, 'remote', 'set-head', 'origin', 'main')
-    lock(repo, 'tests/a.test.mjs', git(repo, 'hash-object', 'tests/a.test.mjs').trim(), 'odd/tasks/f\u0000.md')
+    lock(repo, 'tests/a.test.mjs', git(repo, 'hash-object', 'tests/a.test.mjs').trim(), '.vault/tasks/f\u0000.md')
     return repo
   }
   const guard = (repo, path, extra, env) => run(S('surface-guard.mjs'), [], { session_id: 's1', cwd: repo, tool_name: 'Write', tool_input: { file_path: join(repo, path), content: 'x\n' }, ...extra }, env)
@@ -86,7 +86,7 @@ describe('surface-guard: an error in the lock check', () => {
     // The worker is admitted before the lock record breaks activeLocks (admission would fail open otherwise).
     const clean = repoWith()
     const adm = (args, input) => run(S('delegation-admission.mjs'), args, input, env)
-    adm([], { session_id: 's1', cwd: clean, tool_name: 'Agent', tool_input: { subagent_type: 'construct:worker', prompt: 'Spec: odd/tasks/f.md, T1, S1\n\n## Allowed edit surfaces\nsrc/b.js\n\n## Verification\n- x\n', description: 'u' } })
+    adm([], { session_id: 's1', cwd: clean, tool_name: 'Agent', tool_input: { subagent_type: 'construct:worker', prompt: 'Spec: .vault/tasks/f.md, T1, S1\n\n## Allowed edit surfaces\nsrc/b.js\n\n## Verification\n- x\n', description: 'u' } })
     adm(['start'], { session_id: 's1', agent_id: 'a1', agent_type: 'construct:worker' })
     const repo = broken(clean)
     assert.equal(guard(repo, 'tests/a.test.mjs').decision, 'deny')

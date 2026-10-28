@@ -1,9 +1,9 @@
 // Edit-surface guard (PreToolUse on Write, Edit, MultiEdit, NotebookEdit). A path with an active oracle lock (activeLocks) is denied to
-// every agent and to the main thread (S4 of odd/tasks/oracle-separation.md). A construct writer
+// every agent and to the main thread (S4 of .vault/tasks/oracle-separation.md). A construct writer
 // (agent_id present) may only write inside the `## Allowed edit surfaces` recorded at its launch
-// by delegation-admission.mjs; the main thread may write under odd/tasks/ at any size and
+// by delegation-admission.mjs; the main thread may write under .vault/tasks/ at any size and
 // elsewhere only a call that changes at most `inline_edit_max_lines` lines (option, default 150;
-// 0 means odd/tasks/ only), and sends bigger changes to construct:worker. Paths outside the git work tree, a cwd outside a repository, a subagent
+// 0 means .vault/tasks/ only), and sends bigger changes to construct:worker. Paths outside the git work tree, a cwd outside a repository, a subagent
 // with no record, and any internal error pass (fail open, no output).
 // shortcut: the record is paired to its agent by same-type FIFO at SubagentStart, so two
 // same-type launches in flight may swap surfaces; Bash writes (sed -i, redirects) are not covered.
@@ -100,7 +100,7 @@ function main() {
     const entry = writerRecord(input.session_id, input.agent_id)
     if (!entry || entry.surfaces.some((surface) => surfaceContains(surface, rel))) return
     deny(`surface-guard: ${rel} is outside your allowed edit surfaces (${entry.surfaces.join(', ')}). Write only inside them, or return needs_interaction naming the path you need.`)
-  } else if (!/^odd\/tasks\//.test(rel)) {
+  } else if (!/^\.vault\/tasks\//.test(rel)) {
     const limit = maxLines()
     const changed = changedLines(input, resolve(input.cwd, path))
     if (changed > limit) deny(`surface-guard: this call changes ${changed} lines of ${rel}, over the inline limit of ${limit} (inline_edit_max_lines). Delegate it to construct:worker with an Allowed edit surfaces section.`)

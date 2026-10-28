@@ -35,7 +35,7 @@ describe('the gate does not read a descriptor as a refspec', () => {
   const TABLE = '# F\n\n## Tasks\n\n| ID | Specs | Task | Route | Risk | Status | Commit |\n|---|---|---|---|---|---|---|\n| T1 | S1 | w | worker | 2 | done | `abc` |\n\n## Log\n\n- 1 | none | x\n'
   const repo = makeRepo({ 'src/app.js': 'a\n' })
   git(repo, 'checkout', '-q', '-b', 'feat/x')
-  applyFiles(repo, { 'odd/tasks/f.md': TABLE, 'src/app.js': 'b\n' })
+  applyFiles(repo, { '.vault/tasks/f.md': TABLE, 'src/app.js': 'b\n' })
   commitAll(repo, 'unit')
   const run = (command) => {
     const r = spawnSync('node', [HOOK], {

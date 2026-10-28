@@ -1,5 +1,5 @@
 ---
-description: Multi-session work gets an odd/tasks feature document before the first source write.
+description: Multi-session work gets an .vault/tasks feature document before the first source write.
 max_turns: 40
 timeout_seconds: 900
 allowed_tools: [Read, Glob, Grep, Skill, Agent, TodoWrite]

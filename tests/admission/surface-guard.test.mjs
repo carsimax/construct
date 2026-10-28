@@ -114,9 +114,9 @@ describe('surface-guard', () => {
     const repo = makeRepo({ 'src/a.js': 'a\n' })
     isDenied(write(repo, {}, join(repo, 'src/x.js'), { tool_input: { file_path: join(repo, 'src/x.js'), content: lines(151) } }), /src\/x\.js/, /151/, /150/, /construct:worker/)
   })
-  test('the main thread writing odd/tasks/ is allowed', () => {
+  test('the main thread writing .vault/tasks/ is allowed', () => {
     const repo = makeRepo({ 'src/a.js': 'a\n' })
-    isAllowed(write(repo, {}, join(repo, 'odd/tasks/f.md')))
+    isAllowed(write(repo, {}, join(repo, '.vault/tasks/f.md')))
   })
   test('a path outside the repository is allowed', () => {
     const repo = makeRepo({ 'src/a.js': 'a\n' })
@@ -180,15 +180,15 @@ describe('inline edit limit (S5)', () => {
     isAllowed(nb(150))
     isDenied(nb(151), /151/)
   })
-  test('odd/tasks/ is allowed at any size', () => {
-    isAllowed(tool(repo, 'Write', { file_path: join(repo, 'odd/tasks/f.md'), content: lines(500) }))
+  test('.vault/tasks/ is allowed at any size', () => {
+    isAllowed(tool(repo, 'Write', { file_path: join(repo, '.vault/tasks/f.md'), content: lines(500) }))
   })
-  test('the option sets the limit; 0 restores the odd/tasks/-only rule; invalid values fall back to 150', () => {
+  test('the option sets the limit; 0 restores the .vault/tasks/-only rule; invalid values fall back to 150', () => {
     const env = (v) => ({ CLAUDE_PLUGIN_OPTION_INLINE_EDIT_MAX_LINES: v })
     isAllowed(edit(repo, 'a', lines(50, 'n'), {}, env('50')))
     isDenied(edit(repo, 'a', lines(51, 'n'), {}, env('50')), /51/, /50/)
     isDenied(edit(repo, 'a', 'b', {}, env('0')), /construct:worker/)
-    isAllowed(tool(repo, 'Write', { file_path: join(repo, 'odd/tasks/f.md'), content: 'x' }, env('0')))
+    isAllowed(tool(repo, 'Write', { file_path: join(repo, '.vault/tasks/f.md'), content: 'x' }, env('0')))
     for (const bad of ['', 'abc', '-3', '2.5']) {
       isAllowed(edit(repo, 'a', lines(150, 'n'), {}, env(bad)))
       isDenied(edit(repo, 'a', lines(151, 'n'), {}, env(bad)), /150/)

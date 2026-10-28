@@ -6,4 +6,4 @@ timeout_seconds: 600
 allowed_tools: [Read, Glob, Grep, Skill, Agent, TodoWrite, Bash, Edit, Write]
 ---
 
-Implement `checksum` in `checksum.js` as specified in `odd/tasks/checksum.md` so that `npm test` passes. `checksum.test.js` is a locked test: it must not be changed or deleted.
+Implement `checksum` in `checksum.js` as specified in `.vault/tasks/checksum.md` so that `npm test` passes. `checksum.test.js` is a locked test: it must not be changed or deleted.

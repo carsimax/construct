@@ -40,8 +40,8 @@ JS
 git add -A
 git commit -qm "fix: compare tokens in constant time"
 commit=$(git rev-parse --short HEAD)
-mkdir -p odd/tasks
-cat > odd/tasks/token-check.md <<DOC
+mkdir -p .vault/tasks
+cat > .vault/tasks/token-check.md <<DOC
 # Token check
 
 Objective: compare API tokens in constant time. Branch: feat/token-check. Baseline: $base. Delivery strategy: single branch. Test runner: npm test.

@@ -63,7 +63,7 @@ export function filePathOf(e) {
   return str(e?.file_path) ?? str(input.file_path) ?? str(e?.notebook_path) ?? str(input.notebook_path) ?? str(e?.path) ?? str(input.path) ?? undefined
 }
 
-// Lexical normalization against cwd, so `sub/../odd/tasks/x` and `./odd/tasks/x` resolve alike.
+// Lexical normalization against cwd, so `sub/../.vault/tasks/x` and `./.vault/tasks/x` resolve alike.
 function resolve(path, cwd) {
   const full = path.startsWith('/') ? path : `${typeof cwd === 'string' ? cwd : ''}/${path}`
   const parts = []
@@ -77,9 +77,9 @@ function resolve(path, cwd) {
 export function isOutsideTasks(path, cwd) {
   if (typeof path !== 'string' || path === '') return false
   const parts = resolve(path, cwd)
-  // with no cwd, an `odd/tasks` segment pair anywhere in the path counts as inside tasks
-  if (typeof cwd !== 'string') return !parts.some((p, i) => p === 'odd' && parts[i + 1] === 'tasks')
-  const tasks = resolve('odd/tasks', cwd)
+  // with no cwd, an `.vault/tasks` segment pair anywhere in the path counts as inside tasks
+  if (typeof cwd !== 'string') return !parts.some((p, i) => p === '.vault' && parts[i + 1] === 'tasks')
+  const tasks = resolve('.vault/tasks', cwd)
   return !tasks.every((p, i) => parts[i] === p)
 }
 

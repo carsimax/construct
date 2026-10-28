@@ -1,4 +1,4 @@
 ---
 type: file_exists
-path: 'odd/tasks/*.md'
+path: '.vault/tasks/*.md'
 ---

@@ -2,7 +2,7 @@
 // with a reason naming what is missing and the expected form:
 //   - construct:worker needs a `## Allowed edit
 //     surfaces` section of narrow repository-relative entries, a `Spec:
-//     odd/tasks/<f>.md, T<n>` line naming an existing regular file when an
+//     .vault/tasks/<f>.md, T<n>` line naming an existing regular file when an
 //     unfinished feature document exists, and surfaces that do not overlap those
 //     of a writer still open;
 //   - construct:verifier needs a `Risk: item N` or `Risk: items 2, 5` line (1-6, the whole list valid);
@@ -19,7 +19,7 @@
 // launches in one batch cannot both pass. Fails open on unreadable input, any internal
 // error, or a lock that cannot be taken.
 // Ported from gentle-shell lib/bounded-writer-admission.ts, lib/verifier-admission.ts
-// and lib/writer-surfaces.ts; the Spec rule is adapted (see S2 of odd/tasks/gentle-parity.md).
+// and lib/writer-surfaces.ts; the Spec rule is adapted (see S2 of .vault/tasks/gentle-parity.md).
 // adapted from gentle-shell (https://github.com/Gentleman-Programming/gentle-shell), MIT, Copyright (c) 2025 Mario Zechner, see LICENSE-gentle-shell
 // Usage: node delegation-admission.mjs [stop]   (hook JSON on stdin)
 import { createHash } from 'node:crypto'
@@ -41,14 +41,14 @@ const HEADING = /^## Allowed edit surfaces[ \t]*$/gim
 const MD_HEADING = /^ {0,3}#{1,6} /
 const LIST_MARKER = /^(?:[-*+]|\d+[.)]) +/
 const CONTROL = /\p{Cc}|\p{Zl}|\p{Zp}/u
-const SPEC_LINE = /^[ \t]*(?:[-*+][ \t]+)?Spec:[ \t]*`?(odd\/tasks\/[^\s,`()]+\.md)`?[^\n]*?\bT\d+\b/gm
+const SPEC_LINE = /^[ \t]*(?:[-*+][ \t]+)?Spec:[ \t]*`?(\.vault\/tasks\/[^\s,`()]+\.md)`?[^\n]*?\bT\d+\b/gm
 // The Risk-line gate's grammar (risk-line.mjs) without `none`: the whole list must be valid; a test keeps both in step.
 const RISK_LINE = /^[ \t]*(?:(?:[-*+]|\d+[.)])[ \t]+)?[*_`]*Risk[*_`]*:[*_`]*[ \t]*[*_`]*items? [1-6](?:,[ \t]*[1-6])*[*_`]*(?=$|\s|\()/m
 
 const SURFACES_FORM =
   'Add the exact heading `## Allowed edit surfaces` with narrow repository-relative paths or globs, one per line (for example `src/parser.js`), wrapping a path with whitespace in backticks; put prose under the next heading.'
 const SPEC_FORM =
-  'An unfinished feature document exists, so add a line `Spec: odd/tasks/<feature>.md, T<n>` (and the S# it covers) naming an existing regular file (not a symlink) under odd/tasks/.'
+  'An unfinished feature document exists, so add a line `Spec: .vault/tasks/<feature>.md, T<n>` (and the S# it covers) naming an existing regular file (not a symlink) under .vault/tasks/.'
 const RISK_FORM =
   'Add a line `Risk: item N` (N from 1 to 6, the Task Size high-risk list), for example `Risk: item 3 (shared parser)` or `Risk: items 2, 5 (why)`. `Risk: none` does not admit a verifier: run the checks inline instead.'
 
@@ -101,12 +101,12 @@ export function parseSurfaces(prompt) {
 }
 
 // namesFeatureDocument: a Spec line naming a regular file (not a symlink) that
-// really sits under <root>/odd/tasks.
+// really sits under <root>/.vault/tasks.
 function namesFeatureDocument(prompt, root) {
   for (const match of prompt.matchAll(SPEC_LINE)) {
     try {
       const realRoot = realpathSync(resolve(root))
-      const tasks = realpathSync(resolve(realRoot, 'odd', 'tasks'))
+      const tasks = realpathSync(resolve(realRoot, '.vault', 'tasks'))
       const file = resolve(realRoot, match[1])
       const stat = lstatSync(file)
       if (stat.isSymbolicLink() || !stat.isFile()) continue
@@ -577,7 +577,7 @@ function admit(input) {
     return
   }
   if ((type === ORACLE || hasUnfinishedDocument(root)) && !namesFeatureDocument(prompt, root)) {
-    deny(`${type} needs a Spec line: no \`Spec:\` line in the prompt names an existing regular file under odd/tasks/. ${SPEC_FORM}`)
+    deny(`${type} needs a Spec line: no \`Spec:\` line in the prompt names an existing regular file under .vault/tasks/. ${SPEC_FORM}`)
     return
   }
   withLock(input.session_id, () => {

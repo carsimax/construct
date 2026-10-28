@@ -1,4 +1,4 @@
-// S4, S5 and the T5 hardening (odd/tasks/oracle-separation.md): early stops for a locked oracle (surface-guard,
+// S4, S5 and the T5 hardening (.vault/tasks/oracle-separation.md): early stops for a locked oracle (surface-guard,
 // delegation-admission), the `construct-gate oracle` CLI, the command-guard deny, and the fail-closed record rules.
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
@@ -33,9 +33,9 @@ const denied = (r, ...needles) => {
 }
 const silent = (r) => assert.deepEqual([r.status, r.stdout], [0, ''])
 
-// lockedRepo: the oracle file and the feature document are committed on main; the oracle is locked for odd/tasks/f.md.
-function lockedRepo({ doc = FEATURE('pending'), feature = 'odd/tasks/f.md', path = PATH_ } = {}) {
-  const repo = makeRepo({ [path]: 'one\n', 'odd/tasks/f.md': doc, 'src/a.js': 'a\n' })
+// lockedRepo: the oracle file and the feature document are committed on main; the oracle is locked for .vault/tasks/f.md.
+function lockedRepo({ doc = FEATURE('pending'), feature = '.vault/tasks/f.md', path = PATH_ } = {}) {
+  const repo = makeRepo({ [path]: 'one\n', '.vault/tasks/f.md': doc, 'src/a.js': 'a\n' })
   writeOracle(repo, { path, blob: git(repo, 'hash-object', path).trim(), feature, task: 'T1', at: Date.now() })
   return repo
 }
@@ -65,7 +65,7 @@ describe('surface-guard: a locked oracle', () => {
     const repo = lockedRepo()
     const file = join(repo, PATH_)
     for (const [tool, input] of [['Write', { file_path: file, content: 'x\n' }], ['Edit', { file_path: file, old_string: 'one', new_string: 'two' }], ['MultiEdit', { file_path: file, edits: [{ old_string: 'one', new_string: 'two' }] }], ['NotebookEdit', { notebook_path: file, new_source: 'x' }]]) {
-      denied(guard(repo, tool, input), /locked oracle for odd\/tasks\/f\.md/, /oracle_conflict/, /construct-gate oracle unlock tests\/a\.test\.mjs/)
+      denied(guard(repo, tool, input), /locked oracle for \.vault\/tasks\/f\.md/, /oracle_conflict/, /construct-gate oracle unlock tests\/a\.test\.mjs/)
     }
   })
   test('is denied to a subagent too', () => {
@@ -87,7 +87,7 @@ describe('surface-guard: a locked oracle', () => {
 describe('delegation-admission: locked oracles', () => {
   const surfaces = (...p) => `## Allowed edit surfaces\n${p.join('\n')}\n`
   const launch = (repo, type, prompt) => run(S('delegation-admission.mjs'), { session_id: 's1', cwd: repo, hook_event_name: 'PreToolUse', tool_name: 'Agent', tool_input: { subagent_type: type, prompt, description: 'unit' } })
-  const SPEC = 'Spec: odd/tasks/f.md, T1, S1\n'
+  const SPEC = 'Spec: .vault/tasks/f.md, T1, S1\n'
   test('a worker whose surfaces cover a locked path is denied (exact, glob, directory)', () => {
     const repo = lockedRepo()
     for (const s of [PATH_, 'tests/**/*.test.mjs', 'tests']) denied(launch(repo, 'construct:worker', SPEC + surfaces(s)), /locked oracle/, /tests\/a\.test\.mjs/)
@@ -98,13 +98,13 @@ describe('delegation-admission: locked oracles', () => {
   })
   test('an oracle over a path locked for another feature that is still active is denied (T5)', () => {
     const repo = lockedRepo()
-    write(repo, 'odd/tasks/g.md', FEATURE('pending'))
-    denied(launch(repo, 'construct:oracle', `Spec: odd/tasks/g.md, T1\n${surfaces(PATH_)}`), /locked oracle for odd\/tasks\/f\.md/)
+    write(repo, '.vault/tasks/g.md', FEATURE('pending'))
+    denied(launch(repo, 'construct:oracle', `Spec: .vault/tasks/g.md, T1\n${surfaces(PATH_)}`), /locked oracle for \.vault\/tasks\/f\.md/)
   })
   test('an oracle over a path whose lock is released is admitted', () => {
     const repo = released()
-    write(repo, 'odd/tasks/g.md', FEATURE('pending'))
-    silent(launch(repo, 'construct:oracle', `Spec: odd/tasks/g.md, T1\n${surfaces(PATH_)}`))
+    write(repo, '.vault/tasks/g.md', FEATURE('pending'))
+    silent(launch(repo, 'construct:oracle', `Spec: .vault/tasks/g.md, T1\n${surfaces(PATH_)}`))
   })
 })
 
@@ -116,7 +116,7 @@ const featBranch2 = (repo) => {
 describe('oracle-record: released locks and unlockable surfaces', () => {
   const transcript = (...paths) => {
     const file = join(scratchDir('odd-stops-t-'), 't.jsonl')
-    const text = `Write tests.\n\nSpec: odd/tasks/g.md, T2 (covers S1)\n\n## Allowed edit surfaces\n${paths.join('\n')}\n`
+    const text = `Write tests.\n\nSpec: .vault/tasks/g.md, T2 (covers S1)\n\n## Allowed edit surfaces\n${paths.join('\n')}\n`
     writeFileSync(file, `${JSON.stringify({ type: 'user', message: { role: 'user', content: text } })}\n`)
     return file
   }
@@ -126,17 +126,17 @@ describe('oracle-record: released locks and unlockable surfaces', () => {
     write(repo, PATH_, 'two\n')
     stop(repo, PATH_)
     const [lock] = readOracles(repo)
-    assert.equal(lock.feature, 'odd/tasks/g.md')
+    assert.equal(lock.feature, '.vault/tasks/g.md')
     assert.equal(lock.blob, git(repo, 'hash-object', PATH_).trim())
   })
   test('an active lock is still kept', () => {
     const repo = lockedRepo()
     write(repo, PATH_, 'two\n')
     stop(repo, PATH_)
-    assert.equal(readOracles(repo)[0].feature, 'odd/tasks/f.md')
+    assert.equal(readOracles(repo)[0].feature, '.vault/tasks/f.md')
   })
   test('a symlink surface is locked with a sentinel the gate reports as changed', () => {
-    const repo = makeRepo({ 'odd/tasks/f.md': FEATURE('pending'), 'real.txt': 'r\n' })
+    const repo = makeRepo({ '.vault/tasks/f.md': FEATURE('pending'), 'real.txt': 'r\n' })
     symlinkSync('real.txt', join(repo, 'tests-link'))
     stop(repo, 'tests-link')
     const [lock] = readOracles(repo)
@@ -148,7 +148,7 @@ describe('oracle-record: released locks and unlockable surfaces', () => {
     denied(push(repo), /tests-link/, /locked/)
   })
   test('a sentinel lock denies only a ref that carries the path', () => {
-    const repo = makeRepo({ 'odd/tasks/f.md': FEATURE('pending'), 'real.txt': 'r\n' })
+    const repo = makeRepo({ '.vault/tasks/f.md': FEATURE('pending'), 'real.txt': 'r\n' })
     symlinkSync('real.txt', join(repo, 'tests-link'))
     stop(repo, 'tests-link')
     git(repo, 'checkout', '-q', '-b', 'feat')
@@ -157,7 +157,7 @@ describe('oracle-record: released locks and unlockable surfaces', () => {
     silent(push(repo))
   })
   test('a directory surface is locked with the sentinel too', () => {
-    const repo = makeRepo({ 'odd/tasks/f.md': FEATURE('pending') })
+    const repo = makeRepo({ '.vault/tasks/f.md': FEATURE('pending') })
     mkdirSync(join(repo, 'tests/dir'), { recursive: true })
     write(repo, 'tests/dir/x.mjs', 'x\n')
     stop(repo, 'tests/dir')
@@ -174,26 +174,26 @@ describe('publication-gate: record faults and bounded work', () => {
     assert.deepEqual(readOracles(repo), [])
   })
   test('a valid record whose git probe errors still denies', () => {
-    const repo = makeRepo({ 'odd/tasks/f.md': FEATURE('pending') })
-    writeOracle(repo, { path: PATH_, blob: 'not-an-object-id', feature: 'odd/tasks/f.md', task: 'T1', at: Date.now() })
+    const repo = makeRepo({ '.vault/tasks/f.md': FEATURE('pending') })
+    writeOracle(repo, { path: PATH_, blob: 'not-an-object-id', feature: '.vault/tasks/f.md', task: 'T1', at: Date.now() })
     featBranch(repo)
     denied(push(repo), /could not be checked/)
   })
   test('a lock whose release state cannot be read is kept alone: an unrelated ref still publishes', () => {
-    const repo = withRemote(makeRepo({ 'odd/tasks/f.md': FEATURE('pending'), 'tests/a.test.mjs': 'one\n', 'src/a.js': 'a\n' }))
-    writeOracle(repo, { path: 'tests/zzz.test.mjs', blob: '1'.repeat(40), feature: 'odd/tasks/f\u0000.md', task: 'T1', at: Date.now() })
-    writeOracle(repo, { path: PATH_, blob: git(repo, 'hash-object', PATH_).trim(), feature: 'odd/tasks/f.md', task: 'T1', at: Date.now() })
+    const repo = withRemote(makeRepo({ '.vault/tasks/f.md': FEATURE('pending'), 'tests/a.test.mjs': 'one\n', 'src/a.js': 'a\n' }))
+    writeOracle(repo, { path: 'tests/zzz.test.mjs', blob: '1'.repeat(40), feature: '.vault/tasks/f\u0000.md', task: 'T1', at: Date.now() })
+    writeOracle(repo, { path: PATH_, blob: git(repo, 'hash-object', PATH_).trim(), feature: '.vault/tasks/f.md', task: 'T1', at: Date.now() })
     featBranch(repo)
     silent(push(repo))
     const r = spawnSync('node', [GATE, 'oracle', 'list'], { cwd: repo, encoding: 'utf8' })
     assert.equal(r.status, 0, r.stderr)
     assert.match(r.stdout, /tests\/zzz\.test\.mjs.*\terror\b/)
-    assert.match(r.stdout, /tests\/a\.test\.mjs\s+odd\/tasks\/f\.md\s+T1\s+active/)
+    assert.match(r.stdout, /tests\/a\.test\.mjs\s+\.vault\/tasks\/f\.md\s+T1\s+active/)
   })
   test('the feature document is read once per feature, however many locks share it', () => {
     const tests = ['tests/a.test.mjs', 'tests/b.test.mjs', 'tests/c.test.mjs']
-    const repo = withRemote(makeRepo({ 'odd/tasks/f.md': FEATURE('pending'), 'tests/a.test.mjs': '1\n', 'tests/b.test.mjs': '2\n', 'tests/c.test.mjs': '3\n' }))
-    for (const p of tests) writeOracle(repo, { path: p, blob: git(repo, 'hash-object', p).trim(), feature: 'odd/tasks/f.md', task: 'T1', at: Date.now() })
+    const repo = withRemote(makeRepo({ '.vault/tasks/f.md': FEATURE('pending'), 'tests/a.test.mjs': '1\n', 'tests/b.test.mjs': '2\n', 'tests/c.test.mjs': '3\n' }))
+    for (const p of tests) writeOracle(repo, { path: p, blob: git(repo, 'hash-object', p).trim(), feature: '.vault/tasks/f.md', task: 'T1', at: Date.now() })
     featBranch(repo)
     const trace = join(scratchDir('odd-stops-trace-'), 'trace')
     const bin = scratchDir('odd-stops-bin-')
@@ -201,8 +201,8 @@ describe('publication-gate: record faults and bounded work', () => {
     writeFileSync(join(bin, 'git'), `#!/bin/sh\necho "$@" >> ${trace}\nexec ${realGit} "$@"\n`, { mode: 0o755 })
     silent(push(repo, { PATH: `${bin}:${process.env.PATH}` }))
     const lines = readFileSync(trace, 'utf8').split('\n').map((l) => l.replace(/^--no-replace-objects (-C \S+ )?/, ''))
-    assert.equal(lines.filter((l) => /^show .*odd\/tasks\/f\.md/.test(l)).length, 1)
-    assert.equal(lines.filter((l) => /^ls-tree .*odd\/tasks\/f\.md/.test(l)).length, 1)
+    assert.equal(lines.filter((l) => /^show .*\.vault\/tasks\/f\.md/.test(l)).length, 1)
+    assert.equal(lines.filter((l) => /^ls-tree .*\.vault\/tasks\/f\.md/.test(l)).length, 1)
     assert.equal(lines.filter((l) => /^rev-parse --verify -q [0-9a-f]{40}:tests\//.test(l)).length, 3)
     assert.equal(lines.filter((l) => /^(cat-file|log) /.test(l)).length, 0)
   })
@@ -217,7 +217,7 @@ describe('construct-gate oracle', () => {
     const repo = lockedRepo()
     const first = cli(repo, 'list')
     assert.equal(first.status, 0)
-    assert.match(first.stdout, /tests\/a\.test\.mjs\s+odd\/tasks\/f\.md\s+T1\s+active\s+matches/)
+    assert.match(first.stdout, /tests\/a\.test\.mjs\s+\.vault\/tasks\/f\.md\s+T1\s+active\s+matches/)
     write(repo, PATH_, 'edited\n')
     assert.match(cli(repo, 'list').stdout, /active\s+differs/)
     git(repo, 'rm', '-q', '-f', PATH_)
@@ -243,7 +243,7 @@ describe('construct-gate oracle', () => {
     const r = cli(repo, 'unlock', PATH_)
     assert.equal(r.status, 0)
     assert.match(r.stdout, /unlocked tests\/a\.test\.mjs/)
-    assert.match(r.stdout, /odd\/tasks\/f\.md/)
+    assert.match(r.stdout, /\.vault\/tasks\/f\.md/)
     assert.deepEqual(readOracles(repo), [])
   })
   test('unlock of a path with no lock, or with no argument, is an error', () => {
@@ -276,13 +276,13 @@ describe('delegation-admission: an error in the lock check', () => {
   // The lock check throws when the lock's feature path cannot be read once a release ref exists (a NUL byte).
   const adm = (repo, prompt) => run(S('delegation-admission.mjs'), { session_id: 's1', cwd: repo, hook_event_name: 'PreToolUse', tool_name: 'Agent', tool_input: { subagent_type: 'construct:worker', prompt, description: 'u' } })
   const repoBroken = () => {
-    const repo = withRemote(makeRepo({ [PATH_]: 'one\n', 'odd/tasks/f.md': FEATURE('pending') }))
-    writeOracle(repo, { path: PATH_, blob: git(repo, 'hash-object', PATH_).trim(), feature: 'odd/tasks/f\u0000.md', task: 'T1', at: Date.now() })
+    const repo = withRemote(makeRepo({ [PATH_]: 'one\n', '.vault/tasks/f.md': FEATURE('pending') }))
+    writeOracle(repo, { path: PATH_, blob: git(repo, 'hash-object', PATH_).trim(), feature: '.vault/tasks/f\u0000.md', task: 'T1', at: Date.now() })
     return repo
   }
   test('a writer over a recorded lock is denied, and a writer without a Spec line still is', () => {
     const repo = repoBroken()
-    denied(adm(repo, `Spec: odd/tasks/f.md, T1, S1\n\n## Allowed edit surfaces\n${PATH_}\n\n## Verification\n- x\n`), /locked oracle/)
+    denied(adm(repo, `Spec: .vault/tasks/f.md, T1, S1\n\n## Allowed edit surfaces\n${PATH_}\n\n## Verification\n- x\n`), /locked oracle/)
     denied(adm(repo, '## Allowed edit surfaces\nsrc/a.js\n\n## Verification\n- x\n'), /Spec/)
   })
 })
@@ -300,7 +300,7 @@ describe('command-guard: moving the release ref', () => {
 describe('activeLocks never throws', () => {
   const transcript = (path) => {
     const file = join(scratchDir('odd-stops-t-'), 't.jsonl')
-    writeFileSync(file, `${JSON.stringify({ type: 'user', message: { role: 'user', content: `Write.\n\nSpec: odd/tasks/g.md, T2 (covers S1)\n\n## Allowed edit surfaces\n${path}\n` } })}\n`)
+    writeFileSync(file, `${JSON.stringify({ type: 'user', message: { role: 'user', content: `Write.\n\nSpec: .vault/tasks/g.md, T2 (covers S1)\n\n## Allowed edit surfaces\n${path}\n` } })}\n`)
     return file
   }
   test('oracle-record still records a new lock when the release ref cannot be read, and keeps the old one', () => {
@@ -321,10 +321,10 @@ describe('activeLocks never throws', () => {
 
 describe('oracle-record: pins the remote URL', () => {
   test('the new lock records remote.origin.url at lock time', () => {
-    const repo = withRemote(makeRepo({ 'odd/tasks/f.md': FEATURE('pending') }))
+    const repo = withRemote(makeRepo({ '.vault/tasks/f.md': FEATURE('pending') }))
     write(repo, PATH_, 'one\n')
     const file = join(scratchDir('odd-stops-t-'), 't.jsonl')
-    writeFileSync(file, `${JSON.stringify({ type: 'user', message: { role: 'user', content: `W.\n\nSpec: odd/tasks/g.md, T2 (covers S1)\n\n## Allowed edit surfaces\n${PATH_}\n` } })}\n`)
+    writeFileSync(file, `${JSON.stringify({ type: 'user', message: { role: 'user', content: `W.\n\nSpec: .vault/tasks/g.md, T2 (covers S1)\n\n## Allowed edit surfaces\n${PATH_}\n` } })}\n`)
     run(S('oracle-record.mjs'), { session_id: 's1', agent_id: 'a1', agent_type: 'construct:oracle', cwd: repo, agent_transcript_path: file })
     assert.equal(readOracles(repo)[0].remote, git(repo, 'config', '--get', 'remote.origin.url').trim())
   })
@@ -335,7 +335,7 @@ describe('publication-gate: the release ref is verified against the recorded rem
   const setup = () => {
     const repo = withRemote(lockedRepo())
     git(repo, 'checkout', '-q', '-b', 'side')
-    applyFiles(repo, { 'odd/tasks/f.md': FEATURE('done (ok)') })
+    applyFiles(repo, { '.vault/tasks/f.md': FEATURE('done (ok)') })
     commitAll(repo, 'finish')
     featBranch2(repo)
     return repo
