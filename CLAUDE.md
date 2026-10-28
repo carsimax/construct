@@ -19,7 +19,7 @@ claude plugin validate --strict .               # marketplace manifest
 claude plugin validate --strict ./plugins/construct
 claude --plugin-dir ./plugins/construct         # load the plugin for one session without installing
 scripts/eval.sh [--case small-inline]        # behavior evals; spend real usage, each run is an isolated `claude -p`; also writes `summary.json` (ritual and outcome pass rates, cost, duration, turns) and keeps run dirs under /private/tmp
-scripts/probe-review.sh [--runs N]              # live review-fires probe where the eval sandbox has no git
+scripts/probe-review.sh [--runs N]              # live review probe (the eval sandbox cannot run it, so eval.sh leaves review-fires out)
 ```
 
 ## Architecture
