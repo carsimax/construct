@@ -53,11 +53,11 @@ function review(cwd, root) {
   if (base.startsWith('refs/heads/') && git(cwd, ['rev-parse', '--symbolic-full-name', 'HEAD']) === base) {
     return [`${target} is the default branch and no remote-tracking default branch exists to compare it with (fetch origin, or publish a branch), so its review state cannot be checked.`]
   }
-  const { mergeBase, items, required, state } = reviewState(root, base, git(cwd, ['rev-parse', 'HEAD']))
+  const { mergeBase, items, required, floor, state } = reviewState(root, base, git(cwd, ['rev-parse', 'HEAD']))
   const head = `Branch ${branch ?? '(detached HEAD)'} against ${target}:`
-  if (required.length === 0) return [head, 'no review required (no Risk items in the feature documents changed on this branch).']
+  if (required.length === 0) return [head, 'no review required (no Risk items in the feature documents or diff paths of this branch).']
   const label = { ok: 'approved', rejected: 'rejected', missing: 'missing' }
-  return [head, `Risk items ${[...items].sort().join(', ')}; required lenses for HEAD (Review subject: ${mergeBase}):`, ...required.map((lens) => `- ${lens}: ${label[state(lens)]}`)]
+  return [head, `Risk items ${[...items].sort().join(', ')}${floor.size === 0 ? '' : ` (floor: ${[...floor].map(([item, hit]) => `item ${item} from ${hit.slice(0, 3).join(', ')}${hit.length > 3 ? ', ...' : ''}`).join('; ')})`}; required lenses for HEAD (Review subject: ${mergeBase}):`, ...required.map((lens) => `- ${lens}: ${label[state(lens)]}`)]
 }
 
 function delivery(cwd) {

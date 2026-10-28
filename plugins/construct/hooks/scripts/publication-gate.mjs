@@ -199,22 +199,61 @@ function riskItems(markdown, path) {
   return items
 }
 
+// The risk floor (P5): paths in the published diff add Risk items, whatever the feature documents declare. A glob with no
+// slash matches the basename at any depth (CODEOWNERS-like); `**` crosses directories, `*` and `?` stay inside one.
+const FLOOR = [
+  ['**/migrations/**', 1], ['*.sql', 1],
+  ['**/auth/**', 2], ['**/*secret*', 2], ['.env*', 2],
+  ...['package-lock.json', 'yarn.lock', 'pnpm-lock.yaml', 'bun.lockb', 'Cargo.lock', 'poetry.lock', 'uv.lock', 'go.sum', 'Gemfile.lock', '.github/workflows/**', 'Dockerfile', 'install.sh'].map((g) => [g, 5]),
+]
+
+function globToRegExp(glob) {
+  let re = ''
+  for (let i = 0; i < glob.length; i++) {
+    const c = glob[i]
+    if (c === '*' && glob[i + 1] === '*') {
+      const slash = glob[i + 2] === '/'
+      re += slash ? '(?:.*/)?' : '.*'
+      i += slash ? 2 : 1
+    } else if (c === '*') re += '[^/]*'
+    else if (c === '?') re += '[^/]'
+    else re += c.replace(/[\\^$.|+()[\]{}]/g, '\\$&')
+  }
+  // Case-insensitive (a floor errs toward firing), and `s` so `.` also crosses a newline inside a path name.
+  return new RegExp(`^${glob.includes('/') ? '' : '(?:.*/)?'}${re}$`, 'is')
+}
+
+// projectFloor reads `<glob> <items>` lines (items 1-6 joined by commas; `#` comments, blank lines) of odd/risk-paths at
+// one commit, called with the merge base and the default branch tip, never the ref, so a change cannot lower its own
+// floor and a rule added after it branched still applies. An unreadable line throws.
+function projectFloor(root, commit) {
+  if (out(root, ['ls-tree', '--name-only', commit, '--', 'odd/risk-paths']) === '') return []
+  return out(root, ['show', `${commit}:odd/risk-paths`]).split('\n').map((l) => l.trim()).filter((l) => l !== '' && !l.startsWith('#')).flatMap((line) => {
+    const m = /^(\S+)\s+([1-6](?:\s*,\s*[1-6])*)$/.exec(line)
+    if (!m) throw new Error(`odd/risk-paths has an unreadable line: ${JSON.stringify(line)} (expected "<glob> <items 1-6, comma separated>")`)
+    return m[2].split(',').map((n) => [m[1], Number(n)])
+  })
+}
+
 // reviewState reads, without writing, the Risk items the feature documents changed between the merge base of base
 // and sha name, the lenses they require, and each lens's verdict for that subject ('ok', 'rejected', or 'missing').
-// A malformed Risk cell throws. refVerdict and skill-context.mjs share it.
+// The risk floor adds items from the diff paths (floor: item -> matched paths). A malformed Risk cell or odd/risk-paths line throws. refVerdict and skill-context.mjs share it.
 export function reviewState(root, base, sha) {
   const mergeBase = out(root, ['merge-base', base, sha])
   // -M pairs a rename: its new path is read at the ref and its old path at the merge-base (a rename plus a lowered Risk
   // stays visible). A plain delete is ignored (L15: reading deleted documents would demand reviews for old merged work).
   const tokens = out(root, ['diff', '--name-status', '-M', '-z', mergeBase, sha, '--']).split('\0')
   const reads = [] // [commit, path]
+  const paths = new Set() // every path the diff names: deleted ones and both sides of a rename too
   for (let k = 0; k < tokens.length - 1; ) {
     const status = tokens[k][0]
     if (status === 'R' || status === 'C') {
+      paths.add(tokens[k + 1]).add(tokens[k + 2])
       reads.push([sha, tokens[k + 2]])
       if (status === 'R') reads.push([mergeBase, tokens[k + 1]])
       k += 3
     } else {
+      paths.add(tokens[k + 1])
       if (status !== 'D') reads.push([sha, tokens[k + 1]], [mergeBase, tokens[k + 1]])
       k += 2
     }
@@ -225,13 +264,20 @@ export function reviewState(root, base, sha) {
     if (out(root, ['ls-tree', '--name-only', commit, '--', path]) === '') continue
     for (const item of riskItems(out(root, ['show', `${commit}:${path}`]), path)) items.add(item)
   }
+  const floor = new Map()
+  for (const [glob, item] of [...FLOOR, ...projectFloor(root, mergeBase), ...projectFloor(root, base)]) {
+    const re = globToRegExp(glob)
+    const hit = [...paths].filter((path) => re.test(path))
+    if (hit.length > 0) floor.set(item, [...new Set([...(floor.get(item) ?? []), ...hit])])
+  }
+  for (const item of floor.keys()) items.add(item)
   const required = requiredLenses(items)
-  if (required.length === 0) return { mergeBase, items, required, state: () => 'missing' }
+  if (required.length === 0) return { mergeBase, items, required, floor, state: () => 'missing' }
   const baseTree = out(root, ['rev-parse', `${mergeBase}^{tree}`])
   const headTree = out(root, ['rev-parse', `${sha}^{tree}`])
   const direct = readVerdicts(root, subjectHash(baseTree, headTree))
   const state = (lens) => (direct[lens] ? (direct[lens].approved === true ? 'ok' : 'rejected') : 'missing')
-  return { mergeBase, items, required, state }
+  return { mergeBase, items, required, floor, state }
 }
 
 // refVerdict judges one published ref: null when it may go, else the denial reason.
@@ -244,14 +290,15 @@ function refVerdict(root, pub, base, ref) {
     return `publication-gate: ${pub.gate} is denied because ${short} is the default branch and no remote-tracking default branch exists to compare it with (fetch origin, or publish a branch), so its review state cannot be checked.`
   }
   const sha = out(root, ['rev-parse', '--verify', `${ref}^{commit}`])
-  const { mergeBase, items, required, state } = reviewState(root, base, sha)
+  const { mergeBase, items, required, floor, state } = reviewState(root, base, sha)
   if (required.length === 0) return null
   const missing = required.filter((lens) => state(lens) === 'missing')
   const rejected = required.filter((lens) => state(lens) === 'rejected')
   if (missing.length === 0 && rejected.length === 0) return null
   const parts = [missing.length > 0 && `no verdict from ${missing.join(', ')}`, rejected.length > 0 && `not approved by ${rejected.join(', ')}`].filter(Boolean)
   const checkout = out(root, ['rev-parse', 'HEAD']) === sha ? '' : ` (the head is HEAD: check out ${short} first)`
-  return `publication-gate: ${pub.gate} is denied because the feature documents of ${short} name Risk items ${[...items].sort().join(', ')} and it is not reviewed: ${parts.join('; ')}. Run the construct:review skill with the subject line \`Review subject: ${mergeBase}\`${checkout}, fix what a lens rejects, and publish again; new commits change the subject, so review after the last commit.`
+  const floored = floor.size === 0 ? '' : ` (the diff paths set a floor: ${[...floor].map(([item, hit]) => `item ${item} from ${hit.slice(0, 5).join(', ')}${hit.length > 5 ? ', ...' : ''}`).join('; ')})`
+  return `publication-gate: ${pub.gate} is denied because the feature documents and diff paths of ${short} name Risk items ${[...items].sort().join(', ')}${floored} and it is not reviewed: ${parts.join('; ')}. Run the construct:review skill with the subject line \`Review subject: ${mergeBase}\`${checkout}, fix what a lens rejects, and publish again; new commits change the subject, so review after the last commit.`
 }
 
 // verdict judges a publication (see findPublications for its shape): null when it may go, else the denial reason. pre-push.mjs reuses it.

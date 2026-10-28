@@ -51,7 +51,7 @@ Every change ends with a risk line naming which of six risk categories it touche
 - **Why:** the most important judgment, risk, is the one an agent is least able to make about its own work.
 - **Taken from:** ODD Risk line and publication gate, Spec Kit's pre-planning gates, CODEOWNERS and required reviewers, Meta's Diff Risk Score.
 - **Evidence:** just-in-time defect prediction finds 35% of bug-introducing changes with 20% of the effort (measured); LLM self-assessed confidence is close to chance at separating right from wrong answers (measured). No study measures agents classifying their own risk.
-- **Construct today:** the risk line's presence and the publication gate are enforced by hooks; the floor does not exist, so a wrong `none`, or risky work without a feature document, publishes ungated. A push-time gate can be skipped; only a merge-time check enforces.
+- **Construct today:** the risk line's presence and the publication gate are enforced by hooks; a path floor exists (default table plus `odd/risk-paths` at the merge-base and the default branch tip) so a wrong `none`, or risky work without a feature document, is gated when its diff touches those paths; keyword signals in added lines do not exist. A push-time gate can be skipped; only a merge-time check enforces.
 
 ### 6. The methodology measures itself
 
