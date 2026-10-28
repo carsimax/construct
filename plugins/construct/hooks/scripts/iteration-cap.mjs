@@ -3,7 +3,7 @@
 // counts, PreToolUse denies, SubagentStop ends that agent's counters, UserPromptSubmit resets the main thread's.
 // One file per agent under dataDir()/iteration-cap/<session>, written to a temp name and renamed.
 // Interrupts are not failures. Never blocks on error: any error means no output, exit 0.
-// shortcut: concurrent failures of one agent may race (a lost update delays the cap); state is not pruned by pruneState, upgrade if either matters.
+// shortcut: concurrent failures of one agent may race (a lost update delays the cap), upgrade if it matters.
 import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { randomBytes } from 'node:crypto'
 import { join } from 'node:path'
