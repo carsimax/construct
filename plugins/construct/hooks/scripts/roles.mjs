@@ -1,5 +1,5 @@
 // The role registry (S6): the one place that names the construct agents and their kind.
-// Consumers (delegation-admission, contract, review-context, review-capture, the panel
+// Consumers (delegation-admission, contract, review-context, review-capture, the band
 // phase, routing) derive their sets from it; tests/roles.test.mjs cross-checks it against
 // agents/, plugin.json, hooks.json, and the README.
 // Kinds: reader, writer, verifier, runner (also the role of built-in `general-purpose`),

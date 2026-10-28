@@ -24,10 +24,10 @@ for (const [project, copyright, files] of PORTS) {
   }
 }
 
-// The panel files are Construct's own code: no MIT header, no adaptation line.
-for (const file of ['draw.js', 'layout.js', 'state.js']) {
+// The band files are Construct's own code: no MIT header, no adaptation line.
+for (const file of ['layout.js', 'state.js']) {
   test(`${file} carries no adapted-code header`, () => {
-    const text = readFileSync(new URL(`hooks/panel/${file}`, plugin), 'utf8')
+    const text = readFileSync(new URL(`hooks/band/${file}`, plugin), 'utf8')
     assert.doesNotMatch(text, /Permission is hereby granted/)
     assert.doesNotMatch(text, /adapted from/i)
   })

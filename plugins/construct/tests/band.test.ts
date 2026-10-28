@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-// Mod-level tests for the panel wiring in hooks/register.js (S1, S8).
+// Mod-level tests for the band wiring in hooks/register.js (S1, S8).
 
 const NOW = new Date(2026, 9, 19, 12, 0, 0).getTime()
 const TASKS = [
@@ -42,7 +42,8 @@ function world($, on, o: any = {}) {
     if (a[0] === 'git' && a.includes('rev-parse')) return value(ok('/home/me/proj\n.git\n.git\n'))
     return value({ ...ok(''), exitCode: 1 })
   })
-  on('ui.render', () => ({ type: 'Box', props: {}, children: [] }))
+  // what the mods after construct draw (Claude Code's own default draws nothing)
+  on('ui.render', () => (o.other ? { type: 'Text', props: {}, children: [o.other] } : { type: 'Box', props: {}, children: [] }))
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   const seen = o.seen ?? {}
   on('turn.start', (_$, e) => ((seen.start = e), { turnId: e.turnId }))
@@ -102,49 +103,32 @@ async function start($, on, o: any = {}) {
   await settle()
 }
 
-async function pane($) {
-  return $.ui.mount({ plugin: 'construct', surface: 'terminal', component: 'Pane', requestId: 'construct', props: PANE })
-}
 async function band($) {
   return $.ui.mount({ plugin: 'construct', surface: 'terminal', component: 'AbovePrompt', props: BAND })
 }
-const isUp = async (_$) => open.has('construct')
 
-test('/construct opens the pane and /construct close closes it', { options: { panel_open_on_start: false } }, async ($, on) => {
-  await start($, on)
-  expect(await isUp($)).toBe(false)
-  await $.command.run({ command: 'construct' })
-  await settle()
-  expect(await isUp($)).toBe(true)
-  await $.command.run({ command: 'construct', args: 'close' })
-  await settle()
-  expect(await isUp($)).toBe(false)
-})
-
-test('/construct doctor returns a report even when every process fails', { options: { panel_open_on_start: false } }, async ($, on) => {
+test('/construct doctor returns a report even when every process fails', async ($, on) => {
   await start($, on, { run: () => ({ ...ok(''), exitCode: 1 }), settings: undefined })
   const out = await $.command.run({ command: 'construct', args: 'doctor' })
   const text = String(out?.text ?? '')
   expect(text).toContain('Construct doctor')
   expect(text).toContain('✓ Claude Code 2.1.304')
   expect(text).toContain('✗ Node')
-  expect(text).toContain('✗ Engram (not found)')
+  expect(text).not.toContain('Engram')
   expect(text).not.toContain('CodeGraph')
-  expect(await isUp($)).toBe(false)
 })
 
-test('/construct doctor turns a hanging in-process probe into a failed row', { options: { panel_open_on_start: false } }, async ($, on) => {
+test('/construct doctor turns a hanging in-process probe into a failed row', async ($, on) => {
   let hang = false
   await start($, on, { run: () => ({ ...ok(''), exitCode: 1 }), hang: () => hang })
   hang = true
   const text = String((await $.command.run({ command: 'construct', args: 'doctor' }))?.text ?? '')
   expect(text).toContain('Construct doctor')
-  expect(text).toContain('✗ Engram (not found)')
+  expect(text).toContain('✗ Node')
 })
 
-test('/construct doctor reports a healthy setup', { options: { panel_open_on_start: false } }, async ($, on) => {
+test('/construct doctor reports a healthy setup, and a bare /construct prints the same report', async ($, on) => {
   const run = (a: string[]) => {
-    if (a[0] === 'engram') return ok('engram 3.6.0\n')
     if (a[0] === 'git') return ok('/home/me/proj\n.git\n.git\n')
     if (a[1] === '--version') return ok('v22.16.0\n')
     return ok('usage')
@@ -152,37 +136,43 @@ test('/construct doctor reports a healthy setup', { options: { panel_open_on_sta
   await start($, on, { run, exists: true, version: '2.1.400' })
   const text = String((await $.command.run({ command: 'construct', args: 'doctor' }))?.text ?? '')
   expect(text).not.toContain('✗')
-  expect(text).toContain('✓ Engram 3.6.0')
+  expect(text).toContain('✓ Node 22.16.0')
+  expect(String((await $.command.run({ command: 'construct' }))?.text ?? '')).toBe(text)
+  expect(opens).toHaveLength(0)
 })
 
-test('/construct doctor shows Engram not found when its probe throws, and still shows Node', { options: { panel_open_on_start: false } }, async ($, on) => {
-  const run = (a: string[]) => {
-    if (a[0] === 'engram') throw new Error('spawn engram ENOENT')
-    if (a[1] === '--version') return ok('v22.16.0\n')
-    return ok('usage')
-  }
-  await start($, on, { run, exists: true })
-  const text = String((await $.command.run({ command: 'construct', args: 'doctor' }))?.text ?? '')
-  expect(text).toContain('✗ Engram (not found)')
-  expect(text).toContain('✓ Node')
-})
-
-test('the Pane draws the panel for the construct pane id', async ($, on) => {
+test('the band shows the running agent by its role, the open feature, and the phase', async ($, on) => {
   await start($, on)
+  await $.turn.start({ text: 'go', turnId: 't1' })
   await $.agent.spawn({ subagentType: 'construct:worker', model: 'opus', prompt: 'p', description: 'build it' })
   await settle()
-  const ui = await pane($)
+  const ui = await band($)
   await ui.redraw()
   const text = await joined(ui)
-  expect(text).toContain('worker')
+  expect(text).toContain('● building')
+  expect(text).toContain('ODD feat')
+  expect(text).toContain('⚒ worker building')
   expect(text).not.toContain('construct:worker')
 })
 
-test('the AbovePrompt band is not drawn by the plugin', async ($, on) => {
-  await start($, on)
+test('the band keeps what other mods draw below it, and nothing is drawn in a Pane', async ($, on) => {
+  await start($, on, { other: 'from another mod' })
   const ui = await band($)
   await ui.redraw()
-  expect((await leaves(ui)).join('')).toBe('')
+  const text = await joined(ui)
+  expect(text).toContain('○ ready')
+  expect(text.indexOf('○ ready')).toBeLessThan(text.indexOf('from another mod'))
+  const p = await $.ui.mount({ plugin: 'construct', surface: 'terminal', component: 'Pane', requestId: 'construct', props: PANE })
+  await p.redraw()
+  expect(await joined(p)).toBe('from another mod')
+  expect(opens).toHaveLength(0)
+})
+
+test('with nothing to show the band leaves the site to the other mods', async ($, on) => {
+  await start($, on, { tasks: () => '# no tasks table', other: 'only theirs' })
+  const ui = await band($)
+  await ui.redraw()
+  expect(await joined(ui)).toBe('only theirs')
 })
 
 test('a main-thread Write outside odd/tasks shows the inline alert', async ($, on) => {
@@ -190,29 +180,28 @@ test('a main-thread Write outside odd/tasks shows the inline alert', async ($, o
   await $.turn.start({ text: 'go', turnId: 't1' })
   await $.tool.call({ tool: 'Write', file_path: '/home/me/proj/src/a.js', content: 'x' })
   await settle()
-  const p = await pane($)
+  const p = await band($)
   await p.redraw()
-  expect(await joined(p)).toContain('⚠ 1 inline write')
-  expect(await joined(p)).toContain('a.js')
+  expect(await joined(p)).toContain('⚠ 1 inline')
 })
 
 test('a write under odd/tasks is not an inline write', async ($, on) => {
   await start($, on)
   await $.tool.call({ tool: 'Write', file_path: '/home/me/proj/odd/tasks/x.md', content: 'x' })
   await settle()
-  const p = await pane($)
+  const p = await band($)
   await p.redraw()
   expect(await joined(p)).not.toContain('inline')
 })
 
-test('a tool.check deny appears in the panel and passes the verdict through', async ($, on) => {
+test('a tool.check deny appears in the band and passes the verdict through', async ($, on) => {
   await start($, on, { decision: 'deny' })
   const verdict = await $.tool.check({ tool: 'Bash', input: { command: 'rm -rf x' }, tool_use_id: 'tu-1' })
   expect(verdict.decision).toBe('deny')
   await settle()
-  const p = await pane($)
+  const p = await band($)
   await p.redraw()
-  expect(await joined(p)).toContain('Bash')
+  expect(await joined(p)).toContain('✗ 1')
 })
 
 test('a tool.check query without tool_use_id is not a gate cell', async ($, on) => {
@@ -220,23 +209,21 @@ test('a tool.check query without tool_use_id is not a gate cell', async ($, on) 
   const verdict = await $.tool.check({ tool: 'Bash', input: { command: 'rm -rf x' } })
   expect(verdict.decision).toBe('deny')
   await settle()
-  const p = await pane($)
+  const p = await band($)
   await p.redraw()
-  expect(await joined(p)).not.toContain('denied')
+  expect(await joined(p)).not.toContain('gate')
 })
 
-test('spawn makes a card and passes the spawn result through', async ($, on) => {
+test('spawn adds the agent to the band and passes the spawn result through', async ($, on) => {
   await start($, on)
   const r = await $.agent.spawn({ subagentType: 'construct:worker', prompt: 'p', description: 'd' })
   expect(r.agentId).toBe('ag-1')
   expect(r.model).toBe('sonnet')
   await settle()
-  const p = await pane($)
+  const p = await band($)
   await p.redraw()
   const text = await joined(p)
-  expect(text).toContain('agents')
-  expect(text).toContain('1 at work · 1')
-  expect(text).toContain('worker')
+  expect(text).toContain('⚒ worker building')
   expect(text).not.toContain('construct:worker')
   expect(text).toContain('Sonnet')
 })
@@ -257,57 +244,6 @@ test('new hooks pass events through unchanged', async ($, on) => {
   expect(seen.compact.trigger).toBe('manual')
 })
 
-test('panel_open_on_start opens the pane when the session starts', { options: { panel_open_on_start: true } }, async ($, on) => {
-  await start($, on)
-  expect(await isUp($)).toBe(true)
-})
-
-test('with panel_open_on_start false the pane stays closed on start', { options: { panel_open_on_start: false } }, async ($, on) => {
-  await start($, on)
-  expect(await isUp($)).toBe(false)
-})
-
-test('the pane is requested at 66 columns, titled Construct', { options: { panel_open_on_start: true } }, async ($, on) => {
-  opens.length = 0
-  await start($, on)
-  expect(opens.length).toBeGreaterThan(0)
-  expect(opens[0].columns).toBe(66)
-  expect(opens[0].title).toBe('Construct')
-})
-
-async function step($, e: any = {}) {
-  const stream = $.turn.step({ turnId: 't1', index: 0, ...e })
-  let r = await stream.next()
-  while (r.done !== true) r = await stream.next()
-  return r.value
-}
-
-test('a main-thread turn.step shows its request count, model and effort in the main card', async ($, on) => {
-  await start($, on)
-  await step($, { model: 'claude-opus-5-5', effort: 'high' })
-  await step($, { model: 'claude-opus-5-5', effort: 'high', index: 1 })
-  await step($, { model: 'claude-haiku-4-5', effort: 'low', agentId: 'sub-1', index: 2 })
-  await settle()
-  const p = await pane($)
-  await p.redraw()
-  const text = await joined(p)
-  expect(text).toContain('Opus 5.5')
-  expect(text).toContain('2 req')
-  expect(text).toContain('▮▮▮▯')
-})
-
-test('a spawn from main sets the permission mode; a nested spawn does not', async ($, on) => {
-  await start($, on)
-  await $.agent.spawn({ subagentType: 'construct:worker', prompt: 'p', description: 'd', permissionMode: 'auto' })
-  await $.agent.spawn({ subagentType: 'construct:worker', prompt: 'p', description: 'd', permissionMode: 'plan', parentAgentId: 'x' })
-  await settle()
-  const p = await pane($)
-  await p.redraw()
-  const text = await joined(p)
-  expect(text).toContain('· auto')
-  expect(text).not.toContain('· plan')
-})
-
 test('a tool.call after an ask settles it as cleared', async ($, on) => {
   const seen: any = {}
   await start($, on, { decision: askingGate, seen })
@@ -315,94 +251,20 @@ test('a tool.call after an ask settles it as cleared', async ($, on) => {
   await $.tool.call({ tool: 'Bash', command: 'ls', tool_use_id: 'tu-1' } as any)
   await $.tool.call({ tool: 'Write', file_path: '/home/me/proj/src/a.js', content: 'x' })
   await settle()
-  const p = await pane($)
+  const p = await band($)
   await p.redraw()
   const text = await joined(p)
-  expect(text).toContain('1 you')
+  // the harness checks each call too, so the passed total is above one; the ask is neither pending nor denied
+  expect(text).toMatch(/gate ✓ \d+/)
   expect(text).not.toContain('pending')
-  expect(text).toContain('inline write')
+  expect(text).not.toContain('✗')
+  expect(text).toContain('⚠ 1 inline')
 })
 
-test('no session log card is drawn', async ($, on) => {
-  await start($, on)
-  await $.agent.spawn({ subagentType: 'construct:worker', model: 'opus', prompt: 'p', description: 'build it' })
-  await settle()
-  const p = await pane($)
-  await p.redraw()
-  const text = await joined(p)
-  expect(text).not.toContain('session log')
-  expect(text).not.toContain('CONSTRUCT')
-})
-
-test('the changes card shows the branch, ahead and behind, tracked and untracked files', async ($, on) => {
-  await start($, on, {
-    git: '# branch.oid abc1234\n# branch.head feat/x\n# branch.upstream o/feat/x\n# branch.ab +2 -1\n1 .M N... 100644 100644 100644 a b src/a.js\n? notes.md\n',
-    numstat: '12\t3\tsrc/a.js\n-\t-\tlogo.png\n',
-    untrackedCount: '7\t0\tnotes.md\n',
-  })
-  const p = await pane($)
-  await p.redraw()
-  const text = await joined(p)
-  expect(text).toContain('feat/x')
-  expect(text).toContain('↑2')
-  expect(text).toContain('↓1')
-  expect(text).toContain('src/a.js')
-  expect(text).toContain('+12')
-  expect(text).toContain('-3')
-  expect(text).toContain('logo.png')
-  expect(text).toContain('bin')
-  expect(text).toContain('notes.md')
-  expect(text).toContain('+7')
-})
-
-test('git status runs with -z so a non-ASCII untracked path gets its line count', async ($, on) => {
-  const argvs: string[][] = []
-  await start($, on, {
-    git: '# branch.oid abc1234\0# branch.head main\0# branch.ab +0 -0\0? café.md\0',
-    untrackedCount: '5\t0\tcafé.md\n',
-    run: (a) => (argvs.push(a), a.includes('status') ? ok('# branch.oid abc1234\0# branch.head main\0# branch.ab +0 -0\0? café.md\0') : { ...ok('5\t0\tcafé.md\n'), exitCode: 1 }),
-  })
-  const p = await pane($)
-  await p.redraw()
-  expect(argvs.find((a) => a.includes('status'))).toContain('-z')
-  const text = await joined(p)
-  expect(text).toContain('café.md')
-  expect(text).toContain('+5')
-  expect(argvs.find((a) => a.includes('--no-index'))).toContain('café.md')
-})
-
-test('an untracked file whose count is unavailable shows new; a clean synced repo has no changes card', async ($, on) => {
-  await start($, on, { git: '# branch.oid abc1234\n# branch.head main\n# branch.ab +0 -0\n? notes.md\n' })
-  const p = await pane($)
-  await p.redraw()
-  const text = await joined(p)
-  expect(text).toContain('notes.md')
-  expect(text).toContain('new')
-})
-
-test('a clean repository in sync has no changes card', async ($, on) => {
-  await start($, on, { git: '# branch.oid abc1234\n# branch.head main\n# branch.ab +0 -0\n' })
-  const p = await pane($)
-  await p.redraw()
-  // only the main card's branch row names it: no changes card title
-  expect((await leaves(p)).filter((l) => l === 'main')).toHaveLength(1)
-})
-
-test('5h and 7d show the reset time next to the gauges', async ($, on) => {
-  const iso = (min: number) => new Date(NOW + min * 60_000).toISOString()
-  await start($, on, { rateLimits: [{ kind: 'five_hour', percentUsed: 10, resetsAt: iso(190) }, { kind: 'seven_day', percentUsed: 20, resetsAt: iso(4 * 1440 + 125) }] })
-  const p = await pane($)
-  await p.redraw()
-  const text = await joined(p)
-  expect(text).toContain('↻3h10m')
-  expect(text).toContain('↻4d2h')
-  expect(text).toContain('66k/200k')
-})
-
-test('a surface with Client support still draws no Client element and no rail', async ($, on) => {
+test('the band draws no Client element and no rail', async ($, on) => {
   await start($, on)
   await $.turn.start({ text: 'go', turnId: 't3' })
-  const p = await pane($)
+  const p = await band($)
   await p.redraw()
   const tree = JSON.stringify(await p.drawn())
   expect(tree).not.toContain('"type":"Client"')
@@ -412,9 +274,9 @@ test('a surface with Client support still draws no Client element and no rail', 
 
 // ---- S8b blocked state: tool.check asks and the blocking tools, no classic hooks ----
 
-// One pane per test: mount it once, redraw it for each reading.
+// One band per test: mount it once, redraw it for each reading.
 const reader = async ($) => {
-  const p = await pane($)
+  const p = await band($)
   return async () => (await p.redraw(), joined(p))
 }
 
