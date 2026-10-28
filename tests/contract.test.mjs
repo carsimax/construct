@@ -33,6 +33,11 @@ test('SessionStart emits the session contract as additionalContext within 8000 c
   assert.ok(out.additionalContext.length <= 8000, `length ${out.additionalContext.length}`)
 })
 
+test('the session contract names the feature document sections (agents skipped ## Log when only the reference had them)', () => {
+  const text = context('session', SESSION).additionalContext
+  for (const section of ['## Specs', '## Tasks', '## Log']) assert.ok(text.includes(section), section)
+})
+
 test('the session contract emits the same text after compaction and on malformed input', () => {
   const startup = context('session', SESSION).additionalContext
   assert.equal(context('session', { ...SESSION, source: 'compact' }).additionalContext, startup)

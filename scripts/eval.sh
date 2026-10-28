@@ -12,6 +12,9 @@ plugin_copy="$copy_root/construct"
 
 cp -R "$repo_root/plugins/construct" "$plugin_copy"
 rm -rf "$plugin_copy/evals/results"
+# review-fires cannot run in the eval sandbox (its git shim cannot write its cache and the review
+# skill's `!` line is denied), so it stays out of the suite; scripts/probe-review.sh reuses its fixture and prompt.
+rm -rf "$plugin_copy/evals/review-fires"
 
 cd "$plugin_copy"
 status=0

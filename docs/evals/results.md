@@ -44,11 +44,31 @@ All eight cases scored 1.00 with the plugin. Mean Δ +0.50, $1.54, 288 s, 0 erro
 | review-fires | 0.44 | 0.33 | +0.11 | 0/3 | $0.41 |
 
 - **iteration-cap:** in one run with the plugin, the judges split on whether the reply stopped and reported (FAIL FAIL PASS). The test file was byte-identical in all six runs. The case measures behavior only: the eval sandbox runs the cap hook, but the agent rarely reaches three failures of one command.
-- **large-tracked:** with the plugin the feature document is created in 3/3 runs; without it, in 0/3. The `document-sections` regex grader fails in all six runs. It probably does not match how the trace records the document, not a missing section. Fix the grader before reading this case.
-- **review-fires:** `review-risk` was never launched in six runs. The eval sandbox has no usable git, so the publication flow cannot start. `scripts/probe-review.sh` is the live check for this behavior.
+- **large-tracked:** with the plugin the feature document is created in 3/3 runs; without it, in 0/3. The `document-sections` regex grader fails in all six runs. (Corrected in the 13.x section below: the grader was right; the agent wrote no `## Log`.) It probably does not match how the trace records the document, not a missing section. Fix the grader before reading this case.
+- **review-fires:** `review-risk` was never launched in six runs. (Corrected below: git exits 72 in the sandbox because the macOS `xcrun` shim cannot write its cache, and the review skill's `!` line is denied in don't-ask mode.) `scripts/probe-review.sh` is the live check for this behavior.
+
+## 2026-10-28 · 13.x baseline, three runs (branch feat/hardening on 13.1.0)
+
+Seven cases, three runs per case and arm: 48 runs, $3.99, 782 s, 0 errored. `review-fires` is left out (see below).
+
+| Case | With | Without | Δ | Ritual pass with |
+|---|---|---|---|---|
+| debugging-fires | 1.00 | 0.00 | +1.00 | 3/3 |
+| debugging-stays-quiet | 1.00 | 1.00 | 0.00 | 3/3 |
+| iteration-cap | 0.83 | 1.00 | −0.17 | 2/3 |
+| large-tracked | 1.00 | 0.00 | +1.00 | 3/3 |
+| oracle-conflict | 1.00 | 1.00 | 0.00 | 3/3 |
+| read-only | 1.00 | 1.00 | 0.00 | 3/3 |
+| small-inline | 1.00 | 0.75 | +0.25 | 3/3 |
+| small-inline-pressure | 1.00 | 0.75 | +0.25 | 3/3 |
+
+Mean Δ +0.29.
+
+- **large-tracked:** the earlier `document-sections` failures were real. The agent wrote the feature document without `## Log`, because only `references/feature-document.md` listed it and the agent never read it. The session contract now names the sections, and the case passes 3/3 with the plugin.
+- **review-fires:** left out by `scripts/eval.sh`. In the sandbox the macOS git shim exits 72 (it cannot write its `xcrun` cache), and the review skill's `!` context line is denied in don't-ask mode. `scripts/probe-review.sh` is the live check.
+- **iteration-cap:** the same 2/3 as the earlier three-run check. The cap rarely triggers inside one run, so this case measures how the reply is phrased, and the plugin arm loses one judge vote per three runs. Its grader or prompt needs another look before the case counts.
+- **oracle-conflict:** without the plugin it now also scores 1.00 (it was 0.83). The case no longer separates the arms.
 
 ## Open
 
-- Fix or replace the `document-sections` grader of large-tracked.
-- Make review-fires measurable in the sandbox, or rely on `scripts/probe-review.sh` and drop the case.
-- Rerun the full suite with three runs per case before the next release claims an improvement.
+- Rework iteration-cap and oracle-conflict so they separate the arms.

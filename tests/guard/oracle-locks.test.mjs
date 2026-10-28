@@ -1,7 +1,7 @@
 // T2 security fixes (.vault/tasks/oracle-separation.md, S4): lock matching in delegation-admission and surface-guard.
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { mkdirSync, readdirSync, symlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, test } from 'node:test'
 import { git, makeRepo, scratchDir } from '../helpers/repo.mjs'
@@ -95,5 +95,30 @@ describe('surface-guard: an error in the lock check', () => {
     const r = guard(repo, 'src/a.js', { agent_id: 'a1' }, env)
     assert.equal(r.decision, 'deny')
     assert.match(r.reason, /outside your allowed edit surfaces/)
+  })
+})
+
+const REAL_GIT = spawnSync('which', ['git'], { encoding: 'utf8' }).stdout.trim()
+
+describe('hardening S4(f): surface-guard runs no lock check git when the store holds no locks', () => {
+  // A git shim that records its arguments and runs the real git.
+  const shimmed = (repo, file_path) => {
+    const shim = scratchDir('odd-locks-shim-')
+    const log = join(shim, 'calls')
+    writeFileSync(join(shim, 'git'), `#!/bin/sh\necho "$@" >> "${log}"\nexec "${REAL_GIT}" "$@"\n`, { mode: 0o755 })
+    const r = run(S('surface-guard.mjs'), [], { session_id: 's1', cwd: repo, tool_name: 'Write', tool_input: { file_path, content: 'x\n' } }, { PATH: `${shim}:${process.env.PATH}` })
+    return { r, calls: existsSync(log) ? readFileSync(log, 'utf8') : '' }
+  }
+  test('no oracle lock files: the store is not asked for by git', () => {
+    const repo = repoWith()
+    const { r, calls } = shimmed(repo, join(repo, 'src/a.js'))
+    assert.equal(r.stdout, '')
+    assert.doesNotMatch(calls, /git-common-dir/)
+  })
+  test('with a lock, the lock is still enforced', () => {
+    const repo = repoWith()
+    lock(repo, 'tests/a.test.mjs', git(repo, 'hash-object', 'tests/a.test.mjs').trim())
+    const { r } = shimmed(repo, join(repo, 'tests/a.test.mjs'))
+    assert.equal(r.decision, 'deny')
   })
 })

@@ -4,6 +4,9 @@ Notable changes per release. Versions follow [Semantic Versioning](https://semve
 
 ## Unreleased
 
+- The delivery context shows a sub-branch cut from the feature branch with no commits of its own as `empty`, not `merged` (judged by its reflog; without one it reads as merged). The living-spec check no longer treats `.vault/specs/README.md` as the spec of a finished `.vault/tasks/README.md`: that feature's file is `.vault/specs/README.feature.md`.
+- `construct-gate oracle unlock` accepts `./path`, `a//b`, and an absolute path inside the repository for the stored path, and rejects a path outside it. `surface-guard` runs no git command for the lock check when the review store has no oracle lock files. `CONSTRUCT_LS_REMOTE_TIMEOUT_MS` shortens or sets the 15 s `ls-remote` limit of the release-ref check (a timeout keeps the lock).
+
 ## 13.1.0
 
 - The status band is one row: the status, `ADD <feature>` with its checkpoints, and the running agents (`⚒ worker 1:42` for one, `3 agents 1:42` for several). The current task's id and title, the permission gate tally (`gate N pending`, `gate ✓ N`, `✗ N`), the `⚠ N inline` count, the second agents row, and the agents' models are removed. `◆ waiting on you` still shows while a permission prompt, question, or plan waits on you. A stored band value that still has `gate` or `inline` is repaired on read.

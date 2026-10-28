@@ -298,6 +298,9 @@ export function activeLocks(root, { verifyRemote = false } = {}) {
   }
 }
 
+// CONSTRUCT_LS_REMOTE_TIMEOUT_MS overrides the 15 s limit (a test hook); anything but a positive whole number keeps 15 s. A shorter limit only keeps more locks.
+const lsRemoteTimeout = () => (/^[1-9]\d*$/.test(process.env.CONSTRUCT_LS_REMOTE_TIMEOUT_MS ?? '') ? Number(process.env.CONSTRUCT_LS_REMOTE_TIMEOUT_MS) : 15000)
+
 // remoteTip: true when the release ref's sha equals the tip of the branch it tracks on url (one ls-remote, with a timeout); false on any failure.
 const remoteTip = (root, release, url) => {
   try {
@@ -308,7 +311,7 @@ const remoteTip = (root, release, url) => {
     const branch = target.replace(/^refs\/remotes\/origin\//, '')
     if (branch === target || branch === '') return false
     const sha = git(root, ['rev-parse', '--verify', '-q', `${release}^{commit}`]).toString('utf8').trim()
-    const line = git(tmpdir(), ['ls-remote', url, `refs/heads/${branch}`], { timeout: 15000 }).toString('utf8').trim().split('\n')[0]
+    const line = git(tmpdir(), ['ls-remote', url, `refs/heads/${branch}`], { timeout: lsRemoteTimeout() }).toString('utf8').trim().split('\n')[0]
     return sha !== '' && line.split('\t')[0] === sha
   } catch {
     return false

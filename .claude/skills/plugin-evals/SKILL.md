@@ -44,7 +44,7 @@ Construct today: cases in `plugins/construct/evals/<case>/` (`case.yaml` with `c
 - `claude -p` means **mods draw nothing**: the band cannot be evaluated here (use `claude plugin test`). Mod event hooks and plugin command hooks do run, outside the sandbox, and can change graded files; treat scores as advisory.
 - Permissions never prompt; ungranted tools are removed. `allowed_tools` grants only read-only tools (`Read`, `Glob`, `Grep`, `Skill`, `Agent`, `TodoWrite`, `Task*`, `AskUserQuestion`, ...). `Bash`, `Write`, `Edit`, `WebFetch`, `WebSearch` need `--allow-tools`, which applies to every case. Neither the case nor a skill's `allowed-tools` can widen grants.
 - Any Bash grant runs under the OS sandbox: writes confined to the workspace, home and Claude config unreadable, network limited to `WebFetch(domain:…)` grants. No sandbox backend → Bash runs are refused.
-- Git inside runs has hooks and credential helpers disabled (`GIT_CONFIG_COUNT`). That is why `scripts/probe-review.sh` exists for the review-fires path, and why our pre-push hook cannot be evaluated here.
+- Git inside runs has hooks and credential helpers disabled (`GIT_CONFIG_COUNT`). That is why `scripts/probe-review.sh` exists for the review-fires path, and why our pre-push hook cannot be evaluated here. On macOS the git shim also exits 72 inside runs (it cannot write its `xcrun` cache), and a skill's `!` context line is denied in don't-ask mode, so `scripts/eval.sh` leaves `review-fires` out.
 - MCP: `--mocks record` (default) answers from mock files and never starts real servers.
 
 ## Scoring, ablation, cost
