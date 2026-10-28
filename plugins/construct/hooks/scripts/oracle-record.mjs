@@ -26,6 +26,8 @@ function main() {
   const { paths } = prompt ? parseSurfaces(prompt) : {}
   if (!spec || !paths) return
   const root = repositoryRoot(input.cwd)
+  // The gate verifies the release ref against the URL pinned here, not the config an agent can edit later.
+  const remote = git(root, ['config', '--get', 'remote.origin.url'], { okStatuses: [0, 1] }).toString('utf8').trim()
   const locked = new Set(activeLocks(root).map((o) => o.path))
   for (const path of paths) {
     if (locked.has(path)) continue
@@ -36,7 +38,7 @@ function main() {
       continue // an oracle that wrote nothing at this path locks nothing
     }
     const blob = stat.isFile() ? git(root, ['hash-object', `--path=${path}`, path]).toString('utf8').trim() : UNLOCKABLE
-    writeOracle(root, { path, blob, feature: spec[1], task: spec[2], at: Date.now() })
+    writeOracle(root, { path, blob, feature: spec[1], task: spec[2], at: Date.now(), ...(remote && { remote }) })
   }
 }
 

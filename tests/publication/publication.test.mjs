@@ -6,7 +6,7 @@ import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { applyFiles, commitAll, git, makeRepo, scratchDir } from '../helpers/repo.mjs'
-import { readVerdicts, subjectHash, writeOracle, writeVerdict } from '../../plugins/construct/hooks/scripts/review-store.mjs'
+import { readOracles, readVerdicts, subjectHash, writeOracle, writeVerdict } from '../../plugins/construct/hooks/scripts/review-store.mjs'
 
 const PLUGIN = new URL('../../plugins/construct/', import.meta.url).pathname
 const HOOK = join(PLUGIN, 'hooks/scripts/publication-gate.mjs')
@@ -46,6 +46,7 @@ function withRemote(repo) {
   git(repo, 'remote', 'add', 'origin', bare)
   git(repo, 'fetch', '-q', 'origin')
   git(repo, 'remote', 'set-head', 'origin', 'main')
+  for (const lock of readOracles(repo)) writeOracle(repo, { ...lock, remote: bare }) // the lock pins the URL it was recorded against
   return repo
 }
 
@@ -910,6 +911,20 @@ describe('S3: a locked oracle is protected at the published ref', () => {
   test('dropping the tasks in the same push does not release the lock', () => lockDenied(hook('git push', lockedRepo({ status: 'dropped', edit: EDIT })), /changed/))
   test('deleting the feature document in the same push does not release the lock', () => lockDenied(hook('git push', lockedRepo({ edit: { ...EDIT, 'odd/tasks/f.md': null } })), /changed/))
   test('a feature document finished on the remote default branch releases the lock', () => silent(hook('git push', withRemote(lockedRepo({ mainDoc: FEATURE('done (ok)'), edit: EDIT })))))
+  test('a release ref moved locally to a finished document does not release the lock', () => {
+    const repo = withRemote(lockedRepo({ edit: EDIT }))
+    git(repo, 'checkout', '-q', 'main')
+    applyFiles(repo, { 'odd/tasks/f.md': FEATURE('done (ok)') })
+    commitAll(repo, 'finish')
+    git(repo, 'update-ref', 'refs/remotes/origin/main', 'HEAD')
+    git(repo, 'checkout', '-q', 'feat')
+    lockDenied(hook('git push', repo), /changed/)
+  })
+  test('a lock with no recorded remote is never released by the gate', () => {
+    const repo = withRemote(lockedRepo({ mainDoc: FEATURE('done (ok)'), edit: EDIT }))
+    for (const { remote, ...lock } of readOracles(repo)) writeOracle(repo, lock)
+    lockDenied(hook('git push', repo), /changed/)
+  })
   test('a feature document finished only on a local main, with no remote-tracking default, keeps the lock', () => lockDenied(hook('git push', lockedRepo({ mainDoc: FEATURE('done (ok)'), edit: EDIT })), /changed/))
   test('a publisher-chosen --base with the document finished does not release the lock', () => {
     const repo = withRemote(lockedRepo({ edit: EDIT }))

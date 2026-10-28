@@ -46,8 +46,11 @@ function withRemote(repo) {
   git(repo, 'remote', 'add', 'origin', bare)
   git(repo, 'fetch', '-q', 'origin')
   git(repo, 'remote', 'set-head', 'origin', 'main')
+  for (const lock of readOracles(repo)) writeOracle(repo, { ...lock, remote: bare }) // the lock pins the URL it was recorded against
   return repo
 }
+// breakRelease makes every git read of the release ref fail.
+const breakRelease = (repo) => writeFileSync(join(repo, '.git', 'refs', 'remotes', 'origin', 'HEAD'), 'garbage\n')
 const released = () => withRemote(lockedRepo({ doc: FEATURE('done (ok)') }))
 const push = (repo, extra) => run(S('publication-gate.mjs'), { session_id: 's1', cwd: repo, hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command: 'git push' } }, extra)
 const featBranch = (repo) => {
@@ -291,5 +294,88 @@ describe('command-guard: moving the release ref', () => {
   })
   test('plain fetch, pull, and a local update-ref stay allowed', () => {
     for (const c of ['git fetch', 'git fetch origin', 'git fetch origin main', 'git pull', 'git pull origin main', 'git update-ref refs/heads/x HEAD', 'git symbolic-ref HEAD refs/heads/x', 'git symbolic-ref refs/remotes/origin/HEAD', 'git fetch origin x:refs/heads/y']) silent(guard(c))
+  })
+})
+
+describe('activeLocks never throws', () => {
+  const transcript = (path) => {
+    const file = join(scratchDir('odd-stops-t-'), 't.jsonl')
+    writeFileSync(file, `${JSON.stringify({ type: 'user', message: { role: 'user', content: `Write.\n\nSpec: odd/tasks/g.md, T2 (covers S1)\n\n## Allowed edit surfaces\n${path}\n` } })}\n`)
+    return file
+  }
+  test('oracle-record still records a new lock when the release ref cannot be read, and keeps the old one', () => {
+    const repo = withRemote(lockedRepo())
+    breakRelease(repo)
+    write(repo, 'tests/b.test.mjs', 'b\n')
+    run(S('oracle-record.mjs'), { session_id: 's1', agent_id: 'a1', agent_type: 'construct:oracle', cwd: repo, agent_transcript_path: transcript('tests/b.test.mjs') })
+    assert.deepEqual(readOracles(repo).map((l) => l.path).sort(), [PATH_, 'tests/b.test.mjs'])
+  })
+  test('oracle list exits 0 and shows every lock with the error', () => {
+    const repo = withRemote(lockedRepo())
+    breakRelease(repo)
+    const r = spawnSync('node', [GATE, 'oracle', 'list'], { cwd: repo, encoding: 'utf8' })
+    assert.equal(r.status, 0, r.stderr)
+    assert.match(r.stdout, /tests\/a\.test\.mjs.*\terror\t/)
+  })
+})
+
+describe('oracle-record: pins the remote URL', () => {
+  test('the new lock records remote.origin.url at lock time', () => {
+    const repo = withRemote(makeRepo({ 'odd/tasks/f.md': FEATURE('pending') }))
+    write(repo, PATH_, 'one\n')
+    const file = join(scratchDir('odd-stops-t-'), 't.jsonl')
+    writeFileSync(file, `${JSON.stringify({ type: 'user', message: { role: 'user', content: `W.\n\nSpec: odd/tasks/g.md, T2 (covers S1)\n\n## Allowed edit surfaces\n${PATH_}\n` } })}\n`)
+    run(S('oracle-record.mjs'), { session_id: 's1', agent_id: 'a1', agent_type: 'construct:oracle', cwd: repo, agent_transcript_path: file })
+    assert.equal(readOracles(repo)[0].remote, git(repo, 'config', '--get', 'remote.origin.url').trim())
+  })
+})
+
+describe('publication-gate: the release ref is verified against the recorded remote', () => {
+  // A commit on a side branch that finishes the feature; the lock was recorded against the real origin.
+  const setup = () => {
+    const repo = withRemote(lockedRepo())
+    git(repo, 'checkout', '-q', '-b', 'side')
+    applyFiles(repo, { 'odd/tasks/f.md': FEATURE('done (ok)') })
+    commitAll(repo, 'finish')
+    featBranch2(repo)
+    return repo
+  }
+  const featBranch2 = (repo) => {
+    git(repo, 'checkout', '-q', 'main')
+    git(repo, 'checkout', '-q', '-b', 'feat')
+    applyFiles(repo, { [PATH_]: 'two\n' })
+    commitAll(repo, 'edit oracle')
+  }
+  test('a release ref moved locally to a finished document keeps the lock', () => {
+    const repo = setup()
+    git(repo, 'update-ref', 'refs/remotes/origin/main', 'side')
+    denied(push(repo), /changed/)
+  })
+  test('pointing remote.origin.url at the local repo does not release the lock', () => {
+    const repo = setup()
+    git(repo, 'update-ref', 'refs/remotes/origin/main', 'side')
+    git(repo, 'branch', '-f', 'main', 'side')
+    git(repo, 'config', 'remote.origin.url', '.')
+    denied(push(repo), /changed/)
+  })
+  test('a feature genuinely finished on origin and fetched releases the lock', () => {
+    const repo = setup()
+    git(repo, 'push', '-q', 'origin', 'side:main')
+    git(repo, 'fetch', '-q', 'origin')
+    silent(push(repo))
+  })
+  test('an unreachable remote keeps the lock', () => {
+    const repo = setup()
+    git(repo, 'push', '-q', 'origin', 'side:main')
+    git(repo, 'fetch', '-q', 'origin')
+    for (const lock of readOracles(repo)) writeOracle(repo, { ...lock, remote: join(scratchDir('odd-stops-none-'), 'missing.git') })
+    denied(push(repo), /changed/)
+  })
+  test('a lock without a recorded remote is kept', () => {
+    const repo = setup()
+    git(repo, 'push', '-q', 'origin', 'side:main')
+    git(repo, 'fetch', '-q', 'origin')
+    for (const { remote, ...lock } of readOracles(repo)) writeOracle(repo, lock)
+    denied(push(repo), /changed/)
   })
 })
