@@ -11,48 +11,48 @@ description: The ODD protocol for every implementation request, feature plan, re
 
 !`node "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/skill-context.mjs" workflow`
 
-Order for every request; the parent orchestrates, `construct:delegation` says who writes.
+Order for every request; the parent orchestrates (`construct:delegation`: who writes).
 
-1. **Authorize.** Investigation, explanation, review, comparison, and planning stay read-only. Files change only on a user's change request. Ambiguous intent: one question, read-only.
-2. **Explore.** Start with `mem_search`, proportionately. Stop once the worker's surfaces and handoff can be written. More than one bounded batch goes to `construct:explorer`.
-3. **Resolve uncertainty.** Research only a named uncertainty ([research](references/research.md)). A real product decision gets one question, then stop.
+1. **Authorize.** Investigation, explanation, review, comparison, and planning stay read-only; files change only on a change request. Ambiguous intent: one read-only question.
+2. **Explore.** Start with `mem_search`, proportionately; stop once surfaces and handoff can be written. More than one bounded batch goes to `construct:explorer`.
+3. **Resolve uncertainty.** Research only a named uncertainty ([research](references/research.md)). A real product decision gets one question, then stop. A gap that changes the outcome and is costly to undo is `NEEDS CLARIFICATION: <question>` in the `S#` (at most 3 open per document); any other gap is a marked `Assumption`. A `done` task cannot depend on an open clarification (the publication gate denies it).
 4. **Classify.** Print `Size: small | large (reason)`.
-5. **Track.** Large work gets `odd/tasks/<feature>.md` before the first source write ([feature document](references/feature-document.md)). Name the document and its task count.
-6. **Implement** task by task, test-first; a Risk-named task with a runnable test goes oracle first ([testing](references/testing.md)). Hand off by reference (document, task, `S#`), never paraphrased. Any changed command, option, or message changes its help text and docs in the same unit. Commits, branches, and pull requests: `construct:delivery`.
-7. **Review.** A unit whose Risk names an item gets `construct:review` before publication; the publication gate denies publishing until the lenses approve.
-8. **Close.** Save what was learned (`mem_save`; large work also `mem_session_summary`), then one report: what was verified, each check that failed, was skipped, or stayed unverified, the next step, and the Risk line (last). Close reports; it never starts another verification loop. On large work, converge first: compare the code to every `S#`, append each gap as a new `T#` row, never rewrite or delete rows; a gap reopens work. Converge is not a verification run.
+5. **Track.** Large work gets `odd/tasks/<feature>.md` before the first source write ([feature document](references/feature-document.md)); name it and its task count.
+6. **Implement** task by task, test-first; a Risk-named task with a runnable test goes oracle first ([testing](references/testing.md)). Hand off by reference (document, task, `S#`), never paraphrased. A changed command, option, or message changes its help and docs in the same unit. Commits, branches, PRs: `construct:delivery`.
+7. **Review.** A unit whose Risk names an item gets `construct:review` before publication; the gate denies publishing until lenses approve.
+8. **Close.** Save what was learned (`mem_save`; large work also `mem_session_summary`), then one report: what was verified, each check that failed, was skipped, or stayed unverified, the next step, the Risk line (last). Close reports; it never starts another verification loop. On large work, converge first: compare the code to every `S#`, append each gap as a new `T#` row (never rewrite or delete rows); a gap reopens work. Add the feature's `S#` to `odd/spec.md` under `## <feature>`, editing superseded earlier entries.
 
 ## Size
 
-Small means all three hold:
+Small means all hold:
 
-- Understood: outcome, change, and location are provable in one bounded round of reads (about 3 calls, 10k tokens).
+- Understood: outcome, change, and location provable in one bounded round of reads (about 3 calls, 10k tokens).
 - No high-risk item applies.
-- Resumable from the request plus `git diff` alone (the resume test).
+- Resumable from the request plus `git diff` (resume test).
 
-Large means failing the resume test: several sessions, outside parties, separate deliverables, or requirements that would not survive compaction. Never size by file counts, command counts, or a requested todo list.
+Large means failing the resume test: several sessions, outside parties, separate deliverables, or requirements not surviving compaction. Never size by file counts, command counts, or a todo list.
 
-- Small: done inline (edit calls up to `inline_edit_max_lines` lines, default 150; bigger ones go to `construct:worker`), no feature document, no commits unless asked.
+- Small: done inline (edit calls up to `inline_edit_max_lines` lines, default 150; bigger go to `construct:worker`), no feature document, no commits unless asked.
 - Large: feature document first, then work-unit commits on a feature branch.
 
 ## Risk
 
-High risk: a mistake would be hard to notice or reverse, or would spread past the change:
+High risk: a mistake hard to notice or reverse, or spreading past the change:
 
 1. Data or irreversible effects: migrations, stored-data changes, persisted formats.
 2. Security: auth, permissions, credentials, secrets, guards, sandbox.
-3. Contracts that others consume: altering or removing a public API, CLI flag, config format, export, or code shared with other behavior. Adding one, or a requested change, is not high risk.
+3. Contracts others consume: altering or removing a public API, CLI flag, config format, export, or code shared with other behavior. Adding one, or a requested change, is not high risk.
 4. Concurrency: locks, races, async ordering.
 5. Delivery or environment: installers, release, CI, deploy, dependencies.
-6. Places where no test would catch a regression.
+6. Places no test would catch a regression.
 
-Before `Risk: none`, ask whether the diff touches code other behavior shares; if so, that is item 3.
+`Risk: none` needs a diff touching no shared code (else item 3).
 
-Every code change closes with `Risk: item N (reason)`, `Risk: items 2, 5 (reason)` for several items, or `Risk: none`. The Risk-line hook blocks a reply once when paths outside `odd/tasks/` changed and no Risk line exists, or when the diff adds skipped, focused, or stub test markers. The Tasks table's Risk cell holds the item numbers (`2, 5`, `2-3`) or `none`; the publication gate reads them to require lenses.
+Code changes close with `Risk: item N (reason)`, `Risk: items 2, 5 (reason)`, or `Risk: none`. The Risk-line hook blocks once when paths outside `odd/tasks/` changed with no Risk line, or the diff adds skipped, focused, or stub test markers. The Tasks Risk cell holds item numbers (`2, 5`, `2-3`) or `none`; the publication gate reads them to require lenses.
 
 ## Autonomy
 
-During implementation, with a strong check (deterministic, runnable now, not written or loosened in the same loop; a locked oracle qualifies), loop until it passes, up to `iteration_cap` failed runs of one command (default 3; the iteration-cap hook denies the next). Then stop and report what was tried, the failure, and the hypothesis; never edit the test to pass. With a weak verifier (no tests, ambiguous requirements, external effects), take one small step, show it, and stop. With none, state what would make the work verifiable; docs-only: the reviewed diff is the verifier. One step's approval never carries over. Commit, push, PR, and merge are the user's, except work-unit commits on a feature branch.
+During implementation, with a strong check (deterministic, runnable now, not written or loosened in the loop; a locked oracle counts), loop until it passes, up to `iteration_cap` failed runs of one command (default 3; a hook denies the next). Then stop, reporting attempts, failure, hypothesis; never edit the test to pass. With a weak verifier (no tests, ambiguous requirements, external effects), take one small step, show it, and stop. With none, state what would make the work verifiable; docs-only: the reviewed diff verifies. Approval never carries over. Commit, push, PR, merge are the user's, except work-unit commits on a feature branch.
 
 ## Resume
 

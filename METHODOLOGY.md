@@ -15,7 +15,7 @@ The user's words are the spec. Each requirement (`S#`) quotes a Log entry verbat
 - **Why:** agents rarely notice underspecified tasks and fill gaps silently; they also inflate requirements. Asking about every gap is its own failure mode.
 - **Taken from:** ODD verbatim specs, Spec Kit's clarification marker and its "informed guess, recorded as an assumption" rule, Intent-Driven Development, OpenSpec delta specs.
 - **Evidence:** measured. Letting agents ask on underspecified tasks improved results by up to 74% (arXiv 2502.13069); ClarifyGPT raised pass@1 from 68% to 76%. No study compares verbatim with paraphrased requirements.
-- **Construct today:** verbatim specs are a prompt rule; the clarification state, the quote-in-Log check, and the living spec do not exist; finished feature documents are deleted.
+- **Construct today:** verbatim specs are a prompt rule. A `NEEDS CLARIFICATION: <question>` marker in an `S#` is enforced at the publication gate: a `done` task naming an open one is denied; `feature-state` lists the open ones and warns past 3 per document. It also warns when an `S#` has neither a quote found in the Log nor the word `Assumption`, and when a finished feature document has no heading in the living spec, `odd/spec.md` (finished `S#` with their quotes, starting empty, no backfill). Feature documents are no longer deleted. Limits: the quote check is a warning only, and the living-spec warning detects a missing feature, not a stale entry.
 
 ### 2. Proportional ceremony
 

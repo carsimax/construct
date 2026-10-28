@@ -29,7 +29,7 @@ function splitRow(line) {
 }
 
 // Returns { rows, taskSpecs } for the `## Tasks` table (rows: unfinished only; taskSpecs: every row's
-// [id, Specs cell], or null without a `Specs` column), or null when the table is missing or malformed.
+// [id, Specs cell, Status cell], or null without a `Specs` column), or null when the table is missing or malformed.
 export function unfinishedRows(lines) {
   // A Tasks heading of any level 2-6, as publication-gate.mjs reads it; a heading of the same or a higher level ends it.
   const start = lines.findIndex((l) => /^#{2,6}\s+Tasks\b/i.test(l))
@@ -55,14 +55,14 @@ export function unfinishedRows(lines) {
     if (cells.length < header.length) return null
     // An unescaped `|` in the task cell shifts the columns: join the surplus back into it.
     if (cells.length > header.length) cells.splice(task, cells.length - header.length + 1, cells.slice(task, task + cells.length - header.length + 1).join('|'))
-    taskSpecs?.push([cells[id], cells[specs] ?? ''])
+    taskSpecs?.push([cells[id], cells[specs] ?? '', cells[status]])
     if (!isFinished(cells[status])) rows.push(`${clip(cells[id], MAX_CELL)} — ${clip(cells[task], MAX_CELL)}`)
   }
   return { rows, taskSpecs }
 }
 
 // Spec ids named in a cell: `S1`, `S3, S4`, `S3-S4`, `S3–S4`.
-function specIds(cell) {
+export function specIds(cell) {
   const ids = new Set()
   for (const [, a, b] of cell.matchAll(/S(\d+)\s*[-–]\s*S?(\d+)/g)) for (let n = +a; n <= Math.min(+b, +a + 99); n++) ids.add(n)
   for (const [, n] of cell.replace(/S\d+\s*[-–]\s*S?\d+/g, '').matchAll(/S(\d+)/g)) ids.add(+n)
@@ -84,6 +84,78 @@ function coverageWarning(lines, taskSpecs) {
   const orphans = [...defined].filter((n) => !used.has(n)).map((n) => `S${n}`)
   const parts = [orphans.length && `no task for ${orphans.join(', ')}`, ...(unknown.length ? [`unknown spec: ${unknown.join('; ')}`] : [])].filter(Boolean)
   return parts.length ? clip(`Coverage: ${parts.join('; ')}`, MAX_LINE) : undefined
+}
+
+// The `## Specs` bullets as [id, text] (`- **S2 — ...`, one line each); [] without the section.
+function specBullets(lines) {
+  const at = lines.findIndex((l) => /^##\s+Specs\s*$/.test(l))
+  if (at < 0) return []
+  const end = lines.findIndex((l, n) => n > at && /^##\s/.test(l))
+  return lines.slice(at + 1, end < 0 ? undefined : end).flatMap((l) => {
+    const m = /^- \*\*S(\d+)/.exec(l)
+    return m ? [[`S${m[1]}`, l]] : []
+  })
+}
+
+// Open clarifications: [{ id: 'S2', question }] for each spec bullet carrying `NEEDS CLARIFICATION: <question>`.
+// shortcut: the question ends at the end of its bullet line, upgrade if a spec spans lines.
+export function openClarifications(lines) {
+  return specBullets(lines).flatMap(([id, text]) => {
+    // Inline code (`NEEDS CLARIFICATION: <question>`) names the marker; only plain text opens a clarification.
+    const m = /NEEDS CLARIFICATION:\s*(.*)$/.exec(text.replace(/`[^`]*`/g, ''))
+    return m ? [{ id, question: m[1].trim() }] : []
+  })
+}
+
+const MAX_OPEN = 3
+const squash = (t) => t.replace(/\s+/g, ' ').trim()
+
+// S3 (warn only): a spec passes with `Assumption` or a double-quoted span found, whitespace-normalized, in the `## Log` section.
+function unquotedSpecs(lines) {
+  const at = lines.findIndex((l) => /^##\s+Log\s*$/.test(l))
+  const end = lines.findIndex((l, n) => n > at && /^##\s/.test(l))
+  const log = squash(at < 0 ? '' : lines.slice(at + 1, end < 0 ? undefined : end).join('\n'))
+  return specBullets(lines).filter(([, text]) => !/\bAssumption\b/.test(text) && ![...text.matchAll(/"([^"]+)"|“([^”]+)”/g)].some((m) => log.includes(squash(m[1] ?? m[2])))).map(([id]) => id)
+}
+
+function specLines(lines) {
+  const open = openClarifications(lines)
+  const bad = unquotedSpecs(lines)
+  return [
+    ...open.map((c) => clip(`Open clarification ${c.id}: ${c.question}`, MAX_LINE)),
+    ...(open.length > MAX_OPEN ? [`Warning: ${open.length} open clarifications, more than ${MAX_OPEN}: ask the user before adding more.`] : []),
+    ...(bad.length ? [clip(`Quote warning: ${bad.join(', ')} have no quote found in the Log and no Assumption.`, MAX_LINE)] : []),
+  ]
+}
+
+// S4, S5: finished feature documents with a `## Specs` section and no `## <feature>` heading in odd/spec.md.
+// Without odd/spec.md, or for a document whose L1 date is before its `Started:` line, there is no warning.
+function livingSpecLines(root) {
+  let spec
+  try {
+    spec = readFileSync(join(root, 'odd', 'spec.md'), 'utf8')
+  } catch {
+    return []
+  }
+  const started = /^Started:\s*(\d{4}-\d{2}-\d{2})/m.exec(spec)?.[1]
+  const headings = new Set(spec.split(/\r?\n/).flatMap((l) => (/^##\s+(.+?)\s*$/.exec(l) ?? []).slice(1)))
+  const missing = []
+  for (const name of readdirSync(join(root, 'odd', 'tasks')).sort()) {
+    try {
+      if (!name.endsWith('.md')) continue
+      const lines = readFileSync(join(root, 'odd', 'tasks', name), 'utf8').split(/\r?\n/)
+      const table = unfinishedRows(lines)
+      const feature = basename(name, '.md')
+      if (!table || table.rows.length > 0 || !lines.some((l) => /^##\s+Specs\s*$/.test(l)) || headings.has(feature)) continue
+      // `**L1 (2026-10-22, user):**` counts; a document with no L1 date predates the rule and is skipped.
+      const l1 = /\*\*L1 \((\d{4}-\d{2}-\d{2})[^)]*\)/.exec(lines.join('\n'))?.[1]
+      if (started && (!l1 || l1 < started)) continue
+      missing.push(feature)
+    } catch {
+      // unreadable document: skip it
+    }
+  }
+  return [...missing.slice(0, 3).map((f) => clip(`Living spec: ${f} is finished but odd/spec.md has no "## ${f}" heading; add its S# with their quotes.`, MAX_LINE)), ...(missing.length > 3 ? [`Living spec: ${missing.length - 3} more finished documents are missing from odd/spec.md.`] : [])]
 }
 
 // `Branch: x` inside the header line (before the first `##`), reduced to `Branch: x`.
@@ -110,17 +182,17 @@ function parseDoc(root, path) {
   return {
     path,
     feature: basename(path, '.md'),
-    head: [path, title && clip(title.trim(), MAX_LINE), branch && clip(branch.trim(), MAX_LINE), warning].filter(Boolean),
+    head: [path, title && clip(title.trim(), MAX_LINE), branch && clip(branch.trim(), MAX_LINE), warning, ...specLines(lines)].filter(Boolean),
     rows,
     next: next && clip(next.trim().replace(/^[-*]\s+/, ''), MAX_LINE),
   }
 }
 
-function render(docs) {
+function render(docs, living) {
   const footer = 'Read the full document before continuing.'
   const intro = 'Active ODD feature state (re-injected after compaction or resume):'
   const fixed = docs.map((d) => [...d.head, ...(d.next ? [d.next] : [])].join('\n'))
-  const used = [intro, footer, ...fixed].join('\n\n').length + docs.length * 2
+  const used = [intro, footer, living, ...fixed].join('\n\n').length + docs.length * 2
   const budget = Math.max(0, Math.floor((MAX_TOTAL - used) / docs.length))
   const blocks = docs.map((d, n) => {
     const kept = []
@@ -135,7 +207,7 @@ function render(docs) {
     if (hidden > 0) kept.push(`- (+${hidden} more unfinished)`)
     return [...d.head, ...kept, ...(d.next ? [d.next] : [])].join('\n')
   })
-  const text = [intro, ...blocks, footer].join('\n\n')
+  const text = [intro, ...blocks, ...(living ? [living] : []), footer].join('\n\n')
   return text.length <= MAX_TOTAL ? text : `${text.slice(0, MAX_TOTAL - footer.length - 2)}\n\n${footer}`.slice(0, MAX_TOTAL)
 }
 
@@ -177,9 +249,16 @@ function main() {
   }
   if (!input || typeof input !== 'object' || Array.isArray(input)) return
   const cwd = typeof input.cwd === 'string' && input.cwd ? input.cwd : process.cwd()
-  const docs = activeDocuments(projectRoot(cwd))
-  if (docs.length === 0) return
-  const text = render(docs.slice(0, MAX_DOCS).map((d) => d.doc))
+  const root = projectRoot(cwd)
+  const docs = activeDocuments(root)
+  let living = ''
+  try {
+    living = livingSpecLines(root).join('\n')
+  } catch {
+    // fail open: no living-spec warning
+  }
+  if (docs.length === 0 && !living) return
+  const text = docs.length === 0 ? `ODD living spec:\n${living}` : render(docs.slice(0, MAX_DOCS).map((d) => d.doc), living)
   process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: text } }))
 }
 
