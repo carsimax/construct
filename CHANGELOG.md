@@ -4,6 +4,8 @@ Notable changes per release. Versions follow [Semantic Versioning](https://semve
 
 ## Unreleased
 
+- `command-guard` allows `construct-gate oracle unlock <path>` from the main thread, once, after the user answered an AskUserQuestion with `Unlock` for a question naming that path; otherwise it denies and tells the agent to ask (path and `oracle_conflict`, options `Unlock` and `Keep the test`). Subagents never unlock, and an unreadable transcript denies. The `delegation` skill's relay rule 5 says so.
+
 ## 13.1.1
 
 - The delivery context shows a sub-branch cut from the feature branch with no commits of its own as `empty`, not `merged` (judged by its reflog; without one it reads as merged). The living-spec check no longer treats `.vault/specs/README.md` as the spec of a finished `.vault/tasks/README.md`: that feature's file is `.vault/specs/README.feature.md`.

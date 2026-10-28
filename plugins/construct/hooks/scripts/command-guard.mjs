@@ -8,7 +8,8 @@
 //     `git checkout .`, and `git restore .`, `./`, or `:/` (unless it only touches the index),
 //     `find ... -exec rm` / `-execdir rm` with those flags, `find ... -delete`, and
 //     `xargs [flags] rm` with those flags.
-//   - deny also: `construct-gate oracle unlock` (the user releases a locked oracle with `!`, which skips this hook);
+//   - deny also: `construct-gate oracle unlock`, except in the main thread right after the user answered an
+//     AskUserQuestion with `Unlock` for a question naming that path (one unlock per answer; see unlockApproved);
 //   - deny also: a statement that sets `GIT_CONFIG_PARAMETERS` or `GIT_CONFIG_KEY_<n>` to
 //     core.hooksPath through `export`, `declare` or `typeset` (any flags), `readonly`, `local`,
 //     or a bare assignment, even with no `git` in that statement.
@@ -20,7 +21,10 @@
 // shortcut: git aliases, interpreter one-liners, brace expansion, and variable-built commands are
 // not caught. Upgrade if one of them shows up in real use.
 // Usage: node command-guard.mjs   (hook JSON on stdin)
-import { readInput } from './hook-io.mjs'
+import { spawnSync } from 'node:child_process'
+import { mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
+import { isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { dataDir, readInput } from './hook-io.mjs'
 import { GIT_VALUE_FLAGS, heredocScripts, nestedLines, parsesAsShell, SHELLS, ShellParseError, splitCommands } from './shell-words.mjs'
 
 const MAX_DEPTH = 4
@@ -146,6 +150,63 @@ function findHit(args, nested) {
   return found
 }
 
+const UNLOCK_REASON = 'construct-gate oracle unlock releases a locked oracle, and only the user may approve it. Ask them with AskUserQuestion: a question that names the path and the `oracle_conflict` (the spec against the test), with the options `Unlock` and `Keep the test`; on `Unlock` run the command from the main thread, once. A subagent never unlocks: it returns `oracle_conflict`.'
+
+// Transcript shape relied on (rows are JSONL, one JSON object per line): the main thread's AskUserQuestion call is an
+// assistant row with a content block `{type:'tool_use', id, name:'AskUserQuestion', input:{questions:[{question, options:[{label}]}]}}`;
+// the answer is the following user row with a block `{type:'tool_result', tool_use_id: <that id>}` and the row field
+// `toolUseResult: {questions, answers:{<question text>: <selected label>}}` (a multi-select value is an array of labels).
+// The answers shape comes from the Agent SDK docs (user-input page); the row's `toolUseResult` field is not documented, so a
+// transcript without it reads as no approval (deny). The tool_result text is not parsed: the question text is agent-written.
+function lastAnswer(file) {
+  let found = null
+  const asks = new Set()
+  for (const line of readFileSync(file, 'utf8').split('\n')) {
+    if (!line) continue
+    let row
+    try {
+      row = JSON.parse(line)
+    } catch {
+      continue
+    }
+    const content = Array.isArray(row?.message?.content) ? row.message.content : []
+    for (const b of content) {
+      if (b?.type === 'tool_use' && b.name === 'AskUserQuestion' && typeof b.id === 'string') asks.add(b.id)
+      if (b?.type === 'tool_result' && asks.has(b.tool_use_id) && row.toolUseResult?.answers && typeof row.toolUseResult.answers === 'object') found = { id: b.tool_use_id, answers: row.toolUseResult.answers }
+    }
+  }
+  return found
+}
+
+// The path as the CLI stores it: relative to the repository root, `./p` and `a//b` collapsed. shortcut: the root is
+// the toplevel of the hook's cwd (cwd itself outside git); upgrade if a lock path ever needs symlink resolution.
+function lockPath(path, cwd) {
+  const real = realpathSync(cwd)
+  const top = spawnSync('git', ['rev-parse', '--show-toplevel'], { cwd: real, encoding: 'utf8' })
+  const root = top.status === 0 ? top.stdout.trim() : real
+  const rel = relative(root, resolve(real, path))
+  return rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel) ? null : rel.split(sep).join('/')
+}
+
+// unlockApproved: main thread only, the latest AskUserQuestion answer chose `Unlock` for a question naming the path,
+// and that answer was not used before (the tool_use id is claimed with an exclusive create). Fails closed.
+function unlockApproved(input, paths) {
+  try {
+    if (input.agent_id || paths.length !== 1 || paths[0] == null || typeof input.transcript_path !== 'string' || typeof input.cwd !== 'string') return false
+    const path = lockPath(paths[0], input.cwd)
+    const answer = lastAnswer(input.transcript_path)
+    if (!path || !answer) return false
+    const chose = Object.entries(answer.answers).some(([q, v]) => q.includes(path) && [v].flat().some((l) => typeof l === 'string' && l.trim().toLowerCase() === 'unlock'))
+    if (!chose) return false
+    const dir = join(dataDir(), 'unlock-approval', String(input.session_id ?? 'none').replace(/[^\w-]/g, '_'))
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(join(dir, answer.id.replace(/[^\w-]/g, '_')), '', { flag: 'wx' })
+    return true
+  } catch {
+    return false
+  }
+}
+
 const isGate = (word) => /(^|\/)construct-gate$/.test(word ?? '')
 
 // hitsIn returns every hit of a command line; splitCommands finds the commands nested in
@@ -167,7 +228,8 @@ function hitsIn(command, depth = 0) {
     if (/^(export|declare|typeset|readonly|local|[A-Za-z_]\w*=)/.test(words[0] ?? '') && words.some(hooksEnv)) found.push(hit('deny', HOOKS_ENV_REASON))
     const h = name === 'git' ? gitHit(args, words) : name === 'rm' ? rmHit(args) : name === 'find' ? findHit(args, nested) : null
     // Any word with basename construct-gate counts, so node flags, env, command, xargs and npx wrappers are caught; `node -e` importing review-store cannot be seen in text (discipline layer).
-    if (words.some((w, i) => isGate(w) && words[i + 1] === 'oracle' && words[i + 2] === 'unlock')) found.push(hit('deny', 'construct-gate oracle unlock releases a locked oracle, and only the user may: ask them to run it with ! (for example `!construct-gate oracle unlock <path>`), or return `oracle_conflict` to them.'))
+    const at = words.findIndex((w, i) => isGate(w) && words[i + 1] === 'oracle' && words[i + 2] === 'unlock')
+    if (at !== -1) found.push({ ...hit('deny', UNLOCK_REASON), unlock: words[at + 3] && !words[at + 3].startsWith('-') ? words[at + 3] : null })
     if (h) found.push(h)
   }
   return found
@@ -177,7 +239,9 @@ try {
   const input = readInput()
   const command = input?.tool_input?.command
   if (input?.tool_name === 'Bash' && typeof command === 'string' && command !== '') {
-    const found = hitsIn(command)
+    let found = hitsIn(command)
+    const unlocks = found.filter((h) => 'unlock' in h)
+    if (unlocks.length > 0 && unlockApproved(input, unlocks.map((h) => h.unlock))) found = found.filter((h) => !('unlock' in h))
     const chosen = found.find((h) => h.decision === 'deny') ?? found[0]
     if (chosen && (chosen.decision === 'deny' || asksOn())) process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: chosen.decision, permissionDecisionReason: chosen.reason } })}\n`)
   }

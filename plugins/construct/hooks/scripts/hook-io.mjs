@@ -37,7 +37,7 @@ export const safeName = (value) => String(value || 'unknown').replace(/[^A-Za-z0
 
 // STATE_MAX_AGE_MS: per-session state older than this belongs to a finished session.
 const STATE_MAX_AGE_MS = 7 * 24 * 3600 * 1000
-const STATE_DIRS = ['risk-line', 'subagent-count', 'delegation-admission', 'delivery-signals', 'failure-streak', 'iteration-cap']
+const STATE_DIRS = ['risk-line', 'subagent-count', 'delegation-admission', 'delivery-signals', 'failure-streak', 'iteration-cap', 'unlock-approval']
 
 // pruneState removes this plugin's per-session state entries (a file or a
 // session directory directly under one of STATE_DIRS) and stale construct-index-* temporary directories idle for over 7 days.
