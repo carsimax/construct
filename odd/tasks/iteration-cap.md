@@ -16,11 +16,12 @@ Objective: an agent stops and reports after a check fails a fixed number of time
 
 | ID | Specs | Task | Route | Risk | Status | Commit |
 |---|---|---|---|---|---|---|
-| T1 | S1, S2, S3, S4, S5 | Acceptance tests by construct:oracle (RED) | oracle | 2, 3 | pending | — |
+| T1 | S1, S2, S3, S4, S5 | Acceptance tests by construct:oracle (RED) | oracle | 2, 3 | done | 0b00247 |
 | T2 | S1, S2, S3, S4, S5 | iteration-cap hook, hooks.json, userConfig, README, CHANGELOG | worker | 2, 3 | pending | — |
 | T3 | S6, S7 | workflow skill, contract, worker.md, METHODOLOGY P3, eval case | worker | 3 | pending | — |
 
 ## Log
 
 - **L1 (2026-10-28):** "Vamos con P3"; design approved: "Vamos asi" (configurable cap, default 3).
-- Next step: T1 through construct:oracle.
+- **L2 (2026-10-28):** First live oracle run: 21 tests RED, lock recorded (construct-gate oracle list: active, matches). The deny reason must contain "never edit the test" and "hypothesis"; failures without session_id are never counted.
+- Next step: T2 through construct:worker.
