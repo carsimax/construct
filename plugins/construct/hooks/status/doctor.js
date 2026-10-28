@@ -31,16 +31,6 @@ export function checkNode(text) {
   return { ok: have !== null && atLeast(have, triple(`${MIN_NODE}.0`)), label, hint: `install Node ${MIN_NODE} or later; the hooks need it` }
 }
 
-// `out` is the stdout of `engram version` (for example `engram 3.6.0`), or null when it failed or timed out.
-export function checkEngram(out) {
-  const m = /^engram (\d+\.\d+\.\d+)/.exec(String(out ?? '').trim())
-  return {
-    ok: m !== null,
-    label: m ? `Engram ${m[1]}` : 'Engram (not found)',
-    hint: 'brew install gentleman-programming/tap/engram && engram setup claude-code',
-  }
-}
-
 export function formatReport(rows) {
   return ['Construct doctor', ...rows.map((r) => (r.ok ? `✓ ${r.label}` : `✗ ${r.label} — ${r.hint}`))].join('\n')
 }

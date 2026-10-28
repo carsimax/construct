@@ -1,6 +1,6 @@
 ---
 name: mods
-description: Claude Code mod capabilities and limits for developing construct. Use when designing or changing a construct feature, a hook, the panel, routing, a command, or a gate, to decide whether a mod (hooks/register.js), a settings hook (hooks/scripts/*.mjs), a skill, or an MCP server is the right mechanism.
+description: Claude Code mod capabilities and limits for developing construct. Use when designing or changing a construct feature, a hook, the band, routing, a command, or a gate, to decide whether a mod (hooks/register.js), a settings hook (hooks/scripts/*.mjs), a skill, or an MCP server is the right mechanism.
 ---
 
 # Mods in construct
@@ -40,7 +40,7 @@ Anything outside the handler's own code (draw, command, model call, file read, p
 
 Consequences for construct:
 
-- `scripts/eval.sh` runs `claude -p`: routing hooks fire, the panel never draws. Test panel behavior with `claude plugin test plugins/construct`, not evals. → [test](https://code.claude.com/docs/en/plugins/mods/test.md)
+- `scripts/eval.sh` runs `claude -p`: routing hooks fire, the band never draws. Test band behavior with `claude plugin test plugins/construct`, not evals. → [test](https://code.claude.com/docs/en/plugins/mods/test.md)
 - A drawing feature needs a fallback (a transcript line or a command's text reply) where nothing draws.
 - Minimum versions: terminal v2.1.287, Desktop v2.1.286. Keep `MIN_CLAUDE` in `hooks/status/` consistent with any new API used.
 
@@ -70,7 +70,7 @@ Consequences for construct:
 
 ## What construct already uses
 
-`hooks/register.js` handles `session.start`, `session.compact`, `turn.start`, `turn.step`, `turn.complete`, `tool.call`, `tool.check`, `agent.spawn`, `command.run` (`/construct`), and `ui.render` (`Pane`). It calls `$.ui.open/close/invalidate`, `$.command.register`, `$.process.run`, `$.fs.list/read`, `$.session.*`, `$.clock.now`. Unused capabilities worth considering before adding a settings hook or more prompt text: the band above the prompt, spinner/tool-row restyle, holding a tool call for a user question, answering a tool call directly, and model calls from a hook.
+`hooks/register.js` handles `session.start`, `turn.start`, `turn.step`, `turn.complete`, `tool.call`, `tool.check`, `agent.spawn`, `command.run` (`/construct`), and `ui.render` (`AbovePrompt`, the band; it composes with `await next(e)` so other mods keep their rows). It calls `$.ui.invalidate`, `$.command.register`, `$.process.run`, `$.fs.list/read`, `$.session.*`, `$.clock.now`. The band must not repeat what a user's status line already shows (model, effort, branch, diff, context, plan limits). Unused capabilities worth considering before adding a settings hook or more prompt text: spinner/tool-row restyle, holding a tool call for a user question, answering a tool call directly, and model calls from a hook.
 
 ## References
 

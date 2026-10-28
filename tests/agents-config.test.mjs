@@ -64,16 +64,15 @@ test('userConfig declares new model and effort options defaulting to inherit, an
   }
   assert.equal(cfg.model_jd_fix_agent, undefined)
   assert.equal(cfg.effort_jd_fix_agent, undefined)
-  // The panel's switch is a key that is not a model or effort option
-  assert.equal(cfg.panel_open_on_start?.type, 'boolean')
-  assert.equal(cfg.panel_open_on_start?.default, true)
+  // The band above the prompt has no switch: the docked panel and its option are gone
+  assert.equal(cfg.panel_open_on_start, undefined)
   assert.equal(cfg.command_guard_asks?.type, 'boolean')
   assert.equal(cfg.command_guard_asks?.default, false)
   assert.equal(cfg.inline_edit_max_lines?.type, 'number')
   assert.equal(cfg.inline_edit_max_lines?.default, 150)
   assert.equal(cfg.slice_lines?.type, 'number')
   assert.equal(cfg.slice_lines?.default, 1500)
-  assert.equal(Object.keys(cfg).length, (Object.keys(S6).length + Object.keys(LEGACY).length) * 2 + 4)
+  assert.equal(Object.keys(cfg).length, (Object.keys(S6).length + Object.keys(LEGACY).length) * 2 + 3)
 })
 
 test('no non-deprecated userConfig title names a methodology (ODD, RDD, JD)', () => {

@@ -1,5 +1,5 @@
 import { expect, test } from 'claude-code/testing'
-import { checkClaude, checkEngram, checkNode, formatReport } from '../hooks/status/doctor.js'
+import { checkClaude, checkNode, formatReport } from '../hooks/status/doctor.js'
 
 // Pure checks behind /construct doctor (S8).
 
@@ -29,13 +29,6 @@ test('Node needs 22.16 or later', () => {
   expect(checkNode('v20.11.0').ok).toBe(false)
   expect(checkNode(null).ok).toBe(false)
   expect(checkNode('v22.1.0').label).toContain('22.16')
-})
-
-test('engram row reads `engram version`', () => {
-  expect(checkEngram('engram 3.6.0\n')).toEqual({ ok: true, label: 'Engram 3.6.0', hint: expect.any(String) })
-  for (const out of [null, '', 'garbage']) expect(checkEngram(out).ok).toBe(false)
-  expect(checkEngram(null).label).toBe('Engram (not found)')
-  expect(checkEngram(null).hint).toBe('brew install gentleman-programming/tap/engram && engram setup claude-code')
 })
 
 test('the report has one line per check', () => {

@@ -1,16 +1,14 @@
-// Panel state for the construct mod: pure reducers and selectors over the value persisted as
-// construct.panel.v3. Every reducer takes a state (any value is repaired through merge) and an
+// Band state for the construct mod: pure reducers and selectors over the value persisted as
+// construct.band.v1. Every reducer takes a state (any value is repaired through merge) and an
 // event object, and returns a new state; nothing here reads the clock or the disk.
 import { roleFor } from '../routing.js'
 import { isNum } from '../status/format.js'
 import { kindOf } from '../scripts/roles.mjs'
 
-export const SCHEMA_VERSION = 3
+export const SCHEMA_VERSION = 1
 
 const MAX_AGENTS = 20
-const MAX_CELLS = 60
 const MAX_PENDING = 100
-const MAX_DETAIL = 80
 
 const isObj = (x) => typeof x === 'object' && x !== null && !Array.isArray(x)
 const str = (x) => (typeof x === 'string' && x !== '' ? x : null)
@@ -24,19 +22,9 @@ export function initialState() {
   return {
     v: SCHEMA_VERSION,
     agents: [],
-    inline: { count: 0, last: null },
-    gate: {
-      cells: [],
-      counts: { allowed: 0, asked: 0, denied: 0, sub: 0 },
-      denied: 0,
-      lastDenied: null,
-      verdicts: tally(),
-      buckets: { file: tally(), shell: tally(), other: tally() },
-      pending: {},
-    },
+    inline: { count: 0 },
+    gate: { verdicts: tally(), pending: {} },
     turn: null,
-    compactions: 0,
-    main: { steps: 0, model: null, effort: null, mode: null },
     blocked: false,
   }
 }
@@ -47,61 +35,27 @@ const fill = (def, v) => {
   return Object.fromEntries(Object.entries(def).map(([k, d]) => [k, typeof d === 'number' ? (isNum(from[k]) ? from[k] : d) : (from[k] ?? d)]))
 }
 
-// Repairs a stored value: v1 to v3 are read, anything else resets. A section of the wrong type
-// takes its default, so a field dropped from the schema (receipt, log) never comes back.
+// Repairs a stored value: another version resets. A section of the wrong type takes its default,
+// and a field outside the schema is dropped.
 export function merge(stored) {
   const base = initialState()
-  if (!isObj(stored) || ![1, 2, 3].includes(stored.v)) return base
+  if (!isObj(stored) || stored.v !== SCHEMA_VERSION) return base
   const g = isObj(stored.gate) ? stored.gate : {}
-  const gate = {
-    ...fill(base.gate, g),
-    cells: Array.isArray(g.cells) ? g.cells : [],
-    counts: fill(base.gate.counts, g.counts),
-    verdicts: fill(base.gate.verdicts, g.verdicts),
-    buckets: Object.fromEntries(Object.keys(base.gate.buckets).map((k) => [k, fill(base.gate.verdicts, g.buckets?.[k])])),
-    lastDenied: isObj(g.lastDenied) ? g.lastDenied : null,
-    pending: isObj(g.pending) ? g.pending : {},
-  }
-  const agents = (Array.isArray(stored.agents) ? stored.agents : []).filter(isObj).map((a) => ({ ...a, steps: isNum(a.steps) ? a.steps : 0, ctx: isNum(a.ctx) ? a.ctx : 0 }))
+  const gate = { verdicts: fill(base.gate.verdicts, g.verdicts), pending: isObj(g.pending) ? g.pending : {} }
   return {
     v: SCHEMA_VERSION,
-    agents,
+    agents: (Array.isArray(stored.agents) ? stored.agents : []).filter(isObj),
     inline: fill(base.inline, stored.inline),
     gate,
     turn: isObj(stored.turn) ? stored.turn : null,
-    compactions: isNum(stored.compactions) ? stored.compactions : 0,
-    main: fill(base.main, stored.main),
     blocked: stored.blocked === true,
   }
 }
 
-// merge is idempotent on a sound value, so every reducer repairs nested damage in a v3 value too
+// merge is idempotent on a sound value, so every reducer repairs nested damage in a current value too
 const open = merge
 
-// ---- secrets and paths ---------------------------------------------------
-
-const SECRET_RULES = [
-  [/\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]+/gi, '$1 ***'],
-  [/(\b[a-z][a-z0-9+.-]*:\/\/[^\s:@/]+:)[^\s@/]+@/gi, '$1***@'],
-  [/(\s-u\s+[^\s:]+:)\S+/g, '$1***'],
-  // NAME=value, NAME: value, --name=value where the name holds a secret word anywhere; found nested after `=` or `-D` too.
-  // The name is a whole run of word characters (the lookbehind starts one scan per run) and the lookahead finds the word, so no rescans.
-  [/((?<![\w.-])(?=[\w.-]*(?:key|secret|password|passwd|pwd|token|credential))[\w.-]*\s*[=:]\s*)("[^"]*"|'[^']*'|[^\s&"']+)/gi, '$1***'],
-  [/(?:(?:sk|pk|rk)[-_][A-Za-z0-9_-]{10,}|(?:npm|whsec)_[A-Za-z0-9]{16,}|SG\.[\w.-]{16,}|gh[pousr]_[A-Za-z0-9]{16,}|github_pat_\w{20,}|glpat-[\w-]{20,}|xox[abprs]-[A-Za-z0-9-]{10,}|(?:AKIA|ASIA)[A-Z0-9]{16})/g, '***'],
-  // an AWS-style secret key: 40 chars of base64 with every character class present
-  [/(?<![A-Za-z0-9/+])(?=[A-Za-z0-9/+]*\d)(?=[A-Za-z0-9/+]*[A-Z])(?=[A-Za-z0-9/+]*[a-z])[A-Za-z0-9/+]{40}(?![A-Za-z0-9/+])/g, '***'],
-  // 32+ chars of base64/base64url with a digit (API keys, JWT parts, UUIDs); the lookbehind keeps the scan linear
-  [/(?<![A-Za-z0-9+_-])(?=[A-Za-z0-9+_-]*\d)[A-Za-z0-9+_-]{32,}={0,2}/g, '***'],
-]
-
-export function maskSecrets(text) {
-  if (typeof text !== 'string') return ''
-  let out = text
-  // `-pSECRET` is the mysql form; only mask it where the command is one that takes it
-  if (/\b(?:mysql\w*|mariadb\w*|mongo\w*)\b/.test(out)) out = out.replace(/(\s-p)("[^"]*"|'[^']*'|\S+)/g, '$1***')
-  for (const [re, to] of SECRET_RULES) out = out.replace(re, to)
-  return out
-}
+// ---- paths ---------------------------------------------------------------
 
 // The path a tool call touches: a top-level file_path on the call, else the one in its input.
 export function filePathOf(e) {
@@ -147,24 +101,11 @@ export function onAgentSpawn(state, e) {
     type,
     description: typeof e.description === 'string' ? e.description : '',
     model: str(e.model),
-    effort: str(e.effort),
-    ctx: 0,
-    steps: 0,
     startedMs: isNum(e.nowMs) ? e.nowMs : 0,
     endedMs: null,
     status: 'running',
   }
-  const spawned = { ...s, agents: last([...s.agents.filter((a) => a.id !== id), agent], MAX_AGENTS) }
-  return e.parentAgentId === undefined ? onPermissionMode(spawned, { mode: e.mode }) : spawned
-}
-
-export function onTurnStep(state, e) {
-  const s = open(state)
-  const id = str(e?.agentId)
-  if (!id) return s
-  const u = e.usage
-  const ctx = isObj(u) ? (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0) : null
-  return withAgent(s, id, (a) => ({ steps: a.steps + 1, ctx: isNum(ctx) ? ctx : a.ctx }))
+  return { ...s, agents: last([...s.agents.filter((a) => a.id !== id), agent], MAX_AGENTS) }
 }
 
 export function onTurnStart(state, e) {
@@ -184,24 +125,6 @@ export function onTurnComplete(state, e) {
   return s.turn ? { ...s, turn: null } : s
 }
 
-export function onMainStep(state, e) {
-  const s = open(state)
-  if (str(e?.agentId) !== null) return s
-  const effort = e?.effort == null || e.effort === '' ? null : String(e.effort)
-  return { ...s, main: { ...s.main, steps: s.main.steps + 1, model: str(e?.model) ?? s.main.model, effort } }
-}
-
-export function onPermissionMode(state, e) {
-  const s = open(state)
-  const mode = str(e?.mode)
-  return mode ? { ...s, main: { ...s.main, mode } } : s
-}
-
-export const onCompact = (state) => {
-  const s = open(state)
-  return { ...s, compactions: s.compactions + 1 }
-}
-
 // ---- gate ----------------------------------------------------------------
 
 const FILE_TOOLS = ['Read', 'Edit', 'MultiEdit', 'Write', 'NotebookEdit', 'Glob', 'Grep']
@@ -215,46 +138,25 @@ export function bucketOf(tool) {
 
 const bump = (counts, key, by = 1) => ({ ...counts, [key]: Math.max(0, counts[key] + by) })
 
-// Moves one verdict from `from` to `to`, in the totals and in the tool's bucket.
-function shift(gate, bucket, from, to) {
-  const buckets = gate.buckets[bucket] ? { ...gate.buckets, [bucket]: bump(bump(gate.buckets[bucket], from, -1), to) } : gate.buckets
-  return { ...gate, verdicts: bump(bump(gate.verdicts, from, -1), to), buckets }
-}
+// Moves one verdict from `from` to `to`.
+const shift = (gate, from, to) => ({ ...gate, verdicts: bump(bump(gate.verdicts, from, -1), to) })
 
-const DETAIL_FIELDS = ['command', 'file_path', 'notebook_path', 'path', 'url', 'pattern']
-const CELL = { allow: 'allowed', ask: 'asked', deny: 'denied' }
 const VERDICT = { allow: 'rule', ask: 'ask', deny: 'deny' }
 
 export function onToolCheck(state, e) {
   const s = open(state)
   const decision = e?.decision
   // a query carries no tool_use_id: it asks what would happen and decides nothing
-  if (e?.isQuery || !CELL[decision]) return s
+  if (e?.isQuery || !VERDICT[decision]) return s
   // the same call asked again (a re-check while it waits) is one ask, not two
   if (decision === 'ask' && str(e.callId) && Object.hasOwn(s.gate.pending ?? {}, e.callId)) return s
-  const bucket = bucketOf(e.tool)
-  const verdict = VERDICT[decision]
-  const sub = str(e.agentId) !== null
-  const cell = sub ? 'sub' : CELL[decision]
   const g = s.gate
-  let gate = {
-    ...g,
-    cells: last([...g.cells, cell], MAX_CELLS),
-    counts: bump(g.counts, cell),
-    verdicts: bump(g.verdicts, verdict),
-    buckets: { ...g.buckets, [bucket]: bump(g.buckets[bucket], verdict) },
-  }
-  if (decision === 'deny') {
-    const input = isObj(e.input) ? e.input : {}
-    const shown = maskSecrets(DETAIL_FIELDS.map((k) => str(input[k])).find((x) => x) ?? '')
-    const detail = shown.length > MAX_DETAIL ? `${shown.slice(0, MAX_DETAIL - 3)}...` : shown
-    gate = { ...gate, denied: g.denied + 1, lastDenied: { tool: str(e.tool) ?? 'tool', detail } }
-  }
+  let gate = { ...g, verdicts: bump(g.verdicts, VERDICT[decision]) }
   if (decision === 'ask') {
-    // asks without a call id still need a unique slot; the running total is one
-    const key = str(e.callId) ?? `anon${Object.values(g.counts).reduce((a, b) => a + b, 0)}`
+    // asks without a call id still need a unique slot; the running total of verdicts is one
+    const key = str(e.callId) ?? `anon${Object.values(g.verdicts).reduce((a, b) => a + b, 0)}`
     const keys = Object.keys(gate.pending ?? {}).concat(key).slice(-MAX_PENDING)
-    gate = { ...gate, pending: Object.fromEntries(keys.map((k) => [k, k === key ? bucket : gate.pending[k]])) }
+    gate = { ...gate, pending: Object.fromEntries(keys.map((k) => [k, k === key ? bucketOf(e.tool) : gate.pending[k]])) }
   }
   return { ...s, gate }
 }
@@ -267,8 +169,8 @@ export function onToolSettle(state, e) {
   const bucket = bucketOf(e?.tool)
   const key = id ?? Object.keys(pending).find((k) => pending[k] === bucket)
   if (key === undefined || !Object.hasOwn(pending, key)) return s
-  const { [key]: settled, ...rest } = pending
-  const gate = shift({ ...s.gate, pending: rest }, settled, 'ask', e.didRun ? 'cleared' : 'deny')
+  const { [key]: _settled, ...rest } = pending
+  const gate = shift({ ...s.gate, pending: rest }, 'ask', e.didRun ? 'cleared' : 'deny')
   return { ...s, gate }
 }
 
@@ -277,7 +179,7 @@ export function onToolSettle(state, e) {
 export function onToolCall(state, e) {
   const s = open(state)
   if (str(e?.agentId) !== null || !WRITE_TOOLS.includes(e?.tool) || !isOutsideTasks(e.path, e.cwd)) return s
-  return { ...s, inline: { count: s.inline.count + 1, last: e.path } }
+  return { ...s, inline: { count: s.inline.count + 1 } }
 }
 
 const BLOCKING = ['AskUserQuestion', 'ExitPlanMode']
@@ -296,7 +198,7 @@ export function onUnblocked(state) {
 
 export const mainBusy = (state) => isObj(state?.turn)
 
-// The agent's short panel name: its role with dashes when that is a construct role, else the role
+// The agent's short name: its role with dashes when that is a construct role, else the role
 // or type as is.
 export function shortName(agent) {
   const name = typeof agent === 'string' ? agent : (str(agent?.role) ?? str(agent?.type))

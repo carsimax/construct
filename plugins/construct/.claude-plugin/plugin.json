@@ -1,7 +1,7 @@
 {
   "name": "construct",
   "displayName": "Construct",
-  "version": "9.0.0",
+  "version": "10.0.0",
   "license": "MIT",
   "description": "Organic Driven Development orchestration, review lenses, and delivery skills for Claude Code",
   "author": {
@@ -451,12 +451,6 @@
         "max"
       ],
       "default": "medium"
-    },
-    "panel_open_on_start": {
-      "type": "boolean",
-      "title": "Open the Construct panel on start",
-      "description": "Open the docked Construct panel when a session starts (on by default); /construct opens it any time and /construct close closes it",
-      "default": true
     },
     "command_guard_asks": {
       "type": "boolean",

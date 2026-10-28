@@ -1,10 +1,9 @@
 import { expect, test } from 'claude-code/testing'
-import { parseGitStatus, parseNumstat, parseRevParse } from '../hooks/status/data.js'
+import { parseRevParse } from '../hooks/status/data.js'
 
 // ---- fixtures ----------------------------------------------------------
 
 const NOW = new Date(2026, 9, 19, 12, 0, 0).getTime()
-const at = (day: number, h: number, m: number) => new Date(2026, 9, day, h, m, 0).toISOString()
 
 const TASKS = [
   '# feature',
@@ -25,7 +24,7 @@ const TASKS = [
 const entry = (name: string, mtimeMs = 1) => ({ name, kind: 'file', size: 1, mtimeMs, isLink: false })
 const ok = (stdout: string) => ({ exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false })
 
-// Registers stubs for everything the panel reads. `o` overrides pieces; a function
+// Registers stubs for everything the band reads. `o` overrides pieces; a function
 // for `process` answers each argv, and `fail` makes every call reject.
 function world($, on, o: any = {}) {
   const settings = o.settings ?? {}
@@ -50,22 +49,19 @@ function world($, on, o: any = {}) {
     seen.push([...e.argv])
     if (o.fail) throw new Error('boom')
     const a = e.argv
-    if (a[0] === 'git' && a.includes('status')) {
-      return value(ok('# branch.oid abc1234\n# branch.head main\n# branch.upstream origin/main\n# branch.ab +2 -1\n1 .M N... 1 1 1 a b f\n? new\n'))
-    }
     if (a[0] === 'git' && a.includes('rev-parse')) return value(ok('/home/me/proj\n.git\n.git\n'))
     return value({ ...ok(''), exitCode: 1 })
   })
   return seen
 }
 
-const PANE = { title: 'Construct', isFocused: false, bodyColumns: 80, placement: 'dock', scroll: { offset: 0, bodyRows: 40 }, view: {} }
+const BAND = { hasSurvey: false, isWorking: false, maxRows: 20, bodyColumns: 100, scroll: {}, view: {} }
 
-// Mounts the panel and waits for the refresh a session.start starts to land.
+// Mounts the band and waits for the refresh a session.start starts to land.
 async function drawBand($, on, o: any = {}) {
   const seen = world($, on, o)
   await $.session.start({ cwd: '/home/me/proj', source: 'startup' })
-  const ui = await $.ui.mount({ plugin: 'construct', surface: 'terminal', component: 'Pane', requestId: 'construct', props: PANE })
+  const ui = await $.ui.mount({ plugin: 'construct', surface: 'terminal', component: 'AbovePrompt', props: BAND })
   for (let i = 0; i < 40 && !(await leaves(ui)).some((l) => l.text.includes('ODD')); i++) {
     await ui.redraw()
     await new Promise((r) => setTimeout(r, 5))
@@ -89,76 +85,39 @@ async function leaves(ui) {
 }
 
 const joined = async (ui) => (await leaves(ui)).map((l) => l.text).join('')
-const under = async (ui, key: string) => (await leaves(ui)).filter((l) => l.key === key)
 
 // ---- pure helpers --------------------------------------------------------
 
-test('parsers read git and rev-parse output', async () => {
-  const git = parseGitStatus('# branch.oid abc1234deadbeef\n# branch.head main\n# branch.upstream o/main\n# branch.ab +2 -1\n1 .M x\n? y\n')
-  expect(git).toEqual({ branch: 'main', dirty: 2, ahead: 2, behind: 1, untracked: ['y'] })
-  expect(parseGitStatus('# branch.oid abc1234deadbeef\n# branch.head (detached)\n').branch).toBe('abc1234')
-  expect(parseGitStatus('')).toBe(null)
+test('parseRevParse reads the root', async () => {
   expect(parseRevParse('/r\n/r/.git/worktrees/w\n/r/.git\n')).toEqual({ root: '/r' })
   expect(parseRevParse('/r\n.git\n.git\n')).toEqual({ root: '/r' })
+  expect(parseRevParse('')).toBe(null)
+  expect(parseRevParse(undefined)).toBe(null)
 })
 
-// ---- mounted panel --------------------------------------------------------
+// ---- mounted band ---------------------------------------------------------
 
-test('the panel shows the same cards with or without a statusLine', async ($, on) => {
+test('the band shows the feature and leaves the model, context, limits and git to the status line', async ($, on) => {
   const { ui } = await drawBand($, on, {
-    settings: { statusLine: { type: 'command', command: 'x' } },
-    usage: { startedAt: 0, context: { window: 1, percent: 40 }, rateLimits: [] },
+    settings: { statusLine: { type: 'command', command: 'x' }, outputStyle: 'Explanatory' },
+    usage: { startedAt: 0, context: { window: 1_000_000, tokens: 120_000, percent: 12 }, rateLimits: [{ kind: 'five_hour', percentUsed: 30 }], cost: { usd: 3.5 } },
   })
   const text = await joined(ui)
-  expect(text).toContain('Opus 4')
-  expect(text).toContain('ODD · feat')
-  expect(text).toContain('T2')
-  expect(text).not.toContain('REVIEW')
-  expect(text).toContain('ctx')
-  expect(text).toContain('40%')
-  expect(text).not.toContain('~/proj')
+  expect(text).toMatch(/ODD feat.*T2 second/)
+  for (const w of ['ctx', '12%', '5h', '30%', 'Opus', '⎇', '$3.50', '~/proj', 'Explanatory']) expect(text).not.toContain(w)
 })
 
-test('the main card draws ctx, 5h and 7d from the session usage, and no dir, git or style', async ($, on) => {
-  const { ui } = await drawBand($, on, {
-    settings: { outputStyle: 'Explanatory' },
-    usage: {
-      startedAt: 0,
-      context: { window: 1_000_000, tokens: 120_000, percent: 12 },
-      rateLimits: [
-        { kind: 'five_hour', percentUsed: 30, resetsAt: at(19, 14, 5) },
-        { kind: 'seven_day', percentUsed: 60, resetsAt: at(23, 9, 30) },
-      ],
-      cost: { usd: 3.5 },
-    },
-  })
-  const text = await joined(ui)
-  expect(text).toMatch(/ODD · feat.*T2/)
-  for (const w of ['ctx', '12%', '120k/1.0M', '5h', '30%', '7d', '60%', 'Opus 4']) expect(text).toContain(w)
-  for (const w of ['$3.50', '~/proj', '±2', 'construct:Principal Engineer', 'Explanatory']) expect(text).not.toContain(w)
-  expect(text.indexOf('ODD · feat')).toBeGreaterThan(text.indexOf('ctx'))
-})
-
-for (const [pct, color] of [[49, 'claude'], [79, 'claude'], [80, 'error']] as const) {
-  test(`the ctx gauge at ${pct}% is ${color}`, async ($, on) => {
-    const { ui } = await drawBand($, on, { usage: { startedAt: 0, context: { window: 1, percent: pct }, rateLimits: [] } })
-    const all = await leaves(ui)
-    expect(all.find((l) => l.text.includes('%'))!.text).toContain(`${pct}%`)
-    expect(all.find((l) => l.text.startsWith('▰'))!.props.color).toBe(color)
-  })
-}
-
-// Theme keys documented for custom themes; the panel colors with these so it follows the active theme.
+// Theme keys documented for custom themes; the band colors with these so it follows the active theme.
 const THEME_KEYS = new Set(['claude', 'text', 'inverseText', 'inactive', 'subtle', 'suggestion', 'permission', 'remember', 'success', 'error', 'warning', 'merged', 'promptBorder', 'planMode', 'autoAccept', 'bashBorder', 'ide', 'fastMode'])
 
-test('every color the panel draws is a theme key, so it follows the active theme', async ($, on) => {
+test('every color the band draws is a theme key, so it follows the active theme', async ($, on) => {
   const { ui } = await drawBand($, on)
   const colors = (await leaves(ui)).map((l) => l.props.color).filter(Boolean)
-  expect(colors.length).toBeDefined()
+  expect(colors.length).toBeGreaterThan(0)
   for (const color of colors) expect(THEME_KEYS.has(color)).toBe(true)
 })
 
-test('the panel draws no matrix mark and no inline rail: one element per row', async ($, on) => {
+test('the band draws no matrix mark and no inline rail', async ($, on) => {
   const { ui } = await drawBand($, on)
   const text = await joined(ui)
   expect(text).not.toContain('▌')
@@ -166,71 +125,20 @@ test('the panel draws no matrix mark and no inline rail: one element per row', a
   expect(text).not.toContain(' │ ')
 })
 
-test('a segment whose data is missing is omitted', async ($, on) => {
-  const { ui } = await drawBand($, on, { usage: { startedAt: 0, context: { window: 1 }, rateLimits: [{ kind: 'five_hour', percentUsed: 5 }] } })
-  expect(await joined(ui)).not.toContain('ctx')
-  const text = await joined(ui)
-  expect(text).not.toContain('ctx')
-  expect(text).not.toContain('7d')
-  expect(text).toContain('5h')
-  expect(text).not.toContain('↻')
+test('a failing process still finds the feature from the session directory and does not throw', async ($, on) => {
+  const { ui } = await drawBand($, on, { fail: true })
+  expect(await joined(ui)).toMatch(/ODD feat.*T2/)
 })
 
-test('a failing process draws no git segments and does not throw', async ($, on) => {
-  const { ui } = await drawBand($, on, { fail: true, usage: { startedAt: 0, context: { window: 1, percent: 12 }, rateLimits: [] } })
-  expect(await joined(ui)).toContain('ctx')
-  const text = await joined(ui)
-  expect(text).toContain('ctx')
-  expect(text).toContain('Opus 4')
-  expect(text).not.toContain('⎇')
-  expect(text).not.toContain('REVIEW')
-})
-
-test('with a native statusLine and a failing process nothing extra is drawn', async ($, on) => {
-  world($, on, { fail: true, settings: { statusLine: { type: 'command', command: 'x' } }, tasks: [] })
-  await $.session.start({ cwd: '/home/me/proj', source: 'startup' })
-  const ui = await $.ui.mount({ plugin: 'construct', surface: 'terminal', component: 'Pane', requestId: 'construct', props: PANE })
-  await new Promise((r) => setTimeout(r, 30))
-  await ui.redraw()
-  const text = await joined(ui)
-  expect(text).toContain('Opus 4')
-  for (const w of ['ODD ·', 'REVIEW', 'GATE', 'agents ·']) expect(text).not.toContain(w)
-})
-
-test('the probes are not run on render, only on session.start and turn.complete', async ($, on) => {
+test('the only probe is git rev-parse, run on session.start and turn.complete, never on render', async ($, on) => {
   const { ui, seen } = await drawBand($, on, {})
   const after = seen.length
   expect(after).toBeGreaterThan(0)
+  for (const argv of seen) expect(argv).toEqual(['git', 'rev-parse', '--show-toplevel'])
   await ui.redraw()
   await ui.redraw()
   expect(seen.length).toBe(after)
   await $.turn.complete({ turnId: 't', reason: 'answer', answer: 'ok', durationMs: 1, isAborted: false })
   await new Promise((r) => setTimeout(r, 30))
   expect(seen.length).toBeGreaterThan(after)
-})
-
-test('parseGitStatus reads the -z form: NUL entries, unquoted non-ASCII paths, a rename origin skipped', async () => {
-  const text = ['# branch.oid abc1234', '# branch.head main', '# branch.ab +0 -0', '2 R. N... 100644 100644 100644 a b R100 new.md', '? old.md', '? café.md', '? "q".md', ''].join('\0')
-  const git = parseGitStatus(text.replace('? old.md\0', 'old.md\0? ñ.md\0'))
-  expect(git).toEqual({ branch: 'main', dirty: 4, ahead: 0, behind: 0, untracked: ['ñ.md', 'café.md', '"q".md'] })
-})
-
-test('parseGitStatus lists untracked paths and keeps its other fields', async () => {
-  const git = parseGitStatus('# branch.oid abc1234deadbeef\n# branch.head main\n# branch.ab +2 -1\n1 .M x\n? new.txt\n? dir/\n? "sp\\"q.txt"\n')
-  expect(git).toEqual({ branch: 'main', dirty: 4, ahead: 2, behind: 1, untracked: ['new.txt', 'dir/', 'sp"q.txt'] })
-  expect(parseGitStatus('# branch.oid abc\n# branch.head main\n')?.untracked).toEqual([])
-  expect(parseGitStatus('# branch.oid abc\n# branch.head main\n? a\u001b[2Jb.txt\n')?.untracked).toEqual(['a[2Jb.txt'])
-})
-
-test('parseNumstat reads added and removed lines, binary files, and quoted paths', async () => {
-  expect(parseNumstat('12\t3\tsrc/a.js\n0\t4\tb.md\n-\t-\timg.png\n')).toEqual([
-    { path: 'src/a.js', added: 12, removed: 3, binary: false },
-    { path: 'b.md', added: 0, removed: 4, binary: false },
-    { path: 'img.png', added: null, removed: null, binary: true },
-  ])
-  expect(parseNumstat('1\t1\t"a b\\"c.txt"\n')).toEqual([{ path: 'a b"c.txt', added: 1, removed: 1, binary: false }])
-  expect(parseNumstat('1\t2\tdir/with\ttab.txt\n')[0].path).toBe('dir/with\ttab.txt'.replace('\t', ''))
-  expect(parseNumstat('')).toEqual([])
-  expect(parseNumstat(undefined)).toEqual([])
-  expect(parseNumstat('garbage\n\nx\ty\tz\n')).toEqual([])
 })
