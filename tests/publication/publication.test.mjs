@@ -951,6 +951,16 @@ describe('S3: a locked oracle is protected at the published ref', () => {
     git(repo, 'checkout', '-q', 'feat')
     silent(hook('git push', repo))
   })
+  test('a lock whose feature is a glob is never released as orphaned by another deleted document', () => {
+    const repo = withRemote(lockedRepo({ edit: EDIT, lockFeature: '.vault/tasks/*.md' }))
+    git(repo, 'checkout', '-q', 'main')
+    applyFiles(repo, { '.vault/tasks/f.md': null })
+    commitAll(repo, 'retire another document')
+    git(repo, 'push', '-q', 'origin', 'main')
+    git(repo, 'fetch', '-q', 'origin')
+    git(repo, 'checkout', '-q', 'feat')
+    lockDenied(hook('git push', repo), /changed/)
+  })
   test('a feature document that never reached the remote default branch keeps its lock', () => lockDenied(hook('git push', withRemote(lockedRepo({ mainDoc: null, edit: EDIT }))), /changed/))
   test('a release ref moved locally to a finished document does not release the lock', () => {
     const repo = withRemote(lockedRepo({ edit: EDIT }))

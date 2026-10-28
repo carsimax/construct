@@ -281,9 +281,11 @@ export function activeLocks(root, { verifyRemote = false } = {}) {
       if (!finished.has(feature)) {
         let tasks = null
         let orphaned = false
-        if (release && out(root, ['ls-tree', '--name-only', release, '--', feature]) !== '') tasks = unfinishedRows(out(root, ['show', `${release}:${feature}`]).split('\n'))
+        // Literal pathspecs: a feature such as `.vault/tasks/*.md` must not match another document; a feature that is not a plain document path is never released as orphaned.
+        const literal = `:(literal)${feature}`
+        if (release && out(root, ['ls-tree', '--name-only', release, '--', literal]) !== '') tasks = unfinishedRows(out(root, ['show', `${release}:${feature}`]).split('\n'))
         // The document reached the default branch and a merged change removed it there: nothing is left to protect (S1 of oracle-autonomy).
-        else if (release) orphaned = out(root, ['log', '-1', '--format=%H', release, '--', feature]) !== ''
+        else if (release && /^\.vault\/tasks\/[A-Za-z0-9._-]+\.md$/.test(feature) && !feature.includes('..')) orphaned = out(root, ['log', '-1', '--format=%H', release, '--', literal]) !== ''
         finished.set(feature, orphaned || (tasks !== null && tasks.rows.length === 0))
       }
       return finished.get(feature)
