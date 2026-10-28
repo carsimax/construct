@@ -17,7 +17,7 @@ Objective: make the evals measure what they claim, record a three-run baseline f
 | T2 | S4 | Follow-ups (a)-(f) in hooks, CLI, and tests | worker | 2, 3 | done | fea9929 |
 | T4 | S1 | The session contract names the feature-document sections, since agents skipped `## Log` when only the reference had them | inline | 3 | done | e14d68b |
 | T5 | S2 | Correct the documented review-fires cause (README, CONTRIBUTING, CLAUDE.md, results, plugin-evals skill) | inline | none | done | e14d68b |
-| T6 | S4 | hasOracleFiles fails closed when the root has no `.git` entry (review-risk) | inline | 2 | done | — |
+| T6 | S4 | hasOracleFiles fails closed when the root has no `.git` entry (review-risk) | inline | 2 | done | c06a956 |
 | T3 | S3 | Three-run baseline and `docs/evals/results.md` | inline | none | done | (this commit) |
 
 ## Log
