@@ -19,7 +19,7 @@ Objective: the per-repository working directory becomes `.vault/` with container
 | T1 | S1, S2, S3, S4, S5 | Hooks, CLI, evals, and tests: `.vault/` paths, specs and risk-paths folders, no `odd/` reads | worker | 3 | done | 7b7090c |
 | T2 | S1, S6 | Skills, agents, contracts, README, CLAUDE.md, CONTRIBUTING, METHODOLOGY, CHANGELOG: `.vault/` and ADD text | worker | 3 | done | 706e20d |
 | T5 | S1 | Deny publishing an unmigrated `odd/` without `.vault/`, naming the migration | inline | 2, 3 | done | 731b982 |
-| T6 | S1, S4 | Pre-push fallback denies an unmigrated clone; the migration push keeps the default branch's odd/risk-paths floor | inline | 2, 3 | done | — |
+| T6 | S1, S4 | Pre-push fallback denies an unmigrated clone; the migration push keeps the default branch's odd/risk-paths floor | inline | 2, 3 | done | 700599b |
 | T3 | S7 | Move this repository's `odd/` to `.vault/` | inline | 3 | done | (this commit) |
 
 ## Log
