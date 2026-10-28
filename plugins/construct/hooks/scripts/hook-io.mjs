@@ -40,7 +40,7 @@ const STATE_MAX_AGE_MS = 7 * 24 * 3600 * 1000
 const STATE_DIRS = ['risk-line', 'subagent-count', 'delegation-admission', 'delivery-signals', 'failure-streak']
 
 // pruneState removes this plugin's per-session state entries (a file or a
-// session directory directly under one of STATE_DIRS) idle for over 7 days.
+// session directory directly under one of STATE_DIRS) and stale construct-index-* temporary directories idle for over 7 days.
 // Nothing else in the data directory is touched. Best effort: errors are ignored.
 export function pruneState(now = Date.now()) {
   for (const name of STATE_DIRS) {
@@ -59,6 +59,20 @@ export function pruneState(now = Date.now()) {
         // Best effort.
       }
     }
+  }
+  // A killed snapshot leaves its temporary index directory behind.
+  try {
+    for (const entry of readdirSync(tmpdir())) {
+      if (!entry.startsWith('construct-index-')) continue
+      try {
+        const path = join(tmpdir(), entry)
+        if (now - lstatSync(path).mtimeMs > STATE_MAX_AGE_MS) rmSync(path, { recursive: true, force: true })
+      } catch {
+        // Best effort.
+      }
+    }
+  } catch {
+    // Best effort.
   }
 }
 

@@ -53,6 +53,53 @@ describe('registration', () => {
   })
 })
 
+describe('snapshot budget', () => {
+  const slow = (e) => ({ ...e, CONSTRUCT_SNAPSHOT_BUDGET_MS: '1' })
+  const record = (e) => JSON.parse(readFileSync(join(e.CLAUDE_PLUGIN_DATA, 'risk-line', 's1.json'), 'utf8'))
+
+  test('a degraded snapshot is remembered in the record and announced once', () => {
+    const repo = makeRepo({ 'src/a.js': 'export const a = 1\n' })
+    const e = slow(env())
+    const mark = run('mark', repo, e)
+    assert.equal(mark.status, 0)
+    assert.match(mark.json.systemMessage, /time budget/)
+    assert.equal(mark.json.decision, undefined)
+    assert.equal(record(e).slow, realpathSync(repo))
+    silent(run('mark', repo, e, { extra: { prompt_id: 'p2' } }))
+    applyFiles(repo, { 'src/a.js': 'export const a = 2\n' })
+    const r = check(repo, e, 'Done.')
+    assert.equal(r.json.decision, 'block')
+    assert.equal(r.json.systemMessage, undefined)
+  })
+
+  test('the check path announces a degradation the mark did not see, and does not change the block', () => {
+    const { repo, e } = changed()
+    const r = check(repo, slow(e), 'Done.')
+    assert.equal(r.json.decision, 'block')
+    assert.match(r.json.systemMessage, /time budget/)
+    assert.equal(record(e).noticed, true)
+  })
+
+  test('a repository remembered as slow skips the full hash', () => {
+    const repo = makeRepo({ 'src/a.js': 'export const a = 1\n' })
+    // The rewrite's ctime only differs when it crosses a second boundary; ignore ctime so the stat cache always matches.
+    git(repo, 'config', 'core.trustctime', 'false')
+    const second = Math.floor(Date.now() / 1000) - 100
+    utimesSync(join(repo, 'src/a.js'), second, second)
+    git(repo, 'update-index', '--refresh')
+    utimesSync(join(repo, '.git', 'index'), second + 50, second + 50)
+    const e = slow(env())
+    run('mark', repo, e)
+    const first = record(e).tree
+    // a same-size rewrite with a restored mtime: only the full hash sees it, and the slow repository skips that
+    writeFileSync(join(repo, 'src/a.js'), 'export const a = 2\n')
+    utimesSync(join(repo, 'src/a.js'), second, second)
+    const r = run('mark', repo, { ...e, CONSTRUCT_SNAPSHOT_BUDGET_MS: '60000' }, { extra: { prompt_id: 'p2' } })
+    assert.equal(r.stdout, '')
+    assert.equal(record(e).tree, first)
+  })
+})
+
 describe('check', () => {
   test('blocks a change outside odd/tasks without a Risk line', () => {
     const { repo, e } = changed()

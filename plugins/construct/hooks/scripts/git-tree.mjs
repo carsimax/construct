@@ -7,6 +7,9 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 
 const DEFAULT_OUTPUT_LIMIT = 64 << 20
+// The full HEAD-seeded hash gets this long before the snapshot degrades to the index-seeded one. The
+// environment variable exists so tests can exhaust it without building a huge repository.
+export const SNAPSHOT_BUDGET_MS = Number(process.env.CONSTRUCT_SNAPSHOT_BUDGET_MS) || 5000
 
 class GitError extends Error {
   constructor(message, { status = null, stderr = '' } = {}) {
@@ -14,6 +17,7 @@ class GitError extends Error {
     this.name = 'GitError'
     this.status = status
     this.stderr = stderr
+    this.timedOut = false
   }
 }
 
@@ -29,17 +33,23 @@ function cleanEnvironment(extra) {
 
 // git runs one git command (argument array, never a shell) and returns stdout as a Buffer.
 // okStatuses lists the exit codes that are not failures.
-export function git(root, args, { env, input, maxBuffer = DEFAULT_OUTPUT_LIMIT, okStatuses = [0] } = {}) {
+export function git(root, args, { env, input, maxBuffer = DEFAULT_OUTPUT_LIMIT, okStatuses = [0], timeout } = {}) {
   const argv = ['--no-replace-objects', ...(root ? ['-C', root] : []), ...args]
   const result = spawnSync('git', argv, {
     env: cleanEnvironment(env),
     input: input === undefined ? undefined : Buffer.from(input),
     maxBuffer,
     encoding: 'buffer',
+    timeout,
     stdio: ['pipe', 'pipe', 'pipe'],
   })
   const stderr = result.stderr ? result.stderr.toString('utf8').trim() : ''
   if (result.error) {
+    if (result.error.code === 'ETIMEDOUT') {
+      const error = new GitError(`git ${args[0]} exceeded ${timeout} ms`, { stderr })
+      error.timedOut = true
+      throw error
+    }
     if (result.error.code === 'ENOBUFS') {
       throw new GitError(`git ${args[0]} output exceeded ${maxBuffer} bytes`, { stderr })
     }
@@ -78,14 +88,30 @@ function emptyTree(root) {
 // freezeWorkingTree builds an immutable tree of the current working state
 // (tracked plus untracked, not ignored) through a temporary index, so the user's
 // real index is never read for writing or changed. The base is the HEAD tree, or
-// the empty tree on an unborn branch. The temporary index starts as a copy of the
-// real one, whose stat cache lets `add -A` skip rehashing unchanged files, unless an
-// entry is assume-unchanged or skip-worktree: `add -A` would skip its changes.
-export function freezeWorkingTree(root) {
+// the empty tree on an unborn branch. The temporary index starts from HEAD, so `add -A` rehashes every
+// file and a same-size rewrite with a restored mtime is seen. That full hash gets budgetMs; when it runs out
+// (or indexSeeded asks to skip it) the snapshot starts as a copy of the real index instead, whose stat cache
+// lets `add -A` skip unchanged files, unless an entry is assume-unchanged or skip-worktree: `add -A` would
+// skip its changes. That snapshot is `degraded: true` in the result, because it trusts the stat cache.
+export function freezeWorkingTree(root, { budgetMs = SNAPSHOT_BUDGET_MS, indexSeeded = false } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'construct-index-'))
   try {
     const env = { GIT_INDEX_FILE: join(dir, 'index') }
     const head = headTree(root)
+    const result = (candidateTree, degraded) => ({ baseTree: head ?? emptyTree(root), candidateTree, degraded })
+    const fromHead = (timeout) => {
+      if (head !== null) git(root, ['read-tree', 'HEAD'], { env })
+      git(root, ['add', '-A'], { env, timeout })
+      return text(git(root, ['write-tree'], { env }))
+    }
+    if (!indexSeeded) {
+      try {
+        return result(fromHead(budgetMs), false)
+      } catch (error) {
+        if (!error.timedOut) throw error
+        rmSync(env.GIT_INDEX_FILE, { force: true })
+      }
+    }
     let seeded = false
     // `ls-files -v` tags assume-unchanged entries with a lowercase letter and skip-worktree ones with S
     if (!/^([a-z]|S) /m.test(text(git(root, ['ls-files', '-v'])))) try {
@@ -99,9 +125,9 @@ export function freezeWorkingTree(root) {
       // no real index yet (fresh repository): seed from HEAD below
     }
     if (!seeded && head !== null) git(root, ['read-tree', 'HEAD'], { env })
-    git(root, ['add', '-A'], { env })
-    const candidateTree = text(git(root, ['write-tree'], { env }))
-    return { baseTree: head ?? emptyTree(root), candidateTree }
+    // A cached file system monitor or untracked cache would make `add -A` skip changes the stat cache hides.
+    git(root, ['-c', 'core.fsmonitor=false', '-c', 'core.untrackedCache=false', 'add', '-A'], { env })
+    return result(text(git(root, ['write-tree'], { env })), true)
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
