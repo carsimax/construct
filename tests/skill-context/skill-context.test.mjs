@@ -6,7 +6,7 @@ import { spawnSync } from 'node:child_process'
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { commitAll, git, makeRepo, scratchDir, write } from '../helpers/repo.mjs'
-import { subjectHash, writeVerdict } from '../../plugins/construct/hooks/scripts/review-store.mjs'
+import { subjectHash, writeOracle, writeVerdict } from '../../plugins/construct/hooks/scripts/review-store.mjs'
 
 const SCRIPT = new URL('../../plugins/construct/hooks/scripts/skill-context.mjs', import.meta.url).pathname
 
@@ -240,4 +240,15 @@ test('review on the default branch with no remote-tracking branch says the state
   assert.equal(r.status, 0)
   assert.match(r.stdout, /main is the default branch and no remote-tracking default branch exists/)
   assert.doesNotMatch(r.stdout, /no review required/)
+})
+
+test('review lists the active oracle locks with up to three paths, and omits the line with none', () => {
+  const repo = featureRepo()
+  assert.doesNotMatch(run(repo, 'review').stdout, /Oracle locks/)
+  for (const n of [1, 2, 3, 4]) writeOracle(repo, { path: `tests/t${n}.test.mjs`, blob: 'a'.repeat(40), feature: 'odd/tasks/x.md', task: 'T1', at: Date.now() })
+  const r = run(repo, 'review')
+  assert.equal(r.status, 0)
+  // The store lists locks by hash of the path, so which three show is not fixed.
+  assert.match(r.stdout, /^Oracle locks: 4 active \((tests\/t\d\.test\.mjs, ){3}\.\.\.\)$/m)
+  assert.ok(r.stdout.length <= 1500)
 })
