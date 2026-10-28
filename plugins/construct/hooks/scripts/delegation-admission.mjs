@@ -32,6 +32,7 @@ import { kindOf, namesOf, qualified } from './roles.mjs'
 import { dataDir, readInput, safeName, SUBAGENT_MAX_IDLE_MS } from './hook-io.mjs'
 
 export const WRITERS = new Set(namesOf('writer').map(qualified))
+const ORACLE = qualified('oracle')
 const VERIFIER = qualified(namesOf('verifier')[0])
 
 const HEADING = /^## Allowed edit surfaces[ \t]*$/gim
@@ -543,6 +544,10 @@ function admit(input) {
   const parsed = parseSurfaces(prompt)
   if (!('paths' in parsed)) {
     deny(`${type} needs scoped edit surfaces. ${parsed.problem} ${SURFACES_FORM} Resend the same task text, changing only that section.`)
+    return
+  }
+  if (type === ORACLE && parsed.paths.some((path) => /[*?[\]{}]/.test(path))) {
+    deny(`${type} edit surfaces must be exact file paths, with no glob (any of * ? [ ] { }), because each is locked by its content hash when the oracle stops. List every test file by its full path.`)
     return
   }
   const cwd = typeof input.cwd === 'string' && input.cwd ? input.cwd : process.cwd()

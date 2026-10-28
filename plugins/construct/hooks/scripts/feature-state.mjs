@@ -30,7 +30,7 @@ function splitRow(line) {
 
 // Returns { rows, taskSpecs } for the `## Tasks` table (rows: unfinished only; taskSpecs: every row's
 // [id, Specs cell], or null without a `Specs` column), or null when the table is missing or malformed.
-function unfinishedRows(lines) {
+export function unfinishedRows(lines) {
   // A Tasks heading of any level 2-6, as publication-gate.mjs reads it; a heading of the same or a higher level ends it.
   const start = lines.findIndex((l) => /^#{2,6}\s+Tasks\b/i.test(l))
   if (start < 0) return null

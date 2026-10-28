@@ -437,3 +437,23 @@ describe('start mode (F10)', () => {
     assert.deepEqual(entry, { type: 'command', command: 'node', args: [script, 'start'], timeout: 10 })
   })
 })
+
+describe('oracle admission', () => {
+  const ORACLE = 'construct:oracle'
+  const spec = (...paths) => `Spec: odd/tasks/feat.md, T1\n${surfaces(...paths)}`
+  test('a glob surface is denied: oracle surfaces are exact paths', () => {
+    const repo = withFeature('pending')
+    for (const glob of ['tests/*.test.mjs', 'tests/a/**/x.test.mjs', 'tests/a?.test.mjs', 'tests/[ab].test.mjs', 'tests/{a,b}.test.mjs']) {
+      denied(launch(repo, env(), ORACLE, spec(glob)), /exact file paths/, /content hash/)
+    }
+  })
+  test('exact paths are admitted, and the oracle needs a Spec line like any writer', () => {
+    const repo = withFeature('pending')
+    allowed(launch(repo, env(), ORACLE, spec('tests/a.test.mjs', 'tests/b.test.mjs')))
+    denied(launch(repo, env(), ORACLE, surfaces('tests/a.test.mjs')), /Spec/)
+    denied(launch(repo, env(), ORACLE, 'no surfaces'), /edit surfaces/)
+  })
+  test('a worker with a glob is still admitted', () => {
+    allowed(launch(withFeature('pending'), env(), WORKER, spec('tests/**/*.test.mjs')))
+  })
+})

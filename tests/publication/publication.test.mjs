@@ -6,7 +6,7 @@ import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { applyFiles, commitAll, git, makeRepo, scratchDir } from '../helpers/repo.mjs'
-import { readVerdicts, subjectHash, writeVerdict } from '../../plugins/construct/hooks/scripts/review-store.mjs'
+import { readVerdicts, subjectHash, writeOracle, writeVerdict } from '../../plugins/construct/hooks/scripts/review-store.mjs'
 
 const PLUGIN = new URL('../../plugins/construct/', import.meta.url).pathname
 const HOOK = join(PLUGIN, 'hooks/scripts/publication-gate.mjs')
@@ -867,5 +867,58 @@ describe('errors deny, aliases and shell bodies are seen', () => {
     denied(hook('cat <<EOF\ngit push\nEOF', featureRepo('2')))
     denied(hook('git commit -F - <<EOF\ngit push\nEOF', featureRepo('2')))
     silent(hook('cat <<EOF\nprose: git push (later\nEOF', featureRepo('2')))
+  })
+})
+
+describe('S3: a locked oracle is protected at the published ref', () => {
+  const FEATURE = (status) => `# Feature\n\n## Tasks\n\n| ID | Specs | Task | Route | Risk | Status | Commit |\n|---|---|---|---|---|---|---|\n| T1 | S1 | work | worker | none | ${status} | - |\n\n## Log\n`
+  const TEST_PATH = 'tests/a.test.mjs'
+  // lockedRepo: the oracle file is committed on main and locked; feat adds the feature document (and edits).
+  function lockedRepo({ status = 'pending', edit = {}, lockFeature = 'odd/tasks/f.md' } = {}) {
+    const repo = makeRepo({ [TEST_PATH]: 'one\n' })
+    writeOracle(repo, { path: TEST_PATH, blob: git(repo, 'hash-object', TEST_PATH).trim(), feature: lockFeature, task: 'T1', at: Date.now() })
+    git(repo, 'checkout', '-q', '-b', 'feat')
+    applyFiles(repo, { 'odd/tasks/f.md': FEATURE(status), 'src/app.js': 'x\n', ...edit })
+    commitAll(repo, 'unit')
+    return repo
+  }
+  const lockDenied = (r, ...needles) => {
+    assert.equal(r.decision, 'deny', r.stdout)
+    assert.match(r.reason, /publication-gate/)
+    assert.match(r.reason, /locked/)
+    assert.match(r.reason, /oracle_conflict/)
+    assert.match(r.reason, new RegExp(TEST_PATH.replace('.', '\\.')))
+    for (const n of needles) assert.match(r.reason, n)
+  }
+
+  test('allows when the oracle is unchanged at the ref', () => silent(hook('git push', lockedRepo())))
+  test('denies when the oracle content changed', () => lockDenied(hook('git push', lockedRepo({ edit: { [TEST_PATH]: 'two\n' } })), /changed/))
+  test('denies when the oracle was deleted', () => lockDenied(hook('git push', lockedRepo({ edit: { [TEST_PATH]: null } })), /missing/))
+  test('denies the other gates too', () => lockDenied(hook('gh pr create', lockedRepo({ edit: { [TEST_PATH]: 'two\n' } }))))
+  test('judges the published ref, not the working tree', () => {
+    const repo = lockedRepo()
+    applyFiles(repo, { [TEST_PATH]: 'dirty\n' })
+    silent(hook('git push', repo))
+    git(repo, 'checkout', '-q', '-b', 'edited')
+    commitAll(repo, 'edit the oracle')
+    git(repo, 'checkout', '-q', 'feat')
+    lockDenied(hook('git push origin edited', repo))
+  })
+  test('ignores the lock of a finished feature document', () => silent(hook('git push', lockedRepo({ status: 'done (ok)', edit: { [TEST_PATH]: 'two\n' } }))))
+  test('ignores the lock of a dropped feature document', () => silent(hook('git push', lockedRepo({ status: 'dropped', edit: { [TEST_PATH]: 'two\n' } }))))
+  test('keeps the lock when the Tasks table cannot be read', () => {
+    const repo = lockedRepo({ edit: { [TEST_PATH]: 'two\n' } })
+    applyFiles(repo, { 'odd/tasks/f.md': '# Feature\n\nno table\n' })
+    commitAll(repo, 'break the table')
+    lockDenied(hook('git push', repo), /changed/)
+  })
+  test('ignores the lock of a feature document absent at the ref', () => silent(hook('git push', lockedRepo({ lockFeature: 'odd/tasks/gone.md', edit: { [TEST_PATH]: 'two\n' } }))))
+  test('a branch with no oracle records behaves as before', () => {
+    const repo = makeRepo({ [TEST_PATH]: 'one\n' })
+    git(repo, 'checkout', '-q', '-b', 'feat')
+    applyFiles(repo, { 'odd/tasks/f.md': FEATURE('pending'), [TEST_PATH]: 'two\n' })
+    commitAll(repo, 'unit')
+    silent(hook('git push', repo))
+    denied(hook('git push', featureRepo('2')))
   })
 })

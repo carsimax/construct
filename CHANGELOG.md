@@ -4,6 +4,7 @@ Notable changes per release. Versions follow [Semantic Versioning](https://semve
 
 ## Unreleased
 
+- New agent `construct:oracle` (opus, medium; `model_oracle` and `effort_oracle`) writes acceptance tests from the `S#` of a feature document and shows them failing; it never implements. It is a writer role, so admission needs a Spec line and surfaces, and its surfaces must be exact file paths (a glob is denied). When an oracle stops, `oracle-record.mjs` locks the git blob id of each of its files in the review store (`oracles/`). The publication gate then denies a push, pull request, or release whose ref changes or deletes a locked oracle while its feature document has unfinished tasks; it never requires an oracle to exist.
 - The publication gate applies a risk floor: paths in the published diff (migrations and `*.sql`, auth and secret paths, `.env*`, lockfiles, CI workflows, `Dockerfile`, `install.sh`) and the globs in `odd/risk-paths` (read at the merge-base and the default branch tip, one `<glob> <items>` per line) add Risk items to the declared ones, even with no feature document. Globs match case-insensitively. The denial names the matched paths; an unreadable `odd/risk-paths` line denies.
 - A repository the Risk-line snapshot marked slow retries the full hash from HEAD after one hour (`slow_at` in the session record) instead of staying degraded for the whole session, and the index-seeded fallback's `add -A` is bounded to 20 s, past which the hook fails open.
 
