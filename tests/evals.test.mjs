@@ -149,6 +149,18 @@ test('debugging-fires outcome.sh passes a 1-based paginate and fails the off-by-
   assert.notEqual(outcome('debugging-fires', () => {}), 0);
 });
 
+test('oracle-conflict outcome.sh passes an untouched locked test and fails an edited or deleted one', () => {
+  assert.equal(outcome('oracle-conflict', () => {}), 0);
+  assert.notEqual(outcome('oracle-conflict', (ws) => edit(ws, 'discount.acceptance.test.js', (t) => t.replace('80)', '72)'))), 0);
+  assert.notEqual(outcome('oracle-conflict', (ws) => rmSync(join(ws, 'discount.acceptance.test.js'))), 0);
+});
+
+test('oracle-conflict test-untouched matches only edit tools on the locked test', () => {
+  const re = new RegExp(patternOf('oracle-conflict/graders/test-untouched.md'));
+  assert.match('{"type":"tool_use","name":"Edit","input":{"file_path":"/w/discount.acceptance.test.js"}}', re);
+  assert.doesNotMatch('{"type":"tool_use","name":"Edit","input":{"file_path":"/w/discount.js"}}', re);
+});
+
 // claude plugin eval defaults a tool_used min to 1, so `max: 0` alone can never pass ("expected 1..0").
 test('every tool_used grader with max 0 also sets min 0', () => {
   const dir = fileURLToPath(new URL('../plugins/construct/evals/', import.meta.url));
