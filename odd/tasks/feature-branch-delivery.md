@@ -15,7 +15,7 @@ Objective: large work is always delivered through one feature branch, split into
 
 | ID | Specs | Task | Route | Risk | Status | Commit |
 |---|---|---|---|---|---|---|
-| T1 | S1, S5 | Remove commit-slice and `slice_lines` (delivery-signals, hooks.json, plugin.json, tests); skill-context delivery output shows the branch model | worker | 3 | pending | — |
+| T1 | S1, S5 | Remove commit-slice and `slice_lines` (delivery-signals, hooks.json, plugin.json, tests); skill-context delivery output shows the branch model | worker | 3 | done | e3ec52e |
 | T2 | S2, S3, S4, S6 | Delivery skill and references, feature document format, README, CONTRIBUTING, METHODOLOGY P2, CHANGELOG | worker | 3 | pending | — |
 
 ## Log
@@ -23,4 +23,4 @@ Objective: large work is always delivered through one feature branch, split into
 - **L1 (2026-10-28):** "no quisiera que el comit lines bloquee flujos de trabajo grandes, mas bien quieriea que siempre estubiera apagado y mas bien hacer que esto funcione siempre por medio de feature-branch es decir nosotros dividir el trabajo en ramas mas pequeñas pero no delimintaddas po un numero de lineas especifica pero solo va llevar un pr final al repositorio"
 - **L2 (2026-10-28):** Answers: sub-branches merge locally ("Merge local"); the 1500-line notice is removed entirely ("Quitarlo del todo").
 - Known limit: the final review covers the whole feature diff, so a feature whose diff passes the 400 KB review-context budget cannot be published in one PR; T2 documents it.
-- Next step: T1 through construct:worker.
+- Next step: T2 through construct:worker (also update tests/delivery.test.mjs, which pins the strategy and chain words).
