@@ -17,7 +17,7 @@ Objective: the user's words stay the spec: ambiguity is a visible state that blo
 |---|---|---|---|---|---|---|
 | T1 | S1, S2, S3, S4, S5 | Acceptance tests by construct:oracle (RED) | oracle | 3 | done | 27dcac9 |
 | T2 | S1, S2, S3, S4, S5 | Gate clarification check; feature-state clarifications, quote and living-spec warnings | worker | 3 | done | f05407f |
-| T4 | S1, S4, S5 | Fixes found by running the hooks on this repository: a marker in inline code is not open; L1 dates with a suffix parse; an undated document is skipped | inline | 3 | done | — |
+| T4 | S1, S4, S5 | Fixes found by running the hooks on this repository: a marker in inline code is not open; L1 dates with a suffix parse; an undated document is skipped | inline | 3 | done | 8cd66df |
 | T3 | S6 | Docs and `odd/spec.md` | worker | 3 | done | 2da19dd |
 
 ## Log
