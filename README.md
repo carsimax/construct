@@ -1,7 +1,7 @@
 # Construct
 
 [![Claude Code](https://img.shields.io/badge/Claude_Code-2.1.304%2B-blue)](#requirements)
-[![Plugin version](https://img.shields.io/badge/version-12.0.0-informational)](plugins/construct/.claude-plugin/plugin.json)
+[![Plugin version](https://img.shields.io/badge/version-12.0.1-informational)](plugins/construct/.claude-plugin/plugin.json)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 Construct is a Claude Code plugin that makes every request follow Organic Driven Development (ODD): authorize, explore, size, track, implement test-first, and close with evidence and a Risk line.
@@ -36,7 +36,7 @@ An agent writes code faster than you can check it. Organic Driven Development ke
 ### One command
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v12.0.0/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v12.0.1/install.sh | bash
 ```
 
 The installer requires Engram: when the `engram` binary or the `engram@engram` plugin is missing, it stops and installs nothing, and prints `brew install gentleman-programming/tap/engram && engram setup claude-code`. It checks the other requirements above and stops before changing anything if one is missing, or if `~/.claude` or `~/.claude/settings.json` is not writable, or if `settings.json` is a directory. Then it runs the manual steps below for you:
@@ -54,7 +54,7 @@ If codegraph is installed, the installer says Construct no longer needs it and r
 Pass options after `bash -s --`, for example `curl -fsSL <url> | bash -s -- --no-mcp`. To read the script before running it:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v12.0.0/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v12.0.1/install.sh -o install.sh
 less install.sh
 bash install.sh
 ```
@@ -70,7 +70,7 @@ The manual steps the installer runs, for when you want to run them yourself:
    claude plugin install construct@construct
    ```
 
-   The installer (`install.sh`) pins this marketplace to the release tag (`carsimax/construct#v12.0.0`); the command above follows the default branch.
+   The installer (`install.sh`) pins this marketplace to the release tag (`carsimax/construct#v12.0.1`); the command above follows the default branch.
 
 2. Optional: inside Claude Code, in `/config`, set each role's model and effort (rows such as `Worker model`).
 
@@ -342,7 +342,9 @@ Risk line: one reply can name several items, `Risk: items 2, 5 (reason)`; the Ri
 
 ## Status
 
-Current version: 12.0.0 (`plugins/construct/.claude-plugin/plugin.json`); a major release. Releases are tagged `vX.Y.Z`.
+Current version: 12.0.1 (`plugins/construct/.claude-plugin/plugin.json`); a patch release. Releases are tagged `vX.Y.Z`.
+
+Changes in 12.0.1: the publication gate closes three ways to hide a push inside `$( … )`, and the Risk-line gate no longer misses a same-size rewrite with a restored modification time. See [CHANGELOG.md](CHANGELOG.md).
 
 Changes in 12.0.0: the deprecated 5.x options `model_odd_*`, `effort_odd_*`, `model_jd_*`, and `effort_jd_*` are removed; set `model_<role>` and `effort_<role>` instead. The publication gate, guards, and band get the audit-round fixes. See [CHANGELOG.md](CHANGELOG.md).
 

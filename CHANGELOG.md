@@ -4,6 +4,11 @@ Notable changes per release. Versions follow [Semantic Versioning](https://semve
 
 ## Unreleased
 
+## 12.0.1
+
+- The publication gate now gates a push inside a quoted `$( … )` that follows a `( … )` group, a `case` pattern, or a `#` comment.
+- The Risk-line gate hashes every file again when it records the tree, so a same-size rewrite with its modification time restored is no longer missed.
+
 ## 12.0.0
 
 - **Breaking:** the 12 deprecated 5.x options (`model_odd_*`, `effort_odd_*`, `model_jd_*`, `effort_jd_*`) are removed and no longer read. Set `model_<role>` and `effort_<role>` instead. The built-in `general-purpose` keeps `sonnet`/`medium` while `model_general` and `effort_general` are `inherit`.
