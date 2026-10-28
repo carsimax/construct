@@ -104,21 +104,21 @@ test('agentsView gives the elapsed time from the start to now', () => {
 
 // ---- S3 inline writes --------------------------------------------------
 
-test('isOutsideTasks handles absolute, relative and odd/tasks paths', () => {
+test('isOutsideTasks handles absolute, relative and .vault/tasks paths', () => {
   expect(isOutsideTasks('/repo/src/a.js', '/repo')).toBe(true)
   expect(isOutsideTasks('src/a.js', '/repo')).toBe(true)
-  expect(isOutsideTasks('/repo/odd/tasks/x.md', '/repo')).toBe(false)
-  expect(isOutsideTasks('odd/tasks/x.md', '/repo')).toBe(false)
-  expect(isOutsideTasks('./odd/tasks/x.md', '/repo')).toBe(false)
-  expect(isOutsideTasks('/repo/odd/tasks', '/repo')).toBe(false)
-  expect(isOutsideTasks('/repo/odd/tasksx/a.md', '/repo')).toBe(true)
-  expect(isOutsideTasks('/other/odd/tasks/x.md', '/repo')).toBe(true)
-  expect(isOutsideTasks('/repo/sub/../odd/tasks/x.md', '/repo')).toBe(false)
+  expect(isOutsideTasks('/repo/.vault/tasks/x.md', '/repo')).toBe(false)
+  expect(isOutsideTasks('.vault/tasks/x.md', '/repo')).toBe(false)
+  expect(isOutsideTasks('./.vault/tasks/x.md', '/repo')).toBe(false)
+  expect(isOutsideTasks('/repo/.vault/tasks', '/repo')).toBe(false)
+  expect(isOutsideTasks('/repo/.vault/tasksx/a.md', '/repo')).toBe(true)
+  expect(isOutsideTasks('/other/.vault/tasks/x.md', '/repo')).toBe(true)
+  expect(isOutsideTasks('/repo/sub/../.vault/tasks/x.md', '/repo')).toBe(false)
   expect(isOutsideTasks('', '/repo')).toBe(false)
   expect(isOutsideTasks(undefined, '/repo')).toBe(false)
 })
 
-test('a main-thread write outside odd/tasks counts as inline', () => {
+test('a main-thread write outside .vault/tasks counts as inline', () => {
   let s = initialState()
   s = onToolCall(s, { tool: 'Edit', path: '/repo/src/a.js', cwd: '/repo' })
   s = onToolCall(s, { tool: 'NotebookEdit', path: 'n.ipynb', cwd: '/repo' })
@@ -127,9 +127,9 @@ test('a main-thread write outside odd/tasks counts as inline', () => {
   expect(s.inline.count).toBe(4)
 })
 
-test('odd/tasks writes, reads and subagent writes are not inline', () => {
+test('.vault/tasks writes, reads and subagent writes are not inline', () => {
   let s = initialState()
-  s = onToolCall(s, { tool: 'Write', path: '/repo/odd/tasks/f.md', cwd: '/repo' })
+  s = onToolCall(s, { tool: 'Write', path: '/repo/.vault/tasks/f.md', cwd: '/repo' })
   s = onToolCall(s, { tool: 'Read', path: 'a.js', cwd: '/repo' })
   s = onToolCall(s, { tool: 'Bash', path: undefined, cwd: '/repo' })
   s = onToolCall(s, { tool: 'Edit', path: 'a.js', agentId: 'a1', cwd: '/repo' })
@@ -406,7 +406,7 @@ test('damaged state: counts stay at or above 0, an unknown pending bucket and od
   expect(() => onToolSettle(s0, { callId: 'c2', tool: 'Read', didRun: false })).not.toThrow()
   const view = agentsView({ agents: [null, 7, { id: 'a', status: 'running', startedMs: 1 }] }, 5)
   expect(view.length).toBe(1)
-  expect(isOutsideTasks('/proj/odd/tasks/x.md', undefined)).toBe(false)
+  expect(isOutsideTasks('/proj/.vault/tasks/x.md', undefined)).toBe(false)
   expect(isOutsideTasks('/proj/src/a.js', undefined)).toBe(true)
 })
 

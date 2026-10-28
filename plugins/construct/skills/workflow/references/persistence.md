@@ -5,7 +5,7 @@ The feature document is the only record of large work: The feature-state hook re
 ## Resume
 
 1. Run `mem_context`, then `mem_search`.
-2. Read `odd/tasks/<feature>.md` fully.
+2. Read `.vault/tasks/<feature>.md` fully.
 3. Reconcile document, code, and tests (`git log`, `git status`, the test run). Observed code wins; fix the document.
 4. Continue from the first unfinished task, or run the converge step when all are done.
 

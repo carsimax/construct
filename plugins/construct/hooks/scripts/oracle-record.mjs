@@ -1,4 +1,4 @@
-// SubagentStop hook for construct:oracle (S2 of odd/tasks/oracle-separation.md): when an oracle stops, it
+// SubagentStop hook for construct:oracle (S2 of .vault/tasks/oracle-separation.md): when an oracle stops, it
 // records the git blob id of every file in its allowed edit surfaces (exact paths, admission denies globs)
 // in the review store's oracles/ area, keyed by path, with the feature document and task of its Spec line.
 // The gate (publication-gate.mjs) denies publishing when a locked file differs at the ref. Surfaces and Spec
@@ -16,7 +16,7 @@ import { qualified } from './roles.mjs'
 import { activeLocks } from './publication-gate.mjs'
 import { UNLOCKABLE, writeOracle } from './review-store.mjs'
 
-const SPEC = /^[ \t]*(?:[-*+][ \t]+)?Spec:[ \t]*`?(odd\/tasks\/[^\s,`()]+\.md)`?[^\n]*?\b(T\d+)\b/m
+const SPEC = /^[ \t]*(?:[-*+][ \t]+)?Spec:[ \t]*`?(\.vault\/tasks\/[^\s,`()]+\.md)`?[^\n]*?\b(T\d+)\b/m
 
 function main() {
   const input = readInput()

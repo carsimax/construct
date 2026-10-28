@@ -23,7 +23,7 @@ function setup(risk = '2', { fetch = true, docs = true } = {}) {
     git(repo, 'remote', 'set-head', 'origin', 'main')
   }
   git(repo, 'checkout', '-q', '-b', 'feat')
-  applyFiles(repo, { ...(docs && { 'odd/tasks/f.md': TABLE(risk) }), 'src/app.js': 'export const a = 2\n' })
+  applyFiles(repo, { ...(docs && { '.vault/tasks/f.md': TABLE(risk) }), 'src/app.js': 'export const a = 2\n' })
   commitAll(repo, 'unit')
   return { repo, bare }
 }
@@ -77,6 +77,17 @@ describe('pre-push hook judges a real git push', () => {
     assert.equal(push(repo, config, 'origin', 'feat').status, 0)
     const r = push(repo, config, 'origin', '--delete', 'feat')
     assert.equal(r.status, 0, r.stderr)
+    assert.ok(!remoteRefs(bare).includes('refs/heads/feat'))
+  })
+
+  test('with no default branch, an unmigrated odd/tasks document still denies with the migration (L6)', () => {
+    const { repo, bare, config } = installed('none', { fetch: false, docs: false })
+    applyFiles(repo, { 'odd/tasks/f.md': TABLE('2') })
+    commitAll(repo, 'legacy')
+    git(repo, 'branch', '-m', 'main', 'trunk')
+    const r = push(repo, config, 'origin', 'feat')
+    assert.notEqual(r.status, 0)
+    assert.match(r.stderr, /git mv odd \.vault/)
     assert.ok(!remoteRefs(bare).includes('refs/heads/feat'))
   })
 
@@ -202,7 +213,7 @@ describe('review findings fixed in T3', () => {
   test('B-005: a ref sharing no history with the default branch is denied with an actionable message', () => {
     const { repo, bare, config } = installed('none')
     git(repo, 'checkout', '-q', '--orphan', 'other')
-    applyFiles(repo, { 'odd/tasks/g.md': TABLE('none') })
+    applyFiles(repo, { '.vault/tasks/g.md': TABLE('none') })
     commitAll(repo, 'orphan')
     const r = push(repo, config, 'origin', 'other')
     assert.notEqual(r.status, 0)
@@ -315,17 +326,17 @@ describe('round-2 review findings', () => {
 })
 
 describe('round-2 judge A findings', () => {
-  for (const [name, to] of [['moved out of odd/tasks/', 'docs/f.md'], ['archived under odd/tasks/', 'odd/tasks/archive/f.md']]) {
+  for (const [name, to] of [['moved out of .vault/tasks/', 'docs/f.md'], ['archived under .vault/tasks/', '.vault/tasks/archive/f.md']]) {
     test(`N1: a Risk 2 document ${name} after the merge-base is still judged`, () => {
       const { repo, bare } = setup('2')
       git(repo, 'checkout', '-q', 'main')
-      applyFiles(repo, { 'odd/tasks/f.md': TABLE('2') })
+      applyFiles(repo, { '.vault/tasks/f.md': TABLE('2') })
       commitAll(repo, 'track')
       git(repo, 'push', '-q', 'origin', 'main')
       git(repo, 'fetch', '-q', 'origin')
       git(repo, 'checkout', '-q', '-b', 'moved')
       mkdirSync(join(repo, to, '..'), { recursive: true })
-      git(repo, 'mv', 'odd/tasks/f.md', to)
+      git(repo, 'mv', '.vault/tasks/f.md', to)
       applyFiles(repo, { 'src/app.js': 'export const a = 3\n' })
       commitAll(repo, 'move')
       const config = configDir()

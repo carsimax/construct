@@ -1,4 +1,4 @@
-// Edge cases of odd/tasks/living-spec.md found by running the hooks on this repository (T4).
+// Edge cases of .vault/tasks/living-spec.md found by running the hooks on this repository (T4).
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
@@ -13,18 +13,25 @@ const context = (repo) => {
 }
 
 test('a marker quoted as inline code describes the marker and is not an open clarification', () => {
-  const repo = makeRepo({ 'odd/tasks/f.md': doc('An `S#` may carry `NEEDS CLARIFICATION: <question>`.', 'pending', '2026-10-30') })
+  const repo = makeRepo({ '.vault/tasks/f.md': doc('An `S#` may carry `NEEDS CLARIFICATION: <question>`.', 'pending', '2026-10-30') })
   assert.doesNotMatch(context(repo), /Open clarification/)
-  const open = makeRepo({ 'odd/tasks/f.md': doc('NEEDS CLARIFICATION: which port?', 'pending', '2026-10-30') })
+  const open = makeRepo({ '.vault/tasks/f.md': doc('NEEDS CLARIFICATION: which port?', 'pending', '2026-10-30') })
   assert.match(context(open), /Open clarification S1: which port\?/)
 })
 
 test('an L1 date followed by more text in the parentheses still counts, and a document without an L1 date is skipped', () => {
   const spec = '# Living spec\nStarted: 2026-10-29\n'
-  const old = makeRepo({ 'odd/spec.md': spec, 'odd/tasks/f.md': doc('', 'done', '2026-10-22, user') })
+  const old = makeRepo({ '.vault/specs/README.md': spec, '.vault/tasks/f.md': doc('', 'done', '2026-10-22, user') })
   assert.doesNotMatch(context(old), /Living spec: f /)
-  const fresh = makeRepo({ 'odd/spec.md': spec, 'odd/tasks/f.md': doc('', 'done', '2026-10-30, user') })
+  const fresh = makeRepo({ '.vault/specs/README.md': spec, '.vault/tasks/f.md': doc('', 'done', '2026-10-30, user') })
   assert.match(context(fresh), /Living spec: f /)
-  const undated = makeRepo({ 'odd/spec.md': spec, 'odd/tasks/f.md': doc('', 'done', 'no date') })
+  const undated = makeRepo({ '.vault/specs/README.md': spec, '.vault/tasks/f.md': doc('', 'done', 'no date') })
   assert.doesNotMatch(context(undated), /Living spec: f /)
+})
+
+test('S1: a repository with only odd/tasks gets no feature state, and a finished document with .vault/specs/<feature>.md is not warned', () => {
+  assert.equal(context(makeRepo({ 'odd/tasks/f.md': doc('', 'pending', '2026-10-30') })), '')
+  const spec = '# Living spec\nStarted: 2026-10-29\n'
+  const has = makeRepo({ '.vault/specs/README.md': spec, '.vault/specs/f.md': '# f\n', '.vault/tasks/f.md': doc('', 'done', '2026-10-30') })
+  assert.doesNotMatch(context(has), /Living spec: f /)
 })

@@ -41,8 +41,8 @@ test('debugging-fires reproduced-first matches only when failing output precedes
 
 test('large-tracked document-sections matches a feature document with all sections', () => {
   for (const re of regexes('large-tracked/graders/document-sections.md')) {
-    assert.match('Write odd/tasks/feat.md\n## Specs\nx\n## Tasks\ny\n## Log\n', re);
-    assert.doesNotMatch('Write odd/tasks/feat.md\n## Specs\nx\n## Tasks\n', re);
+    assert.match('Write .vault/tasks/feat.md\n## Specs\nx\n## Tasks\ny\n## Log\n', re);
+    assert.doesNotMatch('Write .vault/tasks/feat.md\n## Specs\nx\n## Tasks\n', re);
   }
 });
 

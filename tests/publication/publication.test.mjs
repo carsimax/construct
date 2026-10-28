@@ -34,7 +34,7 @@ const TABLE = (risk) => `# Feature\n\n## Tasks\n\n| ID | Specs | Task | Route | 
 function featureRepo(risk = '2') {
   const repo = makeRepo({ 'src/app.js': 'export const a = 1\n' })
   git(repo, 'checkout', '-q', '-b', 'feat')
-  applyFiles(repo, { 'odd/tasks/f.md': TABLE(risk), 'src/app.js': 'export const a = 2\n' })
+  applyFiles(repo, { '.vault/tasks/f.md': TABLE(risk), 'src/app.js': 'export const a = 2\n' })
   commitAll(repo, 'unit')
   return repo
 }
@@ -234,7 +234,7 @@ describe('the decision follows the Risk items and the verdicts', () => {
 
   test('a deleted feature document adds no risk, a merged-in default branch adds none', () => {
     const repo = featureRepo('none')
-    git(repo, 'rm', '-q', 'odd/tasks/f.md')
+    git(repo, 'rm', '-q', '.vault/tasks/f.md')
     commitAll(repo, 'drop')
     silent(hook('git push', repo))
   })
@@ -265,7 +265,7 @@ describe('the decision follows the Risk items and the verdicts', () => {
   })
 })
 
-// S1, S2: the risk floor. Paths in the published diff add items to the declared ones; odd/risk-paths is read at the merge-base and the default branch tip.
+// S1, S2: the risk floor. Paths in the published diff add items to the declared ones; .vault/risk-paths is read at the merge-base and the default branch tip.
 describe('the risk floor', () => {
   // floorRepo: main holds `base`; feat commits `change` (a null value deletes the file) with no feature document.
   function floorRepo(base, change) {
@@ -320,8 +320,8 @@ describe('the risk floor', () => {
     assert.match(hook('git push', repo).reason, /Risk items 3, 5/)
   })
 
-  test('odd/risk-paths at the merge-base adds items, a comment and blank lines are ignored', () => {
-    const base = { 'odd/risk-paths': '# contracts\n\nsrc/api/** 3\n*.proto 3,4\n' }
+  test('.vault/risk-paths at the merge-base adds items, a comment and blank lines are ignored', () => {
+    const base = { '.vault/risk-paths/hooks.txt': '# contracts\n\nsrc/api/** 3\n*.proto 3,4\n' }
     const r = hook('git push', floorRepo(base, { 'src/api/v1/x.js': 'x\n' }))
     assert.equal(r.decision, 'deny')
     assert.match(r.reason, /Risk items 3/)
@@ -330,10 +330,10 @@ describe('the risk floor', () => {
     silent(hook('git push', floorRepo(base, { 'src/other.js': 'x\n' })))
   })
 
-  test('a rule added to odd/risk-paths on the default branch after the ref branched still applies', () => {
+  test('a rule added to .vault/risk-paths on the default branch after the ref branched still applies', () => {
     const repo = floorRepo({}, { 'src/api/x.js': 'x\n' })
     git(repo, 'checkout', '-q', 'main')
-    applyFiles(repo, { 'odd/risk-paths': 'src/api/** 3\n' })
+    applyFiles(repo, { '.vault/risk-paths/hooks.txt': 'src/api/** 3\n' })
     commitAll(repo, 'rule')
     git(repo, 'checkout', '-q', 'feat')
     assert.match(hook('git push', repo).reason, /Risk items 3/)
@@ -345,15 +345,15 @@ describe('the risk floor', () => {
     assert.match(hook('git push', floorRepo({}, { 'db/migrations/a\nb.txt': 'x\n' })).reason, /Risk items 1/)
   })
 
-  test('a malformed odd/risk-paths line at the default branch tip denies, as one at the merge-base does', () => {
+  test('a malformed .vault/risk-paths line at the default branch tip denies, as one at the merge-base does', () => {
     const repo = floorRepo({}, { 'src/x.js': 'x\n' })
     git(repo, 'checkout', '-q', 'main')
-    applyFiles(repo, { 'odd/risk-paths': 'src/** nine\n' })
+    applyFiles(repo, { '.vault/risk-paths/hooks.txt': 'src/** nine\n' })
     commitAll(repo, 'bad rule')
     git(repo, 'checkout', '-q', 'feat')
     const r = hook('git push', repo)
     assert.equal(r.decision, 'deny')
-    assert.match(r.reason, /odd\/risk-paths has an unreadable line/)
+    assert.match(r.reason, /\.vault\/risk-paths\/hooks\.txt has an unreadable line/)
   })
 
   test('the denial lists at most five floor paths per item', () => {
@@ -363,20 +363,50 @@ describe('the risk floor', () => {
     assert.doesNotMatch(r.reason, /006\.sql/)
   })
 
-  test('editing odd/risk-paths in the published diff does not change its own floor', () => {
+  test('editing .vault/risk-paths in the published diff does not change its own floor', () => {
     // Deleting or emptying the file while touching a declared path still denies.
-    const base = { 'odd/risk-paths': 'src/api/** 3\n', 'src/api/x.js': 'a\n' }
-    assert.match(hook('git push', floorRepo(base, { 'odd/risk-paths': null, 'src/api/x.js': 'b\n' })).reason, /Risk items 3/)
-    assert.match(hook('git push', floorRepo(base, { 'odd/risk-paths': '# none\n', 'src/api/x.js': 'b\n' })).reason, /Risk items 3/)
+    const base = { '.vault/risk-paths/hooks.txt': 'src/api/** 3\n', 'src/api/x.js': 'a\n' }
+    assert.match(hook('git push', floorRepo(base, { '.vault/risk-paths/hooks.txt': null, 'src/api/x.js': 'b\n' })).reason, /Risk items 3/)
+    assert.match(hook('git push', floorRepo(base, { '.vault/risk-paths/hooks.txt': '# none\n', 'src/api/x.js': 'b\n' })).reason, /Risk items 3/)
     // A rule added at the ref does not apply to that ref, and a malformed one added there is not read.
-    silent(hook('git push', floorRepo({}, { 'odd/risk-paths': 'src/api/** 3\nbad\n', 'src/api/x.js': 'b\n' })))
+    silent(hook('git push', floorRepo({}, { '.vault/risk-paths/hooks.txt': 'src/api/** 3\nbad\n', 'src/api/x.js': 'b\n' })))
   })
 
-  test('a malformed odd/risk-paths line denies', () => {
+  test('S4: every file under .vault/risk-paths/ combines, and a bad line in the second file denies naming it', () => {
+    const base = { '.vault/risk-paths/a.txt': 'src/api/** 3\n', '.vault/risk-paths/b.txt': '*.proto 4\n' }
+    assert.match(hook('git push', floorRepo(base, { 'src/api/x.js': 'x\n' })).reason, /Risk items 3/)
+    assert.match(hook('git push', floorRepo(base, { 'm.proto': 'x\n' })).reason, /Risk items 4/)
+    const bad = hook('git push', floorRepo({ ...base, '.vault/risk-paths/b.txt': '*.proto 4\nbad line\n' }, { 'src/app.js': 'export const a = 2\n' }))
+    assert.equal(bad.decision, 'deny')
+    assert.match(bad.reason, /\.vault\/risk-paths\/b\.txt has an unreadable line/)
+  })
+
+  test('S1: an unmigrated odd/ folder denies with the migration, so it never weakens the gate silently (L6)', () => {
+    for (const legacy of [{ 'odd/risk-paths': 'src/api/** 3\n' }, { 'odd/tasks/f.md': '# F\n' }]) {
+      const r = hook('git push', floorRepo(legacy, { 'src/api/x.js': 'x\n' }))
+      assert.equal(r.decision, 'deny', JSON.stringify(legacy))
+      assert.match(r.reason, /odd\//)
+      assert.match(r.reason, /\.vault\//)
+      assert.match(r.reason, /git mv odd \.vault/)
+    }
+  })
+
+  test('S1: the migration push keeps the default branch odd/risk-paths floor, so adding .vault/ cannot lower it (L7)', () => {
+    const r = hook('git push', floorRepo({ 'odd/risk-paths': 'src/api/** 2\n' }, { '.vault/specs/README.md': '# Living spec\n', 'src/api/x.js': 'x\n' }))
+    denied(r)
+    assert.match(r.reason, /src\/api\/x\.js/)
+  })
+
+  test('S1: odd/ next to .vault/ is an unused archive and is not read', () => {
+    // a migrated default branch: odd/ next to .vault/ is never read
+    silent(hook('git push', floorRepo({ 'odd/risk-paths': 'src/api/** 3\n', '.vault/specs/README.md': '# Living spec\n' }, { 'src/api/x.js': 'x\n' })))
+  })
+
+  test('a malformed .vault/risk-paths line denies', () => {
     for (const line of ['src/api/**', 'src/api/** x', 'src/api/** 7', 'src/api/** 0']) {
-      const r = hook('git push', floorRepo({ 'odd/risk-paths': `${line}\n` }, { 'src/app.js': 'export const a = 2\n' }))
+      const r = hook('git push', floorRepo({ '.vault/risk-paths/hooks.txt': `${line}\n` }, { 'src/app.js': 'export const a = 2\n' }))
       assert.equal(r.decision, 'deny', line)
-      assert.match(r.reason, /odd\/risk-paths/, line)
+      assert.match(r.reason, /\.vault\/risk-paths/, line)
     }
   })
 })
@@ -661,7 +691,7 @@ describe('the Risk cell is read whole', () => {
     for (const cell of ['tbd', 'soon', '', '7', '10']) {
       const r = hook('git push', featureRepo(cell))
       assert.equal(r.decision, 'deny', JSON.stringify(cell))
-      assert.match(r.reason, /odd\/tasks\/f\.md/)
+      assert.match(r.reason, /\.vault\/tasks\/f\.md/)
       assert.match(r.reason, /Risk cell/)
     }
   })
@@ -669,11 +699,11 @@ describe('the Risk cell is read whole', () => {
   test('a Tasks table without a Risk column denies naming the document', () => {
     const repo = makeRepo({ 'src/app.js': 'export const a = 1\n' })
     git(repo, 'checkout', '-q', '-b', 'feat')
-    applyFiles(repo, { 'odd/tasks/f.md': '# F\n\n## Tasks\n\n| ID | Task |\n|---|---|\n| T1 | work |\n' })
+    applyFiles(repo, { '.vault/tasks/f.md': '# F\n\n## Tasks\n\n| ID | Task |\n|---|---|\n| T1 | work |\n' })
     commitAll(repo, 'doc')
     const r = hook('git push', repo)
     assert.equal(r.decision, 'deny')
-    assert.match(r.reason, /odd\/tasks\/f\.md/)
+    assert.match(r.reason, /\.vault\/tasks\/f\.md/)
     assert.match(r.reason, /Risk column/)
   })
 })
@@ -727,7 +757,7 @@ describe('F7, F8: the default branch', () => {
     const repo = withRemote(plain())
     silent(hook('git push origin main', repo))
     // Local main ahead of origin/main with an unreviewed Risk 2 document is judged.
-    applyFiles(repo, { 'odd/tasks/f.md': TABLE('2'), 'src/app.js': 'export const a = 2\n' })
+    applyFiles(repo, { '.vault/tasks/f.md': TABLE('2'), 'src/app.js': 'export const a = 2\n' })
     commitAll(repo, 'unit')
     denied(hook('git push origin main', repo))
     denied(hook('git push', repo))
@@ -736,9 +766,9 @@ describe('F7, F8: the default branch', () => {
 
 describe('F1: the Risk items are read at the ref and at the merge-base', () => {
   test('lowering Risk 2 to none in the branch still requires the review', () => {
-    const repo = makeRepo({ 'odd/tasks/f.md': TABLE('2'), 'src/app.js': 'export const a = 1\n' })
+    const repo = makeRepo({ '.vault/tasks/f.md': TABLE('2'), 'src/app.js': 'export const a = 1\n' })
     git(repo, 'checkout', '-q', '-b', 'feat')
-    applyFiles(repo, { 'odd/tasks/f.md': TABLE('none'), 'src/app.js': 'export const a = 2\n' })
+    applyFiles(repo, { '.vault/tasks/f.md': TABLE('none'), 'src/app.js': 'export const a = 2\n' })
     commitAll(repo, 'downgrade')
     const r = hook('git push', repo)
     denied(r)
@@ -746,10 +776,10 @@ describe('F1: the Risk items are read at the ref and at the merge-base', () => {
   })
 
   test('a renamed document with a lowered Risk is read at the merge-base under its old path', () => {
-    const repo = makeRepo({ 'odd/tasks/f.md': TABLE('2'), 'src/app.js': 'export const a = 1\n' })
+    const repo = makeRepo({ '.vault/tasks/f.md': TABLE('2'), 'src/app.js': 'export const a = 1\n' })
     git(repo, 'checkout', '-q', '-b', 'feat')
-    git(repo, 'mv', 'odd/tasks/f.md', 'odd/tasks/g.md')
-    applyFiles(repo, { 'odd/tasks/g.md': TABLE('none'), 'src/app.js': 'export const a = 2\n' })
+    git(repo, 'mv', '.vault/tasks/f.md', '.vault/tasks/g.md')
+    applyFiles(repo, { '.vault/tasks/g.md': TABLE('none'), 'src/app.js': 'export const a = 2\n' })
     commitAll(repo, 'rename and downgrade')
     const r = hook('git push', repo)
     denied(r)
@@ -757,9 +787,9 @@ describe('F1: the Risk items are read at the ref and at the merge-base', () => {
   })
 
   test('deleting a Risk 2 document with no other risky change is allowed (L15)', () => {
-    const repo = makeRepo({ 'odd/tasks/f.md': TABLE('2'), 'src/app.js': 'export const a = 1\n' })
+    const repo = makeRepo({ '.vault/tasks/f.md': TABLE('2'), 'src/app.js': 'export const a = 1\n' })
     git(repo, 'checkout', '-q', '-b', 'feat')
-    git(repo, 'rm', '-q', 'odd/tasks/f.md')
+    git(repo, 'rm', '-q', '.vault/tasks/f.md')
     commitAll(repo, 'remove the finished feature document')
     silent(hook('git push', repo))
   })
@@ -768,7 +798,7 @@ describe('F1: the Risk items are read at the ref and at the merge-base', () => {
     const doc = TABLE('2').replace('| work |', '| work a \\| b |')
     const repo = makeRepo({ 'src/app.js': 'export const a = 1\n' })
     git(repo, 'checkout', '-q', '-b', 'feat')
-    applyFiles(repo, { 'odd/tasks/f.md': doc, 'src/app.js': 'export const a = 2\n' })
+    applyFiles(repo, { '.vault/tasks/f.md': doc, 'src/app.js': 'export const a = 2\n' })
     commitAll(repo, 'unit')
     denied(hook('git push', repo))
   })
@@ -818,7 +848,7 @@ describe('Risk ranges and a suffixed Tasks heading (L17)', () => {
     for (const heading of ['## Tasks (wave 2)', '## tasks - wave 2']) {
       const repo = makeRepo({ 'src/app.js': 'export const a = 1\n' })
       git(repo, 'checkout', '-q', '-b', 'feat')
-      applyFiles(repo, { 'odd/tasks/f.md': TABLE('2').replace('## Tasks', heading), 'src/app.js': 'export const a = 2\n' })
+      applyFiles(repo, { '.vault/tasks/f.md': TABLE('2').replace('## Tasks', heading), 'src/app.js': 'export const a = 2\n' })
       commitAll(repo, 'unit')
       denied(hook('git push', repo))
     }
@@ -827,13 +857,13 @@ describe('Risk ranges and a suffixed Tasks heading (L17)', () => {
     for (const heading of ['### Tasks', '###### Tasks (wave 2)']) {
       const repo = makeRepo({ 'src/app.js': 'export const a = 1\n' })
       git(repo, 'checkout', '-q', '-b', 'feat')
-      applyFiles(repo, { 'odd/tasks/f.md': TABLE('2').replace('## Tasks', heading), 'src/app.js': 'export const a = 2\n' })
+      applyFiles(repo, { '.vault/tasks/f.md': TABLE('2').replace('## Tasks', heading), 'src/app.js': 'export const a = 2\n' })
       commitAll(repo, 'unit')
       denied(hook('git push', repo))
     }
     const repo = makeRepo({ 'src/app.js': 'export const a = 1\n' })
     git(repo, 'checkout', '-q', '-b', 'feat')
-    applyFiles(repo, { 'odd/tasks/f.md': TABLE('2').replace('## Tasks\n', '## Tasks\n\n#### Notes\n'), 'src/app.js': 'export const a = 2\n' })
+    applyFiles(repo, { '.vault/tasks/f.md': TABLE('2').replace('## Tasks\n', '## Tasks\n\n#### Notes\n'), 'src/app.js': 'export const a = 2\n' })
     commitAll(repo, 'unit')
     denied(hook('git push', repo))
   })
@@ -876,11 +906,11 @@ describe('S3: a locked oracle is protected at the published ref', () => {
   const TEST_PATH = 'tests/a.test.mjs'
   // lockedRepo: main holds the oracle file and (unless mainDoc is null) the feature document, and the oracle is locked;
   // feat adds the feature document (and edits). The lock is released only by the document's state on main.
-  function lockedRepo({ status = 'pending', mainDoc = FEATURE('pending'), edit = {}, lockFeature = 'odd/tasks/f.md' } = {}) {
-    const repo = makeRepo({ [TEST_PATH]: 'one\n', ...(mainDoc === null ? {} : { 'odd/tasks/f.md': mainDoc }) })
+  function lockedRepo({ status = 'pending', mainDoc = FEATURE('pending'), edit = {}, lockFeature = '.vault/tasks/f.md' } = {}) {
+    const repo = makeRepo({ [TEST_PATH]: 'one\n', ...(mainDoc === null ? {} : { '.vault/tasks/f.md': mainDoc }) })
     writeOracle(repo, { path: TEST_PATH, blob: git(repo, 'hash-object', TEST_PATH).trim(), feature: lockFeature, task: 'T1', at: Date.now() })
     git(repo, 'checkout', '-q', '-b', 'feat')
-    applyFiles(repo, { 'odd/tasks/f.md': FEATURE(status), 'src/app.js': 'x\n', ...edit })
+    applyFiles(repo, { '.vault/tasks/f.md': FEATURE(status), 'src/app.js': 'x\n', ...edit })
     commitAll(repo, 'unit')
     return repo
   }
@@ -909,12 +939,12 @@ describe('S3: a locked oracle is protected at the published ref', () => {
   const EDIT = { [TEST_PATH]: 'two\n' }
   test('marking the tasks done in the same push does not release the lock', () => lockDenied(hook('git push', lockedRepo({ status: 'done (ok)', edit: EDIT })), /changed/))
   test('dropping the tasks in the same push does not release the lock', () => lockDenied(hook('git push', lockedRepo({ status: 'dropped', edit: EDIT })), /changed/))
-  test('deleting the feature document in the same push does not release the lock', () => lockDenied(hook('git push', lockedRepo({ edit: { ...EDIT, 'odd/tasks/f.md': null } })), /changed/))
+  test('deleting the feature document in the same push does not release the lock', () => lockDenied(hook('git push', lockedRepo({ edit: { ...EDIT, '.vault/tasks/f.md': null } })), /changed/))
   test('a feature document finished on the remote default branch releases the lock', () => silent(hook('git push', withRemote(lockedRepo({ mainDoc: FEATURE('done (ok)'), edit: EDIT })))))
   test('a release ref moved locally to a finished document does not release the lock', () => {
     const repo = withRemote(lockedRepo({ edit: EDIT }))
     git(repo, 'checkout', '-q', 'main')
-    applyFiles(repo, { 'odd/tasks/f.md': FEATURE('done (ok)') })
+    applyFiles(repo, { '.vault/tasks/f.md': FEATURE('done (ok)') })
     commitAll(repo, 'finish')
     git(repo, 'update-ref', 'refs/remotes/origin/main', 'HEAD')
     git(repo, 'checkout', '-q', 'feat')
@@ -930,7 +960,7 @@ describe('S3: a locked oracle is protected at the published ref', () => {
     const repo = withRemote(lockedRepo({ edit: EDIT }))
     git(repo, 'checkout', '-q', 'main')
     git(repo, 'checkout', '-q', '-b', 'other')
-    applyFiles(repo, { 'odd/tasks/f.md': FEATURE('done (ok)') })
+    applyFiles(repo, { '.vault/tasks/f.md': FEATURE('done (ok)') })
     commitAll(repo, 'finish')
     git(repo, 'push', '-q', 'origin', 'other')
     git(repo, 'checkout', '-q', 'feat')
@@ -941,11 +971,11 @@ describe('S3: a locked oracle is protected at the published ref', () => {
     lockDenied(hook('git push', lockedRepo({ mainDoc: '# Feature\n\nno table\n', edit: EDIT })), /changed/)
   })
   test('a sibling branch that never had the oracle file is not denied', () => {
-    const repo = makeRepo({ 'odd/tasks/f.md': FEATURE('pending') })
+    const repo = makeRepo({ '.vault/tasks/f.md': FEATURE('pending') })
     git(repo, 'checkout', '-q', '-b', 'oracle-branch')
     applyFiles(repo, { [TEST_PATH]: 'one\n' })
     commitAll(repo, 'oracle')
-    writeOracle(repo, { path: TEST_PATH, blob: git(repo, 'hash-object', TEST_PATH).trim(), feature: 'odd/tasks/f.md', task: 'T1', at: Date.now() })
+    writeOracle(repo, { path: TEST_PATH, blob: git(repo, 'hash-object', TEST_PATH).trim(), feature: '.vault/tasks/f.md', task: 'T1', at: Date.now() })
     git(repo, 'checkout', '-q', 'main')
     git(repo, 'checkout', '-q', '-b', 'sibling')
     applyFiles(repo, { 'src/app.js': 'x\n' })
@@ -954,16 +984,16 @@ describe('S3: a locked oracle is protected at the published ref', () => {
   })
   test('a ref whose history had the locked blob and deleted the file is denied', () => lockDenied(hook('git push', lockedRepo({ edit: { [TEST_PATH]: null } })), /missing/))
   test('a lock whose blob was never committed, with its path absent at the ref, is skipped', () => {
-    const repo = makeRepo({ 'odd/tasks/f.md': FEATURE('pending') })
-    writeOracle(repo, { path: TEST_PATH, blob: 'a'.repeat(40), feature: 'odd/tasks/f.md', task: 'T1', at: Date.now() })
+    const repo = makeRepo({ '.vault/tasks/f.md': FEATURE('pending') })
+    writeOracle(repo, { path: TEST_PATH, blob: 'a'.repeat(40), feature: '.vault/tasks/f.md', task: 'T1', at: Date.now() })
     git(repo, 'checkout', '-q', '-b', 'feat')
     applyFiles(repo, { 'src/app.js': 'x\n' })
     commitAll(repo, 'unit')
     silent(hook('git push', repo))
   })
   test('a git error in the history probe denies instead of skipping the lock', () => {
-    const repo = makeRepo({ 'odd/tasks/f.md': FEATURE('pending') })
-    writeOracle(repo, { path: TEST_PATH, blob: 'not-an-object-id', feature: 'odd/tasks/f.md', task: 'T1', at: Date.now() })
+    const repo = makeRepo({ '.vault/tasks/f.md': FEATURE('pending') })
+    writeOracle(repo, { path: TEST_PATH, blob: 'not-an-object-id', feature: '.vault/tasks/f.md', task: 'T1', at: Date.now() })
     git(repo, 'checkout', '-q', '-b', 'feat')
     applyFiles(repo, { 'src/app.js': 'x\n' })
     commitAll(repo, 'unit')
@@ -974,7 +1004,7 @@ describe('S3: a locked oracle is protected at the published ref', () => {
   test('a branch with no oracle records behaves as before', () => {
     const repo = makeRepo({ [TEST_PATH]: 'one\n' })
     git(repo, 'checkout', '-q', '-b', 'feat')
-    applyFiles(repo, { 'odd/tasks/f.md': FEATURE('pending'), [TEST_PATH]: 'two\n' })
+    applyFiles(repo, { '.vault/tasks/f.md': FEATURE('pending'), [TEST_PATH]: 'two\n' })
     commitAll(repo, 'unit')
     silent(hook('git push', repo))
     denied(hook('git push', featureRepo('2')))

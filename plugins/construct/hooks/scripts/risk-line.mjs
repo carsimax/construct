@@ -1,7 +1,7 @@
 // Risk line gate. `mark` (UserPromptSubmit) records the working-state tree at the
 // start of a turn (kept across repeated events of the same prompt_id) and prints nothing, because stdout would enter the model's
 // context. `check` (Stop) blocks the stop once per turn when paths outside
-// odd/tasks/ changed and the final message has no Risk line. It fails open: any
+// .vault/tasks/ changed and the final message has no Risk line. It fails open: any
 // error, and every uncertain state, means no output and exit 0. When the full hash of a repository
 // runs out of its time budget, the record remembers it (`slow`) so later calls skip the full hash, and
 // the user gets one `systemMessage` per session (`noticed`).
@@ -74,7 +74,7 @@ function readRecord(file) {
 }
 
 // markerHits returns `path:line` for each added line of a -U0 diff that carries a marker,
-// skipping odd/tasks/ and Markdown.
+// skipping .vault/tasks/ and Markdown.
 function markerHits(diff) {
   const hits = []
   let path = null
@@ -87,7 +87,7 @@ function markerHits(diff) {
       line = Number(/\+(\d+)/.exec(text)?.[1] ?? 0)
     } else if (text.startsWith('+') && path !== null) {
       const code = text.slice(1)
-      if (!path.startsWith('odd/tasks/') && !path.endsWith('.md') && (MARKERS.some((m) => m.test(code)) || TODO.test(code))) {
+      if (!path.startsWith('.vault/tasks/') && !path.endsWith('.md') && (MARKERS.some((m) => m.test(code)) || TODO.test(code))) {
         hits.push(`${path}:${line}`)
       }
       line++
@@ -165,7 +165,7 @@ async function main() {
   const paths = git(root, ['diff', '--no-renames', '--name-only', '-z', record.tree, candidateTree])
     .toString('utf8')
     .split('\0')
-    .filter((path) => path !== '' && !path.startsWith('odd/tasks/'))
+    .filter((path) => path !== '' && !path.startsWith('.vault/tasks/'))
   if (paths.length === 0) return notify()
   const riskMissing = !RISK_LINE.test(input.last_assistant_message)
   let hits = []

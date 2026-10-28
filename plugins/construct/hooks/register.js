@@ -81,7 +81,7 @@ async function runText($, argv, cwd, timeoutMs) {
 async function readDocs($, root) {
   const docs = []
   try {
-    const dir = `${root}/odd/tasks`
+    const dir = `${root}/.vault/tasks`
     for (const entry of await $.fs.list(dir)) {
       if (entry.kind !== 'file' || !entry.name.endsWith('.md')) continue
       try {
@@ -91,7 +91,7 @@ async function readDocs($, root) {
       }
     }
   } catch {
-    // no odd/tasks directory
+    // no .vault/tasks directory
   }
   return docs
 }
@@ -241,7 +241,7 @@ export function register(on, options) {
     return result
   }).catch(($, e, next) => next(e))
 
-  // A tool call: counts main-thread writes outside odd/tasks. The call stays open while a question or
+  // A tool call: counts main-thread writes outside .vault/tasks. The call stays open while a question or
   // a plan waits on the human (S8b), so AskUserQuestion and ExitPlanMode block the band until it
   // returns; any settled call clears a block.
   on('tool.call', async ($, e, next) => {

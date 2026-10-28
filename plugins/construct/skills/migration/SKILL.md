@@ -18,7 +18,7 @@ A migration changes something other code or stored data depends on. Old and new 
 
 ## Flow
 
-1. **Classify.** Stored data or schema, public name, or a whole system. This work is Risk item 1 or 3, so it is tracked in `odd/tasks/` and its units are reviewed (below).
+1. **Classify.** Stored data or schema, public name, or a whole system. This work is Risk item 1 or 3, so it is tracked in `.vault/tasks/` and its units are reviewed (below).
 2. **Ask at most one blocking question**, only when the answer changes the plan. Without an answer, default to an advisory deprecation with no hard date.
 3. **Plan the phases** from `references/phases.md`: pattern, per-phase verifier and rollback, removal condition. The parent writes the plan; it does not edit code itself.
 4. **Save the plan** with `mem_save` (type `decision`) under `topic_key` `migration/<name>`. A notice updates that entry.

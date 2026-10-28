@@ -2,7 +2,7 @@
 name: workflow
 user-invocable: false
 allowed-tools: Bash(node "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/skill-context.mjs" *)
-description: The ODD protocol for every implementation request, feature plan, resume, task sizing, and the closing Risk line.
+description: The ADD protocol for every implementation request, feature plan, resume, task sizing, and the closing Risk line.
 ---
 
 # Workflow
@@ -17,10 +17,10 @@ Order for every request; the parent orchestrates (`construct:delegation`: who wr
 2. **Explore.** Start with `mem_search`, proportionately; stop once surfaces and handoff can be written. More than one bounded batch goes to `construct:explorer`.
 3. **Resolve uncertainty.** Research only a named uncertainty ([research](references/research.md)). A real product decision gets one question, then stop. A gap that changes the outcome and is costly to undo is `NEEDS CLARIFICATION: <question>` in the `S#` (at most 3 open per document); any other gap is a marked `Assumption`. A `done` task cannot depend on an open clarification (the publication gate denies it).
 4. **Classify.** Print `Size: small | large (reason)`.
-5. **Track.** Large work gets `odd/tasks/<feature>.md` before the first source write ([feature document](references/feature-document.md)); name it and its task count.
+5. **Track.** Large work gets `.vault/tasks/<feature>.md` before the first source write ([feature document](references/feature-document.md)); name it and its task count.
 6. **Implement** task by task, test-first; a Risk-named task with a runnable test goes oracle first ([testing](references/testing.md)). Hand off by reference (document, task, `S#`), never paraphrased. A changed command, option, or message changes its help and docs in the same unit. Commits, branches, PRs: `construct:delivery`.
 7. **Review.** A unit whose Risk names an item gets `construct:review` before publication; the gate denies publishing until lenses approve.
-8. **Close.** Save what was learned (`mem_save`; large work also `mem_session_summary`), then one report: what was verified, each check that failed, was skipped, or stayed unverified, the next step, the Risk line (last). Close reports; it never starts another verification loop. On large work, converge first: compare the code to every `S#`, append each gap as a new `T#` row (never rewrite or delete rows); a gap reopens work. Add the feature's `S#` to `odd/spec.md` under `## <feature>`, editing superseded earlier entries.
+8. **Close.** Save what was learned (`mem_save`; large work also `mem_session_summary`), then one report: what was verified, each check that failed, was skipped, or stayed unverified, the next step, the Risk line (last). Close reports; it never starts another verification loop. On large work, converge first: compare the code to every `S#`, append each gap as a new `T#` row (never rewrite or delete rows); a gap reopens work. Write the feature's `S#` to `.vault/specs/<feature>.md` (a feature changing earlier behavior edits that file).
 
 ## Size
 
@@ -48,7 +48,7 @@ High risk: a mistake hard to notice or reverse, or spreading past the change:
 
 `Risk: none` needs a diff touching no shared code (else item 3).
 
-Code changes close with `Risk: item N (reason)`, `Risk: items 2, 5 (reason)`, or `Risk: none`. The Risk-line hook blocks once when paths outside `odd/tasks/` changed with no Risk line, or the diff adds skipped, focused, or stub test markers. The Tasks Risk cell holds item numbers (`2, 5`, `2-3`) or `none`; the publication gate reads them to require lenses.
+Code changes close with `Risk: item N (reason)`, `Risk: items 2, 5 (reason)`, or `Risk: none`. The Risk-line hook blocks once when paths outside `.vault/tasks/` changed with no Risk line, or the diff adds skipped, focused, or stub test markers. The Tasks Risk cell holds item numbers (`2, 5`, `2-3`) or `none`; the publication gate reads them to require lenses.
 
 ## Autonomy
 

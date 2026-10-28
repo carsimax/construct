@@ -15,7 +15,7 @@ The user's words are the spec. Each requirement (`S#`) quotes a Log entry verbat
 - **Why:** agents rarely notice underspecified tasks and fill gaps silently; they also inflate requirements. Asking about every gap is its own failure mode.
 - **Taken from:** ODD verbatim specs, Spec Kit's clarification marker and its "informed guess, recorded as an assumption" rule, Intent-Driven Development, OpenSpec delta specs.
 - **Evidence:** measured. Letting agents ask on underspecified tasks improved results by up to 74% (arXiv 2502.13069); ClarifyGPT raised pass@1 from 68% to 76%. No study compares verbatim with paraphrased requirements.
-- **Construct today:** verbatim specs are a prompt rule. A `NEEDS CLARIFICATION: <question>` marker in an `S#` is enforced at the publication gate: a `done` task naming an open one is denied; `feature-state` lists the open ones and warns past 3 per document. It also warns when an `S#` has neither a quote found in the Log nor the word `Assumption`, and when a finished feature document has no heading in the living spec, `odd/spec.md` (finished `S#` with their quotes, starting empty, no backfill). Feature documents are no longer deleted. Limits: the quote check is a warning only, and the living-spec warning detects a missing feature, not a stale entry.
+- **Construct today:** verbatim specs are a prompt rule. A `NEEDS CLARIFICATION: <question>` marker in an `S#` is enforced at the publication gate: a `done` task naming an open one is denied; `feature-state` lists the open ones and warns past 3 per document. It also warns when an `S#` has neither a quote found in the Log nor the word `Assumption`, and when a finished feature document has no file in the living spec, `.vault/specs/<feature>.md` (finished `S#` with their quotes, starting empty, no backfill). Feature documents are no longer deleted. Limits: the quote check is a warning only, and the living-spec warning detects a missing feature, not a stale entry.
 
 ### 2. Proportional ceremony
 
@@ -51,7 +51,7 @@ Every change ends with a risk line naming which of six risk categories it touche
 - **Why:** the most important judgment, risk, is the one an agent is least able to make about its own work.
 - **Taken from:** ODD Risk line and publication gate, Spec Kit's pre-planning gates, CODEOWNERS and required reviewers, Meta's Diff Risk Score.
 - **Evidence:** just-in-time defect prediction finds 35% of bug-introducing changes with 20% of the effort (measured); LLM self-assessed confidence is close to chance at separating right from wrong answers (measured). No study measures agents classifying their own risk.
-- **Construct today:** the risk line's presence and the publication gate are enforced by hooks; a path floor exists (default table plus `odd/risk-paths` at the merge-base and the default branch tip) so a wrong `none`, or risky work without a feature document, is gated when its diff touches those paths; keyword signals in added lines do not exist. A push-time gate can be skipped; only a merge-time check enforces.
+- **Construct today:** the risk line's presence and the publication gate are enforced by hooks; a path floor exists (default table plus `.vault/risk-paths/` at the merge-base and the default branch tip) so a wrong `none`, or risky work without a feature document, is gated when its diff touches those paths; keyword signals in added lines do not exist. A push-time gate can be skipped; only a merge-time check enforces.
 
 ### 6. The methodology measures itself
 
@@ -74,7 +74,7 @@ Every principle has at least one behavior eval that grades the outcome, not only
 |---|---|
 | `S#` | A requirement, quoted verbatim from the user's Log entry |
 | `T#` | A task that serves one or more `S#`; disposable |
-| Feature document | `odd/tasks/<feature>.md`: specs, tasks, and log for one change |
+| Feature document | `.vault/tasks/<feature>.md`: specs, tasks, and log for one change |
 | Living spec | The merged requirements of finished work, kept after its feature document closes |
 | Resume test | Can someone continue this from the request plus `git diff` alone? If yes, it is done inline |
 | Strong check | Deterministic, runnable now, and not written or loosened in the loop that must pass it |

@@ -1,5 +1,5 @@
-// Living spec (odd/tasks/living-spec.md), S1-S5: the clarification state blocks publication,
-// feature-state.mjs shows open clarifications, unquoted specs, and finished features missing from odd/spec.md.
+// Living spec (.vault/tasks/living-spec.md), S1-S5: the clarification state blocks publication,
+// feature-state.mjs shows open clarifications, unquoted specs, and finished features with no .vault/specs/<feature>.md.
 // S1 drives the real publication gate as a PreToolUse hook on Bash; S2-S5 drive the real
 // feature-state SessionStart hook with stdin JSON. Wording is the implementation's: tests match stable parts.
 import assert from 'node:assert/strict'
@@ -49,7 +49,7 @@ const silent = (r) => {
 function clarificationDenied(r, { task = 'T1', spec = 'S2', question = QUESTION } = {}) {
   assert.equal(r.status, 0)
   assert.equal(r.decision, 'deny', r.stdout)
-  assert.ok(r.reason.includes('odd/tasks/f.md'), r.reason)
+  assert.ok(r.reason.includes('.vault/tasks/f.md'), r.reason)
   assert.match(r.reason, new RegExp(`\\b${task}\\b`))
   assert.match(r.reason, new RegExp(`\\b${spec}\\b`))
   assert.ok(r.reason.includes(question), r.reason)
@@ -62,11 +62,11 @@ const S2_MARKED = `**S2 — Region.** "pick a region" for the bucket. NEEDS CLAR
 const S2_CLEAR = '**S2 — Region.** "pick a region" for the bucket: eu-west-1.'
 const LOG = ['**L1 (2026-10-01):** "keep the cache" and "pick a region"']
 
-// gateRepo: main holds the base commit; branch feat commits the feature document odd/tasks/f.md.
+// gateRepo: main holds the base commit; branch feat commits the feature document .vault/tasks/f.md.
 function gateRepo(doc) {
   const repo = makeRepo({ 'src/app.js': 'export const a = 1\n' })
   git(repo, 'checkout', '-q', '-b', 'feat')
-  applyFiles(repo, { 'odd/tasks/f.md': doc, 'src/app.js': 'export const a = 2\n' })
+  applyFiles(repo, { '.vault/tasks/f.md': doc, 'src/app.js': 'export const a = 2\n' })
   commitAll(repo, 'unit')
   return repo
 }
@@ -94,7 +94,7 @@ describe('S1: an open clarification on a done task blocks publication', () => {
 
   test('the document is read at the ref: an uncommitted fix does not lift the deny', () => {
     const repo = gateRepo(featureDoc({ specs: [S1_SPEC, S2_MARKED], rows: [['T1', 'S1, S2', 'none', 'done']], log: LOG }))
-    write(repo, 'odd/tasks/f.md', featureDoc({ specs: [S1_SPEC, S2_CLEAR], rows: [['T1', 'S1, S2', 'none', 'done']], log: LOG }))
+    write(repo, '.vault/tasks/f.md', featureDoc({ specs: [S1_SPEC, S2_CLEAR], rows: [['T1', 'S1, S2', 'none', 'done']], log: LOG }))
     clarificationDenied(gate('git push', repo))
     commitAll(repo, 'clarify S2')
     silent(gate('git push', repo))
@@ -139,7 +139,7 @@ describe('S2: open clarifications are visible', () => {
 
   test('each open clarification of an active document is listed with its S# and question', () => {
     const repo = makeRepo()
-    write(repo, 'odd/tasks/a.md', featureDoc({
+    write(repo, '.vault/tasks/a.md', featureDoc({
       specs: [marked('S1', 'Which cache backend applies?'), '**S2 — Plain.** "do S2" now.', marked('S3', 'How long do entries live?')],
       rows: [['T1', 'S1, S2, S3', 'none', 'pending']],
       log: logFor(['S1', 'S2', 'S3']),
@@ -153,14 +153,14 @@ describe('S2: open clarifications are visible', () => {
   test('more than 3 open clarifications in one document is warned; 3 is not', () => {
     const ids = ['S1', 'S2', 'S3', 'S4']
     const four = makeRepo()
-    write(four, 'odd/tasks/a.md', featureDoc({ specs: ids.map((id) => marked(id, `Question about ${id}?`)), rows: [['T1', 'S1-S4', 'none', 'pending']], log: logFor(ids) }))
+    write(four, '.vault/tasks/a.md', featureDoc({ specs: ids.map((id) => marked(id, `Question about ${id}?`)), rows: [['T1', 'S1-S4', 'none', 'pending']], log: logFor(ids) }))
     const text = context(featureState(four))
     for (const id of ids) assert.ok(anyLine(text, word(id), `Question about ${id}?`), text)
     assert.ok(anyLine(text, OVER_CAP), text)
 
     const three = makeRepo()
     const specs = [...ids.slice(0, 3).map((id) => marked(id, `Question about ${id}?`)), '**S4 — Plain.** "do S4" now.']
-    write(three, 'odd/tasks/a.md', featureDoc({ specs, rows: [['T1', 'S1-S4', 'none', 'pending']], log: logFor(ids) }))
+    write(three, '.vault/tasks/a.md', featureDoc({ specs, rows: [['T1', 'S1-S4', 'none', 'pending']], log: logFor(ids) }))
     const text3 = context(featureState(three))
     assert.ok(anyLine(text3, word('S3'), 'Question about S3?'), text3)
     assert.doesNotMatch(text3, OVER_CAP)
@@ -173,7 +173,7 @@ describe('S3: quote provenance', () => {
 
   test('an S# whose quote is not in the Log and has no Assumption is warned; quoted, curly-quoted, whitespace-different, and Assumption specs are not', () => {
     const repo = makeRepo()
-    write(repo, 'odd/tasks/a.md', featureDoc({
+    write(repo, '.vault/tasks/a.md', featureDoc({
       specs: [
         '**S1 — Quoted.** "keep the cache warm" on start.',
         '**S2 — Not in the Log.** "drop stale rows" nightly.',
@@ -198,7 +198,7 @@ describe('S3: quote provenance', () => {
       rows: [['T1', 'S1, S2', 'none', 'pending']],
       log: ['**L1 (2026-10-01):** "in the log"'],
     }).replace('Objective: x.', 'Objective: only in the objective.')
-    write(repo, 'odd/tasks/a.md', doc)
+    write(repo, '.vault/tasks/a.md', doc)
     const text = context(featureState(repo))
     assert.ok(quoteWarned(text, 'S1'), text)
     assert.ok(!quoteWarned(text, 'S2'), text)
@@ -206,8 +206,8 @@ describe('S3: quote provenance', () => {
 
   test('the warning is per document: each document names its own failing S#', () => {
     const repo = makeRepo()
-    write(repo, 'odd/tasks/a.md', featureDoc({ specs: ['**S1 — Ok.** "alpha words"', '**S2 — Bad.** "missing alpha"'], rows: [['T1', 'S1, S2', 'none', 'pending']], log: ['"alpha words"'] }))
-    write(repo, 'odd/tasks/b.md', featureDoc({ specs: ['**S7 — Bad.** "missing beta"', '**S8 — Ok.** "beta words"'], rows: [['T1', 'S7, S8', 'none', 'pending']], log: ['"beta words"'] }))
+    write(repo, '.vault/tasks/a.md', featureDoc({ specs: ['**S1 — Ok.** "alpha words"', '**S2 — Bad.** "missing alpha"'], rows: [['T1', 'S1, S2', 'none', 'pending']], log: ['"alpha words"'] }))
+    write(repo, '.vault/tasks/b.md', featureDoc({ specs: ['**S7 — Bad.** "missing beta"', '**S8 — Ok.** "beta words"'], rows: [['T1', 'S7, S8', 'none', 'pending']], log: ['"beta words"'] }))
     const text = context(featureState(repo))
     assert.ok(quoteWarned(text, 'S2'), text)
     assert.ok(quoteWarned(text, 'S7'), text)
@@ -215,36 +215,40 @@ describe('S3: quote provenance', () => {
   })
 })
 
-describe('S4, S5: finished features land in odd/spec.md', () => {
+describe('S3: finished features land in .vault/specs/<feature>.md', () => {
   const finished = (date = '2026-10-01', status = 'done') => featureDoc({
     specs: ['**S1 — Cache.** "keep the cache"'],
     rows: [['T1', 'S1', 'none', status]],
     log: [`**L1 (${date}):** "keep the cache"`],
   })
-  const SPEC = (headings = [], started = '2026-09-01') => `Started: ${started}\n\n# Living spec\n${headings.map((h) => `\n## ${h}\n\n- **S1 — X.** "x"\n`).join('')}`
-  // livingWarned: a line naming the feature and odd/spec.md.
-  const livingWarned = (text, feature) => anyLine(text, feature, 'odd/spec.md')
+  const SPEC = (started = '2026-09-01') => `Started: ${started}\n\n# Living spec\n`
+  const livingSpec = (repo, feature) => write(repo, `.vault/specs/${feature}.md`, `# ${feature}\n\n- **S1 — X.** "x"\n`)
+  // livingWarned: a line naming the feature and its .vault/specs/<feature>.md.
+  const livingWarned = (text, feature) => anyLine(text, feature, `.vault/specs/${feature}.md`)
 
-  test('a finished document missing its ## <feature> heading is warned even when no document is unfinished', () => {
+  test('a finished document with no specs file is warned even when no document is unfinished', () => {
     const repo = makeRepo()
-    write(repo, 'odd/spec.md', SPEC(['other-feature']))
-    write(repo, 'odd/tasks/cache-layer.md', finished())
+    write(repo, '.vault/specs/README.md', SPEC())
+    livingSpec(repo, 'other-feature')
+    write(repo, '.vault/tasks/cache-layer.md', finished())
     const text = context(featureState(repo))
     assert.ok(livingWarned(text, 'cache-layer'), text)
   })
 
-  test('dropped tasks count as finished; a heading that only starts with the name does not count', () => {
+  test('dropped tasks count as finished; a file that only starts with the name does not count', () => {
     const repo = makeRepo()
-    write(repo, 'odd/spec.md', `${SPEC(['cache-layer-old'])}\n### cache-layer\n`)
-    write(repo, 'odd/tasks/cache-layer.md', finished('2026-10-01', 'dropped'))
+    write(repo, '.vault/specs/README.md', SPEC())
+    livingSpec(repo, 'cache-layer-old')
+    write(repo, '.vault/tasks/cache-layer.md', finished('2026-10-01', 'dropped'))
     assert.ok(livingWarned(context(featureState(repo)), 'cache-layer'))
   })
 
-  test('no warning when the heading exists, and the warning names only the missing feature', () => {
+  test('no warning when the specs file exists, and the warning names only the missing feature', () => {
     const repo = makeRepo()
-    write(repo, 'odd/spec.md', SPEC(['cache-layer']))
-    write(repo, 'odd/tasks/cache-layer.md', finished())
-    write(repo, 'odd/tasks/search-index.md', finished())
+    write(repo, '.vault/specs/README.md', SPEC())
+    livingSpec(repo, 'cache-layer')
+    write(repo, '.vault/tasks/cache-layer.md', finished())
+    write(repo, '.vault/tasks/search-index.md', finished())
     const text = context(featureState(repo))
     assert.ok(livingWarned(text, 'search-index'), text)
     assert.ok(!livingWarned(text, 'cache-layer'), text)
@@ -252,10 +256,10 @@ describe('S4, S5: finished features land in odd/spec.md', () => {
 
   test('an unfinished document and a finished one without ## Specs are not warned', () => {
     const repo = makeRepo()
-    write(repo, 'odd/spec.md', SPEC())
-    write(repo, 'odd/tasks/search-index.md', finished())
-    write(repo, 'odd/tasks/open-work.md', finished('2026-10-01', 'pending'))
-    write(repo, 'odd/tasks/no-specs.md', finished().replace('## Specs', '## Notes'))
+    write(repo, '.vault/specs/README.md', SPEC())
+    write(repo, '.vault/tasks/search-index.md', finished())
+    write(repo, '.vault/tasks/open-work.md', finished('2026-10-01', 'pending'))
+    write(repo, '.vault/tasks/no-specs.md', finished().replace('## Specs', '## Notes'))
     const text = context(featureState(repo))
     assert.ok(livingWarned(text, 'search-index'), text)
     assert.ok(!livingWarned(text, 'open-work'), text)
@@ -264,27 +268,27 @@ describe('S4, S5: finished features land in odd/spec.md', () => {
 
   test('S5: a document whose L1 date is before Started is skipped; the same day or later is warned', () => {
     const repo = makeRepo()
-    write(repo, 'odd/spec.md', SPEC([], '2026-10-15'))
-    write(repo, 'odd/tasks/old-feature.md', finished('2026-10-14'))
-    write(repo, 'odd/tasks/same-day.md', finished('2026-10-15'))
-    write(repo, 'odd/tasks/later.md', finished('2026-10-20'))
+    write(repo, '.vault/specs/README.md', SPEC('2026-10-15'))
+    write(repo, '.vault/tasks/old-feature.md', finished('2026-10-14'))
+    write(repo, '.vault/tasks/same-day.md', finished('2026-10-15'))
+    write(repo, '.vault/tasks/later.md', finished('2026-10-20'))
     const text = context(featureState(repo))
     assert.ok(!livingWarned(text, 'old-feature'), text)
     assert.ok(livingWarned(text, 'same-day'), text)
     assert.ok(livingWarned(text, 'later'), text)
   })
 
-  test('S5: no living-spec warning while odd/spec.md does not exist', () => {
-    // Control: with odd/spec.md the finished document is warned.
+  test('S5: no living-spec warning while .vault/specs/README.md does not exist', () => {
+    // Control: with .vault/specs/README.md the finished document is warned.
     const withSpec = makeRepo()
-    write(withSpec, 'odd/spec.md', SPEC())
-    write(withSpec, 'odd/tasks/cache-layer.md', finished())
+    write(withSpec, '.vault/specs/README.md', SPEC())
+    write(withSpec, '.vault/tasks/cache-layer.md', finished())
     assert.ok(livingWarned(context(featureState(withSpec)), 'cache-layer'))
 
     const without = makeRepo()
-    write(without, 'odd/tasks/cache-layer.md', finished())
+    write(without, '.vault/tasks/cache-layer.md', finished())
     const r = featureState(without)
     assert.equal(r.status, 0)
-    assert.ok(!r.stdout.includes('odd/spec.md'), r.stdout)
+    assert.ok(!r.stdout.includes('.vault/specs/'), r.stdout)
   })
 })

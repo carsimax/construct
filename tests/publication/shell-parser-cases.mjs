@@ -1,4 +1,4 @@
-// T2 of odd/tasks/shell-parser.md: the commands the real shell parser must see through (deny) and
+// T2 of .vault/tasks/shell-parser.md: the commands the real shell parser must see through (deny) and
 // the idioms it must let pass (allow). `denyShapes(cmd, spelled)` hides one command in each shape:
 // `cmd` is the plain text, `spelled` the same command with quoted pieces (`g"i"t pu"s"h`).
 export const denyShapes = (cmd, spelled) => [...shapes(cmd, spelled), ...heredocShapes(cmd)]

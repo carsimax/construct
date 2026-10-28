@@ -20,7 +20,7 @@ const CHECKLIST = new URL('../../skills/review/references/security-checklist.md'
 const MAX_CONTEXT_BYTES = 400 * 1024
 const DIFF_FLAGS = ['--no-color', '--no-ext-diff', '--no-textconv', '--no-renames', '--ignore-submodules=none']
 const MAX_SPECS_CHARS = 4000
-const FEATURE_DOC = /^odd\/tasks\/[^/]+\.md$/
+const FEATURE_DOC = /^\.vault\/tasks\/[^/]+\.md$/
 const FORM = 'Review subject: <base>'
 // Vendored files whose content is omitted: exact repository-relative path -> sha256 of the blob.
 // Changing the vendored file means changing this pin, and that change is shown to the lenses.

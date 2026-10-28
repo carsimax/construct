@@ -1,4 +1,4 @@
-// T2 of odd/tasks/shell-parser.md: publication-gate and review-store-guard on the shell shapes that
+// T2 of .vault/tasks/shell-parser.md: publication-gate and review-store-guard on the shell shapes that
 // hid a command from the heuristic parser, and on the common idioms that must keep passing.
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
@@ -16,7 +16,7 @@ const table = (risk) => `# F\n\n## Tasks\n\n| ID | Specs | Task | Route | Risk |
 function repoWith(risk) {
   const repo = makeRepo({ 'src/app.js': 'a\n' })
   git(repo, 'checkout', '-q', '-b', 'feat')
-  applyFiles(repo, { 'odd/tasks/f.md': table(risk), 'src/app.js': 'b\n' })
+  applyFiles(repo, { '.vault/tasks/f.md': table(risk), 'src/app.js': 'b\n' })
   commitAll(repo, 'unit')
   return repo
 }

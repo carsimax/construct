@@ -19,10 +19,10 @@ claude --plugin-dir ./plugins/construct
 
 ## How work is done here
 
-The repository follows its own workflow, Organic Driven Development (ODD).
+The repository follows its own workflow, Agent Driven Development (ADD).
 
 - **Small changes** (understood, no high-risk item, resumable from the request plus `git diff`) need no tracking document.
-- **Large changes** are tracked in `odd/tasks/<feature>.md`: specs (`S#`), tasks (`T#`), and a log. Tests and comments reference spec ids such as `S6`.
+- **Large changes** are tracked in `.vault/tasks/<feature>.md`: specs (`S#`), tasks (`T#`), and a log. Tests and comments reference spec ids such as `S6`.
 - **Test-first.** Write a failing test for the rule, watch it fail, make it pass, then refactor. Never weaken a check to get to green.
 - **Risk line.** Every code change closes with `Risk: none` or `Risk: item N (reason)`. The six high-risk items are in `plugins/construct/hooks/contract/session.md`.
 

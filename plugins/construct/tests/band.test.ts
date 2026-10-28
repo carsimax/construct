@@ -152,7 +152,7 @@ test('the band shows the running agent by its role, the open feature, and the ph
   await ui.redraw()
   const text = await joined(ui)
   expect(text).toContain('● building')
-  expect(text).toContain('ODD feat')
+  expect(text).toContain('ADD feat')
   expect(text).toContain('⚒ worker building')
   expect(text).not.toContain('construct:worker')
 })
@@ -177,7 +177,7 @@ test('with nothing to show the band leaves the site to the other mods', async ($
   expect(await joined(ui)).toBe('only theirs')
 })
 
-test('a main-thread Write outside odd/tasks shows the inline alert', async ($, on) => {
+test('a main-thread Write outside .vault/tasks shows the inline alert', async ($, on) => {
   await start($, on)
   await $.turn.start({ text: 'go', turnId: 't1' })
   await $.tool.call({ tool: 'Write', file_path: '/home/me/proj/src/a.js', content: 'x' })
@@ -209,9 +209,9 @@ test('an ask whose tool.call throws is settled, not left pending', async ($, on)
   expect(await joined(p)).not.toContain('pending')
 })
 
-test('a write under odd/tasks is not an inline write', async ($, on) => {
+test('a write under .vault/tasks is not an inline write', async ($, on) => {
   await start($, on)
-  await $.tool.call({ tool: 'Write', file_path: '/home/me/proj/odd/tasks/x.md', content: 'x' })
+  await $.tool.call({ tool: 'Write', file_path: '/home/me/proj/.vault/tasks/x.md', content: 'x' })
   await settle()
   const p = await band($)
   await p.redraw()
