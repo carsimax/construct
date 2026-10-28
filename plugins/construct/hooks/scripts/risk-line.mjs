@@ -2,7 +2,9 @@
 // start of a turn (kept across repeated events of the same prompt_id) and prints nothing, because stdout would enter the model's
 // context. `check` (Stop) blocks the stop once per turn when paths outside
 // odd/tasks/ changed and the final message has no Risk line. It fails open: any
-// error, and every uncertain state, means no output and exit 0.
+// error, and every uncertain state, means no output and exit 0. When the full hash of a repository
+// runs out of its time budget, the record remembers it (`slow`) so later calls skip the full hash, and
+// the user gets one `systemMessage` per session (`noticed`).
 // The marker scan flags weakened-verifier markers and TODO comments, whole-line or trailing after code.
 // Usage: node risk-line.mjs mark|check   (hook JSON on stdin)
 import { mkdirSync, readFileSync, realpathSync } from 'node:fs'
@@ -31,6 +33,19 @@ const TODO = /^\s*(?:\/\/|#|\/\*|\*|--)\s*TODO\b|\S\s+(?:\/\/|#)\s*TODO\b/
 // value, then `none`, `item 1-6`, or `items 2, 5` that ends the line or is followed by
 // whitespace or `(`; the space after the colon is optional.
 const RISK_LINE = /^[ \t]*(?:(?:[-*+]|\d+[.)])[ \t]+)?[*_`]*Risk[*_`]*:[*_`]*[ \t]*[*_`]*(?:none|items? [1-6](?:,[ \t]*[1-6])*)[*_`]*(?=$|\s|\()/m
+
+const NOTICE =
+  'Construct: this repository is too large to hash fully within the time budget, so the Risk-line gate now trusts the git index stat cache and can miss a same-size rewrite whose mtime was restored.'
+
+// snapshot freezes the working tree, going straight to the index-seeded one for a repository the record
+// marked slow, and returns the record fields to keep plus the notice to show (once per session).
+function snapshot(freezeWorkingTree, root, record) {
+  const slow = record?.slow === root
+  const frozen = freezeWorkingTree(root, { indexSeeded: slow })
+  const noticed = record?.noticed === true
+  const keep = frozen.degraded ? { slow: root, noticed: true } : { ...(record?.slow ? { slow: record.slow } : {}), ...(noticed ? { noticed } : {}) }
+  return { frozen, keep, notice: frozen.degraded && !noticed ? NOTICE : null }
+}
 
 const recordFile = (session) => {
   const dir = join(dataDir(), 'risk-line')
@@ -117,23 +132,31 @@ async function main() {
     const promptId = typeof input.prompt_id === 'string' && input.prompt_id !== '' ? input.prompt_id : null
     let previous = null
     try {
-      previous = promptId ? readRecord(file) : null
+      previous = readRecord(file)
     } catch {
       // A corrupt record is replaced.
     }
-    if (previous && previous.root === root && previous.prompt_id === promptId) return
-    write({ root, tree: freezeWorkingTree(root).candidateTree, blocked: false, ...(promptId ? { prompt_id: promptId } : {}) })
+    if (promptId && previous && previous.root === root && previous.prompt_id === promptId) return
+    const { frozen, keep, notice } = snapshot(freezeWorkingTree, root, previous)
+    write({ root, tree: frozen.candidateTree, blocked: false, ...keep, ...(promptId ? { prompt_id: promptId } : {}) })
+    if (notice) process.stdout.write(`${JSON.stringify({ systemMessage: notice })}\n`)
     return
   }
 
-  const { candidateTree } = freezeWorkingTree(root)
+  const { frozen, keep, notice } = snapshot(freezeWorkingTree, root, record)
+  const { candidateTree } = frozen
+  const notify = () => {
+    if (notice) process.stdout.write(`${JSON.stringify({ systemMessage: notice })}\n`)
+  }
   // A record from another repository, or an old one without a root, is not this turn's.
-  if (record.root !== root || record.tree === candidateTree) return
+  if (record.root !== root) return
+  if (notice) write({ ...record, ...keep })
+  if (record.tree === candidateTree) return notify()
   const paths = git(root, ['diff', '--no-renames', '--name-only', '-z', record.tree, candidateTree])
     .toString('utf8')
     .split('\0')
     .filter((path) => path !== '' && !path.startsWith('odd/tasks/'))
-  if (paths.length === 0) return
+  if (paths.length === 0) return notify()
   const riskMissing = !RISK_LINE.test(input.last_assistant_message)
   let hits = []
   try {
@@ -141,10 +164,10 @@ async function main() {
   } catch {
     // Fail open on the marker scan.
   }
-  if (!riskMissing && hits.length === 0) return
+  if (!riskMissing && hits.length === 0) return notify()
 
   // One block per turn: the next Stop of this turn finds the record spent.
-  write({ ...record, blocked: true })
+  write({ ...record, ...keep, blocked: true })
   const list = (items) => items.slice(0, MAX_PATHS).join(', ') + (items.length > MAX_PATHS ? `, and ${items.length - MAX_PATHS} more` : '')
   const reasons = []
   if (riskMissing) {
@@ -157,7 +180,7 @@ async function main() {
     reasons.push(`Verifier-weakening marker added: ${list(hits)}. Remove the marker, or explain in the final message why it must stay.`)
   }
   const reason = reasons.join(' ')
-  process.stdout.write(`${JSON.stringify({ decision: 'block', reason })}\n`)
+  process.stdout.write(`${JSON.stringify({ decision: 'block', reason, ...(notice ? { systemMessage: notice } : {}) })}\n`)
 }
 
 // Run only as a script.
