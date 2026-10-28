@@ -129,6 +129,7 @@ function specLines(lines) {
 }
 
 // S3: finished feature documents with a `## Specs` section and no `.vault/specs/<feature>.md`.
+// A document named README.md has its living spec in .vault/specs/README.feature.md, since .vault/specs/README.md is the index.
 // Without .vault/specs/README.md (it holds `Started:`), or for a document whose L1 date is before its `Started:` line, there is no warning.
 function livingSpecLines(root) {
   let spec
@@ -145,7 +146,8 @@ function livingSpecLines(root) {
       const lines = readFileSync(join(root, '.vault', 'tasks', name), 'utf8').split(/\r?\n/)
       const table = unfinishedRows(lines)
       const feature = basename(name, '.md')
-      if (!table || table.rows.length > 0 || !lines.some((l) => /^##\s+Specs\s*$/.test(l)) || existsSync(join(root, '.vault', 'specs', name))) continue
+      const specFile = name === 'README.md' ? 'README.feature.md' : name
+      if (!table || table.rows.length > 0 || !lines.some((l) => /^##\s+Specs\s*$/.test(l)) || existsSync(join(root, '.vault', 'specs', specFile))) continue
       // `**L1 (2026-10-22, user):**` counts; a document with no L1 date predates the rule and is skipped.
       const l1 = /\*\*L1 \((\d{4}-\d{2}-\d{2})[^)]*\)/.exec(lines.join('\n'))?.[1]
       if (started && (!l1 || l1 < started)) continue
@@ -154,7 +156,7 @@ function livingSpecLines(root) {
       // unreadable document: skip it
     }
   }
-  return [...missing.slice(0, 3).map((f) => clip(`Living spec: ${f} is finished but .vault/specs/${f}.md is missing; write its S# with their quotes.`, MAX_LINE)), ...(missing.length > 3 ? [`Living spec: ${missing.length - 3} more finished documents have no file in .vault/specs/.`] : [])]
+  return [...missing.slice(0, 3).map((f) => clip(`Living spec: ${f} is finished but .vault/specs/${f === 'README' ? 'README.feature' : f}.md is missing; write its S# with their quotes.`, MAX_LINE)), ...(missing.length > 3 ? [`Living spec: ${missing.length - 3} more finished documents have no file in .vault/specs/.`] : [])]
 }
 
 // `Branch: x` inside the header line (before the first `##`), reduced to `Branch: x`.

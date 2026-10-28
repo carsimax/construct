@@ -91,6 +91,17 @@ export function oracleEntries(root) {
   return entries
 }
 
+// hasOracleFiles: false only when the store is provably empty without asking git (a plain `.git` directory with no oracles/*.json);
+// anything else, a worktree or a linked `.git` file included, says true and leaves the answer to readOracles.
+export function hasOracleFiles(root) {
+  try {
+    if (!statSync(join(root, '.git')).isDirectory()) return true
+    return readdirSync(join(storeAt('.git', root), 'oracles')).some((n) => n.endsWith('.json'))
+  } catch (error) {
+    return error?.code !== 'ENOENT'
+  }
+}
+
 // readOracles lists the valid oracle lock records; a corrupt one is skipped (oracleEntries shows it).
 export const readOracles = (root) => oracleEntries(root).flatMap((e) => (e.record ? [e.record] : []))
 

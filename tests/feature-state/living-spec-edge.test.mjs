@@ -35,3 +35,11 @@ test('S1: a repository with only odd/tasks gets no feature state, and a finished
   const has = makeRepo({ '.vault/specs/README.md': spec, '.vault/specs/f.md': '# f\n', '.vault/tasks/f.md': doc('', 'done', '2026-10-30') })
   assert.doesNotMatch(context(has), /Living spec: f /)
 })
+
+test('a finished README.md document is warned about even though .vault/specs/README.md exists', () => {
+  const spec = '# Living spec\nStarted: 2026-10-29\n'
+  const repo = makeRepo({ '.vault/specs/README.md': spec, '.vault/tasks/README.md': doc('', 'done', '2026-10-30') })
+  assert.match(context(repo), /Living spec: README is finished but \.vault\/specs\/README\.feature\.md is missing/)
+  const has = makeRepo({ '.vault/specs/README.md': spec, '.vault/specs/README.feature.md': '# r\n', '.vault/tasks/README.md': doc('', 'done', '2026-10-30') })
+  assert.doesNotMatch(context(has), /Living spec: README /)
+})

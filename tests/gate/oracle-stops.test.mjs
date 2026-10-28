@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, readdirSync, readFileSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
+import { createServer } from 'node:net'
 import { join } from 'node:path'
 import { describe, test } from 'node:test'
 import { applyFiles, commitAll, git, makeRepo, scratchDir, write } from '../helpers/repo.mjs'
@@ -246,6 +247,21 @@ describe('construct-gate oracle', () => {
     assert.match(r.stdout, /\.vault\/tasks\/f\.md/)
     assert.deepEqual(readOracles(repo), [])
   })
+  test('unlock accepts ./path, a doubled slash and an absolute path inside the repository, and rejects one outside', () => {
+    for (const spelling of ['./tests/a.test.mjs', 'tests//a.test.mjs', 'tests/./a.test.mjs', (repo) => join(repo, PATH_)]) {
+      const repo = lockedRepo()
+      const r = cli(repo, 'unlock', typeof spelling === 'function' ? spelling(repo) : spelling)
+      assert.equal(r.status, 0, r.stderr)
+      assert.match(r.stdout, /unlocked tests\/a\.test\.mjs/)
+      assert.deepEqual(readOracles(repo), [])
+    }
+    const repo = lockedRepo()
+    const outside = cli(repo, 'unlock', join(scratchDir('odd-stops-out-'), 'a.test.mjs'))
+    assert.equal(outside.status, 1)
+    assert.match(outside.stderr, /outside the repository/)
+    assert.equal(cli(repo, 'unlock', '../a.test.mjs').status, 1)
+    assert.equal(readOracles(repo).length, 1)
+  })
   test('unlock of a path with no lock, or with no argument, is an error', () => {
     const repo = lockedRepo()
     const none = cli(repo, 'unlock', 'src/a.js')
@@ -378,6 +394,22 @@ describe('publication-gate: the release ref is verified against the recorded rem
     git(repo, 'fetch', '-q', 'origin')
     for (const lock of readOracles(repo)) writeOracle(repo, { ...lock, remote: join(scratchDir('odd-stops-none-'), 'missing.git') })
     denied(push(repo), /changed/)
+  })
+  test('a remote whose transport hangs past the ls-remote timeout keeps the lock', async () => {
+    const repo = setup()
+    git(repo, 'push', '-q', 'origin', 'side:main')
+    git(repo, 'fetch', '-q', 'origin')
+    // The kernel accepts the connection into the backlog; nobody answers, so git:// waits until the timeout kills it.
+    const server = createServer()
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+    try {
+      for (const lock of readOracles(repo)) writeOracle(repo, { ...lock, remote: `git://127.0.0.1:${server.address().port}/x.git` })
+      const started = Date.now()
+      denied(push(repo, { CONSTRUCT_LS_REMOTE_TIMEOUT_MS: '500' }), /changed/)
+      assert.ok(Date.now() - started < 10000)
+    } finally {
+      server.close()
+    }
   })
   test('a recorded remote that reads as an option is never passed to git, and keeps the lock', () => {
     const repo = setup()

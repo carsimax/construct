@@ -15,7 +15,7 @@ import { surfaceContains, writerRecord } from './delegation-admission.mjs'
 import { repositoryRoot } from './git-tree.mjs'
 import { readInput } from './hook-io.mjs'
 import { activeLocks } from './publication-gate.mjs'
-import { readOracles } from './review-store.mjs'
+import { hasOracleFiles, readOracles } from './review-store.mjs'
 
 // real resolves symlinks in the deepest existing ancestor and appends the rest.
 function real(path) {
@@ -82,7 +82,7 @@ function main() {
   const under = (p, l) => p === l || p.startsWith(`${l}/`)
   let locks = []
   try {
-    locks = activeLocks(root)
+    if (hasOracleFiles(root)) locks = activeLocks(root)
   } catch {
     // Fail closed for this check only: every recorded lock counts as active; the rest of the guard still runs.
     try {
