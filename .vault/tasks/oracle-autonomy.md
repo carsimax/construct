@@ -14,6 +14,7 @@ Objective: locks no longer need a typed command: orphaned locks release themselv
 |---|---|---|---|---|---|---|
 | T1 | S1 | Orphaned-lock release in `activeLocks` | inline | 2, 3 | done | 5cf3903 |
 | T3 | S1, S2 | Review fixes: literal pathspecs and a strict feature form for orphan release; exact backticked path; one shared path normalization; approvals recorded by a PostToolUse hook in the review store, not read from the transcript | worker | 2, 3 | done | 3cdd1bb |
+| T4 | S2 | Second review fixes: agents cannot run the store-writing hook scripts; approvals bound to the session and expiring after 15 minutes; symlinked paths denied; unlock after a directory change denied | worker | 2, 3 | done | ee0a398 |
 | T2 | S2, S3 | command-guard allows an unlock the user approved through AskUserQuestion; docs | worker | 2, 3 | done | 56f406e |
 
 ## Log
@@ -22,4 +23,5 @@ Objective: locks no longer need a typed command: orphaned locks release themselv
 - **L2 (2026-10-28):** "Haz los das partes lan idea es que el flujo de desarrollo sea lo mas autonomo posible" (part 1: orphaned locks release themselves; part 2: an agent's unlock asks the user in the permission prompt).
 - **L3 (2026-10-28):** The docs do not say whether a hook `ask` prompts in `bypassPermissions` (the user's mode) and imply `dontAsk` denies it, so a permission-prompt design could either unlock silently or never reach the user. S2 uses an AskUserQuestion answer instead, which reaches the user in every mode.
 - **L4 (2026-10-28):** Security review of T1/T2: glob pathspec in the orphan check; substring path match; cwd vs root normalization; an agent-writable transcript as the approval source. T3 fixes all four; the approval now comes from a PostToolUse hook on AskUserQuestion writing to the review store. Unverified: the AskUserQuestion PostToolUse `tool_response` shape (assumed equal to the transcript's `toolUseResult`); if it differs, approvals are not recorded and unlock stays denied (fail closed) until checked in a live session.
+- **L5 (2026-10-28):** Second security review (T4): an agent could run unlock-approval.mjs itself to forge a record (HIGH); approvals had no session or expiry; symlinks and a directory change could make the approved path differ from the unlocked one. All fixed.
 - Next step: review and the PR; after release, confirm one approval end to end.
