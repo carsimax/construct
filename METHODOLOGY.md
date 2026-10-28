@@ -23,8 +23,8 @@ Process scales with the work, judged on two axes. State: a change that can be re
 
 - **Why:** the main criticism of spec-driven tools is one heavy workflow for every task size; lines measure review attention, not lost state or risk.
 - **Taken from:** ODD resume test, Kiro Quick Spec, BMAD scale-adaptive flow, Spec Kit Complexity Tracking.
-- **Evidence:** reviewers find fewer defects past about 200–400 lines (SmartBear/Cisco, vendor, 2006); small batches amplify AI's benefit (DORA); agent success falls with task length (METR). The pull request budget (1,500 lines) and the inline limit (150 lines) are user choices with no external source.
-- **Construct today:** the inline limit is enforced by a hook and the pull request budget raises a notice; the resume test and `Size:` line are prompt rules; the commit-size target and `Exceeds:` do not exist.
+- **Evidence:** reviewers find fewer defects past about 200–400 lines (SmartBear/Cisco, vendor, 2006); small batches amplify AI's benefit (DORA); agent success falls with task length (METR). The inline limit (150 lines) is a user choice with no external source.
+- **Construct today:** the inline limit (150 lines) is enforced by a hook; there are no line budgets for pull requests or commits: large work lives on a feature branch, split by work unit into local sub-branches, with one final pull request; the resume test and `Size:` line are prompt rules; the commit-size target and `Exceeds:` do not exist.
 
 ### 3. Autonomy proportional to verification
 

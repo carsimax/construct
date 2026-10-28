@@ -67,7 +67,7 @@ Many tests cross-check text against code, so a change in one place usually needs
 |---|---|
 | An agent (add or remove) | Start at the role registry `plugins/construct/hooks/scripts/roles.mjs` (name and kind; `tests/roles.test.mjs` cross-checks it against `agents/`, `plugin.json`, `hooks.json`, and `README.md`), then the S6 table in `tests/agents-config.test.mjs`, the `userConfig` options in `plugins/construct/.claude-plugin/plugin.json`, and the agent table in `README.md` |
 | The role registry (`hooks/scripts/roles.mjs`) | The agents, `plugin.json` `userConfig`, `hooks.json`, and the agent table in `README.md`; `tests/roles.test.mjs` cross-checks all of them |
-| Delivery's slice budget or vocabulary (`SLICE_LINES` default in `hooks/scripts/delivery-signals.mjs`, `slice_lines` in `plugin.json` and the README option table, the feature-document header) | `skills/delivery/` and the feature-document reference in `skills/workflow/`; `tests/delivery.test.mjs` compares them |
+| Delivery's branch model or vocabulary (the `feat/<feature>-t<n>` sub-branches, the single final PR, the feature-document header) | `skills/delivery/` and the feature-document reference in `skills/workflow/`; `tests/delivery.test.mjs` checks them |
 | A regex eval grader | The case's `case.yaml` and its grader file; `tests/evals.test.mjs` pins what each regex grader matches and rejects |
 | `skill-context.mjs` or the `## Current state` line of `workflow`, `review`, or `delivery` | The `!` line and `allowed-tools` entry in all three skills, the `Skill state` section of `README.md`; `tests/skill-context/` and `tests/skills.test.mjs` check them. The script must always exit 0 and stay under 1,500 characters |
 | A skill (add or remove) | `EXPECTED` in `tests/skills.test.mjs`; relative links inside skills must resolve |
@@ -81,7 +81,7 @@ Many tests cross-check text against code, so a change in one place usually needs
 
 - `main` is protected. Work on a feature branch and open a pull request.
 - Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/). Do not add AI attribution lines.
-- Keep a pull request within the delivery slice, about 1500 authored changed lines. Split larger work into chained pull requests (see the `construct:delivery` skill).
+- Large work lives on one `feat/<feature>` branch, split by work unit into local sub-branches `feat/<feature>-t<n>` merged with `git merge --no-ff`, and goes out as one pull request; there is no line budget (see the `construct:delivery` skill). Keep a feature small enough that its whole diff stays under the 400 KB review-context budget.
 - Technical artifacts (code, comments, docs, commit messages) are written in English.
 - Commit, push, pull request, and merge are the maintainer's decisions.
 

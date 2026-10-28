@@ -1,13 +1,11 @@
 // Shared by the S7 signal tests: the real delivery-signals hook driven with PostToolUse JSON.
 import { spawnSync } from 'node:child_process'
-import { applyFiles, commitAll, git, makeRepo, scratchDir } from '../helpers/repo.mjs'
+import { scratchDir } from '../helpers/repo.mjs'
 
 export const PLUGIN = new URL('../../plugins/construct/', import.meta.url).pathname
 export const SCRIPT = `${PLUGIN}hooks/scripts/delivery-signals.mjs`
 
-export const lines = (n, tag = 'x') => Array.from({ length: n }, (_, i) => `${tag}${i}\n`).join('')
-
-// mode 'post' feeds PostToolUse (commit slice), mode 'batch' feeds PostToolBatch (context backstop).
+// mode 'batch' feeds PostToolBatch (context backstop); any other mode is no hook and stays silent.
 export function hook(event, env = {}, mode = 'post') {
   const hook_event_name = mode === 'batch' ? 'PostToolBatch' : 'PostToolUse'
   const result = spawnSync('node', [SCRIPT, mode], {
@@ -22,13 +20,4 @@ export function hook(event, env = {}, mode = 'post') {
     // No output.
   }
   return { status: result.status, stdout: result.stdout, stderr: result.stderr, json, context: json?.hookSpecificOutput?.additionalContext }
-}
-
-// A feature branch with one commit of the given files on top of main.
-export function featureRepo(files) {
-  const repo = makeRepo({ 'src/a.js': 'export const a = 1\n' })
-  git(repo, 'checkout', '-q', '-b', 'feat')
-  applyFiles(repo, files)
-  commitAll(repo, 'unit')
-  return repo
 }

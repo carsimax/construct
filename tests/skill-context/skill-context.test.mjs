@@ -134,16 +134,49 @@ test('review leaves the review store byte-for-byte unchanged', () => {
   assert.equal(existsSync(join(bare, '.git', 'construct-review')), false)
 })
 
-test('delivery reports the authored changed lines against the default branch', () => {
+// A feature branch feat/x with sub-branches: t1 merged into it, t2 one commit ahead of it.
+function subBranchRepo() {
+  const repo = featureRepo()
+  for (const n of [1, 2]) {
+    git(repo, 'checkout', '-q', '-b', `feat/x-t${n}`, 'feat/x')
+    write(repo, `src/t${n}.txt`, 'x\n')
+    commitAll(repo, `t${n}`)
+  }
+  git(repo, 'checkout', '-q', 'feat/x')
+  git(repo, 'merge', '-q', '--no-ff', '-m', 'merge t1', 'feat/x-t1')
+  return repo
+}
+
+test('delivery on a feature branch prints it, no current sub-branch, and no sub-branches', () => {
   const r = run(featureRepo(), 'delivery')
   assert.equal(r.status, 0)
-  assert.match(r.stdout, /Commit slice: \d+ authored changed lines in 1 commit on feat\/x since main/)
+  assert.match(r.stdout, /^Feature branch: feat\/x$/m)
+  assert.match(r.stdout, /^Current sub-branch: none$/m)
+  assert.match(r.stdout, /^Sub-branches \(feat\/x-t\*\): none$/m)
+  assert.doesNotMatch(r.stdout, /Commit slice/)
 })
 
-test('delivery on the default branch says there is no slice', () => {
+test('delivery lists the sub-branches as merged or unmerged into the feature branch', () => {
+  const r = run(subBranchRepo(), 'delivery')
+  assert.match(r.stdout, /^Feature branch: feat\/x$/m)
+  assert.match(r.stdout, /^- feat\/x-t1: merged$/m)
+  assert.match(r.stdout, /^- feat\/x-t2: unmerged$/m)
+})
+
+test('delivery on a sub-branch names its feature branch and itself as current', () => {
+  const repo = subBranchRepo()
+  git(repo, 'checkout', '-q', 'feat/x-t2')
+  const r = run(repo, 'delivery')
+  assert.match(r.stdout, /^Feature branch: feat\/x$/m)
+  assert.match(r.stdout, /^Current sub-branch: feat\/x-t2$/m)
+  assert.match(r.stdout, /^- feat\/x-t1: merged$/m)
+  assert.match(r.stdout, /^- feat\/x-t2: unmerged$/m)
+})
+
+test('delivery on the default branch says there is no feature branch', () => {
   const r = run(makeRepo(), 'delivery')
   assert.equal(r.status, 0)
-  assert.match(r.stdout, /no commits ahead of the default branch/i)
+  assert.match(r.stdout, /default branch main.*no feature branch/i)
 })
 
 test('outside a repository every kind exits 0 with one unavailable line', () => {
@@ -168,6 +201,8 @@ test('the output never exceeds 1,500 characters', () => {
   const rows = Array.from({ length: 80 }, (_, n) => `| T${n} | S1 | ${'long task text '.repeat(8)} | none | pending |`).join('\n')
   write(repo, 'odd/tasks/big.md', `# Big\n\n## Tasks\n\n| ID | Specs | Task | Risk | Status |\n|---|---|---|---|---|\n${rows}\n`)
   for (let n = 0; n < 200; n++) write(repo, `dir/${'n'.repeat(30)}${n}.txt`, 'x\n')
+  for (let n = 0; n < 60; n++) git(repo, 'branch', `feat/x-t${'9'.repeat(40)}${n}`)
+  git(repo, 'checkout', '-q', '-b', 'feat/x')
   for (const kind of ['workflow', 'review', 'delivery']) assert.ok(run(repo, kind).stdout.length <= 1500, kind)
 })
 

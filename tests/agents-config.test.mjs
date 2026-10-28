@@ -62,11 +62,10 @@ test('userConfig declares model and effort options defaulting to inherit, and no
   assert.equal(cfg.command_guard_asks?.default, false)
   assert.equal(cfg.inline_edit_max_lines?.type, 'number')
   assert.equal(cfg.inline_edit_max_lines?.default, 150)
-  assert.equal(cfg.slice_lines?.type, 'number')
-  assert.equal(cfg.slice_lines?.default, 1500)
+  assert.equal(cfg.slice_lines, undefined)
   assert.equal(cfg.iteration_cap?.type, 'number')
   assert.equal(cfg.iteration_cap?.default, 3)
-  assert.equal(Object.keys(cfg).length, Object.keys(S6).length * 2 + 4)
+  assert.equal(Object.keys(cfg).length, Object.keys(S6).length * 2 + 3)
 })
 
 test('no userConfig title names a methodology (ODD, RDD, JD)', () => {

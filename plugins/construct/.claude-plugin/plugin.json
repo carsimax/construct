@@ -341,12 +341,6 @@
       "title": "Iteration cap (failures)",
       "description": "Deny a Bash command after it failed this many times for one agent, so the agent stops and reports instead of looping. A value that is not a whole number of 1 or more uses 3. 0 turns the cap off",
       "default": 3
-    },
-    "slice_lines": {
-      "type": "number",
-      "title": "Commit slice budget (lines)",
-      "description": "Authored changed lines on a feature branch (against the default branch) after which delivery-signals asks you to apply the delivery strategy; a target, not a cap. Whole number of 1 or more, otherwise the default applies",
-      "default": 1500
     }
   }
 }

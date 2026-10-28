@@ -46,7 +46,7 @@ Test-first: a runnable deterministic test and a clear expected outcome mean RED,
 - Verifier strength is stated in each handoff. A weak verifier has ambiguous requirements or external side effects: the worker stops after one step and reports. When there is no verifier it names what would make the work verifiable. In docs-only units the reviewed diff is the verifier.
 - Formatters run before verification, afterwards only check-only commands. A byte change reruns the affected checks. Unavailable, partial, or declined proof is never a pass.
 - A docs-only change gets a parent structural readback; other content gets the verifier when Risk-named.
-- One `construct:verifier` per delivery slice (PR), before publication, covering every Risk-named unit in it, after their own checks. delegation-admission denies a verifier prompt without `Risk: item N` (N from 1 to 6; `Risk: none` does not admit). It also carries the whole feature document, baseline, candidate, probe forms, and a scratch directory.
+- One `construct:verifier` per final PR, before publication, covering every Risk-named unit in it, after their own checks. delegation-admission denies a verifier prompt without `Risk: item N` (N from 1 to 6; `Risk: none` does not admit). It also carries the whole feature document, baseline, candidate, probe forms, and a scratch directory.
 
 ## Correction bounds
 

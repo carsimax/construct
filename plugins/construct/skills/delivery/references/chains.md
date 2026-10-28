@@ -1,32 +1,16 @@
-# Chains
+# Sub-branches
 
-Use when a feature exceeds the budget and the strategy allows splitting. Choose by how slices merge.
+Use when large work has a feature document. One feature branch, local sub-branches, one final PR.
 
-## Shapes
+## Flow
 
-- `stacked-to-main`: each PR targets the base branch and merges alone, in order. Landing partway may ship partial behavior, so each slice must be safe by itself. Use when slices merge independently.
-- `feature-branch-chain`: a draft, no-merge tracker PR holds the feature branch. Child 1 targets the tracker, each later child targets its parent. Nothing lands until the tracker merges. Use when the work must integrate first.
+1. From `feat/<feature>`: `git switch -c feat/<feature>-t<n>`, named for the task (or `-t<n>-t<m>` for a cohesive group).
+2. Commit the work unit there. A Risk-named unit has its own commit, reviewed by the lenses before the merge.
+3. Back on the feature branch: `git merge --no-ff feat/<feature>-t<n>`. The merge commit is the rollback boundary of the unit.
+4. Record the unit's commit in the Tasks table. Never push the sub-branch or open a PR from it.
 
-A diff that shows a parent's changes is a base bug: retarget it, do not edit around it. Never mix the two shapes in one feature.
+## Final PR
 
-## Context fields
+`feat/<feature>` to the default branch, with the body rules of the skill. The publication gate reviews the whole feature diff against the default branch, not each sub-branch.
 
-Every chained PR body begins with:
-
-- chain, tracker, position (`n of N`), base, depends on, follow-up
-- review budget: `<changed lines> / 1500`
-- starts at, ends with
-
-Child PRs also carry a dependency diagram marking the current PR.
-
-## Body
-
-- Overview: one paragraph on the unit.
-- Scope: what it includes, what it excludes.
-- Autonomy checklist: CI expected, one scope only, clean rollback, tests or docs cover the unit.
-
-## Over budget
-
-A PR above the budget without `size:exception` gets a split request, not a quiet merge. Pick the tracker when the work must integrate first, stacked when slices merge on their own. After one honest slicing pass, report the overage and recommend `size:exception`.
-
-The push gate reviews every branch of a chain cumulatively against the default branch, not against its parent, so the review subject grows with each child. When that cumulative diff passes the 400 KB review-context budget, no child can be pushed until earlier slices merge into the default branch, so a feature larger than that budget uses `stacked-to-main`, not `feature-branch-chain`.
+When that diff passes the 400 KB review-context budget, the gate cannot review it and nothing publishes in one PR. Keep the feature scoped, or finish and merge part of it first and start a new feature for the rest.

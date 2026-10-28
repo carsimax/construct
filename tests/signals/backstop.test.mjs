@@ -1,10 +1,10 @@
 // S7(b): the context backstop notice, once per session, main thread only, from the tail of the transcript.
 import assert from 'node:assert/strict'
-import { appendFileSync, writeFileSync } from 'node:fs'
+import { appendFileSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, test } from 'node:test'
 import { scratchDir } from '../helpers/repo.mjs'
-import { featureRepo, hook, lines } from './helpers.mjs'
+import { hook, PLUGIN } from './helpers.mjs'
 
 const row = (tokens, model = 'claude-opus-4-7') =>
   `${JSON.stringify({ type: 'assistant', message: { model, role: 'assistant', content: [{ type: 'text', text: 'ok' }], usage: { input_tokens: 10, cache_read_input_tokens: tokens - 20, cache_creation_input_tokens: 5, output_tokens: 5 } } })}\n`
@@ -92,12 +92,20 @@ describe('context backstop', () => {
     assert.equal(r.status, 0)
     assert.equal(r.stdout, '')
   })
+})
 
-  test('the batch run never reports a commit slice', () => {
-    const repo = featureRepo({ 'src/b.js': lines(3) })
-    const call = { tool_name: 'Bash', tool_input: { command: 'git commit -m x' }, tool_use_id: 't1', tool_response: 'ok' }
-    const r = hook({ cwd: repo, tool_calls: [call], transcript_path: transcript(row(1_000)) }, {}, 'batch')
-    assert.equal(r.status, 0)
-    assert.equal(r.stdout, '')
+describe('registration', () => {
+  const groupsOf = (event) => JSON.parse(readFileSync(`${PLUGIN}hooks/hooks.json`, 'utf8')).hooks[event].filter((g) => g.hooks.some((h) => h.args?.[0]?.endsWith('delivery-signals.mjs')))
+
+  test('hooks.json registers delivery-signals batch on PostToolBatch in exec form', () => {
+    const groups = groupsOf('PostToolBatch')
+    assert.equal(groups.length, 1)
+    assert.equal(groups[0].matcher, undefined)
+    assert.deepEqual(groups[0].hooks, [{ type: 'command', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/hooks/scripts/delivery-signals.mjs', 'batch'], timeout: 10 }])
+  })
+
+  test('hooks.json no longer registers delivery-signals post (the commit slice is removed)', () => {
+    assert.deepEqual(groupsOf('PostToolUse'), [])
+    assert.doesNotMatch(readFileSync(`${PLUGIN}hooks/hooks.json`, 'utf8'), /delivery-signals\.mjs",\s*"post"/)
   })
 })

@@ -4,7 +4,7 @@
 // Usage: node skill-context.mjs <workflow|review|delivery>
 import { spawnSync } from 'node:child_process'
 import { activeDocuments } from './feature-state.mjs'
-import { commitSliceReport, defaultBranch, git } from './delivery-signals.mjs'
+import { defaultBranch, git } from './delivery-signals.mjs'
 import { activeLocks, reviewState } from './publication-gate.mjs'
 
 const MAX = 1500
@@ -66,8 +66,22 @@ function locks(root) {
   return active.length === 0 ? [] : [`Oracle locks: ${active.length} active (${[...active.slice(0, 3).map((l) => l.path), ...(active.length > 3 ? ['...'] : [])].join(', ')})`]
 }
 
-function delivery(cwd) {
-  return [commitSliceReport(cwd) ?? 'Commit slice: no commits ahead of the default branch (or on it), nothing to measure.']
+// The feature branch model: feat/<feature> with local sub-branches feat/<feature>-t<n> (merged is judged against the feature branch).
+function delivery(cwd, root) {
+  const branch = git(cwd, ['symbolic-ref', '-q', '--short', 'HEAD'])
+  if (!branch) throw new Error('detached HEAD, no branch')
+  const base = defaultBranch(root)
+  const target = base?.replace(/^refs\/(remotes\/|heads\/)/, '')
+  if (branch === target || `origin/${branch}` === target) return [`On the default branch ${branch}: no feature branch.`]
+  const feature = /^(.+)-t\d+$/.exec(branch)?.[1] ?? branch
+  const merged = new Set(git(cwd, ['branch', '--format=%(refname:short)', '--merged', feature])?.split('\n'))
+  const subs = (git(cwd, ['branch', '--format=%(refname:short)', '--list', `${feature}-t*`]) ?? '').split('\n').filter((b) => /-t\d+$/.test(b))
+  return [
+    `Feature branch: ${feature}`,
+    `Current sub-branch: ${feature === branch ? 'none' : branch}`,
+    subs.length === 0 ? `Sub-branches (${feature}-t*): none` : `Sub-branches (${feature}-t*):`,
+    ...subs.map((b) => `- ${b}: ${merged.has(b) ? 'merged' : 'unmerged'}`),
+  ]
 }
 
 const KINDS = { workflow, review: (cwd, root) => [...review(cwd, root), ...locks(root)], delivery }
