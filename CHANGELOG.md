@@ -4,6 +4,8 @@ Notable changes per release. Versions follow [Semantic Versioning](https://semve
 
 ## Unreleased
 
+- Fix: `unlock-approval` recorded no approval in real Claude Code, because the PostToolUse `tool_input` of `AskUserQuestion` always carries `answers` and `annotations`, so every unlock was denied. It now also runs on PreToolUse (denies a call that pre-fills `answers`, otherwise records the `tool_use_id` as a clean ask), and PostToolUse records the approval from `tool_response.answers` only for a clean ask of the same `tool_use_id` and session. A chosen label of `Unlock (Recommended)` counts as `Unlock`.
+
 ## 13.2.0
 
 - `command-guard` allows `construct-gate oracle unlock <path>` from the main thread, once, after the user answered an AskUserQuestion with `Unlock` for a question that names that path in backticks (exactly one path, compared after the CLI's normalization, so an approval for `tests/a.test.mjs` never unlocks `tests/a`); otherwise it denies and tells the agent to ask (path and `oracle_conflict`, options `Unlock` and `Keep the test`). The answer is recorded in the review store by the new `unlock-approval` PostToolUse hook on `AskUserQuestion` (nothing is recorded when the call pre-fills `answers`; no record denies), not read from the agent-writable transcript. Subagents never unlock. `construct-gate oracle unlock` and `command-guard` share one path normalization (`lockPath`, against the repository root). The `delegation` skill's relay rule 5 says so.
