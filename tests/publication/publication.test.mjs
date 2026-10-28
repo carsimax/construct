@@ -381,8 +381,18 @@ describe('the risk floor', () => {
     assert.match(bad.reason, /\.vault\/risk-paths\/b\.txt has an unreadable line/)
   })
 
-  test('S1: the old odd/risk-paths file is not read', () => {
-    silent(hook('git push', floorRepo({ 'odd/risk-paths': 'src/api/** 3\n' }, { 'src/api/x.js': 'x\n' })))
+  test('S1: an unmigrated odd/ folder denies with the migration, so it never weakens the gate silently (L6)', () => {
+    for (const legacy of [{ 'odd/risk-paths': 'src/api/** 3\n' }, { 'odd/tasks/f.md': '# F\n' }]) {
+      const r = hook('git push', floorRepo(legacy, { 'src/api/x.js': 'x\n' }))
+      assert.equal(r.decision, 'deny', JSON.stringify(legacy))
+      assert.match(r.reason, /odd\//)
+      assert.match(r.reason, /\.vault\//)
+      assert.match(r.reason, /git mv odd \.vault/)
+    }
+  })
+
+  test('S1: odd/ next to .vault/ is an unused archive and is not read', () => {
+    silent(hook('git push', floorRepo({ 'odd/risk-paths': 'src/api/** 3\n', '.vault/specs/README.md': '# Living spec\n' }, { 'src/api/x.js': 'x\n' })))
   })
 
   test('a malformed .vault/risk-paths line denies', () => {
