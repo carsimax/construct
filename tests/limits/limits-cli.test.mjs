@@ -1,7 +1,7 @@
-// S3 of .vault/tasks/config-surface.md: the limits leave userConfig and `construct-limits` sets and shows them per session.
+// S3 of .vault/tasks/config-surface.md and S2 of .vault/tasks/limits-hook.md: the limits leave userConfig; `construct-limits` validates and prints, a hook records.
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, test } from 'node:test'
 import { scratchDir } from '../helpers/repo.mjs'
@@ -9,14 +9,11 @@ import { scratchDir } from '../helpers/repo.mjs'
 const PLUGIN = new URL('../../plugins/construct/', import.meta.url).pathname
 const CLI = join(PLUGIN, 'bin/construct-limits')
 
-// The CLI run as an executable, with the session id and data dir given (inherited ones removed).
-function limits(data, session, ...args) {
-  const env = { ...process.env, CLAUDE_PLUGIN_DATA: data }
+// The CLI run as an executable. It writes no state (S2 of .vault/tasks/limits-hook.md), so it needs no session id or data dir.
+function limits(...args) {
+  const env = { ...process.env }
   delete env.CLAUDE_CODE_SESSION_ID
-  delete env.CLAUDE_PLUGIN_OPTION_INLINE_EDIT_MAX_LINES
-  delete env.CLAUDE_PLUGIN_OPTION_ITERATION_CAP
-  if (session !== undefined) env.CLAUDE_CODE_SESSION_ID = session
-  const r = spawnSync(CLI, args, { encoding: 'utf8', env })
+  const r = spawnSync(CLI, args, { encoding: 'utf8', env, cwd: scratchDir('limits-cli-') })
   return { status: r.status, stdout: r.stdout ?? '', stderr: r.stderr ?? '', error: r.error }
 }
 
@@ -24,25 +21,10 @@ const ok = (r) => {
   assert.equal(r.error, undefined, `construct-limits did not run: ${r.error?.message}`)
   assert.equal(r.status, 0, r.stderr)
 }
-const shows = (data, session, inline, cap) => {
-  const r = limits(data, session, 'show')
+const prints = (r, inline, cap) => {
   ok(r)
-  assert.match(r.stdout, new RegExp(`(^|\\W)inline=${inline}(\\W|$)`))
-  assert.match(r.stdout, new RegExp(`(^|\\W)cap=${cap}(\\W|$)`))
-}
-
-// Every file under dir with its content: the persisted state.
-function snapshot(dir) {
-  const out = {}
-  const walk = (d) => {
-    for (const name of readdirSync(d)) {
-      const p = join(d, name)
-      if (statSync(p).isDirectory()) walk(p)
-      else out[p] = readFileSync(p, 'utf8')
-    }
-  }
-  walk(dir)
-  return out
+  if (inline !== undefined) assert.match(r.stdout, new RegExp(`(^|\\W)inline=${inline}(\\W|$)`))
+  if (cap !== undefined) assert.match(r.stdout, new RegExp(`(^|\\W)cap=${cap}(\\W|$)`))
 }
 
 describe('userConfig (S3)', () => {
@@ -58,36 +40,34 @@ describe('construct-limits (S3)', () => {
     assert.ok(statSync(CLI).mode & 0o111)
   })
 
-  test('show with nothing declared prints the defaults inline=150 and cap=3', () => {
-    shows(scratchDir('limits-cli-'), 'sA', 150, 3)
+  test('show says the hook reports the active limits', () => {
+    const r = limits('show')
+    ok(r)
+    assert.match(r.stdout, /hook/i)
   })
 
-  test('set inline and cap together is shown in that session and not in another', () => {
-    const data = scratchDir('limits-cli-')
-    ok(limits(data, 'sA', 'set', 'inline=300', 'cap=5'))
-    shows(data, 'sA', 300, 5)
-    shows(data, 'sB', 150, 3)
+  test('--help explains that the hook records the values', () => {
+    const r = limits('--help')
+    ok(r)
+    assert.match(r.stdout, /hook records/i)
   })
 
-  test('either key may be set alone; the other keeps its default', () => {
-    const a = scratchDir('limits-cli-')
-    ok(limits(a, 'sA', 'set', 'inline=40'))
-    shows(a, 'sA', 40, 3)
-    const b = scratchDir('limits-cli-')
-    ok(limits(b, 'sA', 'set', 'cap=7'))
-    shows(b, 'sA', 150, 7)
+  test('set prints the requested values and either key may be set alone', () => {
+    prints(limits('set', 'inline=300', 'cap=5'), 300, 5)
+    const a = limits('set', 'inline=40')
+    prints(a, 40)
+    assert.doesNotMatch(a.stdout, /cap=/)
+    const b = limits('set', 'cap=7')
+    prints(b, undefined, 7)
+    assert.doesNotMatch(b.stdout, /inline=/)
   })
 
-  test('show prints the clamped values: inline at most 500, cap at most 10', () => {
-    const data = scratchDir('limits-cli-')
-    ok(limits(data, 'sA', 'set', 'inline=900', 'cap=50'))
-    shows(data, 'sA', 500, 10)
+  test('set prints the clamped values: inline at most 500, cap at most 10', () => {
+    prints(limits('set', 'inline=900', 'cap=50'), 500, 10)
   })
 
   test('0 is a valid value for both keys', () => {
-    const data = scratchDir('limits-cli-')
-    ok(limits(data, 'sA', 'set', 'inline=0', 'cap=0'))
-    shows(data, 'sA', 0, 0)
+    prints(limits('set', 'inline=0', 'cap=0'), 0, 0)
   })
 
   const invalid = [
@@ -96,31 +76,21 @@ describe('construct-limits (S3)', () => {
     ['an empty value', ['inline=']],
     ['a negative value', ['cap=-1']],
     ['an unknown key', ['lines=20']],
+    ['no arguments', []],
     ['one invalid pair beside a valid one', ['inline=200', 'cap=x']],
   ]
   for (const [name, args] of invalid) {
-    test(`${name} exits non-zero with a message on stderr and changes nothing`, () => {
-      const data = scratchDir('limits-cli-')
-      ok(limits(data, 'sA', 'set', 'inline=20', 'cap=4'))
-      const before = snapshot(data)
-      const r = limits(data, 'sA', 'set', ...args)
+    test(`${name} exits non-zero with a message on stderr`, () => {
+      const r = limits('set', ...args)
       assert.equal(r.error, undefined, `construct-limits did not run: ${r.error?.message}`)
       assert.notEqual(r.status, 0)
       assert.notEqual(r.stderr.trim(), '')
-      assert.deepEqual(snapshot(data), before)
-      shows(data, 'sA', 20, 4)
     })
   }
 
-  test('a missing session id exits non-zero with a message on stderr and changes nothing', () => {
-    const data = scratchDir('limits-cli-')
-    const before = snapshot(data)
-    for (const session of [undefined, '']) {
-      const r = limits(data, session, 'set', 'inline=300')
-      assert.equal(r.error, undefined, `construct-limits did not run: ${r.error?.message}`)
-      assert.notEqual(r.status, 0)
-      assert.notEqual(r.stderr.trim(), '')
-    }
-    assert.deepEqual(snapshot(data), before)
+  test('an unknown command exits non-zero with a message on stderr', () => {
+    const r = limits('bogus')
+    assert.notEqual(r.status, 0)
+    assert.notEqual(r.stderr.trim(), '')
   })
 })

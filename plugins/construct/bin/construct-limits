@@ -1,15 +1,17 @@
 #!/usr/bin/env node
 // construct-limits: the orchestrator sets this session's inline edit limit and iteration cap (S3 of .vault/tasks/config-surface.md).
-import { CEILINGS, DEFAULTS, readLimits, writeLimits } from '../hooks/scripts/limits.mjs'
+// It writes no state: the limits-record.mjs hook (PreToolUse on Bash) records `set` and reports the active limits (S2 of .vault/tasks/limits-hook.md).
+import { CEILINGS, DEFAULTS, parseSet } from '../hooks/scripts/limits.mjs'
 
-const USAGE = `usage: construct-limits <set inline=<N> cap=<N> | show>   (keyed by CLAUDE_CODE_SESSION_ID)
+const USAGE = `usage: construct-limits <set inline=<N> cap=<N> | show>
 
   set    declare either or both limits for this session; the other keeps its earlier value; N is a whole number >= 0
-  show   print the active limits as "inline=<N> cap=<N>"
+  show   the hook reports the active limits as "inline=<N> cap=<N>" in its context
 
   inline  most lines one main-thread edit call may change (default ${DEFAULTS.inline}, ceiling ${CEILINGS.inline}); 0 means .vault/tasks/ only
   cap     failures of one Bash command before the next run is denied (default ${DEFAULTS.cap}, ceiling ${CEILINGS.cap}); 0 turns the cap off
-A value over its ceiling is clamped. Invalid input exits non-zero and changes nothing.`
+This command only validates and prints: a hook records the values when the main thread runs set (a subagent's set is ignored and denied).
+A value over its ceiling is clamped. Invalid input exits non-zero and records nothing.`
 
 const fail = (message) => {
   process.stderr.write(`construct-limits: ${message}\n`)
@@ -21,24 +23,9 @@ if (command === '--help' || command === '-h' || command === 'help') {
   process.stdout.write(`${USAGE}\n`)
   process.exit(0)
 }
-if (command !== 'set' && command !== 'show') fail(`unknown command ${JSON.stringify(command ?? '')}\n${USAGE}`)
-const session = process.env.CLAUDE_CODE_SESSION_ID
-if (!session) fail('CLAUDE_CODE_SESSION_ID is not set, so the session is unknown')
-
-if (command === 'set') {
-  if (args.length === 0) fail(`set needs inline=<N> or cap=<N>\n${USAGE}`)
-  const values = {}
-  for (const arg of args) {
-    const [key, value] = arg.split(/=(.*)/s)
-    if (!Object.hasOwn(DEFAULTS, key)) fail(`unknown key ${JSON.stringify(key)} (use inline or cap)`)
-    if (!/^(0|[1-9]\d*)$/.test(value ?? '')) fail(`${key} must be a whole number >= 0, got ${JSON.stringify(value ?? '')}`)
-    values[key] = Number(value)
-  }
-  try {
-    writeLimits(session, values)
-  } catch (error) {
-    fail(`cannot save the limits: ${error.message}`)
-  }
-}
-const now = readLimits(session)
-process.stdout.write(`inline=${now.inline} cap=${now.cap}\n`)
+if (command === 'show') process.stdout.write('The hook reports the active limits (inline=<N> cap=<N>) in its context when this command runs.\n')
+else if (command === 'set') {
+  const { values, error } = parseSet(args)
+  if (error) fail(`${error}\n${USAGE}`)
+  process.stdout.write(`${Object.entries(values).map(([k, v]) => `${k}=${Math.min(v, CEILINGS[k])}`).join(' ')} (the hook records these for the session)\n`)
+} else fail(`unknown command ${JSON.stringify(command ?? '')}\n${USAGE}`)
