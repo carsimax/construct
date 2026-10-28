@@ -2,7 +2,7 @@
 // construct-gate: installs the pre-push hook that runs the publication gate for every git push (S2 of .vault/tasks/pre-push-gate.md).
 import { spawnSync } from 'node:child_process'
 import { chmodSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
-import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { dirname, join, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const USAGE = `usage: construct-gate <install|uninstall|status|oracle list|oracle unlock <path>>   (run inside a repository)
@@ -79,28 +79,19 @@ function warnings({ root, common, file }) {
   return [`construct-gate: warning: ${dir} is outside this repository's git directory, so the hook applies to every repository using it; uninstall removes it for all.`]
 }
 
-// The real path when the file exists (macOS /var is /private/var and git reports the real root), else as given.
-const real = (p) => {
-  try {
-    return realpathSync(p)
-  } catch {
-    return p
-  }
-}
-
 // oracle: `list` and `unlock <path>` over the oracle locks of the current repository (S5 of .vault/tasks/oracle-separation.md).
 async function oracle(sub, path) {
   const top = git('rev-parse', '--show-toplevel')
   if (top.status !== 0) throw new Error('not inside a git repository')
   const root = top.stdout.trim()
-  const { oracleEntries, removeOracle } = await import('../hooks/scripts/review-store.mjs')
+  const { lockPath, oracleEntries, removeOracle } = await import('../hooks/scripts/review-store.mjs')
   if (sub === 'unlock') {
     if (!path) throw new Error('usage: construct-gate oracle unlock <path>')
     // Locks are stored as repository-relative paths: `./p`, `a//b` and an absolute path inside the repository mean the stored one. A corrupt record is named by its file name, so a name with no `/` that matches one stays as typed.
     if (!oracleEntries(root).some((e) => e.name === path || e.name === `${path}.json`)) {
-      const rel = relative(root, real(resolve(root, path)))
-      if (rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) throw new Error(`${path} is outside the repository`)
-      path = rel.split(sep).join('/')
+      const rel = lockPath(root, path)
+      if (rel === null) throw new Error(`${path} is outside the repository`)
+      path = rel
     }
     const lock = oracleEntries(root).find((e) => e.record?.path === path)?.record
     if (!removeOracle(root, path)) throw new Error(`no oracle lock for ${path} (construct-gate oracle list shows them)`)

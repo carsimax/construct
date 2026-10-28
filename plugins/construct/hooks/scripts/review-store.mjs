@@ -2,8 +2,8 @@
 // records (written by review-context.mjs), one verdict record per subject and
 // lens (written only by review-capture.mjs), and the lens result validation.
 import { createHash } from 'node:crypto'
-import { mkdirSync, readdirSync, readFileSync, rmdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
-import { isAbsolute, join } from 'node:path'
+import { mkdirSync, readdirSync, readFileSync, realpathSync, rmdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { atomicWrite, git } from './git-tree.mjs'
 
 const SEVERITIES = ['BLOCKER', 'CRITICAL', 'WARNING', 'SUGGESTION']
@@ -120,6 +120,48 @@ export function removeOracle(root, path) {
   }
   rmSync(file)
   return true
+}
+
+// lockPath is the path as an oracle lock stores it: relative to the repository `root` (its realpath, as git reports it), with
+// `./p` and `a//b` collapsed and symlinks resolved when the file exists; null when it falls outside the repository.
+// `construct-gate oracle unlock` and command-guard both call it, so they resolve one spelling to one path.
+export function lockPath(root, path) {
+  let abs = resolve(root, path)
+  try {
+    abs = realpathSync(abs)
+  } catch {
+    // Not on disk: as given.
+  }
+  const rel = relative(root, abs)
+  return rel === '' || rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel) ? null : rel.split(sep).join('/')
+}
+
+// Unlock approvals (unlock-approval.mjs): one record per answered AskUserQuestion, { tool_use_id, answers, at }, written by the
+// PostToolUse hook from what the user answered, and read by command-guard. Taking one claims it with an exclusive create, so an
+// answer unlocks once. Only the latest record counts: a newer question retires the older answers.
+const approvalDir = (root) => join(storeDir(root), 'approvals')
+const approvalName = (id) => String(id).replace(/[^\w-]/g, '_')
+export const writeApproval = (root, record) => atomicWrite(join(approvalDir(root), `${approvalName(record.tool_use_id)}.json`), `${JSON.stringify(record)}\n`)
+
+// takeApproval returns the latest record and claims it when `accepts(record)`; null when there is none, it does not qualify, or it was claimed before.
+export function takeApproval(root, accepts) {
+  const dir = approvalDir(root)
+  let latest = null
+  for (const name of readdirSync(dir).filter((n) => n.endsWith('.json'))) {
+    try {
+      const r = readJson(join(dir, name))
+      if (typeof r?.tool_use_id === 'string' && typeof r.at === 'number' && r.answers && typeof r.answers === 'object' && (!latest || r.at >= latest.at)) latest = r
+    } catch {
+      // Unreadable record: not an approval.
+    }
+  }
+  if (!latest || !accepts(latest)) return null
+  try {
+    writeFileSync(join(dir, `${approvalName(latest.tool_use_id)}.used`), '', { flag: 'wx' })
+  } catch {
+    return null
+  }
+  return latest
 }
 
 const MAX_AGE_MS = 30 * 24 * 3600 * 1000

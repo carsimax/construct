@@ -4,7 +4,8 @@ Notable changes per release. Versions follow [Semantic Versioning](https://semve
 
 ## Unreleased
 
-- `command-guard` allows `construct-gate oracle unlock <path>` from the main thread, once, after the user answered an AskUserQuestion with `Unlock` for a question naming that path; otherwise it denies and tells the agent to ask (path and `oracle_conflict`, options `Unlock` and `Keep the test`). Subagents never unlock, and an unreadable transcript denies. The `delegation` skill's relay rule 5 says so.
+- `command-guard` allows `construct-gate oracle unlock <path>` from the main thread, once, after the user answered an AskUserQuestion with `Unlock` for a question that names that path in backticks (exactly one path, compared after the CLI's normalization, so an approval for `tests/a.test.mjs` never unlocks `tests/a`); otherwise it denies and tells the agent to ask (path and `oracle_conflict`, options `Unlock` and `Keep the test`). The answer is recorded in the review store by the new `unlock-approval` PostToolUse hook on `AskUserQuestion` (nothing is recorded when the call pre-fills `answers`; no record denies), not read from the agent-writable transcript. Subagents never unlock. `construct-gate oracle unlock` and `command-guard` share one path normalization (`lockPath`, against the repository root). The `delegation` skill's relay rule 5 says so.
+- The publication gate matches an oracle lock's feature document with literal pathspecs, and releases a lock as orphaned only for a feature that is a plain `.vault/tasks/<name>.md` path, so a feature such as `.vault/tasks/*.md` is never released because another document was deleted.
 
 ## 13.1.1
 
