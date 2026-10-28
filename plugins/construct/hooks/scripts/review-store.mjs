@@ -141,7 +141,20 @@ export function lockPath(root, path) {
 // answer unlocks once. Only the latest record counts: a newer question retires the older answers.
 const approvalDir = (root) => join(storeDir(root), 'approvals')
 const approvalName = (id) => String(id).replace(/[^\w-]/g, '_')
-export const writeApproval = (root, record) => atomicWrite(join(approvalDir(root), `${approvalName(record.tool_use_id)}.json`), `${JSON.stringify(record)}\n`)
+// One live approval: writing a new record deletes every older one, and claiming one deletes them all.
+const dropApprovals = (dir, keep = null) => {
+  try {
+    for (const n of readdirSync(dir)) if (n.endsWith('.json') && n !== keep) rmSync(join(dir, n), { force: true })
+  } catch {
+    // Nothing to delete.
+  }
+}
+export function writeApproval(root, record) {
+  const dir = approvalDir(root)
+  const name = `${approvalName(record.tool_use_id)}.json`
+  atomicWrite(join(dir, name), `${JSON.stringify(record)}\n`)
+  dropApprovals(dir, name)
+}
 
 // An approval is good for 15 minutes; expired and used records are deleted when read.
 export const APPROVAL_MAX_AGE_MS = 15 * 60 * 1000
@@ -173,7 +186,7 @@ export function takeApproval(root, accepts) {
   } catch {
     return null
   }
-  rmSync(join(dir, `${approvalName(latest.tool_use_id)}.json`), { force: true })
+  dropApprovals(dir)
   return latest
 }
 
