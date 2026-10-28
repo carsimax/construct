@@ -4,6 +4,8 @@ Notable changes per release. Versions follow [Semantic Versioning](https://semve
 
 ## Unreleased
 
+## 12.3.0
+
 - Living spec: the publication gate denies a ref whose feature document has a `done` task naming an `S#` still marked `NEEDS CLARIFICATION: <question>`. `feature-state.mjs` lists each active document's open clarifications (warning above 3), warns on specs with no quote found in the `## Log` and no `Assumption`, and warns when a finished document with `## Specs` has no `## <feature>` heading in `odd/spec.md` (skipped when `odd/spec.md` is missing or the document's L1 date is before its `Started:` line).
 
 ## 12.2.0
