@@ -1,6 +1,6 @@
 # Snapshot budget
 
-Objective: stop the Risk-line snapshot from trusting the real index's stat cache (a same-size rewrite with its mtime restored goes unseen) without slowing heavy repositories or letting the hook time out. Branch: fix/snapshot-budget. Baseline: 9b4aed4. Delivery strategy: single-pr. Test runner: node --test 'tests/**/*.test.mjs'.
+Objective: stop the Risk-line snapshot from trusting the real index's stat cache (a same-size rewrite with its mtime restored goes unseen) without slowing heavy repositories or letting the hook time out. Branch: fix/snapshot-retry (T3; T2 shipped in 12.0.2 on fix/snapshot-budget). Baseline: 147bca2. Delivery strategy: single-pr. Test runner: node --test 'tests/**/*.test.mjs'.
 
 ## Specs
 
@@ -23,12 +23,17 @@ Objective: stop the Risk-line snapshot from trusting the real index's stat cache
 - A byte budget from the index entries' size fields (needs parsing the index, not just its header).
 - Prune stale `construct-index-*` directories in `pruneState`.
 
+- **S2 — Degraded mode does not stick, and the fallback is bounded.** "ok" (to: retry the full hash on a repository marked slow, and bound the fallback).
+  - Given a repository marked slow more than `SLOW_RETRY_MS` (1 hour) ago When mark or check runs Then the full hash is tried again; if it finishes in budget, `slow` is cleared; if not, `slow` is refreshed and no second notice is shown.
+  - Given the fallback must seed from HEAD (assume-unchanged or skip-worktree entries) When its `add -A` runs Then it gets a timeout of at most `FALLBACK_BUDGET_MS` (20 s); on timeout the hook fails open (no output, exit 0), so mark or check never reaches the 30 s hook timeout.
+
 ## Tasks
 
 | ID | Specs | Task | Route | Risk | Status | Commit |
 |---|---|---|---|---|---|---|
 | T1 | S1 | Choose the budget design | user | none | done: time budget | — |
 | T2 | S1 | Tests (mtime-restore, heavy repo timing, split index, notice once, killed mark), then the change, then clean-context review-risk and review-resilience | worker | 2 | done | — |
+| T3 | S2 | Tests first, then retry of `slow` after `SLOW_RETRY_MS` and the fallback timeout; review-risk | worker | 2 | done | — |
 
 ## Log
 
@@ -40,4 +45,8 @@ Objective: stop the Risk-line snapshot from trusting the real index's stat cache
 
 - **L4 (2026-10-27):** Lenses on 864b2fb: no blockers. review-risk WARNING (pruneState recursive delete of planted `construct-index-*` on a shared /tmp) fixed in one correction batch: only directories owned by the user with no group or other permissions are pruned (RED then GREEN). review-resilience WARNINGs left for the user: the fallback's unbounded `add -A` when assume-unchanged or skip-worktree entries force a HEAD seed, and `slow` never retried within a session.
 
-Next step: review-risk on the correction commit, then the user decides push and PR.
+- **L5 (2026-10-27):** 12.0.2 released (#76, #77). "ok" — T3 opened from the review-resilience warnings and the automated security review (slow sticks for the session).
+
+- **L6 (2026-10-27):** T3 by worker, RED observed (6 tests). Parent fix: the block write reused the stale record and restored a just-cleared `slow`. Suite 1094/1094, five runs.
+
+Next step: review-risk, then the user decides push and PR.

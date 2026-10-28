@@ -10,6 +10,8 @@ const DEFAULT_OUTPUT_LIMIT = 64 << 20
 // The full HEAD-seeded hash gets this long before the snapshot degrades to the index-seeded one. The
 // environment variable exists so tests can exhaust it without building a huge repository.
 export const SNAPSHOT_BUDGET_MS = Number(process.env.CONSTRUCT_SNAPSHOT_BUDGET_MS) || 5000
+// The index-seeded or HEAD-seeded fallback's `add -A` is bounded too; past it the GitError (timedOut) propagates and the hook fails open.
+export const FALLBACK_BUDGET_MS = 20000
 
 class GitError extends Error {
   constructor(message, { status = null, stderr = '' } = {}) {
@@ -93,7 +95,7 @@ function emptyTree(root) {
 // (or indexSeeded asks to skip it) the snapshot starts as a copy of the real index instead, whose stat cache
 // lets `add -A` skip unchanged files, unless an entry is assume-unchanged or skip-worktree: `add -A` would
 // skip its changes. That snapshot is `degraded: true` in the result, because it trusts the stat cache.
-export function freezeWorkingTree(root, { budgetMs = SNAPSHOT_BUDGET_MS, indexSeeded = false } = {}) {
+export function freezeWorkingTree(root, { budgetMs = SNAPSHOT_BUDGET_MS, fallbackBudgetMs = FALLBACK_BUDGET_MS, indexSeeded = false } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'construct-index-'))
   try {
     const env = { GIT_INDEX_FILE: join(dir, 'index') }
@@ -126,7 +128,7 @@ export function freezeWorkingTree(root, { budgetMs = SNAPSHOT_BUDGET_MS, indexSe
     }
     if (!seeded && head !== null) git(root, ['read-tree', 'HEAD'], { env })
     // A cached file system monitor or untracked cache would make `add -A` skip changes the stat cache hides.
-    git(root, ['-c', 'core.fsmonitor=false', '-c', 'core.untrackedCache=false', 'add', '-A'], { env })
+    git(root, ['-c', 'core.fsmonitor=false', '-c', 'core.untrackedCache=false', 'add', '-A'], { env, timeout: fallbackBudgetMs })
     return result(text(git(root, ['write-tree'], { env })), true)
   } finally {
     rmSync(dir, { recursive: true, force: true })

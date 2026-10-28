@@ -4,6 +4,8 @@ Notable changes per release. Versions follow [Semantic Versioning](https://semve
 
 ## Unreleased
 
+- A repository the Risk-line snapshot marked slow retries the full hash from HEAD after one hour (`slow_at` in the session record) instead of staying degraded for the whole session, and the index-seeded fallback's `add -A` is bounded to 20 s, past which the hook fails open.
+
 ## 12.0.2
 
 - `install.sh` adds the marketplace without pinning it to the release tag, so `claude plugin marketplace update construct` and `claude plugin update construct@construct` upgrade an installer-made install. A pin blocked every update, since `marketplace update` does not move it.
