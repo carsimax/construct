@@ -19,6 +19,11 @@ export function readInput() {
 // access is never trusted (another local user could pre-seed its state).
 export function dataDir() {
   if (process.env.CLAUDE_PLUGIN_DATA) return process.env.CLAUDE_PLUGIN_DATA
+  return fallbackDir()
+}
+
+// fallbackDir is the private per-user directory in the system temp dir, whatever CLAUDE_PLUGIN_DATA says.
+export function fallbackDir() {
   const dir = join(tmpdir(), `construct-${process.getuid()}`)
   try {
     mkdirSync(dir, { mode: 0o700 })

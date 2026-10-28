@@ -12,10 +12,8 @@ const CMD = 'node --test tests/a.test.mjs'
 
 const fresh = () => scratchDir('iteration-cap-')
 
-function run(data, payload, { cap, input } = {}) {
+function run(data, payload, { input } = {}) {
   const env = { ...process.env, CLAUDE_PLUGIN_DATA: data }
-  delete env.CLAUDE_PLUGIN_OPTION_ITERATION_CAP
-  if (cap !== undefined) env.CLAUDE_PLUGIN_OPTION_ITERATION_CAP = cap
   const result = spawnSync('node', [HOOK], { input: input ?? JSON.stringify(payload), encoding: 'utf8', env })
   return { status: result.status, stdout: result.stdout }
 }
@@ -146,31 +144,7 @@ describe('reset (S3)', () => {
   })
 })
 
-describe('configurable cap (S4)', () => {
-  test('cap 2 denies the 3rd run', () => {
-    const data = fresh()
-    failN(data, 1, {}, { cap: '2' })
-    allowed(pre(data, {}, { cap: '2' }))
-    failN(data, 1, {}, { cap: '2' })
-    denied(pre(data, {}, { cap: '2' }))
-  })
-
-  for (const cap of ['abc', '-1', '2.5', '', ' ']) {
-    test(`invalid cap ${JSON.stringify(cap)} falls back to 3`, () => {
-      const data = fresh()
-      failN(data, 2, {}, { cap })
-      allowed(pre(data, {}, { cap }))
-      failN(data, 1, {}, { cap })
-      denied(pre(data, {}, { cap }))
-    })
-  }
-
-  test('cap 0 turns the cap off', () => {
-    const data = fresh()
-    failN(data, 10, {}, { cap: '0' })
-    allowed(pre(data, {}, { cap: '0' }))
-  })
-})
+// The declared cap, its ceiling, 0 = off, and the ignored legacy option are covered by tests/limits/iteration-limits.test.mjs.
 
 describe('fails open (S5)', () => {
   test('malformed input prints nothing and exits 0 for every event', () => {

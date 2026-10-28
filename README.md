@@ -113,12 +113,21 @@ claude plugin install construct@construct
 
 ## Configuration
 
-Options are plugin settings, edited in `/config`:
+Construct has no `/config` options. Two limits are set per session by the orchestrator with `construct-limits` (the plugin's `bin/`, on the Bash PATH of a session); the user can also run it with `!`:
 
-| Option | Effect |
-|---|---|
-| `inline_edit_max_lines` (number, default `150`) | Let the main thread edit repository files directly when one Write, Edit, MultiEdit, or NotebookEdit call changes at most this many lines; `surface-guard` sends bigger changes to `construct:worker`. `0` restores the old rule: the main thread writes only `.vault/tasks/` |
-| `iteration_cap` (number, default `3`) | Deny a Bash command after it failed this many times in a row for one agent (a passing run resets its count) (the main thread counts as one), so the agent stops and reports what it tried, the failure, and its hypothesis instead of looping, and never edits the test to pass. A subagent's count ends when it stops; the main thread's resets on your next prompt. A value that is not a whole number of 1 or more uses `3`; `0` turns the cap off |
+```bash
+construct-limits set inline=300 cap=5   # either key alone is fine; the other keeps its earlier value
+construct-limits show                   # inline=300 cap=5
+```
+
+| Limit | Default | Ceiling | Effect |
+|---|---|---|---|
+| `inline` | `150` | `500` | The most lines one Write, Edit, MultiEdit, or NotebookEdit call of the main thread may change; `surface-guard` sends bigger changes to `construct:worker`. `0` means the main thread writes only `.vault/tasks/` |
+| `cap` | `3` | `10` | Deny a Bash command after it failed this many times in a row for one agent (a passing run resets its count; the main thread counts as one), so the agent stops and reports what it tried, the failure, and its hypothesis instead of looping, and never edits the test to pass. A subagent's count ends when it stops; the main thread's resets on your next prompt. `0` turns the cap off |
+
+A value over its ceiling is clamped; invalid input (not a whole number, an unknown key, a missing `CLAUDE_CODE_SESSION_ID`) exits non-zero and changes nothing. The limits belong to the session that set them and are not saved per project.
+
+**Tracked work is never edited inline.** While a `.vault/tasks/*.md` feature document has an unfinished task, `surface-guard` denies every main-thread write outside `.vault/tasks/`, whatever `inline` says, and names `construct:worker`; writers keep their allowed edit surfaces. With every task done, the `inline` limit applies again.
 
 ### Agents
 
@@ -245,7 +254,7 @@ The installer is opt-in and never runs on its own. It writes to the effective ho
 
 **Locked oracles.** While a lock is active (its feature document still has unfinished tasks on the remote-tracking default branch), `surface-guard` denies Write, Edit, MultiEdit, and NotebookEdit of a locked oracle to every agent and to the main thread, `delegation-admission` denies a writer whose surfaces cover one and an oracle launched over one, and `command-guard` denies `construct-gate oracle unlock` to every subagent and to the main thread unless the user's latest AskUserQuestion answer, recorded in the review store by a PostToolUse hook for a call a PreToolUse hook saw without pre-filled `answers`, chose `Unlock` (or `Unlock (Recommended)`) for a question naming that path in backticks (one unlock per answer; one live approval at a time; the unlock must be the whole command, one plain `construct-gate oracle unlock <path>` on an existing regular file with no symlink under the root; no record denies), and denies commands that write `refs/remotes/` locally (`git update-ref`, `git symbolic-ref`, `git remote set-head`, a `git fetch` refspec into it), as a discipline layer. Local edit stops trust the local remote-tracking ref; the publication gate verifies it against the remote URL recorded in the lock (one `git ls-remote`) before releasing a lock, and keeps the lock when the remote is unreachable, differs, or no URL was recorded. A new oracle run replaces a released lock. A symlink or directory surface is locked with a marker the gate always reports as changed (unlock it with `construct-gate oracle unlock`), and a corrupt lock record is skipped by the gate and shown by `oracle list`.
 
-**Command and surface guards.** Two more `PreToolUse` hooks fail open. `command-guard.mjs` on `Bash` denies commands that bypass the verifier (such as `git commit --no-verify`) and never asks. `surface-guard.mjs` on `Write`, `Edit`, `MultiEdit`, and `NotebookEdit` keeps a writer inside its allowed edit surfaces and lets the main thread write under `.vault/tasks/` freely and elsewhere only when one call changes at most `inline_edit_max_lines` lines (default 150); bigger changes are denied and go to `construct:worker`. The Risk-line gate also blocks a turn that adds skipped, focused, or stub test markers. `failure-streak.mjs` on `PostToolUseFailure` tells the model to change strategy when one tool fails five times within ten minutes. `iteration-cap.mjs` counts failed Bash commands on `PostToolUseFailure` and denies, on `PreToolUse`, a command that already failed `iteration_cap` times (default 3) for that agent; `SubagentStop` and `UserPromptSubmit` reset the counts. It fails open.
+**Command and surface guards.** Two more `PreToolUse` hooks fail open. `command-guard.mjs` on `Bash` denies commands that bypass the verifier (such as `git commit --no-verify`) and never asks. `surface-guard.mjs` on `Write`, `Edit`, `MultiEdit`, and `NotebookEdit` keeps a writer inside its allowed edit surfaces and lets the main thread write under `.vault/tasks/` freely and elsewhere only when one call changes at most the session's `inline` limit (default 150; see [Configuration](#configuration)), and not at all while a feature document has an unfinished task; those writes are denied and go to `construct:worker`. The Risk-line gate also blocks a turn that adds skipped, focused, or stub test markers. `failure-streak.mjs` on `PostToolUseFailure` tells the model to change strategy when one tool fails five times within ten minutes. `iteration-cap.mjs` counts failed Bash commands on `PostToolUseFailure` and denies, on `PreToolUse`, a command that already failed the session's `cap` times (default 3) for that agent; `SubagentStop` and `UserPromptSubmit` reset the counts. It fails open.
 
 An approval never authorizes delivery. Commit, push, pull request, and merge stay your decisions.
 
@@ -292,6 +301,7 @@ The mod draws one thing: a **band** above the prompt (the `AbovePrompt` render s
 | `plugins/construct/skills/` | Delivery and review skills (`delivery`, `review`, `debugging`, `constraints`, ...) |
 | `plugins/construct/hooks/` | `hooks.json`, the mod (`register.js`), its routing helpers, the status modules (`status/`), the band modules (`band/`), and the command hooks (`scripts/`: contract, feature state, the `shell-words` command reader over the vendored mvdan-sh parser (`hooks/vendor/`), delivery signals, publication gate, review store guard, command and surface guards, Risk line gate, subagent count, delegation admission, review context and capture) |
 | `plugins/construct/bin/construct-gate` | Installs, removes, or reports the git pre-push hook (`hooks/scripts/pre-push.mjs`) |
+| `plugins/construct/bin/construct-limits` | Sets or shows the session's inline edit limit and iteration cap (`hooks/scripts/limits.mjs`) |
 | `plugins/construct/hooks/contract/` | Session and subagent contract texts injected by hooks |
 | `plugins/construct/evals/` | Behavior eval cases run by `claude plugin eval` (`scripts/eval.sh` also writes `summary.json` with ritual and outcome pass rates, cost, duration, and turns, and keeps the run dirs under /private/tmp; `scripts/probe-review.sh` is the live check for the review behavior; `scripts/eval.sh` leaves the `review-fires` case out because the eval sandbox cannot run git (the macOS `xcrun` shim cannot write its cache) or the review skill's context command (denied in don't-ask mode); recorded results are in [docs/evals/results.md](docs/evals/results.md)) |
 | `plugins/construct/tests/` | Mod tests run by `claude plugin test` |
@@ -306,7 +316,7 @@ Feedback and bug reports go in [issues](https://github.com/carsimax/construct/is
 
 ## Upgrading to 8.0
 
-The main thread now makes small edits inline: each edit call may change up to `inline_edit_max_lines` lines (default 150); bigger ones go to `construct:worker`. Set `inline_edit_max_lines` to `0` to restore the 7.x rule (the main thread writes only `odd/tasks/`). The evals `small-delegated*` were renamed `small-inline*`, and `scripts/eval.sh` now writes `summary.json` with outcome and cost.
+The main thread now makes small edits inline: each edit call may change up to the inline limit (default 150); bigger ones go to `construct:worker`. The 7.x rule (the main thread writes only `odd/tasks/`) is the inline limit `0`. The evals `small-delegated*` were renamed `small-inline*`, and `scripts/eval.sh` now writes `summary.json` with outcome and cost.
 
 ## Upgrading to 7.0
 
@@ -359,7 +369,7 @@ Changes in 9.0.0: the built-in `construct-memory` CLI and `memory` MCP server ar
 Changes in 8.7.0:
 
 - New option `slice_lines` (default `1500`, was a fixed 400): the commit-slice budget of authored changed lines.
-- `inline_edit_max_lines` now defaults to `150` (was `20`); set it back to `20` for the old limit.
+- The inline edit limit now defaults to `150` (was `20`).
 
 Earlier 8.x releases are in [CHANGELOG.md](CHANGELOG.md); older ones follow.
 

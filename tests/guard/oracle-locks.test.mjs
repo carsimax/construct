@@ -20,6 +20,13 @@ const run = (script, args, input, env = {}) => {
   return { status: r.status, stdout: r.stdout, decision: json?.hookSpecificOutput?.permissionDecision, reason: json?.hookSpecificOutput?.permissionDecisionReason }
 }
 const lock = (repo, path, blob, feature = '.vault/tasks/f.md') => writeOracle(repo, { path, blob, feature, task: 'T1', at: Date.now() })
+// Admits a worker with one allowed surface and returns the env and input extras that make a write come from it.
+const writer = (repo, surface) => {
+  const env = { CLAUDE_PLUGIN_DATA: scratchDir('odd-locks-writer-') }
+  run(S('delegation-admission.mjs'), [], { session_id: 's1', cwd: repo, tool_name: 'Agent', tool_input: { subagent_type: 'construct:worker', prompt: `Spec: .vault/tasks/f.md, T1, S1\n\n## Allowed edit surfaces\n${surface}\n\n## Verification\n- x\n`, description: 'u' } }, env)
+  run(S('delegation-admission.mjs'), ['start'], { session_id: 's1', agent_id: 'a1', agent_type: 'construct:worker' }, env)
+  return { env, extra: { agent_id: 'a1' } }
+}
 const repoWith = () => makeRepo({ 'tests/a.test.mjs': 'one\n', '.vault/tasks/f.md': DOC, 'src/a.js': 'a\n' })
 
 describe('delegation-admission: an oracle over an equivalent spelling of a locked path', () => {
@@ -52,7 +59,8 @@ describe('surface-guard: locks on symlinks and directories', () => {
     lock(repo, 'tests', UNLOCKABLE)
     assert.equal(guard(repo, join(repo, 'tests/a.test.mjs')).decision, 'deny')
     assert.equal(guard(repo, join(repo, 'tests/new.test.mjs')).decision, 'deny')
-    assert.equal(guard(repo, join(repo, 'src/a.js')).stdout, '')
+    const w = writer(repo, 'src/a.js')
+    assert.equal(run(S('surface-guard.mjs'), [], { session_id: 's1', cwd: repo, tool_name: 'Write', tool_input: { file_path: join(repo, 'src/a.js'), content: 'x\n' }, ...w.extra }, w.env).stdout, '')
   })
   test('a lock stored under a symlinked directory is matched by the canonical path', () => {
     const repo = repoWith()
@@ -65,7 +73,8 @@ describe('surface-guard: locks on symlinks and directories', () => {
     const repo = repoWith()
     writeFileSync(join(repo, 'tests2.txt'), 'x\n')
     lock(repo, 'tests', UNLOCKABLE)
-    assert.equal(guard(repo, join(repo, 'tests2.txt')).stdout, '')
+    const w = writer(repo, 'tests2.txt')
+    assert.equal(run(S('surface-guard.mjs'), [], { session_id: 's1', cwd: repo, tool_name: 'Write', tool_input: { file_path: join(repo, 'tests2.txt'), content: 'x\n' }, ...w.extra }, w.env).stdout, '')
   })
 })
 
@@ -91,7 +100,7 @@ describe('surface-guard: an error in the lock check', () => {
     const repo = broken(clean)
     assert.equal(guard(repo, 'tests/a.test.mjs').decision, 'deny')
     assert.match(guard(repo, 'tests/a.test.mjs').reason, /locked oracle/)
-    assert.equal(guard(repo, 'src/a.js').stdout, '')
+    assert.match(guard(repo, 'src/a.js').reason, /construct:worker/) // not a lock deny: the main-thread rule for an unfinished feature
     const r = guard(repo, 'src/a.js', { agent_id: 'a1' }, env)
     assert.equal(r.decision, 'deny')
     assert.match(r.reason, /outside your allowed edit surfaces/)
@@ -102,16 +111,16 @@ const REAL_GIT = spawnSync('which', ['git'], { encoding: 'utf8' }).stdout.trim()
 
 describe('hardening S4(f): surface-guard runs no lock check git when the store holds no locks', () => {
   // A git shim that records its arguments and runs the real git.
-  const shimmed = (repo, file_path) => {
+  const shimmed = (repo, file_path, w = {}) => {
     const shim = scratchDir('odd-locks-shim-')
     const log = join(shim, 'calls')
     writeFileSync(join(shim, 'git'), `#!/bin/sh\necho "$@" >> "${log}"\nexec "${REAL_GIT}" "$@"\n`, { mode: 0o755 })
-    const r = run(S('surface-guard.mjs'), [], { session_id: 's1', cwd: repo, tool_name: 'Write', tool_input: { file_path, content: 'x\n' } }, { PATH: `${shim}:${process.env.PATH}` })
+    const r = run(S('surface-guard.mjs'), [], { session_id: 's1', cwd: repo, tool_name: 'Write', tool_input: { file_path, content: 'x\n' }, ...w.extra }, { PATH: `${shim}:${process.env.PATH}`, ...w.env })
     return { r, calls: existsSync(log) ? readFileSync(log, 'utf8') : '' }
   }
   test('no oracle lock files: the store is not asked for by git', () => {
     const repo = repoWith()
-    const { r, calls } = shimmed(repo, join(repo, 'src/a.js'))
+    const { r, calls } = shimmed(repo, join(repo, 'src/a.js'), writer(repo, 'src/a.js'))
     assert.equal(r.stdout, '')
     assert.doesNotMatch(calls, /git-common-dir/)
   })

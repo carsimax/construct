@@ -2,8 +2,10 @@
 // every agent and to the main thread (S4 of .vault/tasks/oracle-separation.md). A construct writer
 // (agent_id present) may only write inside the `## Allowed edit surfaces` recorded at its launch
 // by delegation-admission.mjs; the main thread may write under .vault/tasks/ at any size and
-// elsewhere only a call that changes at most `inline_edit_max_lines` lines (option, default 150;
-// 0 means .vault/tasks/ only), and sends bigger changes to construct:worker. Paths outside the git work tree, a cwd outside a repository, a subagent
+// elsewhere only a call that changes at most the session's inline limit (limits.mjs, set with
+// construct-limits; default 150, 0 means .vault/tasks/ only), and sends bigger changes to construct:worker.
+// While a feature document has an unfinished task (activeDocuments) the main thread writes only .vault/tasks/ (S4 of
+// .vault/tasks/config-surface.md). Paths outside the git work tree, a cwd outside a repository, a subagent
 // with no record, and any internal error pass (fail open, no output).
 // shortcut: the record is paired to its agent by same-type FIFO at SubagentStart, so two
 // same-type launches in flight may swap surfaces; Bash writes (sed -i, redirects) are not covered.
@@ -11,9 +13,11 @@
 // Usage: node surface-guard.mjs   (hook JSON on stdin)
 import { readFileSync, realpathSync } from 'node:fs'
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
+import { activeDocuments, projectRoot } from './feature-state.mjs'
 import { surfaceContains, writerRecord } from './delegation-admission.mjs'
 import { repositoryRoot } from './git-tree.mjs'
 import { readInput } from './hook-io.mjs'
+import { readLimits } from './limits.mjs'
 import { activeLocks } from './publication-gate.mjs'
 import { hasOracleFiles, readOracles } from './review-store.mjs'
 
@@ -24,14 +28,6 @@ function real(path) {
   } catch {
     return join(real(dirname(path)), path.slice(dirname(path).length))
   }
-}
-
-const DEFAULT_MAX_LINES = 150
-
-// An unset or invalid option (not a whole number >= 0) falls back to the default.
-function maxLines() {
-  const raw = (process.env.CLAUDE_PLUGIN_OPTION_INLINE_EDIT_MAX_LINES ?? '').trim()
-  return /^\d+$/.test(raw) ? Number(raw) : DEFAULT_MAX_LINES
 }
 
 const textLines = (text) => (typeof text === 'string' && text !== '' ? text.replace(/\n$/, '').split('\n') : [])
@@ -101,9 +97,19 @@ function main() {
     if (!entry || entry.surfaces.some((surface) => surfaceContains(surface, rel))) return
     deny(`surface-guard: ${rel} is outside your allowed edit surfaces (${entry.surfaces.join(', ')}). Write only inside them, or return needs_interaction naming the path you need.`)
   } else if (!/^\.vault\/tasks\//.test(rel)) {
-    const limit = maxLines()
+    let tracked = false
+    try {
+      tracked = activeDocuments(projectRoot(input.cwd)).length > 0
+    } catch {
+      // No feature documents readable: the inline limit applies.
+    }
+    if (tracked) {
+      deny(`surface-guard: a feature document has unfinished tasks, so ${rel} is written by construct:worker, not inline. Delegate it with an Allowed edit surfaces section and a Spec line; only .vault/tasks/ is written inline.`)
+      return
+    }
+    const limit = readLimits(input.session_id).inline
     const changed = changedLines(input, resolve(input.cwd, path))
-    if (changed > limit) deny(`surface-guard: this call changes ${changed} lines of ${rel}, over the inline limit of ${limit} (inline_edit_max_lines). Delegate it to construct:worker with an Allowed edit surfaces section.`)
+    if (changed > limit) deny(`surface-guard: this call changes ${changed} lines of ${rel}, over the inline limit of ${limit} (set with construct-limits). Delegate it to construct:worker with an Allowed edit surfaces section.`)
   }
 }
 

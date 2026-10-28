@@ -10,7 +10,6 @@ const HOOKS_JSON = new URL('../../plugins/construct/hooks/hooks.json', import.me
 
 function driver() {
   const env = { ...process.env, CLAUDE_PLUGIN_DATA: scratchDir('iteration-cap-consecutive-') }
-  delete env.CLAUDE_PLUGIN_OPTION_ITERATION_CAP
   return (event, command = 'npm test') =>
     spawnSync('node', [HOOK], { input: JSON.stringify({ session_id: 's1', hook_event_name: event, tool_name: 'Bash', tool_input: { command }, error: 'Exit code 1', is_interrupt: false }), encoding: 'utf8', env }).stdout
 }

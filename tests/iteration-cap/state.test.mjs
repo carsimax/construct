@@ -12,7 +12,6 @@ test('state files hold no command text and are private to the user', () => {
   const data = scratchDir('iteration-cap-state-')
   const command = "curl -H 'Authorization: Bearer s3cr3t-token' https://example.invalid"
   const env = { ...process.env, CLAUDE_PLUGIN_DATA: data }
-  delete env.CLAUDE_PLUGIN_OPTION_ITERATION_CAP
   const run = (event) => spawnSync('node', [HOOK], { input: JSON.stringify({ session_id: 's1', hook_event_name: event, tool_name: 'Bash', tool_input: { command }, error: 'Exit code 1', is_interrupt: false }), encoding: 'utf8', env })
   for (let i = 0; i < 3; i++) run('PostToolUseFailure')
   assert.match(run('PreToolUse').stdout, /"deny"/)
