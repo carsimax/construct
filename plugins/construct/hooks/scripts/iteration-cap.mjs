@@ -1,6 +1,6 @@
 // Iteration cap: a Bash command that already failed `iteration_cap` times (default 3) for one agent
 // in one session is denied, so the agent stops and reports instead of looping. PostToolUseFailure
-// counts, PreToolUse denies, SubagentStop ends that agent's counters, UserPromptSubmit resets the main thread's.
+// counts, PostToolUse (a passing run) resets that command, so only consecutive failures count, PreToolUse denies, SubagentStop ends that agent's counters, UserPromptSubmit resets the main thread's.
 // One file per agent under dataDir()/iteration-cap/<session>, written to a temp name and renamed.
 // Interrupts are not failures. Never blocks on error: any error means no output, exit 0.
 // shortcut: concurrent failures of one agent may race (a lost update delays the cap), upgrade if it matters.
@@ -46,8 +46,12 @@ function main() {
     }
     return
   }
-  if (event !== 'PostToolUseFailure' || input.is_interrupt === true) return
-  counts[command] = (counts[command] || 0) + 1
+  if (event === 'PostToolUse') {
+    if (!(command in counts)) return
+    delete counts[command]
+  } else if (event === 'PostToolUseFailure' && input.is_interrupt !== true) {
+    counts[command] = (counts[command] || 0) + 1
+  } else return
   mkdirSync(dir, { recursive: true, mode: 0o700 })
   const temporary = join(dir, `.${randomBytes(6).toString('hex')}.tmp`)
   try {

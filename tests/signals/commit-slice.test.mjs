@@ -130,7 +130,8 @@ describe('registration', () => {
 
   test('hooks.json registers delivery-signals post on Bash git calls in exec form', () => {
     const hooks = JSON.parse(readFileSync(`${PLUGIN}hooks/hooks.json`, 'utf8'))
-    const groups = handlersOf(hooks, 'PostToolUse')
+    // iteration-cap.mjs has its own PostToolUse group; the delivery-signals group is pinned whole.
+    const groups = handlersOf(hooks, 'PostToolUse').filter((g) => g.hooks.some((h) => h.args?.[0]?.endsWith('/delivery-signals.mjs')))
     assert.equal(groups.length, 1)
     assert.equal(groups[0].matcher, 'Bash')
     assert.deepEqual(groups[0].hooks, [{ type: 'command', if: 'Bash(git *)', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/hooks/scripts/delivery-signals.mjs', 'post'], timeout: 10 }])
