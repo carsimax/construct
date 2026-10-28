@@ -59,7 +59,8 @@ function markerHits(diff) {
   let line = 0
   for (const text of diff.split('\n')) {
     if (text.startsWith('+++ ')) {
-      path = text.startsWith('+++ b/') ? text.slice(6) : null
+      // git ends the header of a path with a space with a tab
+      path = text.startsWith('+++ b/') ? text.slice(6).replace(/\t$/, '') : null
     } else if (text.startsWith('@@')) {
       line = Number(/\+(\d+)/.exec(text)?.[1] ?? 0)
     } else if (text.startsWith('+') && path !== null) {

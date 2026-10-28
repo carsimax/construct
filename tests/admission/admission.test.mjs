@@ -19,6 +19,8 @@ const FEATURE = (status = 'pending') =>
 
 const env = () => ({ CLAUDE_PLUGIN_DATA: scratchDir('odd-adm-data-') })
 const surfaces = (...paths) => `Implement the unit.\n\n## Allowed edit surfaces\n${paths.join('\n')}\n\n## Verification\n- node --test\n`
+// other: a second task on the same surfaces (a resend of the very same prompt is not an overlap)
+const other = (...paths) => `${surfaces(...paths)}\nanother unit`
 
 function run(mode, input, e, raw) {
   const r = spawnSync('node', [SCRIPT, ...(mode ? [mode] : [])], {
@@ -227,7 +229,7 @@ describe('SubagentStop clears the record', () => {
       const e = env()
       const p = surfaces('src/a.js')
       allowed(launch(repo, e, WORKER, p))
-      denied(launch(repo, e, WORKER, surfaces('src/a.js')), /overlap/)
+      denied(launch(repo, e, WORKER, other('src/a.js')), /overlap/)
       allowed(stop(e, transcript(p, shape)))
       allowed(launch(repo, e, WORKER, surfaces('src/a.js')))
     })
@@ -240,7 +242,7 @@ describe('SubagentStop clears the record', () => {
     allowed(launch(repo, e, WORKER, surfaces('lib/b.js')))
     allowed(stop(e, transcript(a)))
     allowed(launch(repo, e, WORKER, surfaces('src/a.js')))
-    denied(launch(repo, e, WORKER, surfaces('lib/b.js')), /overlap/)
+    denied(launch(repo, e, WORKER, other('lib/b.js')), /overlap/)
   })
   test('an unreadable transcript or bad input changes nothing and fails open', () => {
     const repo = plain()
@@ -249,7 +251,7 @@ describe('SubagentStop clears the record', () => {
     allowed(stop(e, join(scratchDir('x-'), 'missing.jsonl')))
     allowed(stop(e, undefined))
     allowed(run('stop', null, e, 'not json'))
-    denied(launch(repo, e, WORKER, surfaces('src/a.js')), /overlap/)
+    denied(launch(repo, e, WORKER, other('src/a.js')), /overlap/)
   })
 })
 
@@ -363,7 +365,7 @@ describe('A5: the construct: prefix is optional', () => {
       const repo = plain()
       const e = env()
       allowed(launch(repo, e, type, surfaces('src/a.js'), 'ov'))
-      denied(launch(repo, e, prefixed, surfaces('src/a.js'), 'ov'), /overlap/i)
+      denied(launch(repo, e, prefixed, other('src/a.js'), 'ov'), /overlap/i)
     })
   }
   test('verifier without the prefix needs a Risk line', () => {
@@ -412,6 +414,13 @@ describe('start mode (F10)', () => {
     allowed(start(e))
     allowed(run('stop', { session_id: 's1', agent_id: 'b', agent_type: WORKER, hook_event_name: 'SubagentStop', agent_transcript_path: file }, e))
     allowed(launch(repo, e, WORKER, `${surfaces('src/a.js')}\nunit D`))
+  })
+  test('resending the prompt of a launch that never started is not an overlap with itself', () => {
+    const repo = plain()
+    const e = env()
+    allowed(launch(repo, e, WORKER, surfaces('src/a.js')))
+    allowed(launch(repo, e, WORKER, surfaces('src/a.js')))
+    denied(launch(repo, e, WORKER, other('src/a.js')), /overlap/)
   })
   test('a start for another agent type leaves the record unstarted', () => {
     const repo = plain()

@@ -3,7 +3,8 @@ import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { describe, test } from 'node:test'
-import { applyFiles, commitAll, git, makeRepo } from '../helpers/repo.mjs'
+import { join } from 'node:path'
+import { applyFiles, commitAll, git, makeRepo, scratchDir } from '../helpers/repo.mjs'
 import { featureRepo, hook, lines, PLUGIN, SCRIPT } from './helpers.mjs'
 
 const commit = (repo, extra = {}, command = 'git commit -m unit', env = {}) =>
@@ -17,6 +18,16 @@ describe('commit slice', () => {
     assert.match(r.context, /Commit slice: 120 authored changed lines in 1 commit on feat since main/)
     assert.match(r.context, /1380 lines left before the ~1500-line slice/)
     assert.doesNotMatch(r.context, /Past the/)
+  })
+
+  test('an origin without origin/HEAD is measured against origin/main, as the publication gate does', () => {
+    const repo = featureRepo({ 'src/b.js': lines(120) })
+    const bare = join(scratchDir('slice-remote-'), 'origin.git')
+    git(repo, 'clone', '-q', '--bare', repo, bare)
+    git(repo, 'remote', 'add', 'origin', bare)
+    git(repo, 'fetch', '-q', 'origin')
+    git(repo, 'remote', 'set-head', 'origin', '-d')
+    assert.match(commit(repo).context, /on feat since origin\/main/)
   })
 
   test('exactly 1500 is not past the slice', () => {

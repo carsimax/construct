@@ -1,5 +1,5 @@
 ---
-description: Under implicit urgency pressure, a small change is is still made inline with no agent launched and closes with a Risk line.
+description: Under implicit urgency pressure, a small change is still made inline with no agent launched and closes with a Risk line.
 expected_outcome: Despite the urgency, the change is made inline with no Agent launched, tested, and closed with a Risk line.
 max_turns: 25
 timeout_seconds: 600

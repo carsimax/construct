@@ -41,29 +41,20 @@ test('agent frontmatter matches the S6 table and the file name', () => {
   }
 })
 
-// S7: the six renamed roles keep their legacy option keys through 6.x
-const LEGACY = { explorer: 'odd-explorer', worker: 'odd-worker', verifier: 'odd-verify', general: 'odd-general', 'judge-a': 'jd-judge-a', 'judge-b': 'jd-judge-b' }
-
-test('userConfig declares new model and effort options defaulting to inherit, and legacy options whose defaults match each agent', () => {
+test('userConfig declares model and effort options defaulting to inherit, and no legacy options', () => {
   const cfg = manifest.userConfig
-  for (const [agent, [model, effort]] of Object.entries(S6)) {
+  for (const agent of Object.keys(S6)) {
     const role = agent.replaceAll('-', '_')
     assert.equal(cfg[`model_${role}`].default, 'inherit', `model_${role} default`)
     assert.equal(cfg[`effort_${role}`].default, 'inherit', `effort_${role} default`)
     assert.deepEqual(cfg[`model_${role}`].options, ['inherit', 'haiku', 'sonnet', 'opus', 'fable'])
     assert.deepEqual(cfg[`effort_${role}`].options, ['inherit', 'default', 'low', 'medium', 'high', 'xhigh', 'max'])
     assert.match(cfg[`model_${role}`].description, /inherit/)
-    if (!LEGACY[agent]) continue
-    const old = LEGACY[agent].replaceAll('-', '_')
-    assert.equal(cfg[`model_${old}`]?.default, model, `model_${old}`)
-    assert.equal(cfg[`effort_${old}`]?.default, effort, `effort_${old}`)
-    assert.ok(cfg[`model_${old}`].options.includes(model))
-    assert.ok(cfg[`effort_${old}`].options.includes('default'))
-    assert.match(cfg[`model_${old}`].title, new RegExp(`deprecated.*model_${role}`), `model_${old} title`)
-    assert.match(cfg[`effort_${old}`].title, new RegExp(`deprecated.*effort_${role}`), `effort_${old} title`)
   }
-  assert.equal(cfg.model_jd_fix_agent, undefined)
-  assert.equal(cfg.effort_jd_fix_agent, undefined)
+  for (const old of ['odd_explorer', 'odd_worker', 'odd_verify', 'odd_general', 'jd_judge_a', 'jd_judge_b', 'jd_fix_agent']) {
+    assert.equal(cfg[`model_${old}`], undefined, old)
+    assert.equal(cfg[`effort_${old}`], undefined, old)
+  }
   // The band above the prompt has no switch: the docked panel and its option are gone
   assert.equal(cfg.panel_open_on_start, undefined)
   assert.equal(cfg.command_guard_asks?.type, 'boolean')
@@ -72,12 +63,11 @@ test('userConfig declares new model and effort options defaulting to inherit, an
   assert.equal(cfg.inline_edit_max_lines?.default, 150)
   assert.equal(cfg.slice_lines?.type, 'number')
   assert.equal(cfg.slice_lines?.default, 1500)
-  assert.equal(Object.keys(cfg).length, (Object.keys(S6).length + Object.keys(LEGACY).length) * 2 + 3)
+  assert.equal(Object.keys(cfg).length, Object.keys(S6).length * 2 + 3)
 })
 
-test('no non-deprecated userConfig title names a methodology (ODD, RDD, JD)', () => {
+test('no userConfig title names a methodology (ODD, RDD, JD)', () => {
   for (const [key, opt] of Object.entries(manifest.userConfig)) {
-    if (/deprecated/.test(opt.title)) continue
     assert.doesNotMatch(opt.title, /\b(ODD|RDD|JD)\b/, key)
   }
 })

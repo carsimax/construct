@@ -1,5 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 import { parseRevParse } from '../hooks/status/data.js'
+import { activeWork } from '../hooks/status/tasks.js'
 
 // ---- fixtures ----------------------------------------------------------
 
@@ -141,4 +142,13 @@ test('the only probe is git rev-parse, run on session.start and turn.complete, n
   await $.turn.complete({ turnId: 't', reason: 'answer', answer: 'ok', durationMs: 1, isAborted: false })
   await new Promise((r) => setTimeout(r, 30))
   expect(seen.length).toBeGreaterThan(after)
+})
+
+// The Tasks heading follows the publication gate: any level 2-6, trailing text allowed.
+test('activeWork reads a Tasks table under ### Tasks or ## Tasks (phase 2)', async () => {
+  const table = ['', '| ID | Specs | Task | Status |', '|---|---|---|---|', '| T1 | S1 | a | pending |', '', '## Log']
+  for (const heading of ['### Tasks', '## Tasks (phase 2)']) {
+    expect(activeWork([{ name: 'f.md', mtimeMs: 1, text: ['# f', '', '## Plan', '', heading, ...table].join('\n') }])?.open).toBe(1)
+  }
+  expect(activeWork([{ name: 'f.md', mtimeMs: 1, text: ['# f', '', '### Tasks', '', '## Other', ...table].join('\n') }])).toBe(null)
 })

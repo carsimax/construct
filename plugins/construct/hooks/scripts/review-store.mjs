@@ -16,7 +16,7 @@ export const subjectHash = (baseTree, headTree) => createHash('sha256').update(`
 // storeAt is the store of the git common dir `common`, a path relative to `base` or absolute.
 export const storeAt = (common, base) => join(isAbsolute(common) ? common : join(base, common), 'construct-review')
 
-export const storeDir = (root) => storeAt(git(root, ['rev-parse', '--git-common-dir']).toString('utf8').trim(), root)
+const storeDir = (root) => storeAt(git(root, ['rev-parse', '--git-common-dir']).toString('utf8').trim(), root)
 
 const pendingFile = (root, lens, subject) => join(storeDir(root), 'pending', `${lens}.${subject}.json`)
 const verdictFile = (root, subject, lens) => join(storeDir(root), 'verdicts', subject, `${lens}.json`)
@@ -70,8 +70,10 @@ export function pruneStore(root) {
     const dirs = [join(store, 'pending'), ...readdirSync(join(store, 'verdicts')).map((subject) => join(store, 'verdicts', subject))]
     for (const dir of dirs) {
       try {
+        // Read before the files go (removing one touches the directory); a directory another capture just made is new, so it stays.
+        const stale = statSync(dir).mtimeMs < cutoff
         for (const name of readdirSync(dir)) if (statSync(join(dir, name)).mtimeMs < cutoff) rmSync(join(dir, name), { force: true })
-        if (dir !== dirs[0]) rmdirSync(dir)
+        if (dir !== dirs[0] && stale) rmdirSync(dir)
       } catch {
         // A directory that is gone or not empty stays.
       }

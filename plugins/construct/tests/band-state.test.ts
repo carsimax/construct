@@ -21,7 +21,7 @@ import {
 } from '../hooks/band/state.js'
 
 const spawn = (s: any, id: any, extra: any = {}) =>
-  onAgentSpawn(s, { agentId: id, subagentType: 'construct:worker', description: 'd', model: 'sonnet', nowMs: 1000, ...extra })
+  onAgentSpawn(s, { agentId: id, subagentType: 'construct:worker', model: 'sonnet', nowMs: 1000, ...extra })
 
 // ---- init / merge ------------------------------------------------------
 
@@ -55,7 +55,7 @@ test('merge returns defaults on a version change or a malformed value', () => {
 test('spawn adds a running card with the construct role', () => {
   const s = spawn(initialState(), 'a1')
   expect(s.agents).toEqual([
-    { id: 'a1', role: 'worker', type: 'construct:worker', description: 'd', model: 'sonnet', startedMs: 1000, endedMs: null, status: 'running' },
+    { id: 'a1', role: 'worker', type: 'construct:worker', model: 'sonnet', startedMs: 1000, endedMs: null, status: 'running' },
   ])
 })
 
@@ -89,24 +89,17 @@ test('stored agents are capped at the latest 20', () => {
   expect(s.agents[0].id).toBe('a5')
 })
 
-test('agentsView lists running cards first, then the most recent, with the rest counted', () => {
+test('agentsView lists only the running agents, oldest first', () => {
   let s = initialState()
-  for (let i = 0; i < 5; i++) s = spawn(s, `a${i}`, { nowMs: 100 + i })
-  s = onTurnComplete(s, { agentId: 'a0', nowMs: 200 })
-  s = onTurnComplete(s, { agentId: 'a4', nowMs: 201 })
-  const v = agentsView(s, 300)
-  expect(v.cards.map((c: any) => c.id)).toEqual(['a3', 'a2', 'a1'])
-  expect(v.rest).toBe(2)
-  expect(v.running).toBe(3)
-  expect(agentsView(s, 300, 4).cards.map((c: any) => c.id)).toEqual(['a3', 'a2', 'a1', 'a4'])
+  for (const [id, at] of [['a0', 103], ['a1', 101], ['a2', 102]] as const) s = spawn(s, id, { nowMs: at })
+  s = onTurnComplete(s, { agentId: 'a2', nowMs: 200 })
+  expect(agentsView(s, 300).map((c: any) => c.id)).toEqual(['a1', 'a0'])
 })
 
-test('agentsView gives elapsed time from now for running and from end for done', () => {
-  let s = spawn(initialState(), 'a1', { nowMs: 1000 })
-  expect(agentsView(s, 4000).cards[0].elapsedMs).toBe(3000)
-  s = onTurnComplete(s, { agentId: 'a1', nowMs: 2500 })
-  expect(agentsView(s, 9000).cards[0].elapsedMs).toBe(1500)
-  expect(agentsView(initialState(), 1)).toEqual({ cards: [], rest: 0, running: 0 })
+test('agentsView gives the elapsed time from the start to now', () => {
+  const s = spawn(initialState(), 'a1', { nowMs: 1000 })
+  expect(agentsView(s, 4000)[0].elapsedMs).toBe(3000)
+  expect(agentsView(initialState(), 1)).toEqual([])
 })
 
 // ---- S3 inline writes --------------------------------------------------
@@ -203,7 +196,7 @@ test('odd input never throws', () => {
       }
     }
   }
-  expect(agentsView(null as any, NaN)).toEqual({ cards: [], rest: 0, running: 0 })
+  expect(agentsView(null as any, NaN)).toEqual([])
   expect(isOutsideTasks(5 as any, null as any)).toBe(false)
 })
 
@@ -329,6 +322,7 @@ test('phaseOf maps the running roles to a phase', () => {
   expect(phaseFor('construct:worker')).toBe('implementing')
   expect(phaseFor('construct:explorer')).toBe('exploring')
   expect(phaseFor('general-purpose')).toBe('working')
+  expect(phaseFor('worker')).toBe('working')
 })
 
 test('phaseOf picks verifying > reviewing > implementing > exploring > working', () => {
@@ -359,25 +353,12 @@ test('MultiEdit and NotebookEdit are file tools', () => {
   expect(bucketOf('NotebookEdit')).toBe('file')
 })
 
-test('agentsView keeps every running agent, then the most recently ended', () => {
-  let s: any = initialState()
-  const ends = [50, 90, 10, 70, 30, 80]
-  ends.forEach((end, i) => {
-    s = spawn(s, `d${i}`, { nowMs: 100 + i })
-    s = onTurnComplete(s, { agentId: `d${i}`, nowMs: end + 100 })
-  })
-  s = spawn(s, 'r1', { nowMs: 1 })
-  s = spawn(s, 'r2', { nowMs: 2 })
-  const ids = agentsView(s, 1000, 6).cards.map((c: any) => c.id).sort()
-  expect(ids).toEqual(['d1', 'd3', 'd5', 'd0', 'r1', 'r2'].sort())
-})
-
 test('a duplicate spawn id replaces the card; naming falls back and normalizes', () => {
   let s = spawn(initialState(), 'a1')
-  s = spawn(s, 'a1', { description: 'again' })
+  s = spawn(s, 'a1', { model: 'opus' })
   expect(s.agents.length).toBe(1)
-  expect(s.agents[0].description).toBe('again')
-  expect(agentsView(spawn(initialState(), 'a2', { subagentType: undefined }), 0).cards[0].name).toBe('agent')
+  expect(s.agents[0].model).toBe('opus')
+  expect(agentsView(spawn(initialState(), 'a2', { subagentType: undefined }), 0)[0].name).toBe('agent')
   expect(shortName('my_agent')).toBe('my-agent')
   expect(shortName('construct:unknown_x')).toBe('unknown-x')
   expect(shortName({ type: 'construct:worker' })).toBe('worker')
@@ -402,8 +383,8 @@ test('damaged nested stored shapes are repaired and no reducer throws', () => {
   s = onToolCheck(s, { decision: 'allow', tool: 'Read' })
   s = onTurnStart(s, { agentId: 'a1' })
   const view = agentsView(s, 5)
-  expect(view.cards.length).toBe(1)
-  expect(Number.isFinite(view.cards[0].elapsedMs)).toBe(true)
+  expect(view.length).toBe(1)
+  expect(Number.isFinite(view[0].elapsedMs)).toBe(true)
   expect(s.gate.verdicts).toEqual({ rule: 1, ask: 0, cleared: 1, deny: 0 })
 })
 
@@ -415,7 +396,7 @@ test('a damaged value is repaired by every reducer and selector (L10)', () => {
   finite(onToolCheck(bad, { decision: 'ask', tool: 'Bash', callId: 'c' }))
   finite(onToolSettle({ ...bad, gate: { ...bad.gate, pending: { c: 'file' } } }, { callId: 'c', tool: 'Read', didRun: true }))
   expect(() => onTurnStart(bad, { agentId: 'a' })).not.toThrow()
-  expect(agentsView(bad, 5).cards).toEqual([])
+  expect(agentsView(bad, 5)).toEqual([])
 })
 
 test('damaged state: counts stay at or above 0, an unknown pending bucket and odd agents do not throw (L9)', () => {
@@ -424,8 +405,7 @@ test('damaged state: counts stay at or above 0, an unknown pending bucket and od
   for (const v of Object.values(s1.gate.verdicts)) expect(v as number).toBeGreaterThanOrEqual(0)
   expect(() => onToolSettle(s0, { callId: 'c2', tool: 'Read', didRun: false })).not.toThrow()
   const view = agentsView({ agents: [null, 7, { id: 'a', status: 'running', startedMs: 1 }] }, 5)
-  expect(view.cards.length).toBe(1)
-  expect(view.rest).toBe(0)
+  expect(view.length).toBe(1)
   expect(isOutsideTasks('/proj/odd/tasks/x.md', undefined)).toBe(false)
   expect(isOutsideTasks('/proj/src/a.js', undefined)).toBe(true)
 })

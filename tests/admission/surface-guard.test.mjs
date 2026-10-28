@@ -148,6 +148,11 @@ describe('inline edit limit (S5)', () => {
     isDenied(edit(repo, 'a', lines(151, 'n')), /151/, /150/, /construct:worker/)
     isDenied(edit(repo, lines(151), 'a'), /151/)
   })
+  test('Edit and MultiEdit do not count context lines kept unchanged', () => {
+    isAllowed(edit(repo, lines(160), `${lines(159)}\nchanged`))
+    isDenied(edit(repo, lines(160), `${lines(9)}\n${lines(151, 'n')}`), /151/)
+    isAllowed(tool(repo, 'MultiEdit', { file_path: join(repo, 'src/a.js'), edits: [{ old_string: lines(160), new_string: `${lines(159)}\nchanged` }] }))
+  })
   test('Edit with replace_all multiplies by the occurrences in the file', () => {
     const r = makeRepo({ 'src/a.js': `${Array(76).fill('a').join('\n')}\n` })
     isAllowed(edit(r, 'a', 'b\nc', { replace_all: false }))

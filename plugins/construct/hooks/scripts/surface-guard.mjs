@@ -35,7 +35,7 @@ const textLines = (text) => (typeof text === 'string' && text !== '' ? text.repl
 
 // shortcut: a multiset line diff ignores line order, so a pure reordering counts as zero; upgrade
 // to a real diff if that lets a large rewrite through.
-function rewrittenLines(before, after) {
+function lineChanges(before, after) {
   const counts = new Map()
   for (const line of textLines(before)) counts.set(line, (counts.get(line) ?? 0) + 1)
   let added = 0
@@ -43,11 +43,14 @@ function rewrittenLines(before, after) {
     if (counts.get(line) > 0) counts.set(line, counts.get(line) - 1)
     else added++
   }
-  return added + [...counts.values()].reduce((a, b) => a + b, 0)
+  return [added, [...counts.values()].reduce((a, b) => a + b, 0)]
 }
 
+const rewrittenLines = (before, after) => lineChanges(before, after).reduce((a, b) => a + b, 0)
+
+// An Edit counts the larger of its added and removed lines; context lines kept unchanged do not count.
 const editedLines = (old, next, file, all) => {
-  const size = Math.max(textLines(old).length, textLines(next).length)
+  const size = Math.max(...lineChanges(old, next))
   return all && old ? size * Math.max(1, file.split(old).length - 1) : size
 }
 

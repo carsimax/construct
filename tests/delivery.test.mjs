@@ -29,3 +29,10 @@ test('workflow points at construct:delivery, not the removed reference', () => {
   assert.doesNotMatch(read('workflow/SKILL.md'), /references\/delivery\.md/)
   assert.match(read('workflow/SKILL.md'), /construct:delivery/)
 })
+
+test('slice_lines defaults to SLICE_LINES in plugin.json and the README option table', () => {
+  const root = new URL('../', import.meta.url)
+  const plugin = JSON.parse(readFileSync(new URL('plugins/construct/.claude-plugin/plugin.json', root), 'utf8'))
+  assert.equal(plugin.userConfig.slice_lines.default, SLICE_LINES)
+  assert.match(readFileSync(new URL('README.md', root), 'utf8'), new RegExp(`\\| \`slice_lines\` \\(number, default \`${SLICE_LINES}\`\\) \\|`))
+})

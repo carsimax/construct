@@ -29,7 +29,8 @@ const NO_VERIFY = new Set(['commit', 'push', 'merge', 'rebase', 'am', 'cherry-pi
 
 // parse returns the flags of a subcommand's arguments (long flags whole, short flags as
 // single letters) and its positionals, skipping the text of value flags and anything after `--`.
-function parse(args) {
+// `stop` names short letters whose value is attached (`commit -uno`, `-S<keyid>`): the cluster ends there.
+function parse(args, stop = '') {
   const long = new Set()
   const short = new Set()
   const pos = []
@@ -48,6 +49,7 @@ function parse(args) {
     } else if (a.startsWith('-') && a.length > 1) {
       for (let k = 1; k < a.length; k++) {
         short.add(a[k])
+        if (stop.includes(a[k])) break
         if (SHORT_VALUE_LETTERS.includes(a[k])) {
           if (k === a.length - 1) i++
           break
@@ -84,7 +86,7 @@ function gitHit(args, words = []) {
   }
   const sub = args[i]
   if (sub === undefined) return null
-  const { long, short, pos, after, order } = parse(args.slice(i + 1))
+  const { long, short, pos, after, order } = parse(args.slice(i + 1), sub === 'commit' ? 'uS' : '')
   if (abbr(long, '--no-gpg-sign', 6)) return hit('deny', `git ${sub} --no-gpg-sign skips signing. Sign the commit or fix the signing setup instead of bypassing it.`)
   if (NO_VERIFY.has(sub) && (abbr(long, '--no-verify', 7) || (sub === 'commit' && short.has('n')))) {
     return hit('deny', `git ${sub} --no-verify skips the hooks. Fix the failing hook instead of bypassing it.`)

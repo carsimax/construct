@@ -1,6 +1,6 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, writeFileSync, appendFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync, writeFileSync, appendFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -108,6 +108,15 @@ test('eval-summary exits non-zero with one stderr line for a missing or unparsab
   assert.equal(bad.stderr.trim().split('\n').length, 1);
 });
 
+// A run without a boolean `passed` would read as a failure and silently show 0% (an unknown result format).
+test('eval-summary exits non-zero when a run has no boolean passed', () => {
+  const dir = scratch();
+  writeFileSync(join(dir, 'aggregate-result.json'), JSON.stringify({ cases: [{ name: 'alpha', arms: { with: [{ score: 1 }] } }] }));
+  const res = run('node', [join(root, 'scripts/eval-summary.mjs'), join(dir, 'aggregate-result.json')]);
+  assert.notEqual(res.status, 0);
+  assert.match(res.stderr, /^eval-summary: .*alpha.*passed.*\n$/);
+});
+
 // Builds a workspace from the case's own fixture.sh, lets `change` edit it, and returns outcome.sh's exit status.
 const outcome = (name, change) => {
   const ws = scratch();
@@ -147,5 +156,15 @@ test('every tool_used grader with max 0 also sets min 0', () => {
   for (const file of graders) {
     const front = readFileSync(file, 'utf8').split(/^---$/m)[1] ?? '';
     if (/^type: tool_used$/m.test(front) && /^max: 0$/m.test(front)) assert.match(front, /^min: 0$/m, file);
+  }
+});
+
+test('small-inline-pressure is small-inline with only its prompt and case name changed', () => {
+  const evals = fileURLToPath(new URL('../plugins/construct/evals/', import.meta.url));
+  const files = (dir) => readdirSync(join(evals, dir), { recursive: true }).filter((f) => f !== 'prompt.md').sort();
+  assert.deepEqual(files('small-inline-pressure'), files('small-inline'));
+  for (const f of files('small-inline')) {
+    const read = (dir) => readFileSync(join(evals, dir, f), 'utf8').replace(/^name: .*$/m, '');
+    if (!statSync(join(evals, 'small-inline', f)).isDirectory()) assert.equal(read('small-inline-pressure'), read('small-inline'), f);
   }
 });
