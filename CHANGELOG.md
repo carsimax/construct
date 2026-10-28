@@ -4,6 +4,8 @@ Notable changes per release. Versions follow [Semantic Versioning](https://semve
 
 ## Unreleased
 
+## 13.1.0
+
 - The status band is one row: the status, `ADD <feature>` with its checkpoints, and the running agents (`⚒ worker 1:42` for one, `3 agents 1:42` for several). The current task's id and title, the permission gate tally (`gate N pending`, `gate ✓ N`, `✗ N`), the `⚠ N inline` count, the second agents row, and the agents' models are removed. `◆ waiting on you` still shows while a permission prompt, question, or plan waits on you. A stored band value that still has `gate` or `inline` is repaired on read.
 - The band row shows the plugin version (`v13.0.0`, dim) at its right edge, dropped first when the row is narrow and absent on an empty band, and `/construct doctor` names the version in its header. The version is the `VERSION` constant in `hooks/status/version.js`, kept equal to `plugin.json`.
 
