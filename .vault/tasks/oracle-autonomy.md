@@ -16,7 +16,7 @@ Objective: locks no longer need a typed command: orphaned locks release themselv
 | T3 | S1, S2 | Review fixes: literal pathspecs and a strict feature form for orphan release; exact backticked path; one shared path normalization; approvals recorded by a PostToolUse hook in the review store, not read from the transcript | worker | 2, 3 | done | 3cdd1bb |
 | T4 | S2 | Second review fixes: agents cannot run the store-writing hook scripts; approvals bound to the session and expiring after 15 minutes; symlinked paths denied; unlock after a directory change denied | worker | 2, 3 | done | ee0a398 |
 | T5 | S2 | Lone-command unlock on a plain file (no symlink), one live approval; replaces the per-case defenses | worker | 2, 3 | done | e62cd72 |
-| T6 | S2 | The CLI releases a lock stored for a symlink path as typed, without following it (agents stay blocked by command-guard) | inline | 2 | done | — |
+| T6 | S2 | The CLI releases a lock stored for a symlink path as typed, without following it (agents stay blocked by command-guard) | inline | 2 | done | 1690d90 |
 | T2 | S2, S3 | command-guard allows an unlock the user approved through AskUserQuestion; docs | worker | 2, 3 | done | 56f406e |
 
 ## Log
