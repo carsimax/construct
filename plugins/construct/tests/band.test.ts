@@ -153,7 +153,7 @@ test('the band shows the running agent by its role, the open feature, and the ph
   const text = await joined(ui)
   expect(text).toContain('● building')
   expect(text).toContain('ADD feat')
-  expect(text).toContain('⚒ worker building')
+  expect(text).toMatch(/⚒ worker \d+:\d\d/)
   expect(text).not.toContain('construct:worker')
 })
 
@@ -177,65 +177,20 @@ test('with nothing to show the band leaves the site to the other mods', async ($
   expect(await joined(ui)).toBe('only theirs')
 })
 
-test('a main-thread Write outside .vault/tasks shows the inline alert', async ($, on) => {
-  await start($, on)
+test('the band is one row and draws no gate, inline or task text in any state', async ($, on) => {
+  await start($, on, { decision: 'deny' })
   await $.turn.start({ text: 'go', turnId: 't1' })
+  await $.agent.spawn({ subagentType: 'construct:worker', prompt: 'p', description: 'd' })
+  await $.tool.check({ tool: 'Bash', input: { command: 'rm -rf x' }, tool_use_id: 'tu-1' })
   await $.tool.call({ tool: 'Write', file_path: '/home/me/proj/src/a.js', content: 'x' })
   await settle()
   const p = await band($)
   await p.redraw()
-  expect(await joined(p)).toContain('⚠ 1 inline')
-})
-
-for (const [why, o] of [['denied', { deny: 'surface-guard: too big' }], ['failed', { isError: true }]] as const) {
-  test(`a ${why} main-thread Write is not an inline write`, async ($, on) => {
-    await start($, on, o)
-    await $.turn.start({ text: 'go', turnId: 't1' })
-    await $.tool.call({ tool: 'Write', file_path: '/home/me/proj/src/a.js', content: 'x' })
-    await settle()
-    const p = await band($)
-    await p.redraw()
-    expect(await joined(p)).not.toContain('inline')
-  })
-}
-
-test('an ask whose tool.call throws is settled, not left pending', async ($, on) => {
-  await start($, on, { decision: askingGate, throws: true })
-  await checkAsk($, { tool: 'Bash', input: { command: 'ls' }, tool_use_id: 'tu-1' })
-  await $.tool.call({ tool: 'Bash', command: 'ls', tool_use_id: 'tu-1' } as any).catch(() => {})
-  await settle()
-  const p = await band($)
-  await p.redraw()
-  expect(await joined(p)).not.toContain('pending')
-})
-
-test('a write under .vault/tasks is not an inline write', async ($, on) => {
-  await start($, on)
-  await $.tool.call({ tool: 'Write', file_path: '/home/me/proj/.vault/tasks/x.md', content: 'x' })
-  await settle()
-  const p = await band($)
-  await p.redraw()
-  expect(await joined(p)).not.toContain('inline')
-})
-
-test('a tool.check deny appears in the band and passes the verdict through', async ($, on) => {
-  await start($, on, { decision: 'deny' })
-  const verdict = await $.tool.check({ tool: 'Bash', input: { command: 'rm -rf x' }, tool_use_id: 'tu-1' })
-  expect(verdict.decision).toBe('deny')
-  await settle()
-  const p = await band($)
-  await p.redraw()
-  expect(await joined(p)).toContain('✗ 1')
-})
-
-test('a tool.check query without tool_use_id is not a gate cell', async ($, on) => {
-  await start($, on, { decision: 'deny' })
-  const verdict = await $.tool.check({ tool: 'Bash', input: { command: 'rm -rf x' } })
-  expect(verdict.decision).toBe('deny')
-  await settle()
-  const p = await band($)
-  await p.redraw()
-  expect(await joined(p)).not.toContain('gate')
+  const text = await joined(p)
+  expect(text).toMatch(/⚒ worker \d+:\d\d/)
+  for (const w of ['gate', 'pending', 'inline', '✗', '⚠']) expect(text).not.toContain(w)
+  const tree: any = await p.drawn()
+  expect(tree.children[0].children).toHaveLength(1) // our row; the empty box after it is another mod's
 })
 
 test('spawn adds the agent to the band and passes the spawn result through', async ($, on) => {
@@ -247,9 +202,9 @@ test('spawn adds the agent to the band and passes the spawn result through', asy
   const p = await band($)
   await p.redraw()
   const text = await joined(p)
-  expect(text).toContain('⚒ worker building')
+  expect(text).toMatch(/⚒ worker \d+:\d\d/)
   expect(text).not.toContain('construct:worker')
-  expect(text).toContain('Sonnet')
+  expect(text).not.toContain('Sonnet')
 })
 
 test('new hooks pass events through unchanged', async ($, on) => {
@@ -268,21 +223,16 @@ test('new hooks pass events through unchanged', async ($, on) => {
   expect(seen.compact.trigger).toBe('manual')
 })
 
-test('a tool.call after an ask settles it as cleared', async ($, on) => {
+test('a tool.call after an ask settles it: the band is no longer blocked', async ($, on) => {
   const seen: any = {}
   await start($, on, { decision: askingGate, seen })
   await checkAsk($, { tool: 'Bash', input: { command: 'ls' }, tool_use_id: 'tu-1' })
-  await $.tool.call({ tool: 'Bash', command: 'ls', tool_use_id: 'tu-1' } as any)
-  await $.tool.call({ tool: 'Write', file_path: '/home/me/proj/src/a.js', content: 'x' })
   await settle()
-  const p = await band($)
-  await p.redraw()
-  const text = await joined(p)
-  // the harness checks each call too, so the passed total is above one; the ask is neither pending nor denied
-  expect(text).toMatch(/gate ✓ \d+/)
-  expect(text).not.toContain('pending')
-  expect(text).not.toContain('✗')
-  expect(text).toContain('⚠ 1 inline')
+  const status = await reader($)
+  expect(await status()).toContain('◆ waiting on you')
+  await $.tool.call({ tool: 'Bash', command: 'ls', tool_use_id: 'tu-1' } as any)
+  await settle()
+  expect(await status()).not.toContain('◆ waiting')
 })
 
 test('the band draws no Client element and no rail', async ($, on) => {

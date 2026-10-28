@@ -1,5 +1,5 @@
 import { expect, test } from 'claude-code/testing'
-import { BAND_COLUMNS, PALETTE, buildBand, clock, prettyModel } from '../hooks/band/layout.js'
+import { BAND_COLUMNS, PALETTE, buildBand, clock } from '../hooks/band/layout.js'
 import { initialState } from '../hooks/band/state.js'
 import { activeWork } from '../hooks/status/tasks.js'
 
@@ -16,7 +16,9 @@ function leaves(node, out: { text: string; props: any }[] = []) {
   return out
 }
 // The band's rows: each child of the root column is one row.
-const rowsOf = (tree) => (tree?.children ?? []).map(flat)
+const rawRowsOf = (tree) => (tree?.children ?? []).map(flat)
+// The same rows without the version tag at the right edge.
+const rowsOf = (tree) => rawRowsOf(tree).map((r) => r.replace(/\s+v\d+\.\d+\.\d+$/, ''))
 
 const agent = (o: any = {}) => ({ id: 'a1', role: 'worker', type: 'construct:worker', model: 'claude-sonnet-5-5', startedMs: NOW - 102_000, endedMs: null, status: 'running', ...o })
 const odd = {
@@ -27,21 +29,25 @@ const busy = (o: any = {}) => ({
   ...initialState(),
   turn: { turnId: 't' },
   agents: [agent(), agent({ id: 'a2', role: 'explorer', type: 'construct:explorer', model: 'claude-haiku-5-5', startedMs: NOW - 20_000 })],
-  gate: { verdicts: { rule: 4, ask: 0, cleared: 10, deny: 0 }, pending: {} },
-  inline: { count: 1 },
   ...o,
 })
 const band = (o: any = {}) => buildBand({ state: busy(), odd, nowMs: NOW, columns: 140, ...o })
 
-test('nothing to show draws nothing: idle, no feature, no gate activity, no agents', () => {
+test('nothing to show draws nothing: idle, no feature, no agents', () => {
   for (const state of [undefined, null, initialState()]) expect(buildBand({ state, odd: null, nowMs: NOW, columns: 100 })).toBe(null)
 })
 
-test('row one: phase, feature with checkpoints and task, gate; row two: running agents with model and clock', () => {
-  expect(rowsOf(band())).toEqual([
-    '● building · ADD engram-only-memory ●━●━◆━○ T3 Explorer recall tools · gate ✓ 14 ⚠ 1 inline',
-    '⚒ worker building Sonnet 5.5 1:42 · ⌕ explorer mapping Haiku 5.5 0:20',
-  ])
+test('one row: phase, feature with checkpoints, running agents; no task id or title', () => {
+  expect(rowsOf(band())).toEqual(['● building · ADD engram-only-memory ●━●━◆━○ · 2 agents 1:42'])
+  expect(flat(band())).not.toContain('T3')
+  expect(flat(band())).not.toContain('Explorer recall tools')
+})
+
+test('one row even with agents running; a stored gate or inline count is never drawn', () => {
+  expect(band().children).toHaveLength(1)
+  const stale = band({ state: busy({ turn: null, gate: { verdicts: { rule: 1, ask: 2, cleared: 3, deny: 4 }, pending: {} }, inline: { count: 3 } }) })
+  const text = flat(stale)
+  for (const w of ['gate', 'pending', 'inline', '✗', '⚠', '✓']) expect(text).not.toContain(w)
 })
 
 test('the band draws nothing the status line shows: no model of the main thread, branch, context or limits', () => {
@@ -62,39 +68,32 @@ test('a blocked or busy session shows its status even with nothing else', () => 
   expect(rowsOf(buildBand({ state: { ...initialState(), turn: { turnId: 't' } }, odd: null, nowMs: NOW }))).toEqual(['● busy'])
 })
 
-test('gate: pending asks win over the passed count; denials and inline writes follow', () => {
-  const gate = (verdicts, inline = 0) => rowsOf(band({ odd: null, state: busy({ agents: [], turn: null, gate: { verdicts, pending: {} }, inline: { count: inline } }) }))[0]
-  expect(gate({ rule: 1, ask: 2, cleared: 3, deny: 0 })).toBe('○ ready · gate 2 pending')
-  expect(gate({ rule: 1, ask: 0, cleared: 3, deny: 2 })).toBe('○ ready · gate ✓ 4 ✗ 2')
-  expect(gate({ rule: 0, ask: 0, cleared: 0, deny: 0 }, 3)).toBe('○ ready · ⚠ 3 inline')
+test('a single agent shows glyph, short name and clock; several show a count and the oldest clock', () => {
+  expect(rowsOf(band({ state: busy({ agents: [agent()] }) }))).toEqual(['● building · ADD engram-only-memory ●━●━◆━○ · ⚒ worker 1:42'])
+  expect(rowsOf(band({ odd: null, state: busy({ agents: [agent(), agent({ id: 'b', startedMs: NOW - 5_000 }), agent({ id: 'c', startedMs: NOW - 9_000 })] }) }))).toEqual(['● building · 3 agents 1:42'])
 })
 
-test('only running agents are listed, oldest first; a done agent leaves the band', () => {
+test('only running agents count, oldest first; a done agent leaves the band', () => {
   const agents = [agent({ id: 'b', startedMs: NOW - 5_000 }), agent({ id: 'c', role: 'explorer', status: 'done', endedMs: NOW }), agent({ id: 'a', role: 'review_risk', type: 'construct:review-risk', startedMs: NOW - 9_000 })]
-  expect(rowsOf(band({ state: busy({ agents }) }))[1]).toBe('◎ review-risk reviewing Sonnet 5.5 0:09 · ⚒ worker building Sonnet 5.5 0:05')
-  expect(rowsOf(band({ state: busy({ agents: [agent({ status: 'done', endedMs: NOW })] }) }))).toHaveLength(1)
+  expect(rowsOf(band({ odd: null, state: busy({ agents }) }))).toEqual(['● reviewing · 2 agents 0:09'])
+  expect(rowsOf(band({ odd: null, state: busy({ agents: [agent({ id: 'c', role: 'review_risk', type: 'construct:review-risk', startedMs: NOW - 9_000 })] }) }))).toEqual(['● reviewing · ◎ review-risk 0:09'])
+  expect(rowsOf(band({ state: busy({ agents: [agent({ status: 'done', endedMs: NOW })] }) }))[0]).not.toContain('⚒')
 })
 
-test('an agent with no construct role shows its type with the plain look', () => {
-  expect(rowsOf(band({ state: busy({ agents: [agent({ role: 'my-agent', type: 'my-agent' })] }) }))[1]).toBe('• my-agent working Sonnet 5.5 1:42')
+test('an agent with no construct role shows its type with the plain look; no model is drawn', () => {
+  const row = rowsOf(band({ odd: null, state: busy({ agents: [agent({ role: 'my-agent', type: 'my-agent' })] }) }))[0]
+  expect(row).toBe('● working · • my-agent 1:42')
+  expect(row).not.toContain('Sonnet')
 })
 
-test('a narrow band drops the task title, then the models, then clips with an ellipsis', () => {
-  expect(rowsOf(band({ columns: 80 }))).toEqual([
-    '● building · ADD engram-only-memory ●━●━◆━○ T3 · gate ✓ 14 ⚠ 1 inline',
-    '⚒ worker building Sonnet 5.5 1:42 · ⌕ explorer mapping Haiku 5.5 0:20',
-  ])
+test('a narrow band clips the one row with an ellipsis', () => {
   const rows = rowsOf(band({ columns: 40 }))
-  expect(rows[1]).toBe('⚒ worker building 1:42 · ⌕ explorer map…')
-  for (const r of rows) expect(cellsOf(r)).toBeLessThanOrEqual(40)
-})
-
-test('a band with one row keeps the status row only', () => {
-  expect(rowsOf(band({ maxRows: 1 }))).toHaveLength(1)
+  expect(rows).toEqual(['● building · ADD engram-only-memory ●━●…'])
+  expect(cellsOf(rows[0])).toBeLessThanOrEqual(40)
 })
 
 test('an unknown width falls back to BAND_COLUMNS', () => {
-  const long = { ...odd, task: { id: 'T3', title: 'x'.repeat(200) } }
+  const long = { ...odd, feature: 'x'.repeat(200) }
   for (const r of rowsOf(band({ columns: undefined, odd: long }))) expect(cellsOf(r)).toBeLessThanOrEqual(BAND_COLUMNS)
 })
 
@@ -123,8 +122,8 @@ test('many tasks keep the open checkpoint in view', () => {
 })
 
 test('an agent of another plugin named like a construct role is drawn as a plain agent', () => {
-  const row = rowsOf(band({ state: busy({ agents: [agent({ role: 'worker', type: 'worker' })] }) }))[1]
-  expect(row).toContain('• worker working')
+  const row = rowsOf(band({ state: busy({ agents: [agent({ role: 'worker', type: 'worker' })] }) }))[0]
+  expect(row).toContain('• worker 1:42')
   expect(row).not.toContain('⚒')
 })
 
@@ -160,7 +159,7 @@ test('S4 wide text in the feature and agent names never overflows the band at 40
 test('S4 a clipped name never ends in a broken cluster', () => {
   for (const unit of ['a👨‍👩‍👧', 'e\u0301x', '❤️b', 'ab👨‍👩‍👧c']) {
     const role = unit.repeat(8)
-    const row = rowsOf(band({ columns: 40, state: busy({ agents: [agent({ role, type: role })] }) }))[1]
+    const row = rowsOf(band({ columns: 40, odd: null, state: busy({ agents: [agent({ role, type: role })] }) }))[0]
     const before = row.slice(0, row.indexOf('…'))
     expect(before, unit).not.toMatch(/\u200d$/)
     expect(before, unit).not.toMatch(/^\p{M}|\s\p{M}/u)
@@ -206,7 +205,21 @@ test('activeWork joins surplus cells from an unescaped pipe into the task column
   })
 })
 
-test('prettyModel names the new 5.x ids', () => {
-  expect(prettyModel('claude-fable-5-1')).toBe('Fable 5.1')
-  expect(prettyModel('claude-haiku-5-5')).toBe('Haiku 5.5')
+test('the plugin version sits at the right edge of the row, dim', () => {
+  const [row] = rawRowsOf(band({ columns: 140 }))
+  expect(row.length).toBe(140)
+  expect(row.endsWith(' v13.0.0')).toBe(true)
+  expect(leaves(band({ columns: 140 })).at(-1)).toEqual({ text: 'v13.0.0', props: expect.objectContaining({ dimColor: true }) })
+})
+
+test('the version is not drawn when the band is null', () => {
+  expect(buildBand({ state: initialState(), odd: null, nowMs: NOW, columns: 140 })).toBe(null)
+})
+
+test('the version is the first thing dropped when the row is narrow', () => {
+  const content = '● building · ADD engram-only-memory ●━●━◆━○ · 2 agents 1:42'
+  const w = [...content].length
+  expect(rawRowsOf(band({ columns: w + 8 }))).toEqual([`${content} v13.0.0`])
+  expect(rawRowsOf(band({ columns: w + 7 }))).toEqual([content])
+  expect(rawRowsOf(band({ columns: w }))).toEqual([content])
 })

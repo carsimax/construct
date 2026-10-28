@@ -87,7 +87,7 @@ Many tests cross-check text against code, so a change in one place usually needs
 
 ## Releases
 
-1. Bump `version` in `plugins/construct/.claude-plugin/plugin.json` in a `chore: release X.Y.Z` commit.
+1. Bump `version` in `plugins/construct/.claude-plugin/plugin.json` and `VERSION` in `plugins/construct/hooks/status/version.js` (the band and `/construct doctor` show it) to the same number in a `chore: release X.Y.Z` commit.
 2. Put the version in the pull request title, for example `feat(delegation): ... (0.3.0)`.
 3. Bump `CONSTRUCT_REF` in `install.sh` and the tag in its header URL together with the version.
 4. Move the `Unreleased` entries of [CHANGELOG.md](CHANGELOG.md) under the new version.

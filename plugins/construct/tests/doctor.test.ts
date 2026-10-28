@@ -38,3 +38,7 @@ test('the report has one line per check', () => {
   ])
   expect(text.split('\n')).toEqual(['Construct doctor', '✓ fine', '✗ broken — fix it'])
 })
+
+test('the report header names the plugin version', () => {
+  expect(formatReport([], '13.0.0').split('\n')[0]).toBe('Construct doctor v13.0.0')
+})

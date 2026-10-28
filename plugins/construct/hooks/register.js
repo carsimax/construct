@@ -3,20 +3,17 @@ import { effortFor, modelFor, roleFor } from './routing.js'
 import { buildBand } from './band/layout.js'
 import {
   SCHEMA_VERSION,
-  filePathOf,
   initialState,
   isBlockingTool,
   merge,
   onAgentSpawn,
   onBlocked,
-  onToolCall,
-  onToolCheck,
-  onToolSettle,
   onTurnComplete,
   onTurnStart,
   onUnblocked,
 } from './band/state.js'
 import { checkClaude, checkNode, formatReport } from './status/doctor.js'
+import { VERSION } from './status/version.js'
 import { activeWork } from './status/tasks.js'
 import { parseRevParse } from './status/data.js'
 
@@ -55,16 +52,6 @@ async function nowMs($) {
     return await $.clock.now()
   } catch {
     return Date.now()
-  }
-}
-
-// The project root the inline-write detector compares paths with.
-async function projectRoot($) {
-  if (status.data?.root) return status.data.root
-  try {
-    return await $.session.cwd()
-  } catch {
-    return undefined
   }
 }
 
@@ -148,7 +135,6 @@ async function drawBand($, e, next) {
     odd: status.data?.odd ?? null,
     nowMs: await nowMs($),
     columns: e.props?.bodyColumns,
-    maxRows: e.props?.maxRows,
   })
   if (!ours) return theirs
   return theirs ? { type: 'Box', props: { flexDirection: 'column' }, children: [ours, theirs] } : ours
@@ -181,7 +167,7 @@ async function runDoctor($) {
     probe(async () => (await $.session.version()).version),
     probe(() => runText($, ['node', '--version'], cwd ?? undefined, GIT_MS)),
   ])
-  return formatReport([checkClaude(version), checkNode(node)])
+  return formatReport([checkClaude(version), checkNode(node)], VERSION)
 }
 
 export function register(on, options) {
@@ -241,27 +227,15 @@ export function register(on, options) {
     return result
   }).catch(($, e, next) => next(e))
 
-  // A tool call: counts main-thread writes outside .vault/tasks. The call stays open while a question or
-  // a plan waits on the human (S8b), so AskUserQuestion and ExitPlanMode block the band until it
-  // returns; any settled call clears a block.
+  // A tool call. The call stays open while a question or a plan waits on the human (S8b), so
+  // AskUserQuestion and ExitPlanMode block the band until it returns; any settled call clears a block.
   on('tool.call', async ($, e, next) => {
     if (isBlockingTool(e.tool)) await feed($, onBlocked)
-    let result
     try {
-      result = await next(e)
-      return result
+      return await next(e)
     } finally {
-      // also when next throws, so an ask never stays pending
-      try {
-        const cwd = await projectRoot($)
-        const didRun = result !== undefined && result.deny === undefined
-        await feed($, (s) => {
-          const settled = onToolSettle(onUnblocked(s), { tool: e.tool, didRun, callId: e.tool_use_id })
-          return didRun && !result.isError ? onToolCall(settled, { tool: e.tool, path: filePathOf(e), cwd, agentId: e.agentId }) : settled
-        })
-      } catch {
-        // observe only
-      }
+      // also when next throws, so a block never stays
+      await feed($, onUnblocked)
     }
   }).catch(($, e, next) => next(e))
 
@@ -269,11 +243,8 @@ export function register(on, options) {
   on('tool.check', async ($, e, next) => {
     const result = await next(e)
     const isQuery = typeof e.tool_use_id !== 'string' || e.tool_use_id === ''
-    await feed($, (s) => {
-      const checked = onToolCheck(s, { tool: e.tool, callId: e.tool_use_id, agentId: e.agentId, decision: result?.decision, isQuery })
-      // An ask on a real call goes to the person (or the mode's decider): blocked until the call settles.
-      return !isQuery && result?.decision === 'ask' ? onBlocked(checked) : checked
-    })
+    // An ask on a real call goes to the person (or the mode's decider): blocked until the call settles.
+    if (!isQuery && result?.decision === 'ask') await feed($, onBlocked)
     return result
   }).catch(($, e, next) => next(e))
 
@@ -297,7 +268,7 @@ async function noteSpawn($, e, result) {
 // Registers /construct. Detached from session.start.
 async function registerCommand($) {
   try {
-    await $.command.register({ name: 'construct', description: 'Check the Construct setup (Claude Code and Node versions)', argumentHint: '[doctor]' })
+    await $.command.register({ name: 'construct', description: 'Show the Construct version and check the setup (Claude Code and Node versions)', argumentHint: '[doctor]' })
   } catch {
     // the command stays unavailable
   }
