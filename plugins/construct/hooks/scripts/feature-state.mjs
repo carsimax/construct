@@ -2,7 +2,7 @@
 // Read-only and fail-open: any problem produces no output and exit code 0.
 // Usage: node feature-state.mjs  (SessionStart hook JSON on stdin)
 import { execFileSync } from 'node:child_process'
-import { readFileSync, readdirSync, realpathSync, statSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, realpathSync, statSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -128,25 +128,24 @@ function specLines(lines) {
   ]
 }
 
-// S4, S5: finished feature documents with a `## Specs` section and no `## <feature>` heading in odd/spec.md.
-// Without odd/spec.md, or for a document whose L1 date is before its `Started:` line, there is no warning.
+// S3: finished feature documents with a `## Specs` section and no `.vault/specs/<feature>.md`.
+// Without .vault/specs/README.md (it holds `Started:`), or for a document whose L1 date is before its `Started:` line, there is no warning.
 function livingSpecLines(root) {
   let spec
   try {
-    spec = readFileSync(join(root, 'odd', 'spec.md'), 'utf8')
+    spec = readFileSync(join(root, '.vault', 'specs', 'README.md'), 'utf8')
   } catch {
     return []
   }
   const started = /^Started:\s*(\d{4}-\d{2}-\d{2})/m.exec(spec)?.[1]
-  const headings = new Set(spec.split(/\r?\n/).flatMap((l) => (/^##\s+(.+?)\s*$/.exec(l) ?? []).slice(1)))
   const missing = []
-  for (const name of readdirSync(join(root, 'odd', 'tasks')).sort()) {
+  for (const name of readdirSync(join(root, '.vault', 'tasks')).sort()) {
     try {
       if (!name.endsWith('.md')) continue
-      const lines = readFileSync(join(root, 'odd', 'tasks', name), 'utf8').split(/\r?\n/)
+      const lines = readFileSync(join(root, '.vault', 'tasks', name), 'utf8').split(/\r?\n/)
       const table = unfinishedRows(lines)
       const feature = basename(name, '.md')
-      if (!table || table.rows.length > 0 || !lines.some((l) => /^##\s+Specs\s*$/.test(l)) || headings.has(feature)) continue
+      if (!table || table.rows.length > 0 || !lines.some((l) => /^##\s+Specs\s*$/.test(l)) || existsSync(join(root, '.vault', 'specs', name))) continue
       // `**L1 (2026-10-22, user):**` counts; a document with no L1 date predates the rule and is skipped.
       const l1 = /\*\*L1 \((\d{4}-\d{2}-\d{2})[^)]*\)/.exec(lines.join('\n'))?.[1]
       if (started && (!l1 || l1 < started)) continue
@@ -155,7 +154,7 @@ function livingSpecLines(root) {
       // unreadable document: skip it
     }
   }
-  return [...missing.slice(0, 3).map((f) => clip(`Living spec: ${f} is finished but odd/spec.md has no "## ${f}" heading; add its S# with their quotes.`, MAX_LINE)), ...(missing.length > 3 ? [`Living spec: ${missing.length - 3} more finished documents are missing from odd/spec.md.`] : [])]
+  return [...missing.slice(0, 3).map((f) => clip(`Living spec: ${f} is finished but .vault/specs/${f}.md is missing; write its S# with their quotes.`, MAX_LINE)), ...(missing.length > 3 ? [`Living spec: ${missing.length - 3} more finished documents have no file in .vault/specs/.`] : [])]
 }
 
 // `Branch: x` inside the header line (before the first `##`), reduced to `Branch: x`.
@@ -220,16 +219,16 @@ export function projectRoot(cwd) {
   }
 }
 
-// activeDocuments returns the feature documents under <root>/odd/tasks with an
+// activeDocuments returns the feature documents under <root>/.vault/tasks with an
 // unfinished task, newest first: { doc, mtime }. A missing directory throws.
 // delegation-admission.mjs reuses it, so "an unfinished feature document
 // exists" means the same thing there as for the re-injection.
 export function activeDocuments(root) {
-  const dir = join(root, 'odd', 'tasks')
+  const dir = join(root, '.vault', 'tasks')
   const docs = []
   for (const name of readdirSync(dir)) {
     if (!name.endsWith('.md')) continue
-    const path = `odd/tasks/${name}`
+    const path = `.vault/tasks/${name}`
     try {
       const doc = parseDoc(root, path)
       if (doc) docs.push({ doc, mtime: statSync(join(root, path)).mtimeMs })

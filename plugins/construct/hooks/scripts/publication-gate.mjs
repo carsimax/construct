@@ -7,7 +7,7 @@
 //     with no remote-tracking default to compare with denies;
 //   - the default branch and its merge-base with the ref come from git (origin/HEAD, origin or local
 //     main/master; a `gh pr create --base` branch is tried first); when none resolves, deny;
-//   - the `odd/tasks/*.md` files changed in merge-base..ref are read at the ref and at the merge-base
+//   - the `.vault/tasks/*.md` files changed in merge-base..ref are read at the ref and at the merge-base
 //     (lowering a Risk in the branch does not hide it), and every integer 1-6
 //     in each Risk cell of their Tasks table (the `## Tasks` heading may carry a suffix) names a Risk
 //     item, a range `a-b`, `a–b`, `a—b`, `a to b` naming every item between (`none` names none; a cell
@@ -227,16 +227,16 @@ function globToRegExp(glob) {
   return new RegExp(`^${glob.includes('/') ? '' : '(?:.*/)?'}${re}$`, 'is')
 }
 
-// projectFloor reads `<glob> <items>` lines (items 1-6 joined by commas; `#` comments, blank lines) of odd/risk-paths at
-// one commit, called with the merge base and the default branch tip, never the ref, so a change cannot lower its own
-// floor and a rule added after it branched still applies. An unreadable line throws.
+// projectFloor reads `<glob> <items>` lines (items 1-6 joined by commas; `#` comments, blank lines) of every file under
+// .vault/risk-paths/ at one commit, called with the merge base and the default branch tip, never the ref, so a change
+// cannot lower its own floor and a rule added after it branched still applies. An unreadable line throws, naming its file.
 function projectFloor(root, commit) {
-  if (out(root, ['ls-tree', '--name-only', commit, '--', 'odd/risk-paths']) === '') return []
-  return out(root, ['show', `${commit}:odd/risk-paths`]).split('\n').map((l) => l.trim()).filter((l) => l !== '' && !l.startsWith('#')).flatMap((line) => {
+  const files = out(root, ['ls-tree', '-r', '--name-only', '-z', commit, '--', '.vault/risk-paths/']).split('\0').filter((f) => f !== '')
+  return files.flatMap((file) => out(root, ['show', `${commit}:${file}`]).split('\n').map((l) => l.trim()).filter((l) => l !== '' && !l.startsWith('#')).flatMap((line) => {
     const m = /^(\S+)\s+([1-6](?:\s*,\s*[1-6])*)$/.exec(line)
-    if (!m) throw new Error(`odd/risk-paths has an unreadable line: ${JSON.stringify(line)} (expected "<glob> <items 1-6, comma separated>")`)
+    if (!m) throw new Error(`${file} has an unreadable line: ${JSON.stringify(line)} (expected "<glob> <items 1-6, comma separated>")`)
     return m[2].split(',').map((n) => [m[1], Number(n)])
-  })
+  }))
 }
 
 // objectExists: `git cat-file -e` exits 0 (exists) or 1 (absent); any other status (an invalid name is 128) rethrows.
@@ -337,7 +337,7 @@ function oracleDenial(root, sha) {
 
 // reviewState reads, without writing, the Risk items the feature documents changed between the merge base of base
 // and sha name, the lenses they require, and each lens's verdict for that subject ('ok', 'rejected', or 'missing').
-// The risk floor adds items from the diff paths (floor: item -> matched paths). A malformed Risk cell or odd/risk-paths line throws. refVerdict and skill-context.mjs share it.
+// The risk floor adds items from the diff paths (floor: item -> matched paths). A malformed Risk cell or .vault/risk-paths line throws. refVerdict and skill-context.mjs share it.
 export function reviewState(root, base, sha) {
   const mergeBase = out(root, ['merge-base', base, sha])
   // -M pairs a rename: its new path is read at the ref and its old path at the merge-base (a rename plus a lowered Risk
@@ -361,7 +361,7 @@ export function reviewState(root, base, sha) {
   const items = new Set()
   const docs = [] // [path, text] of each feature document read at the ref
   for (const [commit, path] of reads) {
-    if (!/^odd\/tasks\/[^/]+\.md$/.test(path)) continue
+    if (!/^\.vault\/tasks\/[^/]+\.md$/.test(path)) continue
     if (out(root, ['ls-tree', '--name-only', commit, '--', path]) === '') continue
     const text = out(root, ['show', `${commit}:${path}`])
     if (commit === sha) docs.push([path, text])

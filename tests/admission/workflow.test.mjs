@@ -1,4 +1,4 @@
-// Workflow admission (odd/tasks/workflow-admission.md S1-S2), driven as the real hook: PreToolUse(Workflow)
+// Workflow admission (.vault/tasks/workflow-admission.md S1-S2), driven as the real hook: PreToolUse(Workflow)
 // denies a script that could launch a writing agent, because a workflow's agent() never reaches PreToolUse(Agent).
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'

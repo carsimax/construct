@@ -1,4 +1,4 @@
-// The band above the prompt: turns the stored band state and the active ODD feature into at most
+// The band above the prompt: turns the stored band state and the active ADD feature into at most
 // two rows. Row one is the main status, the feature with its tasks, and the gate; row two lists the
 // running agents. Nothing the user's own status line shows (model, effort, branch, diff, context,
 // plan limits) is drawn here.
@@ -102,7 +102,7 @@ function row(segs, max) {
   return { type: 'Text', props: { wrap: 'truncate' }, children }
 }
 
-// ---- row one: status, ODD feature, gate --------------------------------------
+// ---- row one: status, ADD feature, gate --------------------------------------
 
 // The phase words of state.js as the voice the main status uses.
 const PHASE_VERB = { implementing: 'building', exploring: 'mapping' }
@@ -127,7 +127,7 @@ function checkpoints(tasks, max) {
 }
 
 function oddSegs(odd, withTitle) {
-  const segs = [seg('ODD ', { dim: true }), seg(cut(clean(String(odd.feature)), MAX_FEATURE), { color: PALETTE.odd })]
+  const segs = [seg('ADD ', { dim: true }), seg(cut(clean(String(odd.feature)), MAX_FEATURE), { color: PALETTE.odd })]
   const tasks = (Array.isArray(odd.tasks) ? odd.tasks : []).filter((t) => t && typeof t === 'object')
   if (tasks.length) segs.push(seg(' '), ...checkpoints(tasks, MAX_CHECKPOINT_COLS))
   if (odd.task) {
@@ -137,7 +137,7 @@ function oddSegs(odd, withTitle) {
   return segs
 }
 
-// Pending asks, else the calls that passed; denials and main-thread writes outside odd/tasks after them.
+// Pending asks, else the calls that passed; denials and main-thread writes outside .vault/tasks after them.
 function gateSegs(state) {
   const v = state.gate?.verdicts ?? {}
   const ask = count(v.ask)

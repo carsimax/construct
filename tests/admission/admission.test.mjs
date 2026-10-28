@@ -54,10 +54,10 @@ const allowed = (r) => {
 const plain = () => makeRepo({ 'src/a.js': 'a\n' })
 const withFeature = (status) => {
   const repo = plain()
-  write(repo, 'odd/tasks/feat.md', FEATURE(status))
+  write(repo, '.vault/tasks/feat.md', FEATURE(status))
   return repo
 }
-const SPEC = 'Spec: odd/tasks/feat.md, T1, S1\n'
+const SPEC = 'Spec: .vault/tasks/feat.md, T1, S1\n'
 
 describe('writer surfaces', () => {
   test('jd-fix-agent is no longer a writer: no section, Spec, or overlap check applies', () => {
@@ -98,26 +98,26 @@ describe('Spec line', () => {
     allowed(launch(withFeature('done'), env(), WORKER, surfaces('src/a.js')))
   })
   test('required when an unfinished document exists, with the expected form in the reason', () => {
-    denied(launch(withFeature(), env(), WORKER, surfaces('src/a.js')), /Spec: odd\/tasks\/<feature>\.md, T<n>/)
+    denied(launch(withFeature(), env(), WORKER, surfaces('src/a.js')), /Spec: \.vault\/tasks\/<feature>\.md, T<n>/)
   })
   test('a Spec line naming an existing regular file is allowed', () => {
     allowed(launch(withFeature(), env(), WORKER, SPEC + surfaces('src/a.js')))
-    allowed(launch(withFeature(), env(), WORKER, `- Spec: \`odd/tasks/feat.md\` (read to Log). Do T1; S1.\n${surfaces('src/a.js')}`))
+    allowed(launch(withFeature(), env(), WORKER, `- Spec: \`.vault/tasks/feat.md\` (read to Log). Do T1; S1.\n${surfaces('src/a.js')}`))
   })
   test('a Spec line without a task id, or inside prose, is denied', () => {
-    denied(launch(withFeature(), env(), WORKER, `Spec: odd/tasks/feat.md\n${surfaces('src/a.js')}`), /Spec:/)
-    denied(launch(withFeature(), env(), WORKER, `See Spec: odd/tasks/feat.md, T1\n${surfaces('src/a.js')}`), /Spec:/)
+    denied(launch(withFeature(), env(), WORKER, `Spec: .vault/tasks/feat.md\n${surfaces('src/a.js')}`), /Spec:/)
+    denied(launch(withFeature(), env(), WORKER, `See Spec: .vault/tasks/feat.md, T1\n${surfaces('src/a.js')}`), /Spec:/)
   })
-  test('a missing file, a directory, or a path outside odd/tasks is denied', () => {
+  test('a missing file, a directory, or a path outside .vault/tasks is denied', () => {
     const repo = withFeature()
-    denied(launch(repo, env(), WORKER, `Spec: odd/tasks/nope.md, T1\n${surfaces('src/a.js')}`), /existing regular file/)
-    denied(launch(repo, env(), WORKER, `Spec: odd/tasks/../src/a.md, T1\n${surfaces('src/a.js')}`), /existing regular file/)
+    denied(launch(repo, env(), WORKER, `Spec: .vault/tasks/nope.md, T1\n${surfaces('src/a.js')}`), /existing regular file/)
+    denied(launch(repo, env(), WORKER, `Spec: .vault/tasks/../src/a.md, T1\n${surfaces('src/a.js')}`), /existing regular file/)
   })
   test('a symlinked document is not accepted', () => {
     const repo = withFeature()
     write(repo, 'elsewhere.md', FEATURE())
-    symlinkSync(join(repo, 'elsewhere.md'), join(repo, 'odd/tasks/link.md'))
-    denied(launch(repo, env(), WORKER, `Spec: odd/tasks/link.md, T1\n${surfaces('src/a.js')}`), /existing regular file/)
+    symlinkSync(join(repo, 'elsewhere.md'), join(repo, '.vault/tasks/link.md'))
+    denied(launch(repo, env(), WORKER, `Spec: .vault/tasks/link.md, T1\n${surfaces('src/a.js')}`), /existing regular file/)
   })
 })
 
@@ -305,7 +305,7 @@ describe('feature-state still works after the export', () => {
   test('feature-state.mjs run directly re-injects an unfinished document', () => {
     const repo = withFeature()
     const r = spawnSync('node', [join(PLUGIN, 'hooks/scripts/feature-state.mjs')], { input: JSON.stringify({ cwd: repo }), encoding: 'utf8' })
-    assert.match(JSON.parse(r.stdout).hookSpecificOutput.additionalContext, /odd\/tasks\/feat\.md/)
+    assert.match(JSON.parse(r.stdout).hookSpecificOutput.additionalContext, /\.vault\/tasks\/feat\.md/)
   })
 })
 
@@ -440,7 +440,7 @@ describe('start mode (F10)', () => {
 
 describe('oracle admission', () => {
   const ORACLE = 'construct:oracle'
-  const spec = (...paths) => `Spec: odd/tasks/feat.md, T1\n${surfaces(...paths)}`
+  const spec = (...paths) => `Spec: .vault/tasks/feat.md, T1\n${surfaces(...paths)}`
   test('a glob surface is denied: oracle surfaces are exact paths', () => {
     const repo = withFeature('pending')
     for (const glob of ['tests/*.test.mjs', 'tests/a/**/x.test.mjs', 'tests/a?.test.mjs', 'tests/[ab].test.mjs', 'tests/{a,b}.test.mjs']) {
@@ -456,7 +456,7 @@ describe('oracle admission', () => {
   test('an oracle needs a valid Spec line even when no feature document is unfinished', () => {
     const repo = plain()
     denied(launch(repo, env(), ORACLE, surfaces('tests/a.test.mjs')), /Spec/)
-    denied(launch(repo, env(), ORACLE, `Spec: odd/tasks/missing.md, T1\n${surfaces('tests/a.test.mjs')}`), /Spec/)
+    denied(launch(repo, env(), ORACLE, `Spec: .vault/tasks/missing.md, T1\n${surfaces('tests/a.test.mjs')}`), /Spec/)
   })
   test('an oracle surface that is an existing directory is denied', () => {
     const repo = withFeature('pending')

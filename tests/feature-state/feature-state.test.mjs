@@ -29,18 +29,18 @@ function doc({ title = 'Feature X', branch = 'Tracker branch: `feat/x`', rows = 
 
 function setMtime(repo, name, seconds) {
   const t = new Date(Date.now() + seconds * 1000)
-  utimesSync(join(repo, 'odd/tasks', name), t, t)
+  utimesSync(join(repo, '.vault/tasks', name), t, t)
 }
 
 test('one active document lists path, title, branch, unfinished rows, and the last Next step', () => {
   const repo = makeRepo()
-  write(repo, 'odd/tasks/alpha.md', doc({
+  write(repo, '.vault/tasks/alpha.md', doc({
     title: 'Alpha plan',
     rows: [['T1', 'First thing', 'done'], ['T2', 'Second thing', 'in progress'], ['T3', 'Third thing', 'pending']],
     log: '- L1 Next step: old\n- L2 notes\n  - Next step: do T2 now\n',
   }))
   const text = context(run(repo))
-  assert.match(text, /odd\/tasks\/alpha\.md/)
+  assert.match(text, /\.vault\/tasks\/alpha\.md/)
   assert.match(text, /Alpha plan/)
   assert.match(text, /Tracker branch: `feat\/x`/)
   assert.match(text, /T2 — Second thing/)
@@ -54,7 +54,7 @@ test('one active document lists path, title, branch, unfinished rows, and the la
 
 test('runs on a Node without require(esm) detection (S18)', () => {
   const repo = makeRepo()
-  write(repo, 'odd/tasks/a.md', doc({ rows: [['T1', 'x', 'pending']] }))
+  write(repo, '.vault/tasks/a.md', doc({ rows: [['T1', 'x', 'pending']] }))
   const r = spawnSync('node', ['--no-experimental-detect-module', SCRIPT], { input: JSON.stringify({ cwd: repo, source: 'compact' }), encoding: 'utf8', cwd: scratchDir('fs-run-') })
   assert.equal(r.status, 0)
   assert.match(context(r), /T1 — x/)
@@ -62,13 +62,13 @@ test('runs on a Node without require(esm) detection (S18)', () => {
 
 test('a Branch: header line is also reported', () => {
   const repo = makeRepo()
-  write(repo, 'odd/tasks/b.md', doc({ branch: 'Branch: `odd/b`', rows: [['T1', 'x', 'pending']] }))
+  write(repo, '.vault/tasks/b.md', doc({ branch: 'Branch: `odd/b`', rows: [['T1', 'x', 'pending']] }))
   assert.match(context(run(repo)), /Branch: `odd\/b`/)
 })
 
 test('all tasks done: no output, exit 0', () => {
   const repo = makeRepo()
-  write(repo, 'odd/tasks/a.md', doc({ rows: [['T1', 'x', 'done'], ['T2', 'y', 'done']] }))
+  write(repo, '.vault/tasks/a.md', doc({ rows: [['T1', 'x', 'done'], ['T2', 'y', 'done']] }))
   const r = run(repo)
   assert.equal(r.status, 0)
   assert.equal(r.stdout, '')
@@ -76,19 +76,19 @@ test('all tasks done: no output, exit 0', () => {
 
 test('dropped counts as finished', () => {
   const repo = makeRepo()
-  write(repo, 'odd/tasks/a.md', doc({ rows: [['T1', 'x', 'done'], ['T2', 'y', 'dropped']] }))
+  write(repo, '.vault/tasks/a.md', doc({ rows: [['T1', 'x', 'done'], ['T2', 'y', 'dropped']] }))
   assert.equal(run(repo).stdout, '')
 })
 
 test('a status whose first word is done or dropped counts as finished', () => {
   const repo = makeRepo()
-  write(repo, 'odd/tasks/a.md', doc({ rows: [['T1', 'x', 'done (RED 4 fail; GREEN 24/24)'], ['T2', 'y', 'Done.'], ['T3', 'z', 'dropped — reason']] }))
+  write(repo, '.vault/tasks/a.md', doc({ rows: [['T1', 'x', 'done (RED 4 fail; GREEN 24/24)'], ['T2', 'y', 'Done.'], ['T3', 'z', 'dropped — reason']] }))
   assert.equal(run(repo).stdout, '')
 })
 
 test('undone and other first words stay unfinished', () => {
   const repo = makeRepo()
-  write(repo, 'odd/tasks/a.md', doc({ rows: [['T1', 'x', 'done (ok)'], ['T2', 'open one', 'undone'], ['T3', 'y', 'pending, done soon']] }))
+  write(repo, '.vault/tasks/a.md', doc({ rows: [['T1', 'x', 'done (ok)'], ['T2', 'open one', 'undone'], ['T3', 'y', 'pending, done soon']] }))
   const text = context(run(repo))
   assert.match(text, /open one/)
   assert.match(text, /T3/)
@@ -97,24 +97,24 @@ test('undone and other first words stay unfinished', () => {
 
 test('statuses compare case-insensitively', () => {
   const repo = makeRepo()
-  write(repo, 'odd/tasks/a.md', doc({ rows: [['T1', 'x', 'DONE'], ['T2', 'y', 'Dropped']] }))
+  write(repo, '.vault/tasks/a.md', doc({ rows: [['T1', 'x', 'DONE'], ['T2', 'y', 'Dropped']] }))
   assert.equal(run(repo).stdout, '')
-  write(repo, 'odd/tasks/b.md', doc({ rows: [['T1', 'open one', 'Pending'], ['T2', 'z', 'Done']] }))
+  write(repo, '.vault/tasks/b.md', doc({ rows: [['T1', 'open one', 'Pending'], ['T2', 'z', 'Done']] }))
   const text = context(run(repo))
   assert.match(text, /open one/)
-  assert.doesNotMatch(text, /odd\/tasks\/a\.md/)
+  assert.doesNotMatch(text, /\.vault\/tasks\/a\.md/)
 })
 
 test('at most three documents, newest mtime first', () => {
   const repo = makeRepo()
   const names = ['d1', 'd2', 'd3', 'd4']
   names.forEach((n, i) => {
-    write(repo, `odd/tasks/${n}.md`, doc({ title: `Title ${n}`, rows: [['T1', `task ${n}`, 'pending']] }))
+    write(repo, `.vault/tasks/${n}.md`, doc({ title: `Title ${n}`, rows: [['T1', `task ${n}`, 'pending']] }))
     setMtime(repo, `${n}.md`, i * 10) // d4 newest, d1 oldest
   })
   const text = context(run(repo))
   assert.doesNotMatch(text, /d1\.md/)
-  const order = ['d4', 'd3', 'd2'].map((n) => text.indexOf(`odd/tasks/${n}.md`))
+  const order = ['d4', 'd3', 'd2'].map((n) => text.indexOf(`.vault/tasks/${n}.md`))
   assert.ok(order.every((i) => i >= 0))
   assert.deepEqual([...order].sort((a, b) => a - b), order)
 })
@@ -123,18 +123,18 @@ test('additionalContext stays within 2500 characters and keeps every header', ()
   const repo = makeRepo()
   for (const n of ['p', 'q', 'r']) {
     const rows = Array.from({ length: 40 }, (_, i) => [`T${i}`, `${'long task text '.repeat(20)}${n}`, 'pending'])
-    write(repo, `odd/tasks/${n}.md`, doc({ title: `Title ${n}`, rows, log: 'Next step: go\n' }))
+    write(repo, `.vault/tasks/${n}.md`, doc({ title: `Title ${n}`, rows, log: 'Next step: go\n' }))
   }
   const text = context(run(repo))
   assert.ok(text.length <= 2500, `length ${text.length}`)
-  for (const n of ['p', 'q', 'r']) assert.match(text, new RegExp(`odd/tasks/${n}\\.md`))
+  for (const n of ['p', 'q', 'r']) assert.match(text, new RegExp(`.vault/tasks/${n}\\.md`))
   assert.match(text, /Read the full document before continuing\./)
   assert.match(text, /Read the full document before continuing/)
 })
 
 test('task cells are truncated to 160 characters', () => {
   const repo = makeRepo()
-  write(repo, 'odd/tasks/a.md', doc({ rows: [['T1', 'x'.repeat(400), 'pending']] }))
+  write(repo, '.vault/tasks/a.md', doc({ rows: [['T1', 'x'.repeat(400), 'pending']] }))
   const text = context(run(repo))
   assert.match(text, /x{100}/)
   assert.doesNotMatch(text, /x{161}/)
@@ -143,52 +143,52 @@ test('task cells are truncated to 160 characters', () => {
 test('a Tasks heading of level 2-6 with trailing text is read, as the publication gate reads it', () => {
   for (const heading of ['### Tasks', '## Tasks (phase 2)']) {
     const repo = makeRepo()
-    write(repo, 'odd/tasks/a.md', doc({ rows: [['T1', 'Open thing', 'pending']] }).replace('## Tasks', heading))
+    write(repo, '.vault/tasks/a.md', doc({ rows: [['T1', 'Open thing', 'pending']] }).replace('## Tasks', heading))
     assert.match(context(run(repo)), /T1 — Open thing/)
   }
   const repo = makeRepo()
-  write(repo, 'odd/tasks/a.md', doc({ rows: [['T1', 'Open thing', 'pending']] }).replace('## Tasks\n', '### Tasks\n\n## Other\n'))
+  write(repo, '.vault/tasks/a.md', doc({ rows: [['T1', 'Open thing', 'pending']] }).replace('## Tasks\n', '### Tasks\n\n## Other\n'))
   assert.equal(run(repo).stdout, '')
 })
 
 test('a malformed table yields no output and exit 0', () => {
   const repo = makeRepo()
-  write(repo, 'odd/tasks/a.md', '# Broken\n\n## Tasks\n\n| ID | Task |\n| T1 | only |\n| T2\n\n## Log\n')
+  write(repo, '.vault/tasks/a.md', '# Broken\n\n## Tasks\n\n| ID | Task |\n| T1 | only |\n| T2\n\n## Log\n')
   const r = run(repo)
   assert.equal(r.status, 0)
   assert.equal(r.stdout, '')
-  write(repo, 'odd/tasks/b.md', '# No table\n\n## Tasks\n\nnothing here\n')
+  write(repo, '.vault/tasks/b.md', '# No table\n\n## Tasks\n\nnothing here\n')
   assert.equal(run(repo).stdout, '')
 })
 
-test('an odd/tasks directory without markdown files yields no output', () => {
+test('an .vault/tasks directory without markdown files yields no output', () => {
   const repo = makeRepo()
-  mkdirSync(join(repo, 'odd/tasks'), { recursive: true })
-  write(repo, 'odd/tasks/notes.txt', 'x')
+  mkdirSync(join(repo, '.vault/tasks'), { recursive: true })
+  write(repo, '.vault/tasks/notes.txt', 'x')
   const r = run(repo)
   assert.equal(r.status, 0)
   assert.equal(r.stdout, '')
 })
 
-test('no repository and no odd/tasks yields no output', () => {
+test('no repository and no .vault/tasks yields no output', () => {
   const dir = scratchDir('fs-norepo-')
   const r = run(dir)
   assert.equal(r.status, 0)
   assert.equal(r.stdout, '')
 })
 
-test('no repository but an odd/tasks directory under cwd still works', () => {
+test('no repository but an .vault/tasks directory under cwd still works', () => {
   const dir = scratchDir('fs-plain-')
-  write(dir, 'odd/tasks/a.md', doc({ rows: [['T1', 'plain task', 'pending']] }))
+  write(dir, '.vault/tasks/a.md', doc({ rows: [['T1', 'plain task', 'pending']] }))
   assert.match(context(run(dir)), /plain task/)
 })
 
 test('a nested cwd inside the repository resolves to the root', () => {
   const repo = makeRepo()
-  write(repo, 'odd/tasks/a.md', doc({ rows: [['T1', 'nested task', 'pending']] }))
+  write(repo, '.vault/tasks/a.md', doc({ rows: [['T1', 'nested task', 'pending']] }))
   write(repo, 'src/deep/file.txt', 'x')
   const text = context(run(join(repo, 'src/deep')))
-  assert.match(text, /odd\/tasks\/a\.md/)
+  assert.match(text, /\.vault\/tasks\/a\.md/)
   assert.match(text, /nested task/)
 })
 
@@ -214,7 +214,7 @@ test('hooks.json registers the script on compact|resume in exec form', () => {
 
 test('the script writes nothing: the tree and mtimes stay the same', () => {
   const repo = makeRepo()
-  write(repo, 'odd/tasks/a.md', doc({ rows: [['T1', 'x', 'pending']] }))
+  write(repo, '.vault/tasks/a.md', doc({ rows: [['T1', 'x', 'pending']] }))
   const snapshot = () => {
     const out = []
     const walk = (d) => {
@@ -237,7 +237,7 @@ test('the script writes nothing: the tree and mtimes stay the same', () => {
 
 test('an unescaped pipe in the task cell does not shift the status column', () => {
   const repo = makeRepo()
-  write(repo, 'odd/tasks/pipe.md', doc({ rows: [['T1', 'use a|b', 'done'], ['T2', 'plain', 'pending']] }))
+  write(repo, '.vault/tasks/pipe.md', doc({ rows: [['T1', 'use a|b', 'done'], ['T2', 'plain', 'pending']] }))
   const text = context(run(repo))
   assert.match(text, /T2 — plain/)
   assert.doesNotMatch(text, /T1/)
@@ -253,7 +253,7 @@ const coverage = (text) => text.split('\n').filter((l) => /^Coverage:/.test(l))
 
 test('S1: a Branch inside the template header line is found, value only', () => {
   const repo = makeRepo()
-  write(repo, 'odd/tasks/a.md', specDoc())
+  write(repo, '.vault/tasks/a.md', specDoc())
   const text = context(run(repo))
   assert.match(text, /^Branch: feat\/y$/m)
   assert.doesNotMatch(text, /Baseline/)
@@ -261,7 +261,7 @@ test('S1: a Branch inside the template header line is found, value only', () => 
 
 test('S1: a spec with no task is warned', () => {
   const repo = makeRepo()
-  write(repo, 'odd/tasks/a.md', specDoc({ specs: ['S1', 'S2', 'S3'] }))
+  write(repo, '.vault/tasks/a.md', specDoc({ specs: ['S1', 'S2', 'S3'] }))
   const [line, ...rest] = coverage(context(run(repo)))
   assert.equal(rest.length, 0)
   assert.match(line, /S3/)
@@ -270,7 +270,7 @@ test('S1: a spec with no task is warned', () => {
 
 test('S1: a task naming an unknown spec is warned', () => {
   const repo = makeRepo()
-  write(repo, 'odd/tasks/a.md', specDoc({ tasks: [['T1', 'S1, S2'], ['T2', 'S9']] }))
+  write(repo, '.vault/tasks/a.md', specDoc({ tasks: [['T1', 'S1, S2'], ['T2', 'S9']] }))
   const [line] = coverage(context(run(repo)))
   assert.match(line, /T2/)
   assert.match(line, /S9/)
@@ -279,22 +279,22 @@ test('S1: a task naming an unknown spec is warned', () => {
 
 test('S1: ranges S3-S4 (hyphen and en dash) cover both ends', () => {
   const repo = makeRepo()
-  write(repo, 'odd/tasks/a.md', specDoc({ specs: ['S1', 'S2', 'S3', 'S4'], tasks: [['T1', 'S1-S2'], ['T2', 'S3–S4']] }))
+  write(repo, '.vault/tasks/a.md', specDoc({ specs: ['S1', 'S2', 'S3', 'S4'], tasks: [['T1', 'S1-S2'], ['T2', 'S3–S4']] }))
   assert.deepEqual(coverage(context(run(repo))), [])
 })
 
 test('S1: no warning when fully covered, nor without Specs section or column', () => {
   const repo = makeRepo()
-  write(repo, 'odd/tasks/a.md', specDoc())
-  write(repo, 'odd/tasks/b.md', specDoc().replace('## Specs', '## Notes'))
-  write(repo, 'odd/tasks/c.md', specDoc().replace('| Specs |', '| Spec ref |'))
+  write(repo, '.vault/tasks/a.md', specDoc())
+  write(repo, '.vault/tasks/b.md', specDoc().replace('## Specs', '## Notes'))
+  write(repo, '.vault/tasks/c.md', specDoc().replace('| Specs |', '| Spec ref |'))
   assert.deepEqual(coverage(context(run(repo))), [])
 })
 
 test('S1: the warning survives when rows are truncated by the budget', () => {
   const repo = makeRepo()
   const many = Array.from({ length: 60 }, (_, i) => [`T${i + 1}`, 'S1'])
-  write(repo, 'odd/tasks/a.md', specDoc({ specs: ['S1', 'S2'], tasks: many }).replace(/task (T\d+)/g, `$1 ${'x'.repeat(100)}`))
+  write(repo, '.vault/tasks/a.md', specDoc({ specs: ['S1', 'S2'], tasks: many }).replace(/task (T\d+)/g, `$1 ${'x'.repeat(100)}`))
   const text = context(run(repo))
   assert.match(text, /\(\+\d+ more unfinished\)/)
   assert.match(coverage(text)[0], /S2/)

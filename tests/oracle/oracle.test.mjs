@@ -11,7 +11,7 @@ const PLUGIN = new URL('../../plugins/construct/', import.meta.url).pathname
 const HOOK = join(PLUGIN, 'hooks/scripts/oracle-record.mjs')
 const ORACLE = 'construct:oracle'
 
-const prompt = (...paths) => `Write the acceptance tests.\n\nSpec: odd/tasks/feat.md, T1 (covers S1)\n\n## Allowed edit surfaces\n${paths.join('\n')}\n\n## Verification\n- node --test\n`
+const prompt = (...paths) => `Write the acceptance tests.\n\nSpec: .vault/tasks/feat.md, T1 (covers S1)\n\n## Allowed edit surfaces\n${paths.join('\n')}\n\n## Verification\n- node --test\n`
 
 function stop(repo, { type = ORACLE, text, transcript = true, raw } = {}) {
   const file = join(scratchDir('odd-oracle-'), 't.jsonl')
@@ -32,7 +32,7 @@ describe('oracle-record', () => {
     assert.deepEqual(records.map((x) => x.path), ['tests/a.test.mjs', 'tests/b.test.mjs'])
     for (const rec of records) {
       assert.equal(rec.blob, git(repo, 'hash-object', rec.path).trim())
-      assert.equal(rec.feature, 'odd/tasks/feat.md')
+      assert.equal(rec.feature, '.vault/tasks/feat.md')
       assert.equal(rec.task, 'T1')
       assert.equal(typeof rec.at, 'number')
     }
@@ -46,7 +46,7 @@ describe('oracle-record', () => {
     write(repo, 'tests/a.test.mjs', 'two\n')
     stop(repo, { text: prompt('tests/a.test.mjs').replace('feat.md, T1', 'other.md, T2') })
     assert.deepEqual(readOracles(repo), [first])
-    assert.equal(first.feature, 'odd/tasks/feat.md')
+    assert.equal(first.feature, '.vault/tasks/feat.md')
     assert.equal(first.task, 'T1')
   })
 
@@ -65,7 +65,7 @@ describe('oracle-record', () => {
       stop(repo, { raw: '' }),
       stop(repo, { text: prompt('tests/a.test.mjs'), transcript: false }),
       stop(repo, { text: '## Allowed edit surfaces\ntests/a.test.mjs\n' }),
-      stop(repo, { text: 'Spec: odd/tasks/feat.md, T1\n\nno surfaces' }),
+      stop(repo, { text: 'Spec: .vault/tasks/feat.md, T1\n\nno surfaces' }),
     ]) assert.deepEqual(r, { status: 0, stdout: '' })
     assert.deepEqual(readOracles(repo), [])
   })

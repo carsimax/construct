@@ -39,7 +39,7 @@ test('nothing to show draws nothing: idle, no feature, no gate activity, no agen
 
 test('row one: phase, feature with checkpoints and task, gate; row two: running agents with model and clock', () => {
   expect(rowsOf(band())).toEqual([
-    '● building · ODD engram-only-memory ●━●━◆━○ T3 Explorer recall tools · gate ✓ 14 ⚠ 1 inline',
+    '● building · ADD engram-only-memory ●━●━◆━○ T3 Explorer recall tools · gate ✓ 14 ⚠ 1 inline',
     '⚒ worker building Sonnet 5.5 1:42 · ⌕ explorer mapping Haiku 5.5 0:20',
   ])
 })
@@ -50,7 +50,7 @@ test('the band draws nothing the status line shows: no model of the main thread,
 })
 
 test('status reads ready when idle, the phase while a turn runs, and waiting on you when blocked', () => {
-  expect(rowsOf(band({ state: busy({ turn: null, agents: [] }) }))[0]).toMatch(/^○ ready · ODD/)
+  expect(rowsOf(band({ state: busy({ turn: null, agents: [] }) }))[0]).toMatch(/^○ ready · ADD/)
   expect(rowsOf(band({ state: busy({ agents: [] }) }))[0]).toMatch(/^● busy · /)
   expect(rowsOf(band({ state: busy({ agents: [agent({ role: 'verifier', type: 'construct:verifier' })] }) }))[0]).toMatch(/^● verifying · /)
   expect(rowsOf(band({ state: busy({ blocked: true }) }))[0]).toMatch(/^◆ waiting on you · /)
@@ -81,7 +81,7 @@ test('an agent with no construct role shows its type with the plain look', () =>
 
 test('a narrow band drops the task title, then the models, then clips with an ellipsis', () => {
   expect(rowsOf(band({ columns: 80 }))).toEqual([
-    '● building · ODD engram-only-memory ●━●━◆━○ T3 · gate ✓ 14 ⚠ 1 inline',
+    '● building · ADD engram-only-memory ●━●━◆━○ T3 · gate ✓ 14 ⚠ 1 inline',
     '⚒ worker building Sonnet 5.5 1:42 · ⌕ explorer mapping Haiku 5.5 0:20',
   ])
   const rows = rowsOf(band({ columns: 40 }))

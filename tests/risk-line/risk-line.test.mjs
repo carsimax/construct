@@ -167,7 +167,7 @@ describe('snapshot budget', () => {
 })
 
 describe('check', () => {
-  test('blocks a change outside odd/tasks without a Risk line', () => {
+  test('blocks a change outside .vault/tasks without a Risk line', () => {
     const { repo, e } = changed()
     const r = check(repo, e, 'Done.')
     assert.equal(r.status, 0)
@@ -216,12 +216,12 @@ describe('check', () => {
     silent(check(repo, e, close))
   })
 
-  test('a rename into odd/tasks reports the deleted source path', () => {
+  test('a rename into .vault/tasks reports the deleted source path', () => {
     const repo = makeRepo({ 'src/a.js': 'export const a = 1\n' })
     const e = env()
     silent(run('mark', repo, e))
-    mkdirSync(join(repo, 'odd/tasks'), { recursive: true })
-    execFileSync('git', ['mv', 'src/a.js', 'odd/tasks/a.js'], { cwd: repo })
+    mkdirSync(join(repo, '.vault/tasks'), { recursive: true })
+    execFileSync('git', ['mv', 'src/a.js', '.vault/tasks/a.js'], { cwd: repo })
     const r = check(repo, e, 'Done.')
     assert.equal(r.json.decision, 'block')
     assert.match(r.json.reason, /src\/a\.js/)
@@ -245,8 +245,8 @@ describe('check', () => {
     silent(check(repo, e, 'Done.'))
   })
 
-  test('only odd/tasks changed', () => {
-    const { repo, e } = changed({ 'odd/tasks/x.md': '# x\n' })
+  test('only .vault/tasks changed', () => {
+    const { repo, e } = changed({ '.vault/tasks/x.md': '# x\n' })
     silent(check(repo, e, 'Done.'))
   })
 
@@ -468,8 +468,8 @@ describe('verifier-weakening markers (S2)', () => {
     silent(check(repo, e, 'Done.\nRisk: none'))
   })
 
-  test('markers under odd/tasks are ignored', () => {
-    const { r } = marked({ 'odd/tasks/f.md': '// TODO x\nit.skip(1)\n' })
+  test('markers under .vault/tasks are ignored', () => {
+    const { r } = marked({ '.vault/tasks/f.md': '// TODO x\nit.skip(1)\n' })
     silent(r)
   })
 

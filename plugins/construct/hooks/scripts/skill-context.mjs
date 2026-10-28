@@ -36,7 +36,7 @@ function workflow(cwd, root) {
   try {
     docs = activeDocuments(root)
   } catch {
-    // No odd/tasks directory: no feature documents.
+    // No .vault/tasks directory: no feature documents.
   }
   if (docs.length === 0) return ['No unfinished feature tasks.', ...changes]
   const tasks = docs.slice(0, 3).flatMap(({ doc }) => [doc.path, ...doc.rows.slice(0, MAX_TASK_LINES).map((r) => `- ${r.length > 120 ? `${r.slice(0, 119)}…` : r}`), ...(doc.rows.length > MAX_TASK_LINES ? [`- (+${doc.rows.length - MAX_TASK_LINES} more unfinished)`] : [])])

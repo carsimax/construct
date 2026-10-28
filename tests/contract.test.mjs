@@ -40,11 +40,11 @@ test('the session contract emits the same text after compaction and on malformed
   assert.equal(context('session', '').additionalContext, startup)
 })
 
-test('the session contract carries the ODD protocol, task size, risk line, and delegation anchors', () => {
+test('the session contract carries the ADD protocol, task size, risk line, and delegation anchors', () => {
   const text = context('session', SESSION).additionalContext
   for (const anchor of [
-    'Organic Driven Development',
-    'odd/tasks/<feature>.md',
+    'Agent Driven Development',
+    '.vault/tasks/<feature>.md',
     'Risk: item',
     'Risk: none',
     'migrations',

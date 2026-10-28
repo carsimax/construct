@@ -3,8 +3,8 @@ set -euo pipefail
 git init -q
 printf '{ "type": "module", "scripts": { "test": "node --test" } }\n' > package.json
 printf 'script-shell=/bin/sh\n' > .npmrc
-mkdir -p odd/tasks
-cat > odd/tasks/discount.md <<'MD'
+mkdir -p .vault/tasks
+cat > .vault/tasks/discount.md <<'MD'
 # Feature: order discount
 
 ## Specs

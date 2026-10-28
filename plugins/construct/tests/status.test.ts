@@ -63,7 +63,7 @@ async function drawBand($, on, o: any = {}) {
   const seen = world($, on, o)
   await $.session.start({ cwd: '/home/me/proj', source: 'startup' })
   const ui = await $.ui.mount({ plugin: 'construct', surface: 'terminal', component: 'AbovePrompt', props: BAND })
-  for (let i = 0; i < 40 && !(await leaves(ui)).some((l) => l.text.includes('ODD')); i++) {
+  for (let i = 0; i < 40 && !(await leaves(ui)).some((l) => l.text.includes('ADD')); i++) {
     await ui.redraw()
     await new Promise((r) => setTimeout(r, 5))
   }
@@ -104,7 +104,7 @@ test('the band shows the feature and leaves the model, context, limits and git t
     usage: { startedAt: 0, context: { window: 1_000_000, tokens: 120_000, percent: 12 }, rateLimits: [{ kind: 'five_hour', percentUsed: 30 }], cost: { usd: 3.5 } },
   })
   const text = await joined(ui)
-  expect(text).toMatch(/ODD feat.*T2 second/)
+  expect(text).toMatch(/ADD feat.*T2 second/)
   for (const w of ['ctx', '12%', '5h', '30%', 'Opus', '⎇', '$3.50', '~/proj', 'Explanatory']) expect(text).not.toContain(w)
 })
 
@@ -128,7 +128,7 @@ test('the band draws no matrix mark and no inline rail', async ($, on) => {
 
 test('a failing process still finds the feature from the session directory and does not throw', async ($, on) => {
   const { ui } = await drawBand($, on, { fail: true })
-  expect(await joined(ui)).toMatch(/ODD feat.*T2/)
+  expect(await joined(ui)).toMatch(/ADD feat.*T2/)
 })
 
 test('the only probe is git rev-parse, run on session.start and turn.complete, never on render', async ($, on) => {

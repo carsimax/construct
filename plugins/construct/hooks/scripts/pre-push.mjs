@@ -24,8 +24,8 @@ try {
     let reason = verdict({ gate: 'pre-push', dir, base: null, refs: [ref] })
     if (reason?.includes('default branch cannot be resolved')) {
       // Without a default branch nothing can be compared; a commit with no feature document at all publishes no tracked work.
-      // shortcut: a document moved out of odd/tasks/ is not seen here, upgrade if repositories without a default branch track work.
-      const tree = git(dir, ['ls-tree', '-r', '--name-only', localSha, '--', 'odd/tasks/']).toString('utf8')
+      // shortcut: a document moved out of .vault/tasks/ is not seen here, upgrade if repositories without a default branch track work.
+      const tree = git(dir, ['ls-tree', '-r', '--name-only', localSha, '--', '.vault/tasks/']).toString('utf8')
       if (!/\.md$/m.test(tree)) continue
       reason += ` Run \`git remote set-head ${remote} --auto\` to record the remote's default branch. ${WAYS_OUT}`
     } else if (reason?.includes('could not be checked (git merge-base ')) {

@@ -28,7 +28,7 @@ Branch: feat/x
 function featureRepo() {
   const repo = makeRepo()
   git(repo, 'checkout', '-q', '-b', 'feat/x')
-  write(repo, 'odd/tasks/x.md', DOC)
+  write(repo, '.vault/tasks/x.md', DOC)
   write(repo, 'src/a.txt', 'one\ntwo\nthree\n')
   commitAll(repo, 'feature')
   return repo
@@ -52,7 +52,7 @@ test('workflow lists the short status and the unfinished tasks', () => {
   const r = run(repo, 'workflow')
   assert.equal(r.status, 0)
   assert.match(r.stdout, /\?\? src\/dirty\.txt/)
-  assert.match(r.stdout, /odd\/tasks\/x\.md/)
+  assert.match(r.stdout, /\.vault\/tasks\/x\.md/)
   assert.match(r.stdout, /T2 — Open work/)
   assert.doesNotMatch(r.stdout, /T1/)
 })
@@ -90,7 +90,7 @@ test('review reports a rejected lens and no requirement when the Risk cells are 
   const head = tree(repo, 'HEAD')
   writeVerdict(repo, { lens: 'review-risk', subject_hash: subjectHash(base, head), approved: false, at: Date.now(), result: {} })
   assert.match(run(repo, 'review').stdout, /review-risk: rejected/)
-  write(repo, 'odd/tasks/x.md', DOC.replace('2, 3', 'none'))
+  write(repo, '.vault/tasks/x.md', DOC.replace('2, 3', 'none'))
   commitAll(repo, 'lower risk')
   assert.match(run(repo, 'review').stdout, /no review required/i)
 })
@@ -109,16 +109,16 @@ test('review shows the risk floor on a branch with no feature document', () => {
 // The skill reads the gate's own reviewState, so a range expands and a malformed cell fails as the gate would.
 test('review shares the gate parser: ranges expand, a malformed Risk cell is unavailable', () => {
   const repo = featureRepo()
-  write(repo, 'odd/tasks/x.md', DOC.replace('2, 3', '3-5'))
+  write(repo, '.vault/tasks/x.md', DOC.replace('2, 3', '3-5'))
   commitAll(repo, 'range')
   const r = run(repo, 'review')
   assert.equal(r.status, 0)
   assert.match(r.stdout, /Risk items 3, 4, 5;/)
-  write(repo, 'odd/tasks/x.md', DOC.replace('2, 3', 'maybe'))
+  write(repo, '.vault/tasks/x.md', DOC.replace('2, 3', 'maybe'))
   commitAll(repo, 'malformed')
   const bad = run(repo, 'review')
   assert.equal(bad.status, 0)
-  assert.match(bad.stdout, /^\(state unavailable: odd\/tasks\/x\.md has a Risk cell that is neither "none" nor names an item 1-6: "maybe"\)\n$/)
+  assert.match(bad.stdout, /^\(state unavailable: \.vault\/tasks\/x\.md has a Risk cell that is neither "none" nor names an item 1-6: "maybe"\)\n$/)
 })
 
 test('review leaves the review store byte-for-byte unchanged', () => {
@@ -199,7 +199,7 @@ test('an unknown or missing kind exits 0 with one unavailable line', () => {
 test('the output never exceeds 1,500 characters', () => {
   const repo = makeRepo()
   const rows = Array.from({ length: 80 }, (_, n) => `| T${n} | S1 | ${'long task text '.repeat(8)} | none | pending |`).join('\n')
-  write(repo, 'odd/tasks/big.md', `# Big\n\n## Tasks\n\n| ID | Specs | Task | Risk | Status |\n|---|---|---|---|---|\n${rows}\n`)
+  write(repo, '.vault/tasks/big.md', `# Big\n\n## Tasks\n\n| ID | Specs | Task | Risk | Status |\n|---|---|---|---|---|\n${rows}\n`)
   for (let n = 0; n < 200; n++) write(repo, `dir/${'n'.repeat(30)}${n}.txt`, 'x\n')
   for (let n = 0; n < 60; n++) git(repo, 'branch', `feat/x-t${'9'.repeat(40)}${n}`)
   git(repo, 'checkout', '-q', '-b', 'feat/x')
@@ -211,7 +211,7 @@ test('the output never exceeds 1,500 characters', () => {
 const longDocs = (repo) => {
   for (const name of ['a', 'b', 'c']) {
     const rows = Array.from({ length: 12 }, (_, n) => `| T${n} | S1 | ${name} ${'long task text '.repeat(8)} | none | pending |`).join('\n')
-    write(repo, `odd/tasks/${name}.md`, `# ${name}\n\n## Tasks\n\n| ID | Specs | Task | Risk | Status |\n|---|---|---|---|---|\n${rows}\n`)
+    write(repo, `.vault/tasks/${name}.md`, `# ${name}\n\n## Tasks\n\n| ID | Specs | Task | Risk | Status |\n|---|---|---|---|---|\n${rows}\n`)
   }
 }
 
@@ -269,7 +269,7 @@ test('workflow takes no optional index lock: a stale index is left as it was', (
 
 test('review on the default branch with no remote-tracking branch says the state cannot be checked, as the gate does', () => {
   const repo = makeRepo()
-  write(repo, 'odd/tasks/x.md', DOC)
+  write(repo, '.vault/tasks/x.md', DOC)
   commitAll(repo, 'on main')
   const r = run(repo, 'review')
   assert.equal(r.status, 0)
@@ -280,7 +280,7 @@ test('review on the default branch with no remote-tracking branch says the state
 test('review lists the active oracle locks with up to three paths, and omits the line with none', () => {
   const repo = featureRepo()
   assert.doesNotMatch(run(repo, 'review').stdout, /Oracle locks/)
-  for (const n of [1, 2, 3, 4]) writeOracle(repo, { path: `tests/t${n}.test.mjs`, blob: 'a'.repeat(40), feature: 'odd/tasks/x.md', task: 'T1', at: Date.now() })
+  for (const n of [1, 2, 3, 4]) writeOracle(repo, { path: `tests/t${n}.test.mjs`, blob: 'a'.repeat(40), feature: '.vault/tasks/x.md', task: 'T1', at: Date.now() })
   const r = run(repo, 'review')
   assert.equal(r.status, 0)
   // The store lists locks by hash of the path, so which three show is not fixed.

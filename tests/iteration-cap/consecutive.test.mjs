@@ -1,4 +1,4 @@
-// The cap counts consecutive failures: a passing run of the command resets its count (L4 of odd/tasks/iteration-cap.md).
+// The cap counts consecutive failures: a passing run of the command resets its count (L4 of .vault/tasks/iteration-cap.md).
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
