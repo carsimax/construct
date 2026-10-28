@@ -31,7 +31,7 @@ A failed install or missing package is never replaced by a similar name: stop wi
 
 ## Fix rounds
 
-Given confirmed finding ids as the spec: fix only those: no refactor, no new findings; report new problems back. Report each fix as `file:line` and change.
+Given confirmed finding ids as the spec: fix only those: no refactor, no unflagged code, no new findings; report new problems back. Report fixes as `file:line`.
 
 ## Verification
 

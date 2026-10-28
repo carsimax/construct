@@ -39,6 +39,11 @@ describe('handoff templates vs delegation-admission', () => {
     assert.equal(launch('construct:jd-fix-agent', 'Do the thing'), '')
   })
 
+  test('oracle template is admitted once placeholders are exact test paths', () => {
+    const prompt = template('Oracle').replace('<feature>', 'feat').replace('<n>', '1').replace('<exact-test-file-path>', 'tests/a.test.mjs').replace('<another-exact-test-file-path>', 'tests/b.test.mjs')
+    assert.equal(launch('construct:oracle', prompt), '')
+  })
+
   test('worker template names the Spec and surfaces forms literally', () => {
     const worker = template('Worker')
     assert.match(worker, /^Spec: odd\/tasks\/<feature>\.md, T<n>/m)

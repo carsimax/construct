@@ -18,11 +18,12 @@ Small work is done inline: the parent edits directly when each call changes at m
 
 - Worker: one per independent unit, code, tests, and docs together. Disjoint units launch in one message; dependent ones in order, never a second agent of one role and task in a turn.
 - Workflows launch only read-only agents, each `agent()` naming its `agentType` (hook); writes go through `construct:worker`.
-- `construct:oracle`: before the worker of a Risk-named task with a runnable test; writes the `S#` tests RED (`## Oracle` handoff).
+- `construct:oracle`: a Risk-named task with a runnable test gets its `S#` tests RED before the worker.
 - `construct:explorer`: mapping beyond one batch or about 5 sequential lookups, one per front, at most 3 per message; dependents wait.
 - `construct:general`: long suites, builds, installs, broad research.
 - `construct:verifier`: only for a Risk-named item (see Verification).
 - Model and effort come from plugin config (`model_<role>`, `effort_<role>`), never a prompt.
+- Keep parent output bounded: counts, stat, tails, summaries.
 
 ## Writer handoff
 
@@ -32,7 +33,7 @@ delegation-admission denies a `construct:worker` launch that lacks:
 - While a feature document is unfinished: `Spec: odd/tasks/<feature>.md, T<n>` pointing at a real file, not a symlink, under `odd/tasks/`.
 - Surfaces disjoint from every writer still open. An entry it cannot interpret counts as overlap. A shared file has one owner; run writers in sequence or `isolation: worktree` when files overlap.
 
-surface-guard then denies writes outside those entries. A worker given no list returns `needs_interaction` with candidate paths; paths change only on a human instruction. Writers run no repo-wide formatters, generators, or installs; other-repository work goes in a fresh worktree.
+surface-guard then denies writes outside those entries. A worker given no list returns `needs_interaction` with candidate paths; the parent offers approve or decline, and paths change only on a human instruction. Writers run no repo-wide formatters, generators, or installs; other-repository work goes in a fresh worktree.
 
 ## Prompt contents
 
@@ -59,4 +60,4 @@ When a subagent or tool hands back a question, a menu, a consent request, or an 
 2. Use AskUserQuestion when the envelope fits; otherwise a plain-text envelope with the answer syntax, then stop. Never choose, default, or launch dependent work while the answer is pending.
 3. Validate the reply: trimmed, case-insensitive label match, exactly one label; ordinals ("first", "2") alias to positions. An invalid answer re-presents the envelope; a valid one is returned once.
 4. A question about a choice is answered from the envelope without recommending, then the choice is re-presented.
-5. A worker's `oracle_conflict` goes whole to the user as a decision: fix the spec and unlock, or keep the test and fix the code. Never unlock for them.
+5. A worker's `oracle_conflict` goes whole to the user: fix the spec and unlock, or fix the code. Never unlock for them.
