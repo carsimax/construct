@@ -15,7 +15,7 @@ An agent writes code faster than you can check it. Organic Driven Development ke
 ## What you get
 
 - **ADD workflow.** A session contract, injected by hooks, that Claude follows on every request without being asked.
-- **Role agents with model routing.** 11 agents (explorer, worker, oracle, verifier, judges, review lenses). You choose each role's model and effort in `/config`.
+- **Role agents.** 11 agents (explorer, worker, oracle, verifier, judges, review lenses), each on its own model and effort.
 - **Skills.** Procedures that load on demand: workflow (sizing included), delegation, debugging, quality bar, migrations, feature branch with local sub-branches, commits, and the final pull request (`delivery`), review, and more.
 - **Mandatory review.** Work whose Risk names a high-risk item is reviewed by lens agents before it can be published. Hooks build the evidence, record the verdicts, and gate `git push`, `gh pr create`, and `gh release create`.
 - **Status band.** One row above the prompt with the phase, the active feature with its checkpoints, and the running agents. It leaves the model, branch, context, and plan limits to your status line.
@@ -117,14 +117,13 @@ Options are plugin settings, edited in `/config`:
 
 | Option | Effect |
 |---|---|
-| Model and effort per role | See the routing table below. Each option defaults to `inherit`: use the deprecated key of the same role if it is set, else the agent's own frontmatter |
 | `inline_edit_max_lines` (number, default `150`) | Let the main thread edit repository files directly when one Write, Edit, MultiEdit, or NotebookEdit call changes at most this many lines; `surface-guard` sends bigger changes to `construct:worker`. `0` restores the old rule: the main thread writes only `.vault/tasks/` |
 | `iteration_cap` (number, default `3`) | Deny a Bash command after it failed this many times in a row for one agent (a passing run resets its count) (the main thread counts as one), so the agent stops and reports what it tried, the failure, and its hypothesis instead of looping, and never edits the test to pass. A subagent's count ends when it stops; the main thread's resets on your next prompt. A value that is not a whole number of 1 or more uses `3`; `0` turns the cap off |
 | `command_guard_asks` (boolean, default `false`) | Let `command-guard` ask before destructive commands (`rm -rf`, force push, `reset --hard`, and the rest). Denies of verifier bypasses always apply |
 
-### Agents and model routing
+### Agents
 
-The plugin ships 11 agents. Each role's model and effort can be changed in `/config`, where every option appears as a row such as `Worker model` or `Review risk effort`.
+The plugin ships 11 agents. Their model and effort are not configurable: each runs on its own frontmatter.
 
 | Role | Agent | Model | Effort |
 |---|---|---|---|
@@ -140,16 +139,12 @@ The plugin ships 11 agents. Each role's model and effort can be changed in `/con
 | Review resilience | `construct:review-resilience` | sonnet | medium |
 | General | `construct:general` and the built-in `general-purpose` | sonnet | medium |
 
-How the routing works:
+How it works:
 
-- The plugin's mod (`hooks/register.js`) applies the configured model when a subagent spawns and the configured effort on each of its requests.
-- A model passed explicitly on the Agent call wins; the configured model applies only when the call names none.
-- An effort of `default` keeps the model's own effort.
+- The mod (`hooks/register.js`) sets no model and no effort for a construct agent. It sends a built-in `general-purpose` launch on `sonnet` with effort `medium`; a model passed explicitly on the Agent call wins.
 - Turn budgets: `construct:explorer` stops after 30 turns, `construct:verifier` after 50, and each lens after 2. A capped agent returns its output marked partial, and it can be resumed.
 - The `delegation`, `review`, and `workflow` skills are model-only (`user-invocable: false`): the orchestrator loads them, and they do not appear in the `/` menu. Ask for a review in plain words.
-- An `inherit` option leaves the agent's frontmatter model, and the effort the call asks for, untouched. The built-in `general-purpose` has no frontmatter, so with those options on `inherit` it gets `construct:general`'s sonnet and medium.
-- The 5.x options `model_odd_*`, `effort_odd_*`, `model_jd_*`, and `effort_jd_*` are no longer read; set `model_<role>` / `effort_<role>` instead.
-- If the mod cannot run, each agent keeps the model and effort in its own frontmatter.
+- Saved per-role model and effort options from earlier versions have no effect.
 
 ## Reference
 
@@ -346,7 +341,7 @@ Skills:
 | `memory`, `debugging`, `migration` | unchanged |
 | `go-testing`, `comment-writer`, `cognitive-doc-design`, `skill-creator`, `skill-improver` | removed |
 
-Options: each role has `model_<role>` and `effort_<role>`, where the role is the agent name with dashes turned into underscores (`model_worker`, `effort_review_risk`). Both default to `inherit`, which defers to the deprecated 5.x option of the same role (`model_odd_*`, `effort_odd_*`, `model_jd_*`, `effort_jd_*`) and then to the agent's own setting. The deprecated options still apply through 6.x; set the new ones and drop the old. The `jd_fix_agent` options are gone.
+Options: the 5.x per-role model and effort options were replaced by per-role options in 6.x, and those are removed (see CHANGELOG.md). The `jd_fix_agent` options are gone.
 
 Risk line: one reply can name several items, `Risk: items 2, 5 (reason)`; the Risk-line gate and the verifier admission both accept it. `Risk: item N` and `Risk: none` are unchanged, and a trailing comma or an item outside 1-6 is still rejected.
 
@@ -354,7 +349,7 @@ Risk line: one reply can name several items, `Risk: items 2, 5 (reason)`; the Ri
 
 Current version: 12.0.0 (`plugins/construct/.claude-plugin/plugin.json`); a major release. Releases are tagged `vX.Y.Z`.
 
-Changes in 12.0.0: the deprecated 5.x options `model_odd_*`, `effort_odd_*`, `model_jd_*`, and `effort_jd_*` are removed; set `model_<role>` and `effort_<role>` instead. The publication gate, guards, and band get the audit-round fixes. See [CHANGELOG.md](CHANGELOG.md).
+Changes in 12.0.0: the deprecated 5.x per-role model and effort options are removed. The publication gate, guards, and band get the audit-round fixes. See [CHANGELOG.md](CHANGELOG.md).
 
 Changes in 11.0.0: the `Principal Engineer` output style is removed; your own output style and CLAUDE.md govern replies, and if you had picked `construct:Principal Engineer` in `/output-style`, pick another. See [CHANGELOG.md](CHANGELOG.md).
 
@@ -424,7 +419,7 @@ Upgrading from 1.3.1:
 - Plain `odd-assess` (no `--json`) exits 1 on an unassessable candidate.
 - `odd-review` mutating commands refuse with `rdd_disabled` while RDD is off.
 - Lens results with a location outside the candidate's paths, line 0, or a reversed range are refused (`invalid_result`), and a severe claim on unchanged lines is downgraded to `unknown`.
-- A `model` passed on the Agent call now wins over `model_<role>`.
+- A `model` passed on the Agent call now wins over the configured per-role model.
 
 Upgrading from 1.1.0:
 

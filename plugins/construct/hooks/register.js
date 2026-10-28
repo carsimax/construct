@@ -170,13 +170,13 @@ async function runDoctor($) {
   return formatReport([checkClaude(version), checkNode(node)], VERSION)
 }
 
-export function register(on, options) {
-  // Send each construct agent on the model its role is configured for, unless the call names one.
-  // If this hook fails, the agent keeps its frontmatter model.
+export function register(on) {
+  // Send a built-in general-purpose agent on its default model, unless the call names one.
+  // Construct agents keep their frontmatter model.
   on('agent.spawn', async ($, e, next) => {
     const role = roleFor(e.subagentType)
     // a resumed agent keeps its model (a hook can only refuse its run); a fork always inherits
-    const model = e.model || e.resume || e.fork ? null : modelFor(role, options, e.subagentType)
+    const model = e.model || e.resume || e.fork ? null : modelFor(e.subagentType)
     const result = await next(model ? { ...e, model } : e)
     if (role && result?.agentId) {
       roleByAgent.set(result.agentId, { role, type: e.subagentType })
@@ -187,10 +187,10 @@ export function register(on, options) {
     return result
   })
 
-  // Apply the role's effort to every request a routed subagent makes
+  // Apply the default effort to every request of a built-in routed subagent
   on('turn.step', async function* ($, e, next) {
     const routed = roleByAgent.get(e.agentId)
-    const effort = effortFor(routed?.role, options, routed?.type)
+    const effort = effortFor(routed?.type)
     return yield* next(effort ? { ...e, effort } : e)
   })
 

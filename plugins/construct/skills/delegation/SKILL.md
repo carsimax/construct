@@ -22,7 +22,7 @@ Small work is done inline: the parent edits directly when each call changes at m
 - `construct:explorer`: mapping beyond one batch or about 5 sequential lookups, one per front, at most 3 per message; dependents wait.
 - `construct:general`: long suites, builds, installs, broad research.
 - `construct:verifier`: only for a Risk-named item (see Verification).
-- Model and effort come from plugin config (`model_<role>`, `effort_<role>`), never a prompt.
+- Agents keep their own model and effort; never set them in a prompt.
 - Keep parent output bounded: counts, stat, tails, summaries.
 
 ## Writer handoff
