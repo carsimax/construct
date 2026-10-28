@@ -1,7 +1,7 @@
 {
   "name": "construct",
   "displayName": "Construct",
-  "version": "13.1.1",
+  "version": "13.2.0",
   "license": "MIT",
   "description": "Agent Driven Development orchestration, review lenses, and delivery skills for Claude Code",
   "author": {
