@@ -113,7 +113,7 @@ claude plugin install construct@construct
 
 ## Configuration
 
-Construct has no `/config` options. Two limits are set per session by the orchestrator with `construct-limits` (the plugin's `bin/`, on the Bash PATH of a session); the user can also run it with `!`, but a subagent cannot run `set` (`command-guard` denies it; `show` is allowed). The command only validates and prints: the `limits-record.mjs` hook (`PreToolUse` on `Bash`) records the main thread's `set` in the plugin data directory and reports the active limits in its context, for `set` and `show` alike:
+Construct has no `/config` options. Two limits are set per session by the orchestrator with `construct-limits` (the plugin's `bin/`, on the Bash PATH of a session); the user can also run it with `!`, but a subagent cannot run `set` (`command-guard` denies it; `show` is allowed). The command only validates and prints: the `limits-record.mjs` hook (`PreToolUse` on `Bash`) records the main thread's `set` in the plugin data directory and reports the active limits in its context, for `set` and `show` alike (a `set` whose write fails, such as an unwritable data directory, reports `set failed, nothing written: <error>` and the earlier limits stay active):
 
 ```bash
 construct-limits set inline=300 cap=5   # either key alone is fine; the other keeps its earlier value

@@ -1,7 +1,7 @@
 // S1 of .vault/tasks/limits-hook.md, edges the oracle leaves out: unrelated and unparsable commands produce no output; a set inside `sh -c` is recorded.
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { existsSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { scratchDir } from '../helpers/repo.mjs'
@@ -19,6 +19,15 @@ test('a command without construct-limits and an unparsable command give no outpu
     assert.deepEqual(run(data, command), { status: 0, stdout: '' })
   }
   assert.equal(existsSync(join(data, 'limits')), false)
+})
+
+test('a set whose write fails reports set failed and still prints the active limits', () => {
+  const file = join(scratchDir('limits-edge-'), 'not-a-dir')
+  writeFileSync(file, 'x')
+  const ctx = JSON.parse(run(file, 'construct-limits set inline=300').stdout).hookSpecificOutput.additionalContext
+  assert.match(ctx, /set failed, nothing written: /)
+  assert.doesNotMatch(ctx, /set recorded/)
+  assert.match(ctx, /active limits inline=150 cap=3/)
 })
 
 test('a set inside sh -c is recorded', () => {
