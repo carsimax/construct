@@ -4,6 +4,8 @@ Notable changes per release. Versions follow [Semantic Versioning](https://semve
 
 ## Unreleased
 
+## 13.0.0
+
 - **Breaking:** the per-repository folder `odd/` is replaced by `.vault/`, with container folders `tasks/` (feature documents), `specs/` (`README.md` with the purpose and `Started: <YYYY-MM-DD>`, plus one living-spec file `<feature>.md` per finished feature; a feature that changes earlier behavior edits that feature's file) and `risk-paths/` (rule files, each line `<glob> <items>`, all files combined). Nothing reads `odd/` any more; an existing `odd/` folder stays on disk untouched. Migration (a file cannot move into a folder of the same name, so `risk-paths` goes through a temporary name): `git mv odd .vault && git mv .vault/risk-paths .vault/rules.txt && mkdir .vault/specs .vault/risk-paths && git mv .vault/spec.md .vault/specs/README.md && git mv .vault/rules.txt .vault/risk-paths/rules.txt`. Skip the `risk-paths` and `spec.md` moves for a file you do not have. Until a repository moves, the publication gate (and the pre-push hook) deny publishing a ref that keeps `odd/tasks/` or `odd/risk-paths` without a `.vault/` folder, naming these commands, so the change never weakens review silently. While the default branch has not migrated, the risk floor of the migration push still comes from its `odd/risk-paths`, so adding `.vault/` cannot lower it.
 - The methodology is renamed from Organic Driven Development (ODD) to Agent Driven Development (ADD) in the skills, agents, contracts, and documentation. The internal `ODD_REVIEW_*` markers are unchanged.
 
