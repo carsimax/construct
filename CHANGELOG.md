@@ -4,6 +4,8 @@ Notable changes per release. Versions follow [Semantic Versioning](https://semve
 
 ## Unreleased
 
+## 13.2.1
+
 - Fix: `unlock-approval` recorded no approval in real Claude Code, because the PostToolUse `tool_input` of `AskUserQuestion` always carries `answers` and `annotations`, so every unlock was denied. It now also runs on PreToolUse (denies a call that pre-fills `answers`, otherwise records the `tool_use_id` as a clean ask), and PostToolUse records the approval from `tool_response.answers` only for a clean ask of the same `tool_use_id` and session. A chosen label of `Unlock (Recommended)` counts as `Unlock`.
 
 ## 13.2.0
