@@ -136,21 +136,33 @@ export function lockPath(root, path) {
   return rel === '' || rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel) ? null : rel.split(sep).join('/')
 }
 
-// Unlock approvals (unlock-approval.mjs): one record per answered AskUserQuestion, { tool_use_id, answers, at }, written by the
+// Unlock approvals (unlock-approval.mjs): one record per answered AskUserQuestion, { tool_use_id, session_id, answers, at }, written by the
 // PostToolUse hook from what the user answered, and read by command-guard. Taking one claims it with an exclusive create, so an
 // answer unlocks once. Only the latest record counts: a newer question retires the older answers.
 const approvalDir = (root) => join(storeDir(root), 'approvals')
 const approvalName = (id) => String(id).replace(/[^\w-]/g, '_')
 export const writeApproval = (root, record) => atomicWrite(join(approvalDir(root), `${approvalName(record.tool_use_id)}.json`), `${JSON.stringify(record)}\n`)
 
+// An approval is good for 15 minutes; expired and used records are deleted when read.
+export const APPROVAL_MAX_AGE_MS = 15 * 60 * 1000
+
 // takeApproval returns the latest record and claims it when `accepts(record)`; null when there is none, it does not qualify, or it was claimed before.
+// Claiming writes a `.used` marker with an exclusive create (a racing second claim fails) and deletes the record; the marker goes with the first read after expiry.
 export function takeApproval(root, accepts) {
   const dir = approvalDir(root)
   let latest = null
-  for (const name of readdirSync(dir).filter((n) => n.endsWith('.json'))) {
+  const now = Date.now()
+  for (const name of readdirSync(dir)) {
+    const file = join(dir, name)
     try {
-      const r = readJson(join(dir, name))
-      if (typeof r?.tool_use_id === 'string' && typeof r.at === 'number' && r.answers && typeof r.answers === 'object' && (!latest || r.at >= latest.at)) latest = r
+      if (name.endsWith('.used')) {
+        if (now - statSync(file).mtimeMs > APPROVAL_MAX_AGE_MS) rmSync(file, { force: true })
+        continue
+      }
+      if (!name.endsWith('.json')) continue
+      const r = readJson(file)
+      if (typeof r?.tool_use_id === 'string' && typeof r.at === 'number' && now - r.at > APPROVAL_MAX_AGE_MS) rmSync(file, { force: true })
+      else if (typeof r?.tool_use_id === 'string' && typeof r.at === 'number' && r.answers && typeof r.answers === 'object' && (!latest || r.at >= latest.at)) latest = r
     } catch {
       // Unreadable record: not an approval.
     }
@@ -161,6 +173,7 @@ export function takeApproval(root, accepts) {
   } catch {
     return null
   }
+  rmSync(join(dir, `${approvalName(latest.tool_use_id)}.json`), { force: true })
   return latest
 }
 
