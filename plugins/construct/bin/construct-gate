@@ -2,7 +2,7 @@
 // construct-gate: installs the pre-push hook that runs the publication gate for every git push (S2 of .vault/tasks/pre-push-gate.md).
 import { spawnSync } from 'node:child_process'
 import { chmodSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
-import { dirname, join, resolve, sep } from 'node:path'
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const USAGE = `usage: construct-gate <install|uninstall|status|oracle list|oracle unlock <path>>   (run inside a repository)
@@ -88,7 +88,10 @@ async function oracle(sub, path) {
   if (sub === 'unlock') {
     if (!path) throw new Error('usage: construct-gate oracle unlock <path>')
     // Locks are stored as repository-relative paths: `./p`, `a//b` and an absolute path inside the repository mean the stored one. A corrupt record is named by its file name, so a name with no `/` that matches one stays as typed.
-    if (!oracleEntries(root).some((e) => e.name === path || e.name === `${path}.json`)) {
+    // A lock stored for the path exactly as typed (a symlink surface's own lock) is released without following anything.
+    const lexical = relative(root, resolve(root, path)).split(sep).join('/')
+    if (!lexical.startsWith('..') && !isAbsolute(lexical) && oracleEntries(root).some((e) => e.record?.path === lexical)) path = lexical
+    else if (!oracleEntries(root).some((e) => e.name === path || e.name === `${path}.json`)) {
       const typed = path
       const rel = lockPath(root, path)
       if (rel === null) throw new Error(`${path} is outside the repository`)
