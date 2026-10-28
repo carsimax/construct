@@ -4,6 +4,8 @@ Notable changes per release. Versions follow [Semantic Versioning](https://semve
 
 ## Unreleased
 
+## 12.2.0
+
 - The `delivery` skill describes one model for large work: a feature branch `feat/<feature>`, a local sub-branch `feat/<feature>-t<n>` per task or cohesive group (split by work unit, never by line count) merged with `git merge --no-ff`, and one final pull request that the publication gate reviews cumulatively. Sub-branches are never pushed. The delivery strategies (`ask-on-risk`, `auto-chain`, `single-pr`, `exception-ok`), the chain shapes, and `size:exception` are removed, as is `Delivery strategy` from the feature-document header; `references/chains.md` is now the sub-branch reference. Limit: a feature whose whole diff passes the 400 KB review-context budget cannot publish in one PR.
 - The commit-slice notice is removed: `delivery-signals.mjs` no longer reports the authored changed lines after a `git commit` (its `post` hook registration is gone), and the `slice_lines` option is removed from `plugin.json`, so a `slice_lines` value users had set is now ignored. The context backstop (`delivery-signals.mjs batch`) is unchanged. The `delivery` skill's state line now shows the feature branch (`feat/<feature>`, or the parent of a sub-branch `feat/<feature>-t<n>`), the current sub-branch, and the local sub-branches merged or unmerged into the feature branch.
 - Eval results are recorded in `docs/evals/results.md`: the 12.0.2 baseline, the run after ADD P4, and a three-run check showing that the single-run large-tracked and review-fires gains were noise.
