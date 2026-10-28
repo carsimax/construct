@@ -6,7 +6,7 @@ import { describe, test } from 'node:test'
 import { makeRepo, scratchDir } from '../helpers/repo.mjs'
 
 const PLUGIN = new URL('../../plugins/construct/', import.meta.url).pathname
-const CLI = join(PLUGIN, 'bin/construct-limits')
+const RECORD = join(PLUGIN, 'hooks/scripts/limits-record.mjs')
 const ADMISSION = join(PLUGIN, 'hooks/scripts/delegation-admission.mjs')
 const GUARD = join(PLUGIN, 'hooks/scripts/surface-guard.mjs')
 const WORKER = 'construct:worker'
@@ -21,9 +21,10 @@ function run(script, args, data, input) {
   return { status: r.status, stdout: r.stdout }
 }
 const set = (data, session, ...pairs) => {
-  const r = spawnSync(CLI, ['set', ...pairs], { encoding: 'utf8', env: { ...baseEnv(data), CLAUDE_CODE_SESSION_ID: session } })
-  assert.equal(r.error, undefined, `construct-limits did not run: ${r.error?.message}`)
+  // The main thread's `construct-limits set` is recorded by the limits-record hook (S1 of .vault/tasks/limits-hook.md).
+  const r = spawnSync('node', [RECORD], { input: JSON.stringify({ session_id: session, cwd: process.cwd(), hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command: `construct-limits set ${pairs.join(' ')}` } }), encoding: 'utf8', env: baseEnv(data) })
   assert.equal(r.status, 0, r.stderr)
+  assert.match(r.stdout, /set recorded/)
 }
 
 // The feature document template of tests/feature-state/feature-state.test.mjs.

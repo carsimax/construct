@@ -20,6 +20,7 @@ import { lstatSync, realpathSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { repositoryRoot } from './git-tree.mjs'
 import { readInput } from './hook-io.mjs'
+import { isLimits } from './limits.mjs'
 import { lockPath, takeApproval } from './review-store.mjs'
 import { GIT_VALUE_FLAGS, heredocScripts, nestedLines, parsesAsShell, SHELLS, ShellParseError, splitCommands } from './shell-words.mjs'
 
@@ -160,7 +161,6 @@ const LONE_UNLOCK = /^(?:node )?(?:[\w.@%+=:,/-]*\/)?construct-gate oracle unloc
 const lonePath = (command) => LONE_UNLOCK.exec(command.trim().replace(/ +/g, ' '))?.[1] ?? null
 
 const isGate = (word) => /(^|\/)construct-gate$/.test(word ?? '')
-const isLimits = (word) => /(^|\/)construct-limits$/.test(word ?? '')
 const LIMITS_REASON = 'only the main thread declares session limits: a subagent cannot run construct-limits set. `construct-limits show` is allowed; ask the orchestrator to change a limit.'
 let subagent = false
 
