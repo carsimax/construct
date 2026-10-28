@@ -2,8 +2,8 @@
 // records (written by review-context.mjs), one verdict record per subject and
 // lens (written only by review-capture.mjs), and the lens result validation.
 import { createHash } from 'node:crypto'
-import { mkdirSync, readdirSync, readFileSync, rmdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
-import { isAbsolute, join } from 'node:path'
+import { mkdirSync, readdirSync, readFileSync, realpathSync, rmdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { atomicWrite, git } from './git-tree.mjs'
 
 const SEVERITIES = ['BLOCKER', 'CRITICAL', 'WARNING', 'SUGGESTION']
@@ -120,6 +120,74 @@ export function removeOracle(root, path) {
   }
   rmSync(file)
   return true
+}
+
+// lockPath is the path as an oracle lock stores it: relative to the repository `root` (its realpath, as git reports it), with
+// `./p` and `a//b` collapsed and symlinks resolved when the file exists; null when it falls outside the repository.
+// `construct-gate oracle unlock` and command-guard both call it, so they resolve one spelling to one path.
+export function lockPath(root, path) {
+  let abs = resolve(root, path)
+  try {
+    abs = realpathSync(abs)
+  } catch {
+    // Not on disk: as given.
+  }
+  const rel = relative(root, abs)
+  return rel === '' || rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel) ? null : rel.split(sep).join('/')
+}
+
+// Unlock approvals (unlock-approval.mjs): one record per answered AskUserQuestion, { tool_use_id, session_id, answers, at }, written by the
+// PostToolUse hook from what the user answered, and read by command-guard. Taking one claims it with an exclusive create, so an
+// answer unlocks once. Only the latest record counts: a newer question retires the older answers.
+const approvalDir = (root) => join(storeDir(root), 'approvals')
+const approvalName = (id) => String(id).replace(/[^\w-]/g, '_')
+// One live approval: writing a new record deletes every older one, and claiming one deletes them all.
+const dropApprovals = (dir, keep = null) => {
+  try {
+    for (const n of readdirSync(dir)) if (n.endsWith('.json') && n !== keep) rmSync(join(dir, n), { force: true })
+  } catch {
+    // Nothing to delete.
+  }
+}
+export function writeApproval(root, record) {
+  const dir = approvalDir(root)
+  const name = `${approvalName(record.tool_use_id)}.json`
+  atomicWrite(join(dir, name), `${JSON.stringify(record)}\n`)
+  dropApprovals(dir, name)
+}
+
+// An approval is good for 15 minutes; expired and used records are deleted when read.
+export const APPROVAL_MAX_AGE_MS = 15 * 60 * 1000
+
+// takeApproval returns the latest record and claims it when `accepts(record)`; null when there is none, it does not qualify, or it was claimed before.
+// Claiming writes a `.used` marker with an exclusive create (a racing second claim fails) and deletes the record; the marker goes with the first read after expiry.
+export function takeApproval(root, accepts) {
+  const dir = approvalDir(root)
+  let latest = null
+  const now = Date.now()
+  for (const name of readdirSync(dir)) {
+    const file = join(dir, name)
+    try {
+      if (name.endsWith('.used')) {
+        if (now - statSync(file).mtimeMs > APPROVAL_MAX_AGE_MS) rmSync(file, { force: true })
+        continue
+      }
+      if (!name.endsWith('.json')) continue
+      const r = readJson(file)
+      if (typeof r?.tool_use_id === 'string' && typeof r.at === 'number' && now - r.at > APPROVAL_MAX_AGE_MS) rmSync(file, { force: true })
+      else if (typeof r?.tool_use_id === 'string' && typeof r.at === 'number' && r.answers && typeof r.answers === 'object' && (!latest || r.at >= latest.at)) latest = r
+    } catch {
+      // Unreadable record: not an approval.
+    }
+  }
+  if (!latest || !accepts(latest)) return null
+  try {
+    writeFileSync(join(dir, `${approvalName(latest.tool_use_id)}.used`), '', { flag: 'wx' })
+  } catch {
+    return null
+  }
+  dropApprovals(dir)
+  return latest
 }
 
 const MAX_AGE_MS = 30 * 24 * 3600 * 1000

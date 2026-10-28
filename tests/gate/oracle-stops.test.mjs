@@ -262,6 +262,26 @@ describe('construct-gate oracle', () => {
     assert.equal(cli(repo, 'unlock', '../a.test.mjs').status, 1)
     assert.equal(readOracles(repo).length, 1)
   })
+  test('unlock refuses a path with a symlink under the repository root, so it never follows a link to another lock', () => {
+    const repo = lockedRepo()
+    symlinkSync('a.test.mjs', join(repo, 'tests/link.test.mjs'))
+    symlinkSync('tests', join(repo, 'dir'))
+    for (const p of ['tests/link.test.mjs', 'dir/a.test.mjs']) {
+      const r = cli(repo, 'unlock', p)
+      assert.equal(r.status, 1, p)
+      assert.match(r.stderr, /symlink/)
+    }
+    assert.equal(readOracles(repo).length, 1)
+    assert.equal(cli(repo, 'unlock', PATH_).status, 0)
+  })
+  test('unlock releases a lock stored for the symlink itself, matched as typed without following it', () => {
+    const repo = lockedRepo()
+    symlinkSync('a.test.mjs', join(repo, 'tests/link.test.mjs'))
+    writeOracle(repo, { path: 'tests/link.test.mjs', blob: 'unlockable', feature: '.vault/tasks/f.md', task: 'T1', at: Date.now() })
+    const r = cli(repo, 'unlock', 'tests/link.test.mjs')
+    assert.equal(r.status, 0, r.stderr)
+    assert.deepEqual(readOracles(repo).map((l) => l.path), [PATH_])
+  })
   test('unlock of a path with no lock, or with no argument, is an error', () => {
     const repo = lockedRepo()
     const none = cli(repo, 'unlock', 'src/a.js')
