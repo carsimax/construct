@@ -18,14 +18,15 @@ Objective: for risky work, acceptance tests are written from the specs by an ora
 | ID | Specs | Task | Route | Risk | Status | Commit |
 |---|---|---|---|---|---|---|
 | T1 | S1, S2, S3 | Oracle agent and role, oracle-record hook, store area, gate lock check (PR 1) | worker | 2, 3 | done | b2a71cb |
-| T2 | S4, S5 | surface-guard and delegation-admission stops, `construct-gate oracle` CLI, command-guard deny (PR 2) | worker | 2, 3 | pending | — |
+| T2 | S4, S5 | surface-guard and delegation-admission stops, `construct-gate oracle` CLI, command-guard deny (PR 2) | worker | 2, 3 | done | f4f21f6 |
 | T3 | S7 | review-context passes specs and locked oracles; skill-context lists locks (PR 3) | worker | 3 | pending | — |
 | T4 | S6, S8 | worker `oracle_conflict`, workflow/delegation/review skills, contracts, eval case, README/METHODOLOGY/CHANGELOG (PR 4) | worker | 3 | pending | — |
-| T5 | S2, S5 | From T1 review: a lock whose feature is finished on main is replaced by a new oracle run (today it blocks the new lock silently); a corrupt or unreadable lock record must not deny every publication; `oracle list` shows stale locks; an oracle on a path locked for another unfinished feature is denied at admission; a surface that is a directory or symlink when the oracle stops fails closed; a symlink surface is reported, not skipped silently; fix the writeOracle comment (it says a later record replaces the lock); bound the gate's git calls per lock (PR 2, with T2) | worker | 2, 3 | pending | — |
+| T5 | S2, S5 | From T1 review: a lock whose feature is finished on main is replaced by a new oracle run (today it blocks the new lock silently); a corrupt or unreadable lock record must not deny every publication; `oracle list` shows stale locks; an oracle on a path locked for another unfinished feature is denied at admission; a surface that is a directory or symlink when the oracle stops fails closed; a symlink surface is reported, not skipped silently; fix the writeOracle comment (it says a later record replaces the lock); bound the gate's git calls per lock (PR 2, with T2) | worker | 2, 3 | done | f4f21f6 |
 
 ## Log
 
 - **L1 (2026-10-28):** "Vamos con ello analiza bien la mejor estrategia y dime bien qué se agrega ejemplo (skills, agentes,hooks,etc)"
 - **L2 (2026-10-28):** "1. Solo proteger 2. Dejarlo configurable pero analizar del modelo por defecto entre sonnet haiku o opus 5.5 con nivel de pensamiento medio". Default chosen: opus, medium. Worker defaults to sonnet, so an opus oracle is a different model from the writer (judges favor their own model's output); a wrong locked test costs a user interruption per conflict, so test quality outweighs cost; the oracle runs once per risky task with a small output; haiku is too weak at turning specs into deterministic tests. Same choice as the other checking roles (verifier, review-risk).
 - **L3 (2026-10-28):** T1 published as PR #81 after one correction round (release from the default branch only, no re-lock, Spec line and no directories for the oracle). Recheck warnings moved to T5.
-- Next step: T2 and T5 on feat/oracle-stops (PR 2).
+- **L4 (2026-10-28):** T2 and T5 in one commit (f4f21f6, ~407 lines). Oracle admission denies a launch over any active lock (S4), not only another feature's; surface-guard would block its writes anyway.
+- Next step: review PR 2, then T3.
