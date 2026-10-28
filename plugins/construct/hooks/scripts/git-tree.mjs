@@ -79,16 +79,16 @@ function emptyTree(root) {
 // (tracked plus untracked, not ignored) through a temporary index, so the user's
 // real index is never read for writing or changed. The base is the HEAD tree, or
 // the empty tree on an unborn branch. The temporary index starts as a copy of the
-// real one, whose stat cache lets `add -A` skip rehashing unchanged files.
-// shortcut: assume-unchanged and skip-worktree entries keep their index content; seed from
-// `read-tree HEAD` instead if a missed change there ever matters.
+// real one, whose stat cache lets `add -A` skip rehashing unchanged files, unless an
+// entry is assume-unchanged or skip-worktree: `add -A` would skip its changes.
 export function freezeWorkingTree(root) {
   const dir = mkdtempSync(join(tmpdir(), 'construct-index-'))
   try {
     const env = { GIT_INDEX_FILE: join(dir, 'index') }
     const head = headTree(root)
     let seeded = false
-    try {
+    // `ls-files -v` tags assume-unchanged entries with a lowercase letter and skip-worktree ones with S
+    if (!/^([a-z]|S) /m.test(text(git(root, ['ls-files', '-v'])))) try {
       const index = resolve(root, text(git(root, ['rev-parse', '--git-path', 'index'])))
       copyFileSync(index, env.GIT_INDEX_FILE)
       // Keep the index mtime (floored, never later) so git still rehashes racily clean entries.

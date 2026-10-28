@@ -37,6 +37,16 @@ describe('git-tree', () => {
     assert.deepEqual(readFileSync(join(repo, '.git', 'index')), index)
   })
 
+  test('freezeWorkingTree sees a change to an assume-unchanged or skip-worktree file', () => {
+    for (const flag of ['--assume-unchanged', '--skip-worktree']) {
+      const repo = makeRepo({ 'a.txt': 'a\n' })
+      const { baseTree } = freezeWorkingTree(repo)
+      sh(repo, 'update-index', flag, 'a.txt')
+      writeFileSync(join(repo, 'a.txt'), 'changed\n')
+      assert.notEqual(freezeWorkingTree(repo).candidateTree, baseTree, flag)
+    }
+  })
+
   test('freezeWorkingTree sees a same-size change made in the same second as the index (racily clean)', () => {
     const repo = makeRepo({ 'a.txt': 'a\n' })
     const second = Math.floor(Date.now() / 1000) - 100
