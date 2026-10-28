@@ -55,8 +55,9 @@ export function splitCommands(input) {
       plain = false
       for (i++; i < input.length && input[i] !== '"'; i++) {
         // A `$(...)` inside double quotes is one span: its own quotes do not close the string.
-        const end = input[i] === '$' && input[i + 1] === '(' ? closingParen(input, i + 2) : -1
-        if (end > 0) {
+        if (input[i] === '$' && input[i + 1] === '(') {
+          const end = closingParen(input, i + 2)
+          if (end < 0) throw new UndelimitedSubstitution()
           cur += input.slice(i, end + 1)
           i = end
           continue
@@ -161,7 +162,7 @@ function unwrap(texts) {
   return { at: i, strings, rest: texts.slice(i) }
 }
 
-const HEREDOC_RE = /<<-?\s*(['"]?)([A-Za-z_]\w*)\1[^\n]*\n[\s\S]*?\n[ \t]*\2(?=\n|$)/g
+const HEREDOC_RE = /<<-?\s*(['"]?)\\?([A-Za-z_]\w*)\1[^\n]*\n[\s\S]*?\n[ \t]*\2(?=\n|$)/g
 
 // extractHeredocs removes heredoc bodies from the command (they are data) and returns them
 // with the header line they belong to, so a body fed to a shell or SQL client is checked.
@@ -175,6 +176,16 @@ export function extractHeredocs(command) {
     return raw.slice(0, nl)
   })
   return { text, bodies }
+}
+
+// UndelimitedSubstitution is thrown when a `$(`, `<(`, or `>(` has no end closingParen can find.
+// Re-reading such a body character by character can pair its quotes wrongly and hide the
+// commands after it, so callers that guard commands treat this error as a hit (fail closed).
+export class UndelimitedSubstitution extends Error {
+  constructor() {
+    super('a command substitution could not be delimited')
+    this.name = 'UndelimitedSubstitution'
+  }
 }
 
 // closingBacktick returns the index of the backtick that closes the span opened before `from`, or -1.
@@ -208,6 +219,10 @@ export function closingParen(text, from) {
       if (i < 0) return -1
     } else if (c === '$' && text[i + 1] === '(') {
       i = closingParen(text, i + 2)
+      if (i < 0) return -1
+    } else if (c === '$' && text[i + 1] === '{') {
+      // a parameter expansion: a `(` or `)` in its pattern is not a group
+      i = text.indexOf('}', i + 2)
       if (i < 0) return -1
     } else if (c === '#' && (i === from || /[\s;&|()]/.test(text[i - 1]))) {
       // a comment runs to the end of the line; with no newline the body cannot close

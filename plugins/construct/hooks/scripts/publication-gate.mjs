@@ -45,7 +45,8 @@ const GH_VALUE_FLAGS = new Set(['-R', '--repo', '--hostname'])
 // tokenizer would split such a span into commands of its own and `git -C $(pwd)` would lose its
 // directory; quoted, it stays one word and is seen as unresolvable. Span ends come from the
 // quote-aware scanners above. A span that never closes is left as written, so the tokenizer
-// still sees whatever follows it.
+// still sees whatever follows it (inside double quotes it throws UndelimitedSubstitution, which
+// main's catch denies when the text mentions a publication).
 function quoteSubstitutions(text) {
   let out = ''
   let quote = null

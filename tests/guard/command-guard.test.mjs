@@ -65,6 +65,10 @@ describe('deny: verifier bypasses', () => {
     'FOO=1 sudo git commit -n',
     'eval "git commit -n"',
     'git commit -n -m x # hi',
+    // security-review: a substitution that cannot be delimited does not hide what follows it.
+    `echo "$(echo case 'a"b')"; git commit --no-verify -m x`,
+    `git commit -m "$(echo case 'a"b')" -n`,
+    `X="$(echo (x 'a"b')"; git push --no-verify`,
   ])
   test('deny wins over ask in one command', () => {
     const r = run('rm -rf build && git commit --no-verify -m x')

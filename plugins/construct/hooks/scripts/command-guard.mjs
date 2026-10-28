@@ -19,7 +19,7 @@
 // variable-built commands are not caught. Upgrade if one of them shows up in real use.
 // Usage: node command-guard.mjs   (hook JSON on stdin)
 import { readInput } from './hook-io.mjs'
-import { extractHeredocs, GIT_VALUE_FLAGS, nestedLines, SHELLS, splitCommands, substitutionBodies } from './shell-words.mjs'
+import { extractHeredocs, GIT_VALUE_FLAGS, nestedLines, SHELLS, splitCommands, substitutionBodies, UndelimitedSubstitution } from './shell-words.mjs'
 
 const MAX_DEPTH = 4
 // Flags whose value is a word of its own (or the rest of a short cluster): their text is not a flag.
@@ -162,15 +162,19 @@ function hitsIn(command, depth = 0) {
   return found
 }
 
+let command = ''
 try {
   const input = readInput()
-  const command = input?.tool_input?.command
+  command = input?.tool_input?.command
   if (input?.tool_name === 'Bash' && typeof command === 'string' && command !== '') {
     const found = hitsIn(command)
     const chosen = found.find((h) => h.decision === 'deny') ?? found[0]
     if (chosen && (chosen.decision === 'deny' || asksOn())) process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: chosen.decision, permissionDecisionReason: chosen.reason } })}\n`)
   }
-} catch {
-  // Fail open.
+} catch (error) {
+  // Fail open, except for a substitution that cannot be delimited in a git command: it can hide a bypass.
+  if (error instanceof UndelimitedSubstitution && /\bgit\b/.test(command)) {
+    process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: 'command-guard: a command substitution in this git command could not be delimited, so a verifier bypass cannot be ruled out. Close every $( with its ) or split the command.' } })}\n`)
+  }
 }
 process.exitCode = 0
