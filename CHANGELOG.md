@@ -4,11 +4,6 @@ Notable changes per release. Versions follow [Semantic Versioning](https://semve
 
 ## Unreleased
 
-## 12.0.1
-
-- The Risk-line gate hashes every file when it records the tree, so a same-size rewrite with its modification time restored is no longer missed. Above 20,000 tracked files it keeps the faster index-seeded snapshot (with fsmonitor and the untracked cache off) to stay within its timeout, and says so once per session.
-- Known, not fixed in this release: the shell parsing shared by the publication gate, `command-guard`, and `review-store-guard` can still miss a command hidden inside or after a quoted `$( … )` (a `( … )` group, a `case`, a `#` comment, or a `}` or `)` inside `${ … }`) or after a `<<WORD` that is not a real here-doc. Guards are a discipline layer (see SECURITY.md); a parser rewrite is planned.
-
 ## 12.0.0
 
 - **Breaking:** the 12 deprecated 5.x options (`model_odd_*`, `effort_odd_*`, `model_jd_*`, `effort_jd_*`) are removed and no longer read. Set `model_<role>` and `effort_<role>` instead. The built-in `general-purpose` keeps `sonnet`/`medium` while `model_general` and `effort_general` are `inherit`.

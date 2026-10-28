@@ -91,7 +91,7 @@ async function main() {
     if (!record || record.blocked === true) return
   }
 
-  const { repositoryRoot, freezeWorkingTree, FREEZE_HASH_BUDGET, git, headCommit, atomicWrite } = await import('./git-tree.mjs')
+  const { repositoryRoot, freezeWorkingTree, git, headCommit, atomicWrite } = await import('./git-tree.mjs')
 
   let root
   try {
@@ -117,20 +117,12 @@ async function main() {
     const promptId = typeof input.prompt_id === 'string' && input.prompt_id !== '' ? input.prompt_id : null
     let previous = null
     try {
-      previous = readRecord(file)
+      previous = promptId ? readRecord(file) : null
     } catch {
       // A corrupt record is replaced.
     }
-    if (promptId && previous && previous.root === root && previous.prompt_id === promptId) return
-    const frozen = freezeWorkingTree(root)
-    const noted = frozen.fast && previous?.root === root && previous.fast_noted === true
-    write({ root, tree: frozen.candidateTree, blocked: false, ...(promptId ? { prompt_id: promptId } : {}), ...(frozen.fast ? { fast_noted: true } : {}) })
-    // Said once per session and repository: the large-repository snapshot trusts git's stat cache.
-    if (frozen.fast && !noted) {
-      process.stdout.write(
-        `${JSON.stringify({ systemMessage: `construct: this repository has more than ${FREEZE_HASH_BUDGET} tracked files, so the Risk-line gate trusts git's index stat cache to stay within its timeout; a same-size rewrite with a restored modification time can go unseen.` })}\n`,
-      )
-    }
+    if (previous && previous.root === root && previous.prompt_id === promptId) return
+    write({ root, tree: freezeWorkingTree(root).candidateTree, blocked: false, ...(promptId ? { prompt_id: promptId } : {}) })
     return
   }
 
