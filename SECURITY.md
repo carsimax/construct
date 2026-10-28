@@ -14,7 +14,7 @@ Include the Construct version (`claude plugin list`), the Claude Code and Node.j
 
 In scope:
 
-- `install.sh`: what it writes to `~/.claude/settings.json`, and the `permissions.allow` rules it adds for `construct-memory`.
+- `install.sh`: what it writes to `~/.claude/settings.json`.
 - The memory store and its MCP server: reading or writing memory of another repository, or a pre-approved command reaching a destructive one.
 - Hooks that leak data, run commands they should not, or write outside the repository and `~/.claude`.
 

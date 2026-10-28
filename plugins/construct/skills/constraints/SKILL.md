@@ -32,7 +32,7 @@ Construct backs the Floor with hooks. The Risk-line gate blocks a reply when add
 2. **Ask** the remaining questions, one per turn, defaults offered. With no numbers given, measure today's value and hold it (a ratchet), and drop any dimension that needs a URL the project lacks.
 3. **Defaults** when the user has no preference: coverage and security. Block on the Floor, warn on the rest for two weeks, then measure and hold.
 4. **Write.** After the user answers, one `construct:worker` writes `CONSTRAINTS.md` from `references/constraints-template.md` and adds a one-line pointer to it in the repository's agent instructions file.
-5. **Save** each quality-bar decision with `mem_save` (else `construct-memory save`), using `topic_key` `quality/<rule>`.
+5. **Save** each quality-bar decision with `mem_save`, using `topic_key` `quality/<rule>`.
 
 When a change silences a check or skips a test, stop: fix the cause, or ask the user whether to change the rule. Do not edit the rule yourself.
 

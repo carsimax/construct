@@ -11,7 +11,6 @@ const EXPECTED = [
   'constraints',
   'debugging',
   'delivery',
-  'memory',
   'migration',
   'delegation',
   'workflow',
@@ -123,10 +122,9 @@ test('review names the Review subject form and no longer names the removed CLIs 
   assert.doesNotMatch(text, /odd-review|odd-assess|review_due|refuter|validator/)
 })
 
-test('the only MCP server is the plugin\'s own memory server', () => {
-  const { mcpServers } = JSON.parse(readFileSync(join(pluginRoot, '.mcp.json'), 'utf8'))
-  assert.deepEqual(mcpServers, { memory: { command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/hooks/scripts/memory-mcp.mjs'] } })
-  assert.ok(existsSync(join(pluginRoot, 'hooks/scripts/memory-mcp.mjs')))
+test('the plugin ships no MCP server; memory comes from Engram', () => {
+  assert.equal(existsSync(join(pluginRoot, '.mcp.json')), false)
+  assert.equal(existsSync(join(pluginRoot, 'bin/construct-memory')), false)
 })
 
 test('S5: delegation handoff names the verifier and its strength', () => {

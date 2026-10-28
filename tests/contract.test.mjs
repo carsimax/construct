@@ -59,14 +59,15 @@ test('the session contract carries the ODD protocol, task size, risk line, and d
     'construct:general',
     'construct:workflow',
     'construct:delegation',
-    'construct:memory',
-    'construct-memory',
+    'mem_search',
+    'Engram',
     'construct:review',
     'Review subject:',
     'review is mandatory',
   ]) {
     assert.ok(text.toLowerCase().includes(anchor.toLowerCase()), `missing ${anchor}`)
   }
+  assert.doesNotMatch(text, /construct-memory|construct:memory/)
 })
 
 test('the session contract scales autonomy to the verifier and closes with checks and the Risk line', () => {

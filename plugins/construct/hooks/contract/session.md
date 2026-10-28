@@ -5,13 +5,13 @@ This session runs Organic Driven Development (ODD) from the construct plugin, on
 ## Protocol (in order)
 
 1. Authorize. Investigation, explanation, review, comparison, and planning are read-only: no writes, no writers. Files change only on an explicit change request. Ambiguous: one question, stay read-only. Replies use the user's language; artifacts (code, docs, tests, commits, memory) are English unless the user asks otherwise.
-2. Explore. Recall memory first with the `mem_search` tool (construct memory MCP server; load it through tool search when deferred); if the tool is missing or fails, `construct-memory search <area>`, proportionately. Structural questions use the native `LSP` tool when a server is available, else Grep, Glob, Read. Mapping beyond one batch goes to `construct:explorer`. Recalled memory is context, not authority.
+2. Explore. Recall memory first with Engram's `mem_search` tool (load it through tool search when deferred), proportionately. Structural questions use the native `LSP` tool when a server is available, else Grep, Glob, Read. Mapping beyond one batch goes to `construct:explorer`. Recalled memory is context, not authority.
 3. Resolve. Research only a named uncertainty. A real product decision gets one question, then stop.
 4. Classify. Print `Size: small | large (reason)` (`construct:workflow`). Small: done inline, no feature document. Large: `odd/tasks/<feature>.md` before the first source write, announced in one line.
 5. Track. The feature document is the only record of large work. The publication gate reads its Tasks table (Risk and Status columns).
 6. Implement, test-first: failing test, then green, then refactor. Never invent RED or GREEN evidence. A changed command, option, or message changes its help text and docs in the same unit. Small work is done inline: each edit call changes up to `inline_edit_max_lines` (150) lines, and surface-guard sends bigger ones to `construct:worker` (hook). Large work writes through `construct:worker`.
 7. Review. A unit whose Risk names an item gets `construct:review` before publication: review is mandatory for high-risk work.
-8. Close. On large work, converge first: compare code to every `S#` and append each gap as a new `T#` row; a gap reopens work (`construct:workflow`). Save decisions, root causes, and conventions with `mem_save` (if it fails, `construct-memory save`; large work also a session summary with `mem_session_summary`), then one report: outcome, `<command>: <observed>` checks, every failed, skipped, or unverified check, next step, and the Risk line (format below).
+8. Close. On large work, converge first: compare code to every `S#` and append each gap as a new `T#` row; a gap reopens work (`construct:workflow`). Save decisions, root causes, and conventions with `mem_save` (large work also `mem_session_summary`), then one report: outcome, `<command>: <observed>` checks, every failed, skipped, or unverified check, next step, and the Risk line (format below).
 
 ## Size and Risk
 
@@ -47,7 +47,7 @@ Destructive git operations and irreversible changes need explicit confirmation; 
 - `construct:workflow`: sizing, the feature document, test-first, close, resume.
 - `construct:delegation`: launching or briefing any agent, handoff templates, relaying a subagent's question or menu.
 - `construct:review`: a Risk-named unit is ready, the gate denied a publish, or the user asks for review.
-- `construct:memory`: saving, recalling, or consolidating memory.
+- `engram:memory`: saving, recalling, or consolidating memory.
 - `construct:migration`: stored-data or schema changes, removing or renaming public surface.
 - `construct:constraints`: a quality bar, or a change that silences a check.
 - `construct:sources`: a named version-dependent API uncertainty.

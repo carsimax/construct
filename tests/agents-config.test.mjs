@@ -83,20 +83,31 @@ test('no non-deprecated userConfig title names a methodology (ODD, RDD, JD)', ()
   }
 })
 
-test('no plugin agent references gentle-ai or any engram tool', () => {
+test('no plugin agent references gentle-ai', () => {
   for (const file of agentFiles) {
     const text = readFileSync(join(pluginRoot, 'agents', file), 'utf8')
     assert.doesNotMatch(text, /gentle[-_ ]?ai/i, file)
-    assert.doesNotMatch(text, /mcp__(plugin_engram_)?engram/, file)
   }
 })
 
-test('explorer keeps Bash so it can run construct-memory search, and the manifests have no engram dependency', () => {
-  const tools = readFileSync(join(pluginRoot, 'agents', 'explorer.md'), 'utf8').match(/^tools:(.*)$/m)[1]
-  assert.match(tools, /\bBash\b/)
+test('explorer tells agents to recall with mem_search, and the manifests have no engram dependency', () => {
+  const text = readFileSync(join(pluginRoot, 'agents', 'explorer.md'), 'utf8')
+  assert.match(text, /mem_search/)
+  const tools = text.split('---')[1].match(/^tools: (.*)$/m)[1].split(/,\s*/)
   assert.equal(manifest.dependencies, undefined)
   const market = JSON.parse(readFileSync(new URL('../.claude-plugin/marketplace.json', import.meta.url), 'utf8'))
   assert.equal(market.allowCrossMarketplaceDependenciesOn, undefined)
+})
+
+// Engram serves its tools under either prefix: direct MCP (`engram setup claude-code`) or the plugin's own server.
+test('explorer and judges list Engram read tools under both prefixes, and no Engram write tool', () => {
+  for (const agent of ['explorer', 'judge-a', 'judge-b']) {
+    const tools = readFileSync(join(pluginRoot, 'agents', `${agent}.md`), 'utf8').split('---')[1].match(/^tools: (.*)$/m)[1].split(/,\s*/)
+    for (const prefix of ['mcp__engram__', 'mcp__plugin_engram_engram__']) {
+      for (const t of ['mem_search', 'mem_get_observation']) assert.ok(tools.includes(prefix + t), `${agent} lists ${prefix + t}`)
+    }
+    assert.deepEqual(tools.filter((t) => /engram/.test(t) && !/__mem_(search|get_observation)$/.test(t)), [], `${agent} lists only Engram read tools`)
+  }
 })
 
 test('S2: explorer and judge agents list LSP, and no agent lists a codegraph tool', () => {

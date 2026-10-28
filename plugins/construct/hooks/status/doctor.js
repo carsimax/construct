@@ -31,31 +31,14 @@ export function checkNode(text) {
   return { ok: have !== null && atLeast(have, triple(`${MIN_NODE}.0`)), label, hint: `install Node ${MIN_NODE} or later; the hooks need it` }
 }
 
-// Run through `node -e`: prints `ok` when node:sqlite loads and has the FTS5 trigram tokenizer. Node 22.13-22.15 and
-// 23.x load it without fts5, so a version check alone is not enough. install.sh carries the same probe.
-export const MEMORY_PROBE =
-  "const { DatabaseSync } = require('node:sqlite'); new DatabaseSync(':memory:').exec(\"CREATE VIRTUAL TABLE t USING fts5(x, tokenize='trigram')\"); console.log('ok')"
-
-// `out` is the stdout of `node -e MEMORY_PROBE`, or null when it failed or timed out.
-export function checkMemory(out) {
+// `out` is the stdout of `engram version` (for example `engram 3.6.0`), or null when it failed or timed out.
+export function checkEngram(out) {
+  const m = /^engram (\d+\.\d+\.\d+)/.exec(String(out ?? '').trim())
   return {
-    ok: String(out ?? '').trim() === 'ok',
-    label: 'Memory (node:sqlite with FTS5 trigram)',
-    hint: `use Node 22.16+; node:sqlite with the FTS5 trigram tokenizer must load`,
+    ok: m !== null,
+    label: m ? `Engram ${m[1]}` : 'Engram (not found)',
+    hint: 'brew install gentleman-programming/tap/engram && engram setup claude-code',
   }
-}
-
-// `out` is the stdout of `construct-memory doctor --json` ([{ check, ok, detail }]), or null when the command
-// could not run. Anything that is not a non-empty list of checks is one failed row, never a throw.
-export function memoryDoctorRows(out) {
-  let list = null
-  try {
-    list = JSON.parse(String(out ?? ''))
-  } catch {}
-  if (!Array.isArray(list) || list.length === 0 || !list.every((c) => c && typeof c.check === 'string')) {
-    return [{ ok: false, label: 'memory doctor', hint: 'could not run' }]
-  }
-  return list.map((c) => ({ ok: c.ok === true, label: `memory: ${c.check}`, hint: String(c.detail ?? '') }))
 }
 
 export function formatReport(rows) {

@@ -2,7 +2,7 @@
 # Construct installer: sets up the Construct plugin and merges the Construct
 # settings into ~/.claude/settings.json. Safe to run again; a second run changes nothing.
 #
-#   curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v8.7.0/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v9.0.0/install.sh | bash
 #
 # Runs under the macOS system bash (3.2): no associative arrays, no ${x,,}.
 set -euo pipefail
@@ -10,7 +10,7 @@ set -euo pipefail
 MIN_CLAUDE=2.1.304
 MIN_NODE=22.16
 CONSTRUCT_REPO=carsimax/construct
-CONSTRUCT_REF=v8.7.0 # the release this script belongs to; keep in step with the URL above
+CONSTRUCT_REF=v9.0.0 # the release this script belongs to; keep in step with the URL above
 CONSTRUCT_PLUGIN=construct@construct
 
 INSTALLED=""
@@ -81,10 +81,6 @@ preflight() {
   has node || fail "Node.js $MIN_NODE or later is required (node is not on the PATH). See https://nodejs.org"
   version=$(run node -p 'process.versions.node')
   version_ge "$version" "$MIN_NODE" || fail "Node.js $version is too old; Construct needs $MIN_NODE or later"
-  # Node 22.13-22.15 and 23.x load node:sqlite without the fts5 module, so the version alone is not enough.
-  # Keep this probe in step with MEMORY_PROBE in plugins/construct/hooks/status/doctor.js.
-  run node -e "const { DatabaseSync } = require('node:sqlite'); new DatabaseSync(':memory:').exec(\"CREATE VIRTUAL TABLE t USING fts5(x, tokenize='trigram')\")" >/dev/null 2>&1 ||
-    fail "Node.js $version has no node:sqlite with FTS5 trigram, which Construct memory needs; use Node.js $MIN_NODE or later (Node.js 23 is not supported)"
   has git || fail "git is required and is not on the PATH"
   check_writable
   local rc=0
@@ -95,11 +91,11 @@ preflight() {
   [ "$rc" = 0 ] || fail "nothing was installed"
 }
 
-# Construct keeps its own memory; an existing engram is left alone, never removed.
-note_engram() {
-  if has engram; then
-    say "engram is installed, but Construct no longer needs it; nothing was removed"
-  fi
+# Memory is Engram's: stop before anything is written when the binary or its Claude Code plugin is missing.
+require_engram() {
+  local msg="Construct needs Engram for memory; install it with: brew install gentleman-programming/tap/engram && engram setup claude-code"
+  has engram || fail "$msg"
+  [[ "$(run claude plugin list)" == *"engram@engram"* ]] || fail "$msg"
 }
 
 # Construct no longer uses CodeGraph; an existing CLI or MCP server is left alone, never removed.
@@ -154,14 +150,6 @@ const path = require('node:path')
 const [mode, file] = process.argv.slice(2)
 // Earlier versions set this theme; it is removed, and any other theme stays.
 const OLD_THEME = 'custom:construct:construct'
-// One rule per non-destructive construct-memory command and memory MCP tool; delete, prompts delete, consolidate, import, export, and review done keep asking.
-// Rule syntax (code.claude.com/docs/en/permissions, Bash): a trailing ` *` matches the bare command and any arguments; a rule without it matches only that exact command.
-const ALLOW = [
-  ...['search', 'get', 'context', 'timeline', 'stats', 'doctor', 'suggest-topic-key', 'save', 'update', 'summary', 'review list', 'review stale', 'review passive', 'prompts --search', 'prompts --limit', 'pin', 'unpin', 'judge', 'judge-many', 'compare', 'relations pending', 'help'].map((c) => `Bash(construct-memory ${c} *)`),
-  'Bash(construct-memory prompts)',
-  // The memory MCP server (plugins/construct/.mcp.json) has no destructive tool, so every tool is pre-approved by exact name.
-  ...['mem_save', 'mem_search', 'mem_context', 'mem_get_observation', 'mem_update', 'mem_timeline', 'mem_session_summary', 'mem_judge', 'mem_suggest_topic_key', 'mem_relations_pending'].map((t) => `mcp__plugin_construct_memory__${t}`),
-]
 
 let text = null
 try {
@@ -187,12 +175,6 @@ if (text !== null && text.trim() !== '') {
   }
 }
 
-const permissions = settings.permissions ?? {}
-const allow = permissions.allow ?? []
-if (typeof permissions !== 'object' || Array.isArray(permissions) || !Array.isArray(allow)) {
-  console.error(`${file} has a permissions.allow that is not a list; fix it and run the installer again`)
-  process.exit(3)
-}
 if (mode === 'check') process.exit(0)
 
 const lines = []
@@ -201,14 +183,6 @@ if (settings.theme === OLD_THEME) {
   delete settings.theme
   changed = true
   lines.push(`+ theme ${OLD_THEME} removed`)
-}
-const missing = ALLOW.filter((rule) => !allow.includes(rule))
-if (missing.length) {
-  settings.permissions = { ...permissions, allow: [...allow, ...missing] }
-  changed = true
-  lines.push(`+ permissions.allow gained ${missing.join(', ')}`)
-} else {
-  lines.push('= permissions.allow has the construct-memory CLI and MCP tools')
 }
 
 if (changed) {
@@ -292,7 +266,7 @@ main() {
     warn "--no-mcp is deprecated and has no effect; the installer no longer adds an MCP server"
   fi
   preflight
-  note_engram
+  require_engram
   note_codegraph
   add_marketplace "$CONSTRUCT_REPO" "$CONSTRUCT_REF"
   install_plugin

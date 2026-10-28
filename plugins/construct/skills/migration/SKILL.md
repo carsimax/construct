@@ -21,7 +21,7 @@ A migration changes something other code or stored data depends on. Old and new 
 1. **Classify.** Stored data or schema, public name, or a whole system. This work is Risk item 1 or 3, so it is tracked in `odd/tasks/` and its units are reviewed (below).
 2. **Ask at most one blocking question**, only when the answer changes the plan. Without an answer, default to an advisory deprecation with no hard date.
 3. **Plan the phases** from `references/phases.md`: pattern, per-phase verifier and rollback, removal condition. The parent writes the plan; it does not edit code itself.
-4. **Save the plan** with `mem_save` (else `construct-memory save`; type `decision`) under `topic_key` `migration/<name>`. A notice updates that entry.
+4. **Save the plan** with `mem_save` (type `decision`) under `topic_key` `migration/<name>`. A notice updates that entry.
 5. **One phase per unit.** Delegate each phase to `construct:worker`, test-first, with the phase's rollback as an acceptance check. A contract step never shares a unit with an earlier phase.
 6. **Review.** Each unit is Risk item 1 or 3, so it gets `construct:review` before it counts as done, and the publication gate denies `git push`, `gh pr create`, and `gh release create` until the lenses approve. command-guard denies `--no-verify`, and the Risk-line gate blocks added skipped or stub tests, so neither is a way around a failing phase.
 

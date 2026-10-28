@@ -79,7 +79,7 @@ test('frontmatter caps: explorer and verifier have a turn budget, no agent force
 })
 
 test('frontmatter by kind: judges read only, writers write, reader and verifier never write (V52)', () => {
-  for (const n of namesOf('judge')) assert.deepEqual(frontmatter(n).tools, ['Read', 'Glob', 'Grep', 'LSP'], n)
+  for (const n of namesOf('judge')) assert.deepEqual(frontmatter(n).tools, ['Read', 'Glob', 'Grep', 'LSP', 'mcp__engram__mem_search', 'mcp__engram__mem_get_observation', 'mcp__plugin_engram_engram__mem_search', 'mcp__plugin_engram_engram__mem_get_observation'], n)
   for (const n of [...namesOf('reader'), ...namesOf('verifier')]) {
     const fm = frontmatter(n)
     for (const tool of ['Edit', 'Write', 'NotebookEdit', 'Agent']) assert.ok(fm.disallowed.includes(tool) || (fm.tools && !fm.tools.includes(tool)), `${n} ${tool}`)

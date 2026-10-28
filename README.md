@@ -1,7 +1,7 @@
 # Construct
 
 [![Claude Code](https://img.shields.io/badge/Claude_Code-2.1.304%2B-blue)](#requirements)
-[![Plugin version](https://img.shields.io/badge/version-8.7.0-informational)](plugins/construct/.claude-plugin/plugin.json)
+[![Plugin version](https://img.shields.io/badge/version-9.0.0-informational)](plugins/construct/.claude-plugin/plugin.json)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 Construct is a Claude Code plugin that makes every request follow Organic Driven Development (ODD): authorize, explore, size, track, implement test-first, and close with evidence and a Risk line.
@@ -16,35 +16,36 @@ An agent writes code faster than you can check it. Organic Driven Development ke
 
 - **ODD workflow.** A session contract, injected by hooks, that Claude follows on every request without being asked.
 - **Role agents with model routing.** 10 agents (explorer, worker, verifier, judges, review lenses). You choose each role's model and effort in `/config`.
-- **Skills.** Procedures that load on demand: workflow (sizing included), delegation, debugging, quality bar, migrations, branches, commits and pull requests (`delivery`), review, memory, and more.
+- **Skills.** Procedures that load on demand: workflow (sizing included), delegation, debugging, quality bar, migrations, branches, commits and pull requests (`delivery`), review, and more.
 - **Mandatory review.** Work whose Risk names a high-risk item is reviewed by lens agents before it can be published. Hooks build the evidence, record the verdicts, and gate `git push`, `gh pr create`, and `gh release create`.
 - **Status panel.** A docked panel with the model, context, plan limits, active feature, permission gate, agents, and changes. Open it with `/construct`.
 - **Output style.** The `Principal Engineer` output style.
 
-- **Memory.** A per-repository memory built in (`construct-memory`), with no extra plugin, server, or binary. See [Memory](#memory).
+- **Memory.** Provided by [Engram](https://github.com/Gentleman-Programming/engram), which you install separately. See [Memory](#memory).
 
 ## Requirements
 
 | Requirement | Why |
 |---|---|
 | Claude Code 2.1.304 or later, signed in | The panel is a mod, and the panel needs 2.1.304. Tested on 2.1.304 |
-| Node.js 22.16 or later (Node 23 is not supported) | The plugin's scripts and hooks, and the memory's `node:sqlite` with FTS5. Claude Code's native install does not bundle Node.js |
+| Node.js 22.16 or later (Node 23 is not supported) | The plugin's scripts and hooks. Claude Code's native install does not bundle Node.js |
 | `git` on the PATH | The review and publication hooks read the repository |
+| [Engram](https://github.com/Gentleman-Programming/engram) | The memory: recall and save through its `mem_*` tools |
 
 ## Install
 
 ### One command
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v8.7.0/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v9.0.0/install.sh | bash
 ```
 
-The installer checks the requirements above and stops before changing anything if one is missing, or if `~/.claude` or `~/.claude/settings.json` is not writable, or if `settings.json` is a directory. Then it runs the manual steps below for you:
+The installer requires Engram: when the `engram` binary or the `engram@engram` plugin is missing, it stops and installs nothing, and prints `brew install gentleman-programming/tap/engram && engram setup claude-code`. It checks the other requirements above and stops before changing anything if one is missing, or if `~/.claude` or `~/.claude/settings.json` is not writable, or if `settings.json` is a directory. Then it runs the manual steps below for you:
 
 - Adds the construct marketplace and installs `construct@construct`.
-- Merges into `~/.claude/settings.json`: one `permissions.allow` rule per non-destructive `construct-memory` command (`search`, `get`, `context`, `timeline`, `stats`, `doctor`, `suggest-topic-key`, `save`, `update`, `summary`, `review list`, `review stale`, `review passive`, `prompts`, `prompts --limit`, `prompts --search`, `pin`, `unpin`, `judge`, `judge-many`, `compare`, `help`; `delete`, `prompts delete`, `consolidate`, `import`, `export`, and `review done` still ask), and removes a `theme` of `custom:construct:construct` left by earlier versions (any other theme is left alone). Destructive commands run only in their exact form: any extra option or word is refused, which keeps the pre-approved prefixes from reaching them. An empty `settings.json` counts as `{}`. Other keys stay as they are, a symlinked file (even a dangling one, whose target is then created) is written through to its target with its mode kept, and the previous file is saved as `settings.json.bak-<timestamp>`.
+- Removes a `theme` of `custom:construct:construct` left by earlier versions from `~/.claude/settings.json` (any other theme is left alone). It adds no memory permission rules and leaves your existing rules alone. An empty `settings.json` counts as `{}`. Other keys stay as they are, a symlinked file is written through to its target with its mode kept, and the previous file is saved as `settings.json.bak-<timestamp>`; when there is nothing to change, the file is not touched.
 
-If engram or codegraph is installed, the installer says Construct no longer needs it and removes nothing. Every step is skipped when it is already done, so running the installer again changes nothing. It never changes other permissions or your permission mode. The output style needs no setting: the plugin forces `Principal Engineer`, and an `outputStyle` you already have stays in the file but has no effect while construct is enabled.
+If codegraph is installed, the installer says Construct no longer needs it and removes nothing. Every step is skipped when it is already done, so running the installer again changes nothing. It never changes other permissions or your permission mode. The output style needs no setting: the plugin forces `Principal Engineer`, and an `outputStyle` you already have stays in the file but has no effect while construct is enabled.
 
 | Option | Meaning |
 |---|---|
@@ -54,7 +55,7 @@ If engram or codegraph is installed, the installer says Construct no longer need
 Pass options after `bash -s --`, for example `curl -fsSL <url> | bash -s -- --no-mcp`. To read the script before running it:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v8.7.0/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/carsimax/construct/v9.0.0/install.sh -o install.sh
 less install.sh
 bash install.sh
 ```
@@ -70,7 +71,7 @@ The manual steps the installer runs, for when you want to run them yourself:
    claude plugin install construct@construct
    ```
 
-   The installer (`install.sh`) pins this marketplace to the release tag (`carsimax/construct#v8.7.0`); the command above follows the default branch.
+   The installer (`install.sh`) pins this marketplace to the release tag (`carsimax/construct#v9.0.0`); the command above follows the default branch.
 
 2. Optional: inside Claude Code, in `/config`, set each role's model and effort (rows such as `Worker model`).
 
@@ -178,24 +179,13 @@ The hook fails open on unreadable input or any internal error; a well-formed lau
 
 ### MCP servers
 
-Construct ships one MCP server, its own `memory` server (`plugins/construct/.mcp.json`, started with `node`, no dependencies; see [Memory](#memory)), and no third-party server. Structural questions (architecture, call flow, references, impact) use the native `LSP` tool when a language server is available, and Grep, Glob, and Read otherwise.
+Construct ships no MCP server of its own; memory comes from Engram (see [Memory](#memory)). Structural questions (architecture, call flow, references, impact) use the native `LSP` tool when a language server is available, and Grep, Glob, and Read otherwise.
 
 The installer no longer registers context7 or codegraph. Earlier registrations can be removed with `claude mcp remove --scope user context7` and `claude mcp remove --scope user codegraph` (the codegraph CLI itself, if you installed it with npm, is `npm uninstall -g @colbymchenry/codegraph`).
 
 ### Memory
 
-Memory is per repository: one SQLite database at `<git common dir>/construct-memory/memory.db`, shared by every worktree of the clone and never committed. It needs Node 22.16 or later and is off outside a git repository. Claude reaches it through the plugin's MCP server or the `construct-memory` command (on the Bash tool's PATH), and the `construct:memory` skill.
-
-- **MCP tools.** The `memory` server exposes `mem_save`, `mem_search`, `mem_context`, `mem_get_observation`, `mem_update`, `mem_timeline`, `mem_session_summary`, `mem_judge`, `mem_suggest_topic_key`, and `mem_relations_pending` (Claude Code names them `mcp__plugin_construct_memory__<tool>`). Each call runs the CLI once, so the CLI stays the single implementation and the fallback; a CLI failure comes back as an error result and a call that takes over 10 seconds as `construct-memory timed out`. The server works in `CLAUDE_PROJECT_DIR` when set, else its working directory. `install.sh` pre-approves these ten tools by exact name. `delete`, `prompts delete`, `consolidate`, `import`, `export`, and `review done` have no tool: they are CLI-only and keep asking. `construct:explorer` has a fixed tool list without the MCP tools and uses the CLI.
-
-- **Commands.** `save`, `search`, `get`, `context`, `update`, `delete`, `summary --session <id>`, `review list|done <id>`, `review stale [--json]` (read-only: live memories whose `Where:` names repository paths that no longer exist), `review passive [--days N] [--json]` (read-only: live `passive` memories never read with `get` and at least N days old, default 30, oldest first, to consolidate or delete), `import <file>`, `export [file]`, `suggest-topic-key` (prints a key from a JSON `type`, `title`, `content` on stdin), `timeline <id>`, `pin <id>` / `unpin <id>` (pinned memories load in every session context and rank higher in search), `stats`, `doctor [--json]` (read-only health checks, exit 1 when one fails), `prompts --search <query>`, `consolidate <id> <id>... --title T` (merge several memories into one: content on stdin, a preview and fingerprint first, then `--confirm <fingerprint>`), and `judge`, `judge-many`, `compare` (verdicts on related memories), and `relations pending [--limit N] [--json]` (lists the pending relation candidates). `construct-memory help` lists the flags. `get` counts each read of a live memory (`accessed: N`, columns `access_count` and `last_accessed_at`; `search`, `context`, and `timeline` do not count) and a read memory ranks slightly higher in search.
-- **Related memories.** After a save, `construct-memory` prints up to 3 similar memories as candidates; judging them is optional; the session context counts pending relations and `relations pending` lists them; and `search` and `get` mark judged `conflicts_with` and `supersedes` relations. Export and import carry relations between exported memories.
-- **Hooks.** At session start the recent memory is injected: sessions that have a summary or memories, recent prompts, pinned memories, the 20 newest agent saves, and the 3 newest passive learnings apart (after a compaction, with an instruction to save a summary first). Search ranks passive learnings below agent saves of equal relevance. Each prompt is stored (harness notices such as subagent and background-job completions are skipped), a subagent's `## Key Learnings:` section is captured as memories (an item whose words mostly match an earlier learning is skipped), session end marks the session closed, and a one-line reminder appears after 15 minutes without a save. `<private>...</private>` text is never stored, and text that looks like prompt injection is rejected, dropped, or filtered before it is stored.
-- **Erasing a memory.** `construct-memory delete <id>` hides it; `delete <id> --hard` erases it and its earlier versions for good, and an imported one is not re-imported.
-- **Stored prompts.** `construct-memory prompts [--limit N]` lists them with their ids and `construct-memory prompts delete <id>` removes one for good; `<private>` keeps text out in the first place.
-- **Import from engram.** Run `engram export` once, then `construct-memory import <file> --project <name>` (`--project` is required when the file holds several). Re-running it inserts nothing new, and it never reads `~/.engram`.
-- **Export.** `construct-memory export [file]` writes live observations, sessions, and prompts as JSON, to stdout or a new file, so you can back them up or move them to another clone with `import <file> --project <repository directory name>`.
-- **Uninstalling `engram@engram` is optional.** Construct no longer uses it.
+Memory comes from [Engram](https://github.com/Gentleman-Programming/engram), a prerequisite that Construct does not install or bundle. Claude recalls and saves through Engram's `mem_*` MCP tools (`mem_search`, `mem_save`, `mem_context`, `mem_session_summary`), and the `engram:memory` skill describes how. Engram's own hooks inject session context and capture a subagent's `## Key Learnings:` section. `/construct doctor` checks that `engram` is installed.
 
 ### Quality and recovery skills
 
@@ -273,7 +263,7 @@ Both `PostToolUse` signals fail open (no output, exit 0).
 
 The mod draws one thing: a docked **panel** (a `Pane` with id `construct`) drawn as cards and shaped to the ODD flow: one column at any width, no header or legend, `round` bordered cards, the bold title on the left and the status on the right. It has a voice: each agent role has a glyph and a verb (`⌕ explorer mapping`, `⚒ worker building`, `⊨ verifier verifying`, `⚖ judge judging`, `◎ review-risk reviewing`), the main card reads `● building`, `◆ waiting on you`, or `○ ready`, the GATE card says `all clear` or `N waiting on you`, and empty cards say so (`nothing remembered yet`). The band above the prompt is not drawn. It needs Claude Code 2.1.304 or later and does not appear in `claude -p` runs, which draw no interface.
 
-**Commands and opening.** `/construct` opens the panel, `/construct close` closes it, and `/construct doctor` prints a setup report instead: one line per check, `✓ label` or `✗ label — hint`, for Claude Code 2.1.304 or later, Node 22.16 or later, memory (`node:sqlite` with FTS5 trigram). The checks run in parallel with a 3 s timeout each, and a failed check shows as `✗` and never throws. The panel opens at every session start; to turn that off, set the plugin option `panel_open_on_start` (boolean, default `true`) to `false`.
+**Commands and opening.** `/construct` opens the panel, `/construct close` closes it, and `/construct doctor` prints a setup report instead: one line per check, `✓ label` or `✗ label — hint`, for Claude Code 2.1.304 or later, Node 22.16 or later, Engram (`engram version`). The checks run in parallel with a 3 s timeout each, and a failed check shows as `✗` and never throws. The panel opens at every session start; to turn that off, set the plugin option `panel_open_on_start` (boolean, default `true`) to `false`.
 
 **Width.** The panel asks for 66 columns when it opens (`columns: 66` on `ui.open`). That is a request, not a guarantee: a width you drag or keep wins, and the layout reads the real width (never below 40). Rows that do not fit are clipped, and the changes card keeps only the file rows that fit the pane height.
 
@@ -284,7 +274,6 @@ The mod draws one thing: a docked **panel** (a `Pane` with id `construct`) drawn
 1. **main card** (always drawn, with or without a `statusLine`): `<Model>` (no suffix) and idle, busy (named by the ODD phase of the running agents: `● verifying`, `● reviewing`, `● implementing`, `● exploring`, `● working`; plain `● busy` with none running), or `◆ blocked` (warning color) while Claude waits on you: a `tool.check` verdict of `ask` on a real call (the permission prompt), or a `tool.call` on `AskUserQuestion` or `ExitPlanMode` while it is open; the next settled `tool.call`, `turn.start` or `turn.complete` clears it, and the idle "waiting for your input" state never sets it (it is the one indicator, with no extra row; the mod's `classic.*` hooks are bypassed by a higher-tier module, so none is used); the current git branch (`⎇ <branch>`, hidden without one); the effort meter (`▮▯`), the permission mode (from the main thread's spawns), and the main request count; the context gauge with tokens used and window; the 5-hour and 7-day gauges (`▰▱`) with the time to each reset (`↻3h10m`, `↻4d2h`), omitted when the figure is missing, for example off a subscription.
 2. **ODD card** (only with an active feature): the feature (newest `odd/tasks/*.md` with an unfinished task, the rule of `feature-state.mjs`), the current task, one checkpoint per task (done filled, current highlighted) and the open count.
 3. **GATE card**: a stacked bar of permission verdicts, allowed / asked (`you`, or `classifier` in `auto` mode) / pending / denied counts, `file`, `shell` and `other` bucket counts, the last denied tool with credential-like values masked, and the inline-write alert (a main-thread `Edit`, `Write`, `MultiEdit` or `NotebookEdit` outside `odd/tasks/`: the count and last path, error color). It only observes and never blocks.
-   - **MEMORY card** (after GATE; a dim reason line when memory is off, `no memories yet` when empty): `N memories`, `<n> to review` (amber above 0), `<n> pinned`, `<n> pending` relations, `last save <age> ago` and `+<n> this session`, from `construct-memory stats --json`; left out when that run fails.
 4. **agents card**: titled `agents`, with `N running · M total` on the right, one row per subagent (up to 6, then `+N earlier`): a status mark, a short name (the construct role, as in `worker` or `review-risk`; the subagent type when there is no construct role), the routed model with its effort meter (for example `Sonnet 5.5 ▮▮▮▯`), and the elapsed time as static text.
 5. **changes card** (only with something to show): round card titled with the branch, `↑N` (commits to push) and `↓N` (commits to pull) on the right, each shown only when above 0. One row per changed file, biggest change first: the path (long paths keep their basename: `…/dir/name`) and `+added` / `-removed` lines (`bin` for a binary file). Changes are the working tree against `HEAD`, staged and unstaged; an untracked file shows `+lines` (counted for the first 20 untracked files) or `new` when it is a directory, past the first 20, or not countable. Rows fit the pane height; when some are cut the last row is `+N more`. The card is hidden when the repository is clean and in sync.
 
@@ -301,8 +290,7 @@ The mod draws one thing: a docked **panel** (a `Pane` with id `construct`) drawn
 | `plugins/construct/` | The plugin (manifest name `construct`) |
 | `plugins/construct/agents/` | The 10 role agents |
 | `plugins/construct/skills/` | Delivery and review skills (`delivery`, `review`, `debugging`, `constraints`, ...) |
-| `plugins/construct/hooks/` | `hooks.json`, the mod (`register.js`), its routing helpers, the status modules (`status/`), the panel modules (`panel/`), and the command hooks (`scripts/`: contract, feature state, the `shell-words` tokenizer, delivery signals, publication gate, review store guard, command and surface guards, Risk line gate, subagent count, delegation admission, review context and capture, and the memory store `memory-store.mjs` with its hooks `memory-hooks.mjs`) |
-| `plugins/construct/bin/construct-memory` | The memory command line (on the Bash tool's PATH) |
+| `plugins/construct/hooks/` | `hooks.json`, the mod (`register.js`), its routing helpers, the status modules (`status/`), the panel modules (`panel/`), and the command hooks (`scripts/`: contract, feature state, the `shell-words` tokenizer, delivery signals, publication gate, review store guard, command and surface guards, Risk line gate, subagent count, delegation admission, review context and capture) |
 | `plugins/construct/bin/construct-gate` | Installs, removes, or reports the git pre-push hook (`hooks/scripts/pre-push.mjs`) |
 | `plugins/construct/hooks/contract/` | Session and subagent contract texts injected by hooks |
 | `plugins/construct/evals/` | Behavior eval cases run by `claude plugin eval` (`scripts/eval.sh` also writes `summary.json` with ritual and outcome pass rates, cost, duration, and turns, and keeps the run dirs under /private/tmp; `scripts/probe-review.sh` stands in for `review-fires` where the eval sandbox has no working git) |
@@ -356,7 +344,9 @@ Risk line: one reply can name several items, `Risk: items 2, 5 (reason)`; the Ri
 
 ## Status
 
-Current version: 8.7.0 (`plugins/construct/.claude-plugin/plugin.json`); a minor release. Releases are tagged `vX.Y.Z`.
+Current version: 9.0.0 (`plugins/construct/.claude-plugin/plugin.json`); a major release. Releases are tagged `vX.Y.Z`.
+
+Changes in 9.0.0: the built-in `construct-memory` CLI and `memory` MCP server are removed; [Engram](https://github.com/Gentleman-Programming/engram) is required and the installer stops without it. See [CHANGELOG.md](CHANGELOG.md).
 
 Changes in 8.7.0:
 
