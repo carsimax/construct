@@ -4,6 +4,8 @@ Notable changes per release. Versions follow [Semantic Versioning](https://semve
 
 ## Unreleased
 
+- **Breaking:** the plugin no longer ships or forces the `Principal Engineer` output style. Replies follow your own output style and CLAUDE.md; the session contract still carries the reply-language, one-question, and Risk-line rules, and the `delivery` skill the commit rules. If you had picked `construct:Principal Engineer` in `/output-style`, pick another.
+
 ## 10.0.0
 
 - **Breaking:** the docked panel is replaced by a band above the prompt: the phase, the active feature and its tasks, the gate, and the running agents. The model, effort, branch, changed files, context, and plan limits are no longer drawn; your status line shows them.

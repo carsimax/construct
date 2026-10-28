@@ -19,7 +19,6 @@ An agent writes code faster than you can check it. Organic Driven Development ke
 - **Skills.** Procedures that load on demand: workflow (sizing included), delegation, debugging, quality bar, migrations, branches, commits and pull requests (`delivery`), review, and more.
 - **Mandatory review.** Work whose Risk names a high-risk item is reviewed by lens agents before it can be published. Hooks build the evidence, record the verdicts, and gate `git push`, `gh pr create`, and `gh release create`.
 - **Status band.** One or two rows above the prompt with the phase, the active feature and its tasks, the permission gate, and the running agents. It leaves the model, branch, context, and plan limits to your status line.
-- **Output style.** The `Principal Engineer` output style.
 
 - **Memory.** Provided by [Engram](https://github.com/Gentleman-Programming/engram), which you install separately. See [Memory](#memory).
 
@@ -45,7 +44,7 @@ The installer requires Engram: when the `engram` binary or the `engram@engram` p
 - Adds the construct marketplace and installs `construct@construct`.
 - Removes a `theme` of `custom:construct:construct` left by earlier versions from `~/.claude/settings.json` (any other theme is left alone). It adds no memory permission rules and leaves your existing rules alone. An empty `settings.json` counts as `{}`. Other keys stay as they are, a symlinked file is written through to its target with its mode kept, and the previous file is saved as `settings.json.bak-<timestamp>`; when there is nothing to change, the file is not touched.
 
-If codegraph is installed, the installer says Construct no longer needs it and removes nothing. Every step is skipped when it is already done, so running the installer again changes nothing. It never changes other permissions or your permission mode. The output style needs no setting: the plugin forces `Principal Engineer`, and an `outputStyle` you already have stays in the file but has no effect while construct is enabled.
+If codegraph is installed, the installer says Construct no longer needs it and removes nothing. Every step is skipped when it is already done, so running the installer again changes nothing. It never changes other permissions or your permission mode.
 
 | Option | Meaning |
 |---|---|
@@ -157,7 +156,6 @@ A plugin cannot ship a `CLAUDE.md`, so Construct loads its rules in layers:
 | Session contract | `SessionStart` hook (startup, resume, clear, compact) | ODD protocol, task size, high-risk list, Risk line, and delegation triggers, under 8,000 characters |
 | Subagent contract | `SubagentStart` hook | Artifact language, edit surfaces, scratch, and the `## Key Learnings` closing block. JSON-only reviewers (`review-*`, `judge-*`) get nothing |
 | Skills | Loaded on demand | `workflow`, `delegation`, `debugging`, `constraints` |
-| Output style | Forced by the plugin (`force-for-plugin`), in every project | Reply tone, language, response length, verification, and working rules (no AI attribution in commits, one question at a time) |
 
 The contract texts live in `plugins/construct/hooks/contract/`.
 
