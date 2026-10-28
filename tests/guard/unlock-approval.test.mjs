@@ -3,10 +3,10 @@
 // The answer is recorded in the review store by unlock-approval.mjs (PostToolUse on AskUserQuestion); the transcript is never read.
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { readFileSync, symlinkSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, symlinkSync } from 'node:fs'
 import { describe, test } from 'node:test'
 import { repositoryRoot } from '../../plugins/construct/hooks/scripts/git-tree.mjs'
-import { writeApproval } from '../../plugins/construct/hooks/scripts/review-store.mjs'
+import { storeAt, writeApproval } from '../../plugins/construct/hooks/scripts/review-store.mjs'
 import { makeRepo, scratchDir } from '../helpers/repo.mjs'
 
 const GUARD = new URL('../../plugins/construct/hooks/scripts/command-guard.mjs', import.meta.url).pathname
@@ -39,8 +39,8 @@ const denied = (r) => {
 }
 
 describe('command-guard: unlock after a recorded AskUserQuestion approval', () => {
-  test('allowed after a matching Unlock answer, in the wrapper forms and with a case-insensitive padded label', () => {
-    for (const [command, label] of [[unlock(), 'Unlock'], [`sh -c "${unlock()}"`, ' UNLOCK '], [`node /x/bin/construct-gate oracle unlock ${PATH_}`, 'Unlock']]) {
+  test('allowed after a matching Unlock answer, as a lone command (plain or run by node) and with a case-insensitive padded label', () => {
+    for (const [command, label] of [[unlock(), 'Unlock'], [unlock(), ' UNLOCK '], [`node /x/bin/construct-gate oracle unlock ${PATH_}`, 'Unlock']]) {
       const repo = fresh()
       record(repo, { label })
       allowed(guard(repo, command))
@@ -165,6 +165,7 @@ describe('unlock approvals: session binding, expiry, symlinks, directory changes
     const q = question()
     writeApproval(repositoryRoot(repo), { tool_use_id: 'old', session_id: 's1', answers: { [q]: 'Unlock' }, at: Date.now() - 16 * 60 * 1000 })
     denied(guard(repo, unlock()))
+    assert.equal(existsSync(`${storeAt('.git', repositoryRoot(repo))}/approvals/old.json`), false)
     writeApproval(repositoryRoot(repo), { tool_use_id: 'fresh', session_id: 's1', answers: { [q]: 'Unlock' }, at: Date.now() - 14 * 60 * 1000 })
     allowed(guard(repo, unlock()))
   })
@@ -188,12 +189,44 @@ describe('unlock approvals: session binding, expiry, symlinks, directory changes
     record(repo, { id: 't5' })
     allowed(guard(repo, unlock()))
   })
-  test('a directory change before the unlock in the same command line is denied', () => {
-    for (const command of [`cd tests && ${unlock()}`, `pushd tests; ${unlock()}`, `git -C tests status && ${unlock()}`, `env -C tests ${unlock()}`, `(cd tests; ${unlock()})`, `(${unlock()})`, `cd tests && sh -c "${unlock()}"`, `sh -c "cd tests && ${unlock()}"`]) {
+  test('an unlock that is not the whole command is denied: separators, links made on the line, variables, wrappers, directory changes, redirections', () => {
+    for (const command of [
+      `cd tests && ${unlock()}`, `pushd tests; ${unlock()}`, `git -C tests status && ${unlock()}`, `env -C tests ${unlock()}`, `(cd tests; ${unlock()})`, `(${unlock()})`,
+      `cd tests && sh -c "${unlock()}"`, `sh -c "cd tests && ${unlock()}"`, `sh -c "${unlock()}"`, `ln -s a.test.mjs tests/z && ${unlock()}`, `${unlock()} && ls`, `${unlock()}; ls`, `${unlock()} || ls`,
+      `${unlock()} | cat`, `${unlock()} &`, `${unlock()} > /dev/null`, `${unlock()} 2>&1`, `${unlock()} <<< x`, `${unlock()} $(echo)`, `X=1 ${unlock()}`, `env ${unlock()}`, `command ${unlock()}`,
+      `nohup ${unlock()}`, `xargs ${unlock()}`, `P=${PATH_}; construct-gate oracle unlock "$P"`, 'construct-gate oracle unlock $P', 'construct-gate oracle unlock "$(echo tests/a.test.mjs)"',
+      `construct-gate oracle unlock '${PATH_}'`, `construct-gate oracle unlock "${PATH_}"`, `construct-gate oracle unlock tests/*.test.mjs`, `construct-gate oracle unlock ~/${PATH_}`, `${unlock()}\nls`, `node -e 1 /x/construct-gate oracle unlock ${PATH_}`,
+    ]) {
       const repo = fresh()
       record(repo)
       denied(guard(repo, command))
     }
+  })
+  test('the typed path must exist as a regular file: a missing path, a directory, and a path with .. are denied', () => {
+    for (const p of ['tests/none.test.mjs', 'tests', 'tests/../tests/a.test.mjs']) {
+      const repo = fresh()
+      record(repo, { q: question(p) })
+      denied(guard(repo, unlock(p)))
+    }
+  })
+  test('one live approval: a new record deletes the older ones, and using one deletes them all', () => {
+    const repo = fresh()
+    const dir = `${storeAt('.git', repositoryRoot(repo))}/approvals`
+    const ids = () => readdirSync(dir).filter((n) => n.endsWith('.json'))
+    record(repo, { id: 'a1' })
+    record(repo, { id: 'a2' })
+    record(repo, { id: 'a3' })
+    assert.deepEqual(ids(), ['a3.json'])
+    allowed(guard(repo, unlock()))
+    assert.deepEqual(ids(), [])
+    assert.equal(existsSync(`${dir}/a3.used`), true)
+  })
+  test('two sessions interleaved: the latest record belongs to the other session, so this session fails closed (documented limit); the other session unlocks', () => {
+    const repo = fresh()
+    record(repo, { id: 'mine' })
+    record(repo, { id: 'theirs', session_id: 's2' })
+    denied(guard(repo, unlock()))
+    allowed(guard(repo, unlock(), { session_id: 's2' }))
   })
   test('an agent running the approval or oracle recorder hook is denied, in each form review-store-guard covers', () => {
     const repo = fresh()

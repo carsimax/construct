@@ -89,9 +89,22 @@ async function oracle(sub, path) {
     if (!path) throw new Error('usage: construct-gate oracle unlock <path>')
     // Locks are stored as repository-relative paths: `./p`, `a//b` and an absolute path inside the repository mean the stored one. A corrupt record is named by its file name, so a name with no `/` that matches one stays as typed.
     if (!oracleEntries(root).some((e) => e.name === path || e.name === `${path}.json`)) {
+      const typed = path
       const rel = lockPath(root, path)
       if (rel === null) throw new Error(`${path} is outside the repository`)
       path = rel
+      // Never follow a link to another lock: the typed path (lockPath resolves links) may have no symlink under the root, the file itself included.
+      // `real` is null for a part that is not on disk (a deleted oracle); a dangling link is still found by lstat.
+      const real = (d) => {
+        try {
+          return realpathSync(d)
+        } catch {
+          return null
+        }
+      }
+      for (let d = resolve(root, typed); real(d) !== root && d !== dirname(d); d = dirname(d)) {
+        if (lstatSync(d, { throwIfNoEntry: false })?.isSymbolicLink()) throw new Error(`${typed} has a symlink under the repository root (${d}); unlock the real path`)
+      }
     }
     const lock = oracleEntries(root).find((e) => e.record?.path === path)?.record
     if (!removeOracle(root, path)) throw new Error(`no oracle lock for ${path} (construct-gate oracle list shows them)`)
