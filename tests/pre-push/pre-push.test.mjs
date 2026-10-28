@@ -80,6 +80,17 @@ describe('pre-push hook judges a real git push', () => {
     assert.ok(!remoteRefs(bare).includes('refs/heads/feat'))
   })
 
+  test('with no default branch, an unmigrated odd/tasks document still denies with the migration (L6)', () => {
+    const { repo, bare, config } = installed('none', { fetch: false, docs: false })
+    applyFiles(repo, { 'odd/tasks/f.md': TABLE('2') })
+    commitAll(repo, 'legacy')
+    git(repo, 'branch', '-m', 'main', 'trunk')
+    const r = push(repo, config, 'origin', 'feat')
+    assert.notEqual(r.status, 0)
+    assert.match(r.stderr, /git mv odd \.vault/)
+    assert.ok(!remoteRefs(bare).includes('refs/heads/feat'))
+  })
+
   test('an error while judging denies (no default branch resolves)', () => {
     const { repo, bare, config } = installed('none', { fetch: false })
     git(repo, 'branch', '-m', 'main', 'trunk')

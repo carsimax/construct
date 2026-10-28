@@ -6,7 +6,7 @@
 // Usage: node pre-push.mjs <remote> <url>   (run by git inside the repository)
 import { readFileSync } from 'node:fs'
 import { git, repositoryRoot } from './git-tree.mjs'
-import { verdict } from './publication-gate.mjs'
+import { UNMIGRATED, verdict } from './publication-gate.mjs'
 
 const remote = process.argv[2] || 'origin'
 const WAYS_OUT = 'To skip the check once use `git push --no-verify`; to remove the hook run `construct-gate uninstall`.'
@@ -25,9 +25,12 @@ try {
     if (reason?.includes('default branch cannot be resolved')) {
       // Without a default branch nothing can be compared; a commit with no feature document at all publishes no tracked work.
       // shortcut: a document moved out of .vault/tasks/ is not seen here, upgrade if repositories without a default branch track work.
-      const tree = git(dir, ['ls-tree', '-r', '--name-only', localSha, '--', '.vault/tasks/']).toString('utf8')
-      if (!/\.md$/m.test(tree)) continue
-      reason += ` Run \`git remote set-head ${remote} --auto\` to record the remote's default branch. ${WAYS_OUT}`
+      const tree = git(dir, ['ls-tree', '-r', '--name-only', localSha, '--', '.vault/', 'odd/tasks/', 'odd/risk-paths']).toString('utf8')
+      if (!/^\.vault\//m.test(tree) && /^odd\/(tasks\/.+\.md|risk-paths)$/m.test(tree)) {
+        // odd/ is never read, so an unmigrated clone must not publish silently (L6 of .vault/tasks/vault.md).
+        reason = `construct pre-push: ${localRef} ${UNMIGRATED} ${WAYS_OUT}`
+      } else if (!/^\.vault\/tasks\/.+\.md$/m.test(tree)) continue
+      else reason += ` Run \`git remote set-head ${remote} --auto\` to record the remote's default branch. ${WAYS_OUT}`
     } else if (reason?.includes('could not be checked (git merge-base ')) {
       reason = `construct pre-push: ${localRef} shares no history with the default branch, so its review state cannot be checked. ${WAYS_OUT}`
     } else if (reason?.includes('no remote-tracking default branch exists')) {

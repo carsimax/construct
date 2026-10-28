@@ -231,7 +231,9 @@ function globToRegExp(glob) {
 // .vault/risk-paths/ at one commit, called with the merge base and the default branch tip, never the ref, so a change
 // cannot lower its own floor and a rule added after it branched still applies. An unreadable line throws, naming its file.
 function projectFloor(root, commit) {
-  const files = out(root, ['ls-tree', '-r', '--name-only', '-z', commit, '--', '.vault/risk-paths/']).split('\0').filter((f) => f !== '')
+  // A trusted commit with no .vault/ has not migrated: its odd/risk-paths still sets the floor, so the migration push cannot lower it (L7).
+  const legacy = out(root, ['ls-tree', '--name-only', commit, '--', '.vault']) === ''
+  const files = legacy ? (out(root, ['ls-tree', '--name-only', commit, '--', 'odd/risk-paths']) === '' ? [] : ['odd/risk-paths']) : out(root, ['ls-tree', '-r', '--name-only', '-z', commit, '--', '.vault/risk-paths/']).split('\0').filter((f) => f !== '')
   return files.flatMap((file) => out(root, ['show', `${commit}:${file}`]).split('\n').map((l) => l.trim()).filter((l) => l !== '' && !l.startsWith('#')).flatMap((line) => {
     const m = /^(\S+)\s+([1-6](?:\s*,\s*[1-6])*)$/.exec(line)
     if (!m) throw new Error(`${file} has an unreadable line: ${JSON.stringify(line)} (expected "<glob> <items 1-6, comma separated>")`)
@@ -399,6 +401,9 @@ function clarificationDenial(docs) {
   return found.length === 0 ? null : found.join('; ')
 }
 
+// UNMIGRATED: the deny for a ref that keeps odd/ (never read, S1 of .vault/tasks/vault.md) without .vault/; pre-push.mjs shares it.
+export const UNMIGRATED = `still keeps its feature documents or risk rules in odd/, which Construct no longer reads, so their review requirements would silently stop counting. Move them to .vault/ first: git mv odd .vault && git mv .vault/risk-paths .vault/rules.txt && mkdir .vault/specs .vault/risk-paths && git mv .vault/spec.md .vault/specs/README.md && git mv .vault/rules.txt .vault/risk-paths/rules.txt (skip the moves for files you do not have), then commit.`
+
 // refVerdict judges one published ref: null when it may go, else the denial reason.
 function refVerdict(root, pub, base, ref) {
   const short = ref.replace(/^refs\/heads\//, '')
@@ -411,7 +416,7 @@ function refVerdict(root, pub, base, ref) {
   const sha = out(root, ['rev-parse', '--verify', `${ref}^{commit}`])
   // odd/ is never read (S1), so an unmigrated one would drop its Risk cells and rules without a word: deny until it moves.
   if (out(root, ['ls-tree', '--name-only', sha, '--', 'odd/tasks', 'odd/risk-paths']) !== '' && out(root, ['ls-tree', '--name-only', sha, '--', '.vault']) === '') {
-    return `publication-gate: ${pub.gate} is denied because ${short} still keeps its feature documents or risk rules in odd/, which Construct no longer reads, so their review requirements would silently stop counting. Move them to .vault/ first: git mv odd .vault && git mv .vault/risk-paths .vault/rules.txt && mkdir .vault/specs .vault/risk-paths && git mv .vault/spec.md .vault/specs/README.md && git mv .vault/rules.txt .vault/risk-paths/rules.txt (skip the moves for files you do not have), then commit.`
+    return `publication-gate: ${pub.gate} is denied because ${short} ${UNMIGRATED}`
   }
   const locked = oracleDenial(root, sha)
   if (locked) return `publication-gate: ${pub.gate} is denied because ${short} changes an oracle that is locked by content hash: ${locked}. The oracle is locked while its feature has unfinished tasks: restore the file, or return \`oracle_conflict\` to the user (the spec and the test disagree) or ask them to unlock it.`
