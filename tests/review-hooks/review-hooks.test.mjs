@@ -8,7 +8,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, utimesSync, writeFile
 import { join } from 'node:path'
 import { applyFiles, commitAll, git, makeRepo, scratchDir } from '../helpers/repo.mjs'
 import { requiredLenses } from '../../plugins/construct/hooks/scripts/review-lenses.mjs'
-import { readVerdicts, subjectHash, writeVerdict } from '../../plugins/construct/hooks/scripts/review-store.mjs'
+import { readVerdicts, subjectHash, writeOracle, writeVerdict } from '../../plugins/construct/hooks/scripts/review-store.mjs'
 
 const PLUGIN = new URL('../../plugins/construct/', import.meta.url).pathname
 const CONTEXT_HOOK = join(PLUGIN, 'hooks/scripts/review-context.mjs')
@@ -476,5 +476,76 @@ describe('ranges, deleted paths, and verdict records (T8)', () => {
     writeVerdict(repo, record(1))
     writeVerdict(repo, record(2))
     assert.equal(readVerdicts(repo, 's1')['review-risk'].at, 1)
+  })
+})
+
+// S7 (T3): the lenses see the Specs of the feature documents the diff touches and the locked oracles it touches.
+describe('spec-aware context', () => {
+  const FEATURE = 'odd/tasks/f.md'
+  const doc = (specs) => `# F\n\n## Specs\n\n${specs}\n\n## Tasks\n\n| ID | Specs |\n|---|---|\n| T1 | S1 |\n`
+  const contextOf = (repo, agent = 'construct:review-readability') => hook(CONTEXT_HOOK, spawnInput(repo, 'Review subject: HEAD~1\n', agent)).json.hookSpecificOutput.updatedInput.prompt
+  const withDoc = (content, extra = {}) => {
+    const repo = makeRepo({ 'src/a.js': 'export const a = 1\n' })
+    applyFiles(repo, { [FEATURE]: content, ...extra })
+    commitAll(repo, 'change')
+    return repo
+  }
+  const lock = (repo, path, feature = FEATURE) => writeOracle(repo, { path, blob: 'a'.repeat(40), feature, task: 'T1', at: Date.now() })
+
+  test('a changed feature document adds its Specs section, read from HEAD, with the follow-up rule', () => {
+    const repo = withDoc(doc('- **S1** first spec'))
+    writeFileSync(join(repo, FEATURE), doc('- **S1** working tree edit'))
+    const prompt = contextOf(repo, 'construct:review-risk')
+    assert.match(prompt, /odd\/tasks\/f\.md/)
+    assert.match(prompt, /\*\*S1\*\* first spec/)
+    assert.doesNotMatch(prompt, /working tree edit/)
+    assert.match(prompt, /outside these specs are follow-ups, not blockers/)
+  })
+
+  test('the Specs section stops before the next heading', () => {
+    const prompt = contextOf(withDoc(doc('- S1 only')), 'construct:review-risk')
+    const specs = prompt.slice(prompt.indexOf('ODD_REVIEW_SPECS_BEGIN'), prompt.indexOf('ODD_REVIEW_SPECS_END'))
+    assert.match(specs, /S1 only/)
+    assert.doesNotMatch(specs, /## Tasks/)
+  })
+
+  test('no changed feature document means no specs section', () => {
+    assert.doesNotMatch(hook(CONTEXT_HOOK, spawnInput(reviewed(), 'Review subject: HEAD~1\n')).json.hookSpecificOutput.updatedInput.prompt, /ODD_REVIEW_SPECS/)
+  })
+
+  test('a document without a Specs section is listed as such', () => {
+    assert.match(contextOf(withDoc('# F\n\nno sections\n')), /odd\/tasks\/f\.md: no Specs section/)
+  })
+
+  test('the specs are bounded to about 4,000 characters with a marker naming the document', () => {
+    const prompt = contextOf(withDoc(doc('- long spec line\n'.repeat(1000))))
+    const specs = prompt.slice(prompt.indexOf('ODD_REVIEW_SPECS_BEGIN'), prompt.indexOf('ODD_REVIEW_SPECS_END'))
+    assert.ok(specs.length < 4600, String(specs.length))
+    assert.match(specs, /truncated.*odd\/tasks\/f\.md/)
+  })
+
+  test('the manifest and subject hash are unchanged by the specs section', () => {
+    const repo = withDoc(doc('- S1'))
+    const binding = prepare(repo)
+    assert.deepEqual(binding.artifact_subject.changed_path_manifest, [FEATURE])
+    assert.equal(binding.subject_hash, subjectHash(git(repo, 'rev-parse', 'HEAD~1^{tree}').trim(), git(repo, 'rev-parse', 'HEAD^{tree}').trim()))
+  })
+
+  test('active locks on a diff path or whose feature document is in the diff are listed', () => {
+    const repo = withDoc(doc('- S1'), { 'tests/x.test.mjs': 'x\n' })
+    lock(repo, 'tests/x.test.mjs')
+    lock(repo, 'tests/other.test.mjs', 'odd/tasks/g.md')
+    lock(repo, 'tests/y.test.mjs')
+    const prompt = contextOf(repo)
+    assert.match(prompt, /tests\/x\.test\.mjs \(odd\/tasks\/f\.md, T1\)/)
+    assert.match(prompt, /tests\/y\.test\.mjs \(odd\/tasks\/f\.md, T1\)/)
+    assert.doesNotMatch(prompt, /other\.test/)
+    assert.match(prompt, /change to a locked oracle is a finding/i)
+  })
+
+  test('no relevant lock means no locks section', () => {
+    const repo = withDoc(doc('- S1'))
+    lock(repo, 'tests/other.test.mjs', 'odd/tasks/g.md')
+    assert.doesNotMatch(contextOf(repo), /ODD_REVIEW_LOCKS/)
   })
 })

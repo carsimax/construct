@@ -5,7 +5,7 @@
 import { spawnSync } from 'node:child_process'
 import { activeDocuments } from './feature-state.mjs'
 import { commitSliceReport, defaultBranch, git } from './delivery-signals.mjs'
-import { reviewState } from './publication-gate.mjs'
+import { activeLocks, reviewState } from './publication-gate.mjs'
 
 const MAX = 1500
 const MAX_STATUS_LINES = 12
@@ -60,11 +60,17 @@ function review(cwd, root) {
   return [head, `Risk items ${[...items].sort().join(', ')}${floor.size === 0 ? '' : ` (floor: ${[...floor].map(([item, hit]) => `item ${item} from ${hit.slice(0, 3).join(', ')}${hit.length > 3 ? ', ...' : ''}`).join('; ')})`}; required lenses for HEAD (Review subject: ${mergeBase}):`, ...required.map((lens) => `- ${lens}: ${label[state(lens)]}`)]
 }
 
+// Offline (activeLocks never verifies the remote); omitted when no oracle is locked.
+function locks(root) {
+  const active = activeLocks(root)
+  return active.length === 0 ? [] : [`Oracle locks: ${active.length} active (${[...active.slice(0, 3).map((l) => l.path), ...(active.length > 3 ? ['...'] : [])].join(', ')})`]
+}
+
 function delivery(cwd) {
   return [commitSliceReport(cwd) ?? 'Commit slice: no commits ahead of the default branch (or on it), nothing to measure.']
 }
 
-const KINDS = { workflow, review, delivery }
+const KINDS = { workflow, review: (cwd, root) => [...review(cwd, root), ...locks(root)], delivery }
 
 function main() {
   const kind = process.argv[2]
