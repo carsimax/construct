@@ -12,7 +12,7 @@ Objective: locks no longer need a typed command: orphaned locks release themselv
 
 | ID | Specs | Task | Route | Risk | Status | Commit |
 |---|---|---|---|---|---|---|
-| T1 | S1 | Orphaned-lock release in `activeLocks` | inline | 2, 3 | pending | — |
+| T1 | S1 | Orphaned-lock release in `activeLocks` | inline | 2, 3 | done | 5cf3903 |
 | T2 | S2, S3 | command-guard asks for agent unlocks; docs | worker | 2, 3 | pending | — |
 
 ## Log
