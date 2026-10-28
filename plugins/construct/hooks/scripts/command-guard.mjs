@@ -21,6 +21,8 @@
 // shortcut: git aliases, interpreter one-liners, brace expansion, and variable-built commands are
 // not caught. Upgrade if one of them shows up in real use.
 // Usage: node command-guard.mjs   (hook JSON on stdin)
+import { realpathSync } from 'node:fs'
+import { dirname, join, relative, resolve } from 'node:path'
 import { repositoryRoot } from './git-tree.mjs'
 import { readInput } from './hook-io.mjs'
 import { lockPath, takeApproval } from './review-store.mjs'
@@ -158,27 +160,51 @@ const quoted = (q) => /^[^`]*`([^`]+)`[^`]*$/.exec(q)?.[1] ?? null
 
 // unlockApproved: main thread only, the latest recorded AskUserQuestion answer chose `Unlock` for a question naming the path,
 // and that answer was not used before (takeApproval claims it with an exclusive create). Fails closed.
+// plainPath: the path as typed, resolved against the root without following symlinks, is its own realpath (no symlink inside the
+// repository), so an approval of a symlink cannot unlock its target. The repository itself may be reached through an alias such as
+// /var -> /private/var. A path that is not on disk passes, as lockPath keeps it as given.
+const realOf = (p) => {
+  try {
+    return realpathSync(p)
+  } catch {
+    return null
+  }
+}
+function plainPath(root, path) {
+  const abs = resolve(root, path)
+  const real = realOf(abs)
+  if (real === null) return true
+  for (let d = abs; ; d = dirname(d)) {
+    if (realOf(d) === root) return real === join(root, relative(d, abs))
+    if (d === dirname(d)) return real === abs
+  }
+}
+
 function unlockApproved(input, paths) {
   try {
-    if (input.agent_id || paths.length !== 1 || paths[0] == null || typeof input.cwd !== 'string') return false
+    if (input.agent_id || paths.length !== 1 || paths[0] == null || typeof input.cwd !== 'string' || typeof input.session_id !== 'string' || input.session_id === '') return false
     const root = repositoryRoot(input.cwd)
     const path = lockPath(root, paths[0])
-    if (!path) return false
-    return takeApproval(root, (a) => Object.entries(a.answers).some(([q, v]) => quoted(q) !== null && lockPath(root, quoted(q)) === path && [v].flat().some((l) => typeof l === 'string' && l.trim().toLowerCase() === 'unlock'))) !== null
+    if (!path || !plainPath(root, paths[0])) return false
+    return takeApproval(root, (a) => a.session_id === input.session_id && Object.entries(a.answers).some(([q, v]) => quoted(q) !== null && lockPath(root, quoted(q)) === path && plainPath(root, quoted(q)) && [v].flat().some((l) => typeof l === 'string' && l.trim().toLowerCase() === 'unlock'))) !== null
   } catch {
     return false
   }
 }
+
+// A command that moves the shell or git to another directory: the guard resolves the path against the hook's cwd, not the one the unlock would run in.
+const movesDir = (words) => ['cd', 'pushd', 'popd'].includes(words[0]) || words.some((w) => /^(-C.*|--chdir(=.*)?|--git-dir(=.*)?|--work-tree(=.*)?)$/.test(w))
+const MOVED_REASON = ' Run it as its own command, with no cd, pushd, git -C, env -C, or subshell before it on the line.'
 
 const isGate = (word) => /(^|\/)construct-gate$/.test(word ?? '')
 
 // hitsIn returns every hit of a command line; splitCommands finds the commands nested in
 // substitutions and heredoc expansions, and the lines a command runs as a string are read again.
 // Throws ShellParseError for text that is not valid shell.
-function hitsIn(command, depth = 0) {
+function hitsIn(command, depth = 0, moved = false) {
   if (depth > MAX_DEPTH) return []
   const found = []
-  const nested = (line) => found.push(...hitsIn(line, depth + 1))
+  const nested = (line) => found.push(...hitsIn(line, depth + 1, moved))
   const commands = splitCommands(command)
   const scripts = heredocScripts(commands)
   for (const tokens of commands) {
@@ -192,7 +218,12 @@ function hitsIn(command, depth = 0) {
     const h = name === 'git' ? gitHit(args, words) : name === 'rm' ? rmHit(args) : name === 'find' ? findHit(args, nested) : null
     // Any word with basename construct-gate counts, so node flags, env, command, xargs and npx wrappers are caught; `node -e` importing review-store cannot be seen in text (discipline layer).
     const at = words.findIndex((w, i) => isGate(w) && words[i + 1] === 'oracle' && words[i + 2] === 'unlock')
-    if (at !== -1) found.push({ ...hit('deny', UNLOCK_REASON), unlock: words[at + 3] && !words[at + 3].startsWith('-') ? words[at + 3] : null })
+    const before = at === -1 ? words : words.slice(0, at)
+    if (at !== -1) {
+      const moves = moved || tokens.parens.includes('(') || movesDir(before)
+      found.push({ ...hit('deny', UNLOCK_REASON + (moves ? MOVED_REASON : '')), unlock: words[at + 3] && !words[at + 3].startsWith('-') ? words[at + 3] : null, moves })
+    }
+    if (movesDir(words)) moved = true
     if (h) found.push(h)
   }
   return found
@@ -204,7 +235,7 @@ try {
   if (input?.tool_name === 'Bash' && typeof command === 'string' && command !== '') {
     let found = hitsIn(command)
     const unlocks = found.filter((h) => 'unlock' in h)
-    if (unlocks.length > 0 && unlockApproved(input, unlocks.map((h) => h.unlock))) found = found.filter((h) => !('unlock' in h))
+    if (unlocks.length > 0 && !unlocks.some((h) => h.moves) && unlockApproved(input, unlocks.map((h) => h.unlock))) found = found.filter((h) => !('unlock' in h))
     const chosen = found.find((h) => h.decision === 'deny') ?? found[0]
     if (chosen && (chosen.decision === 'deny' || asksOn())) process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: chosen.decision, permissionDecisionReason: chosen.reason } })}\n`)
   }

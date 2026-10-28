@@ -3,12 +3,15 @@
 // The answer is recorded in the review store by unlock-approval.mjs (PostToolUse on AskUserQuestion); the transcript is never read.
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { readFileSync, symlinkSync } from 'node:fs'
 import { describe, test } from 'node:test'
+import { repositoryRoot } from '../../plugins/construct/hooks/scripts/git-tree.mjs'
+import { writeApproval } from '../../plugins/construct/hooks/scripts/review-store.mjs'
 import { makeRepo, scratchDir } from '../helpers/repo.mjs'
 
 const GUARD = new URL('../../plugins/construct/hooks/scripts/command-guard.mjs', import.meta.url).pathname
 const RECORDER = new URL('../../plugins/construct/hooks/scripts/unlock-approval.mjs', import.meta.url).pathname
+const STORE_GUARD = new URL('../../plugins/construct/hooks/scripts/review-store-guard.mjs', import.meta.url).pathname
 const HOOKS = new URL('../../plugins/construct/hooks/hooks.json', import.meta.url).pathname
 const PATH_ = 'tests/a.test.mjs'
 const data = scratchDir('unlock-data-')
@@ -147,5 +150,60 @@ describe('unlock-approval recorder', () => {
     assert.equal(record(repo, { tool_name: 'Read' }).status, 0)
     denied(guard(repo, unlock()))
     assert.equal(spawnSync('node', [RECORDER], { input: 'not json', env }).status, 0)
+  })
+})
+
+describe('unlock approvals: session binding, expiry, symlinks, directory changes, forged hook runs', () => {
+  test('an approval recorded in another session is denied and stays for its own session', () => {
+    const repo = fresh()
+    record(repo)
+    denied(guard(repo, unlock(), { session_id: 's2' }))
+    allowed(guard(repo, unlock()))
+  })
+  test('an approval older than 15 minutes is denied and its record is deleted', () => {
+    const repo = fresh()
+    const q = question()
+    writeApproval(repositoryRoot(repo), { tool_use_id: 'old', session_id: 's1', answers: { [q]: 'Unlock' }, at: Date.now() - 16 * 60 * 1000 })
+    denied(guard(repo, unlock()))
+    writeApproval(repositoryRoot(repo), { tool_use_id: 'fresh', session_id: 's1', answers: { [q]: 'Unlock' }, at: Date.now() - 14 * 60 * 1000 })
+    allowed(guard(repo, unlock()))
+  })
+  test('a record without a session id is not recorded', () => {
+    const repo = fresh()
+    record(repo, { session_id: undefined })
+    denied(guard(repo, unlock()))
+  })
+  test('a symlink cannot be unlocked by approving it, or its target by approving the link, and a symlinked directory is refused', () => {
+    const repo = fresh()
+    symlinkSync('a.test.mjs', `${repo}/tests/link.test.mjs`)
+    symlinkSync('tests', `${repo}/dir`)
+    record(repo, { q: question('tests/link.test.mjs') })
+    denied(guard(repo, unlock('tests/link.test.mjs')))
+    record(repo, { q: question('tests/link.test.mjs'), id: 't2' })
+    denied(guard(repo, unlock(PATH_)))
+    record(repo, { id: 't3' })
+    denied(guard(repo, unlock('tests/link.test.mjs')))
+    record(repo, { q: question('dir/a.test.mjs'), id: 't4' })
+    denied(guard(repo, unlock('dir/a.test.mjs')))
+    record(repo, { id: 't5' })
+    allowed(guard(repo, unlock()))
+  })
+  test('a directory change before the unlock in the same command line is denied', () => {
+    for (const command of [`cd tests && ${unlock()}`, `pushd tests; ${unlock()}`, `git -C tests status && ${unlock()}`, `env -C tests ${unlock()}`, `(cd tests; ${unlock()})`, `(${unlock()})`, `cd tests && sh -c "${unlock()}"`, `sh -c "cd tests && ${unlock()}"`]) {
+      const repo = fresh()
+      record(repo)
+      denied(guard(repo, command))
+    }
+  })
+  test('an agent running the approval or oracle recorder hook is denied, in each form review-store-guard covers', () => {
+    const repo = fresh()
+    for (const script of ['unlock-approval.mjs', 'oracle-record.mjs']) {
+      for (const command of [`node /p/hooks/scripts/${script}`, `echo {} | node "$CLAUDE_PLUGIN_ROOT/hooks/scripts/${script}"`, `bash -c "node /p/hooks/scripts/${script}"`, `/p/hooks/scripts/${script}`, `env FOO=1 bun /p/hooks/scripts/${script}`, `cd x && deno run ${script}`, `node '${script}'`]) {
+        const r = spawnSync('node', [STORE_GUARD], { encoding: 'utf8', input: JSON.stringify({ cwd: repo, hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command } }) })
+        assert.equal(JSON.parse(r.stdout || '{}').hookSpecificOutput?.permissionDecision, 'deny', command)
+      }
+      const r = spawnSync('node', [STORE_GUARD], { encoding: 'utf8', input: JSON.stringify({ cwd: repo, hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command: `cat plugins/construct/hooks/scripts/${script} | wc -l` } }) })
+      assert.equal(r.stdout, '')
+    }
   })
 })

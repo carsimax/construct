@@ -2,7 +2,7 @@
 // store (<git-common-dir>/construct-review/) is written only by the review hooks. A file tool
 // aimed inside it is denied; that rule needs a git repository and fails open outside one. A Bash
 // command is denied in any directory (the hook scripts are the plugin's own) when a segment runs
-// `review-capture.mjs` or `review-context.mjs` (directly or as the script of node, bun, deno, or a
+// `review-capture.mjs`, `review-context.mjs`, `unlock-approval.mjs`, or `oracle-record.mjs` (directly or as the script of node, bun, deno, or a
 // shell) or names `construct-review`, once quotes, backslashes, and brackets are removed. Commands
 // that only name the hook files as data (grep, git diff, cat, a commit message) pass. A heuristic
 // guard: it fails open on unreadable input, and denies a command the shell parser rejects.
@@ -18,7 +18,7 @@ import { storeAt } from './review-store.mjs'
 import { heredocScripts, nestedLines, parsesAsShell, SHELLS, ShellParseError, splitCommands } from './shell-words.mjs'
 
 const INTERPRETERS = new Set(['node', 'nodejs', 'bun', 'deno', 'sh', 'bash', 'zsh', 'dash', 'ksh'])
-const HOOK_FILE = /^review-(capture|context)\.mjs$/
+const HOOK_FILE = /^(review-(capture|context)|unlock-approval|oracle-record)\.mjs$/
 const plain = (text) => text.replace(/["'\\\[\]]/g, '').toLowerCase()
 
 // runsReviewHook is true when a command segment executes a review hook file: the file as the
