@@ -5,3 +5,4 @@ node_modules/
 .atl/
 evals/results/
 plugins/construct/tsconfig.json
+/reference/
