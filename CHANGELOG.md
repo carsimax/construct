@@ -4,6 +4,8 @@ Notable changes per release. Versions follow [Semantic Versioning](https://semve
 
 ## Unreleased
 
+## 15.0.0
+
 ### Breaking
 
 - The oracle is the only source of autonomy limits. Every code task goes oracle first: `construct:oracle` writes the failing tests (locked by content hash) and ends its reply with an `## Envelope` (`Command`, `Surfaces`, `Attempts`, `Minutes`, `Lines`), stored with the lock and clamped to the ceilings 10 attempts, 60 minutes, 1500 changed lines (defaults 5, 30, 400). The main thread writes only `.vault/` and docs (`*.md` outside `hooks/contract/`, `skills/`, `agents/`), whatever the size; every other write is denied naming `construct:oracle` then `construct:worker`. `delegation-admission` denies a worker with code surfaces whose task has no envelope, or whose surfaces are not inside it.
