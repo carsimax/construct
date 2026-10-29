@@ -1,0 +1,5 @@
+schema_version: "1.1"
+name: two-cause-bug
+context:
+  scaffold_script: fixture.sh
+arms: claudemd
