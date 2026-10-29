@@ -5,7 +5,7 @@ import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, realpathSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { applyFiles, git, makeRepo, scratchDir } from '../helpers/repo.mjs'
+import { applyFiles, commitAll, git, makeRepo, scratchDir } from '../helpers/repo.mjs'
 
 const PLUGIN = new URL('../../plugins/construct/', import.meta.url).pathname
 const SCRIPT = join(PLUGIN, 'hooks/scripts/risk-line.mjs')
@@ -404,6 +404,18 @@ describe('fingerprint (S6)', () => {
     const t = new Date(Date.now() + 5000)
     utimesSync(join(repo, path), t, t)
   }
+
+  test('a path clean at mark, edited and committed in the turn is reported and needs a Risk line', () => {
+    const { repo, e } = changed()
+    commitAll(repo, 'turn')
+    assert.match(check(repo, e, 'Done.').json.reason, /Risk line missing.*src\/a\.js/)
+  })
+
+  test('a marker added and committed in the turn is flagged', () => {
+    const { repo, e } = changed({ 'src/a.test.js': "it.skip('x', () => {})\n" })
+    commitAll(repo, 'turn')
+    assert.match(check(repo, e, 'Done.\nRisk: none').json.reason, /marker.*src\/a\.test\.js/)
+  })
 
   test('a path edited between mark and check is reported', () => {
     const { repo, e } = changed()

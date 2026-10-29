@@ -166,7 +166,7 @@ async function main() {
       // A corrupt record is replaced.
     }
     if (promptId && previous && previous.fp && previous.root === root && previous.prompt_id === promptId) return
-    write({ root, fp: fingerprint(git, root, DIFF_BUDGET_MS), blocked: false, ...(promptId ? { prompt_id: promptId } : {}) })
+    write({ root, fp: fingerprint(git, root, DIFF_BUDGET_MS), head: headCommit(root), blocked: false, ...(promptId ? { prompt_id: promptId } : {}) })
     return
   }
 
@@ -174,6 +174,15 @@ async function main() {
   if (record.root !== root || !record.fp) return
   const now = fingerprint(git, root, DIFF_BUDGET_MS)
   const changed = [...new Set([...Object.keys(record.fp), ...Object.keys(now)])].filter((path) => record.fp[path] !== now[path])
+  // A commit made during the turn hides its paths from git status: add them and scan from the marked head.
+  const base = typeof record.head === 'string' && record.head !== headCommit(root) ? record.head : 'HEAD'
+  if (base !== 'HEAD') {
+    try {
+      changed.push(...git(root, ['diff', '--name-only', '-z', base, 'HEAD']).toString('utf8').split('\0'))
+    } catch {
+      // Fail open: the status-visible paths still count.
+    }
+  }
   const paths = changed.filter((path) => path !== '' && !path.startsWith('.vault/tasks/'))
   if (paths.length === 0) return
   const riskMissing = !RISK_LINE.test(input.last_assistant_message)
@@ -181,7 +190,7 @@ async function main() {
   try {
     const untracked = paths.filter((path) => now[path]?.startsWith('?? '))
     const tracked = paths.filter((path) => !untracked.includes(path)).slice(0, 500)
-    const diff = tracked.length === 0 ? '' : git(root, ['--literal-pathspecs', '-c', 'core.quotepath=off', 'diff', '-U0', 'HEAD', '--', ...tracked], { timeout: DIFF_BUDGET_MS }).toString('utf8')
+    const diff = tracked.length === 0 ? '' : git(root, ['--literal-pathspecs', '-c', 'core.quotepath=off', 'diff', '-U0', base, '--', ...tracked], { timeout: DIFF_BUDGET_MS }).toString('utf8')
     hits = markerHits(diff + untracked.map((path) => untrackedDiff(root, path)).join(''))
   } catch {
     // Fail open on the marker scan.
