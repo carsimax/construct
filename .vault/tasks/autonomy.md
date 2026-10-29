@@ -26,13 +26,16 @@ Objective: phases 1 and 2 of the L1 plan: remove forced human stops and per-chan
 
 | ID | Specs | Task | Route | Risk | Status | Commit |
 |---|---|---|---|---|---|---|
-| T1 | S1 | Review the working-tree snapshot | worker | 2, 3 | open | |
+| T1 | S1 | Review the working-tree snapshot | worker | 2, 3 | done | 5039e8d |
 | T2 | S3 | `.vault/exempt-paths` allowlist at the default-branch tip | worker | 2 | open | |
-| T3 | S5 | One Bash hook process | worker | 2, 3 | open | |
-| T4 | S6 | Risk-line fingerprint from git status | worker | 3 | open | |
+| T3 | S5 | One Bash hook process | worker | 2, 3 | done | 459fe3d |
+| T4 | S6 | Risk-line fingerprint from git status | worker | 3 | done | 29e9345 |
 | T5 | S2, S4, S7 | Docs, contract, skills, CHANGELOG | worker | 3 | open | |
 
 ## Log
 
 - **L1 (2026-10-29):** "ahora quiero que explores todo el proyecto y des opinion sincera y propongas cambios reales, la idea es que funcione bien y lo mas autonomo posible". Menu answers: "1. Autonomía — Revisión sin commit, doc de una tarea automático, lista de código no testeable, regla única de verifier" and "2. Simplificar — Un solo hook de Bash, huella barata para Risk, borrar modo degradado de git-tree". Proposal text: "Revisar sobre el árbol de trabajo, sin exigir commit", "Un solo hook de Bash", "huella barata para Risk".
 - **L2 (2026-10-29):** Not done from the menu: "borrar modo degradado de git-tree" is dropped: worker start and stop snapshots still need it on large repositories (S2 of guarantees made a missing baseline block the stop), so removing it would turn slow repositories into blocked workers. The review store keys verdicts on trees (subjectHash(baseTree, headTree)), which is why S1 needs no gate change.
+- **L3 (2026-10-29):** T3 (459fe3d): one bash-guard.mjs process per Bash call (3 before, ~0.22 s saved); splitCommands caches per text. RED confirmed afterwards (registration test fails on the old hooks.json), GREEN 11/11; focused 723 pass.
+- **L4 (2026-10-29):** T4 (29e9345): fingerprint from git status + lstat; 8 snapshot-implementation tests removed. RED confirmed afterwards (fingerprint tests against the old risk-line), GREEN 111/111. Known: a marker that predates the turn in a path dirty at mark and edited again can be reported.
+- **L5 (2026-10-29):** T1 (5039e8d): RED (context built from HEAD lacked the uncommitted patch), GREEN 79/79; end-to-end: approval on the working tree lets a same-content commit push, different content is denied. skill-context keeps reporting HEAD's tree (a working-tree approval shows as missing until the commit).
