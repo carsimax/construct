@@ -1,4 +1,4 @@
-// Review store write guard (PreToolUse on Write, Edit, MultiEdit, NotebookEdit, Bash). The review
+// Review store write guard (PreToolUse on Write, Edit, MultiEdit, NotebookEdit; on Bash it runs inside bash-guard.mjs). The review
 // store (<git-common-dir>/construct-review/) is written only by the review hooks. A file tool
 // aimed inside it is denied; that rule needs a git repository and fails open outside one. A Bash
 // command is denied in any directory (the hook scripts are the plugin's own) when a segment runs
@@ -10,9 +10,10 @@
 // shortcut: a name built indirectly (variables, concatenation, base64), a glob spelling
 // (`construct-revie?`, `con*-review`), or a run through an interpreter's own code (`node -e`) is
 // not seen; upgrade if that shows up in real use.
-// Usage: node review-store-guard.mjs   (hook JSON on stdin)
+// Usage: node review-store-guard.mjs   (hook JSON on stdin); on Bash, bash-guard.mjs imports guard() instead.
 import { realpathSync } from 'node:fs'
 import { basename, dirname, join, relative, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { git } from './git-tree.mjs'
 import { readInput } from './hook-io.mjs'
 import { storeAt } from './review-store.mjs'
@@ -59,24 +60,28 @@ function insideStore(input, store) {
   return rel === '' || (!rel.startsWith('..') && !rel.startsWith('/'))
 }
 
-function main() {
-  const input = readInput()
-  if (!input || typeof input.cwd !== 'string' || input.cwd === '' || typeof input.tool_name !== 'string') return
-  const command = input.tool_input?.command
-  let denied
-  if (input.tool_name === 'Bash') denied = typeof command === 'string' && (plain(command).includes('construct-review') || runsReviewHook(command))
-  else if (/^(Write|Edit|MultiEdit|NotebookEdit)$/.test(input.tool_name)) {
-    // One git call; a relative common dir is relative to cwd.
-    const common = git(input.cwd, ['rev-parse', '--git-common-dir']).toString('utf8').trim()
-    denied = insideStore(input, storeAt(common, input.cwd))
-  } else return
-  if (denied) process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: REASON } })}\n`)
+// guard returns the denial reason, or null to allow; bash-guard.mjs calls it with input it already read.
+// Fails open, except on text that is not valid shell: bash can run the part before a syntax error.
+export function guard(input) {
+  try {
+    if (!input || typeof input.cwd !== 'string' || input.cwd === '' || typeof input.tool_name !== 'string') return null
+    const command = input.tool_input?.command
+    let denied
+    if (input.tool_name === 'Bash') denied = typeof command === 'string' && (plain(command).includes('construct-review') || runsReviewHook(command))
+    else if (/^(Write|Edit|MultiEdit|NotebookEdit)$/.test(input.tool_name)) {
+      // One git call; a relative common dir is relative to cwd.
+      const common = git(input.cwd, ['rev-parse', '--git-common-dir']).toString('utf8').trim()
+      denied = insideStore(input, storeAt(common, input.cwd))
+    } else return null
+    return denied ? REASON : null
+  } catch (error) {
+    if (error instanceof ShellParseError) return `review-store-guard: the command could not be parsed (${error.message}), so it is denied: text the guard cannot read may run a review hook. Rewrite it as plain shell.`
+    return null
+  }
 }
 
-try {
-  main()
-} catch (error) {
-  // Fail open, except on text that is not valid shell: bash can run the part before a syntax error.
-  if (error instanceof ShellParseError) process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: `review-store-guard: the command could not be parsed (${error.message}), so it is denied: text the guard cannot read may run a review hook. Rewrite it as plain shell.` } })}\n`)
+if (process.argv[1] && fileURLToPath(import.meta.url) === realpathSync(process.argv[1])) {
+  const reason = guard(readInput())
+  if (reason) process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: reason } })}\n`)
+  process.exitCode = 0
 }
-process.exitCode = 0

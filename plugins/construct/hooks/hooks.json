@@ -94,23 +94,10 @@
             "type": "command",
             "command": "node",
             "args": [
-              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/publication-gate.mjs"
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/bash-guard.mjs"
             ],
             "timeout": 30,
             "onFailure": "block"
-          }
-        ]
-      },
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node",
-            "args": [
-              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/command-guard.mjs"
-            ],
-            "timeout": 10
           }
         ]
       },
@@ -128,7 +115,7 @@
         ]
       },
       {
-        "matcher": "Write|Edit|MultiEdit|NotebookEdit|Bash",
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit",
         "hooks": [
           {
             "type": "command",

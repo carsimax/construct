@@ -29,7 +29,7 @@
 // shortcut: a heuristic parser; git aliases, interpreter one-liners, variable-built commands,
 // --git-dir/GIT_DIR, a spoofed origin/HEAD, deleted or moved feature documents, and store paths
 // built indirectly are not caught. Upgrade if one of them shows up in real use.
-// Usage: node publication-gate.mjs   (hook JSON on stdin)
+// Usage: node publication-gate.mjs   (hook JSON on stdin); bash-guard.mjs imports guard() instead.
 import { realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
@@ -468,36 +468,33 @@ export function verdict(pub) {
 
 const unresolvable = (command) => `publication-gate: this publishes work from a directory the gate cannot resolve (${command}). Write the repository path literally (no variable or substitution besides ~ and $HOME), so the gate can check its review state.`
 
-const deny = (reason) => process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: reason } })}\n`)
-let publishing = false
-
-function main() {
-  const input = readInput()
-  if (!input || input.tool_name !== 'Bash' || typeof input.cwd !== 'string' || input.cwd === '') return
-  const command = input.tool_input?.command
-  if (typeof command !== 'string' || command === '') return
-  // A parser crash on text that mentions a publication cannot be told from a hidden one.
-  publishing = /\bpush\b|\b(?:pr|release)\s+(?:create|new)\b/.test(command)
-  // An unresolvable directory is reported first: its reason says what to fix.
-  const pubs = findPublications(command, input.cwd).sort((a, b) => (b.dir === null) - (a.dir === null))
-  publishing = publishing || pubs.length > 0
-  for (const pub of pubs) {
-    const reason = pub.dir === null ? unresolvable(pub.gate === 'pre-push' ? 'git push' : pub.gate === 'pre-pr' ? 'gh pr create' : 'gh release create') : verdict(pub)
-    if (reason) {
-      deny(reason)
-      return
+// guard returns the denial reason, or null to allow; bash-guard.mjs calls it with input it already read.
+export function guard(input) {
+  let publishing = false
+  try {
+    if (!input || input.tool_name !== 'Bash' || typeof input.cwd !== 'string' || input.cwd === '') return null
+    const command = input.tool_input?.command
+    if (typeof command !== 'string' || command === '') return null
+    // A parser crash on text that mentions a publication cannot be told from a hidden one.
+    publishing = /\bpush\b|\b(?:pr|release)\s+(?:create|new)\b/.test(command)
+    // An unresolvable directory is reported first: its reason says what to fix.
+    const pubs = findPublications(command, input.cwd).sort((a, b) => (b.dir === null) - (a.dir === null))
+    publishing = publishing || pubs.length > 0
+    for (const pub of pubs) {
+      const reason = pub.dir === null ? unresolvable(pub.gate === 'pre-push' ? 'git push' : pub.gate === 'pre-pr' ? 'gh pr create' : 'gh release create') : verdict(pub)
+      if (reason) return reason
     }
+    return null
+  } catch (error) {
+    // Bash can run the part of a command before a syntax error, so unparseable text is denied outright.
+    if (error instanceof ShellParseError) return `publication-gate: the command could not be parsed (${error.message}), so it is denied: text the gate cannot read may hide a publication. Rewrite it as plain shell.`
+    return publishing ? `publication-gate: the publication could not be checked (${error.message}), so it is denied.` : null
   }
 }
 
 // The hook runs only when this file is executed directly, so pre-push.mjs can import verdict.
 if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
-  try {
-    main()
-  } catch (error) {
-    // Bash can run the part of a command before a syntax error, so unparseable text is denied outright.
-    if (error instanceof ShellParseError) deny(`publication-gate: the command could not be parsed (${error.message}), so it is denied: text the gate cannot read may hide a publication. Rewrite it as plain shell.`)
-    else if (publishing) deny(`publication-gate: the publication could not be checked (${error.message}), so it is denied.`)
-  }
+  const reason = guard(readInput())
+  if (reason) process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: reason } })}\n`)
   process.exitCode = 0
 }

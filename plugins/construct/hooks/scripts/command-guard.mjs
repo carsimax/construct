@@ -17,9 +17,10 @@
 // Long options match as git does: any prefix at least as long as the minimum in `abbr` calls.
 // shortcut: git aliases, interpreter one-liners, brace expansion, and variable-built commands are
 // not caught. Upgrade if one of them shows up in real use.
-// Usage: node command-guard.mjs   (hook JSON on stdin)
+// Usage: node command-guard.mjs   (hook JSON on stdin); bash-guard.mjs imports guard() instead.
 import { lstatSync, realpathSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { repositoryRoot } from './git-tree.mjs'
 import { readInput } from './hook-io.mjs'
 import { lockPath, takeApproval } from './review-store.mjs'
@@ -215,21 +216,27 @@ function hitsIn(command, depth = 0) {
   return found
 }
 
-try {
-  const input = readInput()
-  const command = input?.tool_input?.command
-  if (input?.tool_name === 'Bash' && typeof command === 'string' && command !== '') {
+// guard returns the denial reason, or null to allow; bash-guard.mjs calls it with input it already read.
+// Fails open, except on text that is not valid shell: bash can run the part before a syntax error.
+export function guard(input) {
+  try {
+    const command = input?.tool_input?.command
+    if (input?.tool_name !== 'Bash' || typeof command !== 'string' || command === '') return null
     let found = hitsIn(command)
     const unlocks = found.filter((h) => 'unlock' in h)
     if (unlocks.length === 1 && lonePath(command) !== null && unlockApproved(input, [lonePath(command)])) found = found.filter((h) => !('unlock' in h))
     const exempts = found.filter((h) => 'exempt' in h)
     const lone = loneExempt(command)
     if (exempts.length === 1 && lone && exemptApproved(input, lone[1], lone[2], lone[3])) found = found.filter((h) => !('exempt' in h))
-    const chosen = found[0]
-    if (chosen) process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: chosen.decision, permissionDecisionReason: chosen.reason } })}\n`)
+    return found[0]?.reason ?? null
+  } catch (error) {
+    if (error instanceof ShellParseError) return `command-guard: the command could not be parsed (${error.message}), so it is denied: text the guard cannot read may hide a verifier bypass. Rewrite it as plain shell.`
+    return null
   }
-} catch (error) {
-  // Fail open, except on text that is not valid shell: bash can run the part before a syntax error.
-  if (error instanceof ShellParseError) process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: `command-guard: the command could not be parsed (${error.message}), so it is denied: text the guard cannot read may hide a verifier bypass. Rewrite it as plain shell.` } })}\n`)
 }
-process.exitCode = 0
+
+if (process.argv[1] && fileURLToPath(import.meta.url) === realpathSync(process.argv[1])) {
+  const reason = guard(readInput())
+  if (reason) process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: reason } })}\n`)
+  process.exitCode = 0
+}

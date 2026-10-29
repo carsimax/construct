@@ -69,10 +69,10 @@ const silent = (r) => {
 describe('registration', () => {
   test('hooks.json registers a Bash PreToolUse entry in exec form', () => {
     const hooks = JSON.parse(readFileSync(join(PLUGIN, 'hooks/hooks.json'), 'utf8'))
-    const entry = hooks.hooks.PreToolUse.find((e) => e.hooks.some((h) => h.args?.[0]?.endsWith('publication-gate.mjs')))
+    const entry = hooks.hooks.PreToolUse.find((e) => e.hooks.some((h) => h.args?.[0]?.endsWith('bash-guard.mjs')))
     assert.ok(entry)
     assert.equal(entry.matcher, 'Bash')
-    assert.deepEqual(entry.hooks[0], { type: 'command', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/hooks/scripts/publication-gate.mjs'], timeout: 30, onFailure: 'block' })
+    assert.deepEqual(entry.hooks[0], { type: 'command', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/hooks/scripts/bash-guard.mjs'], timeout: 30, onFailure: 'block' })
   })
 
   test('hooks.json registers no secret-guard hook', () => {

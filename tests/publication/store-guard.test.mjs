@@ -33,10 +33,10 @@ const silent = (r) => {
 }
 
 describe('review-store-guard', () => {
-  test('hooks.json registers it in exec form for the file tools and Bash', () => {
+  test('hooks.json registers it in exec form for the file tools (Bash runs it inside bash-guard)', () => {
     const hooks = JSON.parse(readFileSync(join(PLUGIN, 'hooks/hooks.json'), 'utf8')).hooks
     const entry = hooks.PreToolUse.find((g) => g.hooks.some((h) => h.args?.[0].endsWith('review-store-guard.mjs')))
-    assert.equal(entry.matcher, 'Write|Edit|MultiEdit|NotebookEdit|Bash')
+    assert.equal(entry.matcher, 'Write|Edit|MultiEdit|NotebookEdit')
     assert.deepEqual(entry.hooks[0], { type: 'command', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/hooks/scripts/review-store-guard.mjs'], timeout: 10 })
   })
 
