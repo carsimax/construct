@@ -32,7 +32,7 @@ Small means all hold:
 
 Large means failing the resume test: several sessions, outside parties, separate deliverables, or requirements not surviving compaction. Never size by file counts, command counts, or a todo list.
 
-- Small: no feature document, no commits unless asked; code still goes oracle first, then `construct:worker`.
+- Small: no commits unless asked; code takes a one-task feature document, then oracle, then `construct:worker`.
 - Large: feature document first, then work-unit commits on a feature branch.
 
 ## Risk
