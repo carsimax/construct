@@ -1,0 +1,81 @@
+# Everyday commands that bash-guard must let through (one per line).
+git status
+git status --short --branch
+git diff
+git diff --stat HEAD~1
+git diff --cached -- src/app.js
+git log --oneline -n 20
+git log -p -- src/app.js
+git show HEAD:src/app.js
+git add src/app.js
+git add -A
+git commit -m "fix: handle empty input"
+git commit -am "wip"
+git commit --amend --no-edit
+git commit -m "docs: explain --no-verify is denied"
+git branch
+git branch -a
+git branch feature/x
+git branch -d old-topic
+git switch main
+git switch -c feature/y
+git checkout -b feature/z
+git stash list
+git merge --no-ff feature/x
+git rebase main
+git fetch origin
+git pull --ff-only
+git config user.name
+git config --get core.hooksPath
+git config core.editor vim
+git -c color.ui=always diff
+git -C . status
+git push --dry-run
+git push -n origin feat
+git push origin --delete old-topic
+gh pr view
+gh pr view 12 --json state
+gh pr list
+gh pr checks
+gh release list
+gh issue list --limit 5
+npm test
+npm run lint
+node --test tests/
+node --test 'tests/**/*.test.mjs'
+node --version
+ls
+ls -la plugins/construct
+grep -rn "TODO" src
+grep -n "no-verify" README.md
+sed -n 1,40p src/app.js
+cat package.json
+head -n 5 .vault/tasks/f.md
+wc -l src/app.js
+find . -name "*.mjs" -not -path "./node_modules/*"
+mkdir -p /tmp/scratch-dir
+touch /tmp/scratch-dir/a.txt
+rm /tmp/scratch-dir/a.txt
+cp src/app.js /tmp/scratch-dir/app.js
+mv /tmp/scratch-dir/app.js /tmp/scratch-dir/b.js
+echo hello
+printf '%s\n' hello world
+echo done && git status
+git status | head -n 5
+git diff --name-only | sort | uniq
+ls src && cat src/app.js | wc -l
+cd src && ls
+cd /tmp && ls
+pwd; date
+test -f src/app.js && echo present
+for f in src/*.js; do echo "$f"; done
+echo "$(git rev-parse --short HEAD)"
+sh -c 'echo ok'
+bash -c 'ls -la | head -n 3'
+env FOO=bar node --version
+sudo -n true
+git ls-files | xargs wc -l
+cat .gitignore
+git rev-parse --git-dir
+ls .git
+cat .git/HEAD

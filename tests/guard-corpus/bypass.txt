@@ -1,0 +1,103 @@
+# Bypasses the guards are documented to catch; every line must be denied.
+# commit / push --no-verify and -n, many spellings
+git commit --no-verify -m x
+git commit -n -m x
+git commit -nm x
+git commit -anm x
+git commit -m x --no-verify
+git commit --no-verif -m x
+git commit --no-ver -m x
+git commit --no-gpg-sign -m x
+git push --no-verify
+git push --no-verify origin feat
+git push origin feat --no-verify
+git push --no-ver origin feat
+git merge --no-verify feature/x
+git rebase --no-verify main
+git cherry-pick --no-verify abc123
+git am --no-verify patch.mbox
+git -C . commit -n -m x
+git -c user.name=x commit --no-verify -m x
+git add -A && git commit --no-verify -m x
+# hooks path
+git -c core.hooksPath=/dev/null commit -m x
+git -c core.hooksPath=/tmp/h status
+git -c core.hooksPath= push origin feat
+git config core.hooksPath /tmp/x
+git config --local core.hooksPath /dev/null
+git config --global core.hooksPath /tmp/x
+export GIT_CONFIG_PARAMETERS="'core.hooksPath=/dev/null'"
+export GIT_CONFIG_KEY_0=core.hooksPath
+GIT_CONFIG_KEY_0=core.hooksPath git commit -m x
+declare -x GIT_CONFIG_PARAMETERS="'core.hooksPath=/dev/null'"
+# nested wrappers
+sh -c 'git commit --no-verify -m x'
+bash -c "git commit -n -m x"
+bash -c 'git config core.hooksPath /tmp/x'
+sh -c "sh -c 'git commit --no-verify -m x'"
+eval 'git commit --no-verify -m x'
+eval "git -c core.hooksPath=/dev/null commit -m x"
+sh -c 'bash -c "eval \"git commit -n -m x\""'
+sh -c 'sh -c "sh -c \"sh -c \\\"sh -c \\\\\\\"git commit -n -m x\\\\\\\"\\\"\\\"\""'
+env git commit --no-verify -m x
+env -S 'git commit --no-verify -m x'
+command git commit -n -m x
+sudo git commit --no-verify -m x
+xargs git commit --no-verify -m x
+echo x | xargs git commit -n -m
+echo "$(git commit --no-verify -m x)"
+echo `git commit -n -m x`
+echo $(sh -c 'git commit --no-verify -m x')
+# review store
+echo '{}' > .git/construct-review/verdict.json
+echo x >> .git/construct-review/pending/a
+cp /tmp/v.json .git/construct-review/verdicts/v.json
+rm -r .git/construct-review
+rm .git/construct-review/verdicts/v.json
+echo '{}' | tee .git/construct-review/verdict.json
+cat /tmp/v.json | tee -a .git/CONSTRUCT-REVIEW/verdict.json
+ls .git/construct-review
+mv /tmp/x .git/construct-re"view"/x
+node plugins/construct/hooks/scripts/review-capture.mjs
+node plugins/construct/hooks/scripts/review-context.mjs < /tmp/input.json
+node plugins/construct/hooks/scripts/oracle-record.mjs
+node plugins/construct/hooks/scripts/unlock-approval.mjs
+bash plugins/construct/hooks/scripts/review-capture.mjs
+sh -c 'node plugins/construct/hooks/scripts/review-capture.mjs'
+echo '{}' | node ./review-capture.mjs
+cd plugins/construct/hooks/scripts && node review-capture.mjs
+# publication of the unreviewed branch
+git push
+git push origin feat
+git push origin HEAD
+git push -u origin feat
+git push origin feat:main
+git push --force-with-lease origin feat
+git push --all
+git push --tags
+git -C . push origin feat
+sh -c 'git push origin feat'
+eval 'git push'
+env git push origin feat
+sudo git push origin feat
+echo ok && git push origin feat
+git push origin feat; echo done
+gh pr create --title t --body b
+gh pr create --fill
+gh pr create -H feat -B main --title t --body b
+gh pr create -Hfeat --title t --body b
+gh pr create --head feat --base main --fill
+gh pr create --head=feat --fill
+gh pr new --fill
+gh release create v1.0.0 --target feat --notes x
+gh release create v1.0.0 --generate-notes
+gh release new v1.0.0 --target feat
+sh -c 'gh pr create --fill'
+echo "$(gh pr create --fill)"
+# oracle unlock and exempt without approval
+construct-gate oracle unlock tests/a.test.mjs
+plugins/construct/bin/construct-gate oracle unlock tests/a.test.mjs
+sh -c 'construct-gate oracle unlock tests/a.test.mjs'
+construct-gate oracle unlock tests/a.test.mjs && echo done
+construct-gate oracle exempt .vault/tasks/f.md T1 -- src/app.js
+git --git-dir=/tmp/other.git push origin feat
