@@ -4,7 +4,8 @@
 //     surfaces` section of narrow repository-relative entries, a `Spec:
 //     .vault/tasks/<f>.md, T<n>` line naming an existing regular file when an
 //     unfinished feature document exists, and surfaces that do not overlap those
-//     of a writer still open;
+//     of a writer still open, and, when that Spec task has an oracle envelope (envelope.mjs, stored by
+//     oracle-record.mjs), surfaces all inside the envelope's surfaces (a task with no envelope is unchanged);
 //   - construct:verifier needs a `Risk: item N` or `Risk: items 2, 5` line (1-6, the whole list valid);
 //   - a Workflow script (PreToolUse on Workflow) may launch only read-only agents: every agent() call
 //     names a literal agentType of the reader, lens, or judge kind, or the built-in Explore or Plan
@@ -29,7 +30,7 @@ import { isAbsolute, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { activeDocuments, projectRoot } from './feature-state.mjs'
 import { activeLocks } from './publication-gate.mjs'
-import { readOracles } from './review-store.mjs'
+import { readEnvelope, readOracles } from './review-store.mjs'
 import { kindOf, namesOf, qualified } from './roles.mjs'
 import { dataDir, readInput, safeName, SUBAGENT_MAX_IDLE_MS } from './hook-io.mjs'
 
@@ -117,6 +118,12 @@ function namesFeatureDocument(prompt, root) {
     }
   }
   return false
+}
+
+// envelopeOf: the oracle envelope of the feature and task the prompt's Spec line names, or undefined.
+function envelopeOf(prompt, root) {
+  const spec = /^[ \t]*(?:[-*+][ \t]+)?Spec:[ \t]*`?(\.vault\/tasks\/[^\s,`()]+\.md)`?[^\n]*?\b(T\d+)\b/m.exec(prompt)
+  return spec ? (readEnvelope(root, spec[1], spec[2]) ?? undefined) : undefined
 }
 
 // The same "unfinished feature document" rule feature-state.mjs re-injects by.
@@ -581,6 +588,12 @@ function admit(input) {
   }
   if ((type === ORACLE || hasUnfinishedDocument(root)) && !namesFeatureDocument(prompt, root)) {
     deny(`${type} needs a Spec line: no \`Spec:\` line in the prompt names an existing regular file under .vault/tasks/. ${SPEC_FORM}`)
+    return
+  }
+  const bounds = type === ORACLE ? undefined : envelopeOf(prompt, root)
+  const outside = bounds && parsed.paths.filter((path) => !bounds.surfaces.some((surface) => surfaceContains(surface, path)))
+  if (outside?.length) {
+    deny(`${type} edit surfaces ${outside.join(', ')} are outside the oracle envelope of ${bounds.feature} (task ${bounds.task}), which allows ${bounds.surfaces.join(', ')}. Keep the surfaces inside the envelope; the oracle fixes it and a worker cannot change it.`)
     return
   }
   withLock(input.session_id, () => {

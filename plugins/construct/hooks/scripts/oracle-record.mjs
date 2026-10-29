@@ -5,18 +5,36 @@
 // line are read from the agent's prompt (the first user row of its transcript), not from the admission
 // record: delegation-admission's own stop hook runs in parallel and may already have removed that record.
 // A path with an active lock (activeLocks) is kept untouched (release is a human unlock or a finished feature); a released lock is replaced.
+// The reply's `## Envelope` section (envelope.mjs) is stored in the envelopes/ area, keyed by feature and task; like a lock it is
+// kept while any lock of that task is active, and replaced otherwise.
 // A surface that is a symlink or directory cannot be hashed as a file: it is locked with the UNLOCKABLE sentinel, which the gate always reports changed. Fails open: no output, exit 0.
 // Usage: node oracle-record.mjs   (hook JSON on stdin)
-import { lstatSync } from 'node:fs'
+import { lstatSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { parseEnvelope } from './envelope.mjs'
 import { firstUserPrompt, parseSurfaces } from './delegation-admission.mjs'
 import { git, repositoryRoot } from './git-tree.mjs'
 import { readInput } from './hook-io.mjs'
 import { qualified } from './roles.mjs'
 import { activeLocks } from './publication-gate.mjs'
-import { UNLOCKABLE, writeOracle } from './review-store.mjs'
+import { UNLOCKABLE, readEnvelope, writeEnvelope, writeOracle } from './review-store.mjs'
 
 const SPEC = /^[ \t]*(?:[-*+][ \t]+)?Spec:[ \t]*`?(\.vault\/tasks\/[^\s,`()]+\.md)`?[^\n]*?\b(T\d+)\b/m
+
+// replyOf: last_assistant_message, else the last assistant text of the agent's transcript.
+function replyOf(input) {
+  if (typeof input.last_assistant_message === 'string' && input.last_assistant_message.trim() !== '') return input.last_assistant_message
+  let text = null
+  for (const line of readFileSync(input.agent_transcript_path, 'utf8').split('\n')) {
+    try {
+      const parts = JSON.parse(line)?.type === 'assistant' ? JSON.parse(line).message?.content : null
+      for (const part of Array.isArray(parts) ? parts : []) if (part?.type === 'text' && part.text?.trim()) text = part.text
+    } catch {
+      // not a JSON row
+    }
+  }
+  return text
+}
 
 function main() {
   const input = readInput()
@@ -28,7 +46,11 @@ function main() {
   const root = repositoryRoot(input.cwd)
   // The gate verifies the release ref against the URL pinned here, not the config an agent can edit later.
   const remote = git(root, ['config', '--get', 'remote.origin.url'], { okStatuses: [0, 1] }).toString('utf8').trim()
-  const locked = new Set(activeLocks(root).map((o) => o.path))
+  const active = activeLocks(root)
+  const locked = new Set(active.map((o) => o.path))
+  const envelope = parseEnvelope(replyOf(input))
+  const kept = active.some((o) => o.feature === spec[1] && o.task === spec[2]) && readEnvelope(root, spec[1], spec[2])
+  if (envelope && !kept) writeEnvelope(root, { feature: spec[1], task: spec[2], ...envelope, at: Date.now() })
   for (const path of paths) {
     if (locked.has(path)) continue
     let stat

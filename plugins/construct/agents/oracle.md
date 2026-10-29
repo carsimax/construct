@@ -32,4 +32,18 @@ You write acceptance tests from the specs and nothing else. delegation-admission
 - **Scratch paths**: every directory you created
 - **Open issues**: anything unresolved
 
+Then `## Envelope`, the limits the worker of this task runs under, as exactly these lines:
+
+```
+## Envelope
+- Command: <shell command that runs the oracle tests>
+- Surfaces:
+  - <one repository-relative path or narrow glob per line: the worker's allowed edit surfaces>
+- Attempts: <n>
+- Minutes: <n>
+- Lines: <n>
+```
+
+Declare the smallest budget the specs need; values above the ceilings (10 attempts, 60 minutes, 1500 lines) are clamped, and a missing one takes the default (5, 30, 400).
+
 Close with `## Key Learnings:` (1-5 items) for Engram.

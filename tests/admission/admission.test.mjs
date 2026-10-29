@@ -7,6 +7,7 @@ import { mkdirSync, readdirSync, readFileSync, symlinkSync, utimesSync, writeFil
 import { join } from 'node:path'
 import { describe, test } from 'node:test'
 import { makeRepo, scratchDir, write } from '../helpers/repo.mjs'
+import { writeEnvelope } from '../../plugins/construct/hooks/scripts/review-store.mjs'
 
 const PLUGIN = new URL('../../plugins/construct/', import.meta.url).pathname
 const SCRIPT = join(PLUGIN, 'hooks/scripts/delegation-admission.mjs')
@@ -480,5 +481,25 @@ describe('oracle admission', () => {
   })
   test('a worker with a glob is still admitted', () => {
     allowed(launch(withFeature('pending'), env(), WORKER, spec('tests/**/*.test.mjs')))
+  })
+})
+
+describe('envelope admission (S2 of oracle-limits)', () => {
+  const envelope = { feature: '.vault/tasks/feat.md', task: 'T1', command: 'node --test', surfaces: ['src/**', 'docs/a.md'], attempts: 5, minutes: 30, lines: 400, at: 1 }
+  const withEnvelope = () => {
+    const repo = withFeature('pending')
+    writeEnvelope(repo, envelope)
+    return repo
+  }
+  test('worker surfaces inside the envelope surfaces are admitted', () => {
+    allowed(launch(withEnvelope(), env(), WORKER, SPEC + surfaces('src/a.js', 'docs/a.md')))
+  })
+  test('a surface outside the envelope is denied, naming it', () => {
+    denied(launch(withEnvelope(), env(), WORKER, SPEC + surfaces('src/a.js', 'lib/b.js')), /envelope/, /lib\/b\.js/)
+  })
+  test('a Spec task without an envelope keeps the current behavior', () => {
+    allowed(launch(withFeature('pending'), env(), WORKER, SPEC + surfaces('lib/b.js')))
+    const repo = withEnvelope()
+    allowed(launch(repo, env(), WORKER, 'Spec: .vault/tasks/feat.md, T2\n' + surfaces('lib/b.js')))
   })
 })
