@@ -39,7 +39,7 @@ Objective: the oracle becomes the only source of autonomy limits. Every code tas
 | T4 | S4, S5 | SubagentStop runs the oracle; progress-based attempts and minutes per task | worker | 3, 4 | done | e049373 |
 | T5 | S6 | Diff check against the envelope at stop | worker | 2 | done | e049373 |
 | T7 | S6 | Review correction R3-whole-tree-diff: per-worker baseline, ignore other open writers' surfaces, count lines only inside own surfaces | worker | 2, 4 | done | bbb8656 |
-| T8 | S6 | Finish R3: per-worker baseline in the review store (not the admission record), and exempt surfaces of writers that stopped after this worker started | worker | 2, 4 | open | |
+| T8 | S6 | Finish R3: per-worker baseline in the review store (not the admission record), and exempt surfaces of writers that stopped after this worker started | worker | 2, 4 | done | 81212c2 |
 | T6 | S8 | Docs, contracts, skills, agents, CHANGELOG | worker | 3 | done | ecc0b01 |
 
 ## Log
@@ -55,3 +55,4 @@ Objective: the oracle becomes the only source of autonomy limits. Every code tas
 - **L9 (2026-10-29):** T6 (ecc0b01): contracts, skills, agents, README, CLAUDE, CONTRIBUTING, METHODOLOGY, CHANGELOG (Breaking); evals iteration-cap, small-inline, small-inline-pressure removed by the parent (the worker's git rm was refused by the safety layer). node --test: 1278 pass; claude plugin test: 100 pass; validate --strict passed. Converge: S1-S8 each map to a done task; gap kept as follow-up: no eval covers the oracle-first path or the stop block. Version bump is the release PR.
 - **L10 (2026-10-29):** Native review review-2cb5b2d486055691 (T4-T6 slice, base 1707070) requires one correction: R3-whole-tree-diff CRITICAL, the stop diff covers the whole tree since the task's first start, so parallel workers of other tasks block each other and spend attempts. T7 added; correction plan 150 diff lines. The whole feature exceeded the native review budget, so T1-T3 get their own review slice.
 - **L11 (2026-10-29):** T7 (bbb8656, 56 diff lines, 1280 pass) was rejected by the targeted validator (lineage escalated): (1) a sibling that wrote and stopped before this worker's stop is no longer an open record, so its paths block this worker again; (2) the per-worker baseTree lives in the admission record, which admission's own SubagentStop may remove first, falling back to the task-wide baseline. T8 fixes both; a new review transaction follows.
+- **L12 (2026-10-29):** T8 (81212c2): RED 2 failing (stopped sibling, removed admission record), GREEN; node --test: 1283 pass. Admission stop marks records stoppedAt instead of deleting them; the per-worker baseline is state.workers[agent_id] in the review store.
