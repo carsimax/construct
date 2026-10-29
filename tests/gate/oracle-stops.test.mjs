@@ -7,7 +7,7 @@ import { createServer } from 'node:net'
 import { join } from 'node:path'
 import { describe, test } from 'node:test'
 import { applyFiles, commitAll, git, makeRepo, scratchDir, write } from '../helpers/repo.mjs'
-import { readOracles, writeOracle } from '../../plugins/construct/hooks/scripts/review-store.mjs'
+import { readOracles, writeEnvelope, writeOracle } from '../../plugins/construct/hooks/scripts/review-store.mjs'
 
 const PLUGIN = new URL('../../plugins/construct/', import.meta.url).pathname
 const S = (name) => join(PLUGIN, 'hooks/scripts', name)
@@ -38,6 +38,8 @@ const silent = (r) => assert.deepEqual([r.status, r.stdout], [0, ''])
 function lockedRepo({ doc = FEATURE('pending'), feature = '.vault/tasks/f.md', path = PATH_ } = {}) {
   const repo = makeRepo({ [path]: 'one\n', '.vault/tasks/f.md': doc, 'src/a.js': 'a\n' })
   writeOracle(repo, { path, blob: git(repo, 'hash-object', path).trim(), feature, task: 'T1', at: Date.now() })
+  // The oracle's envelope covers every path, so a worker on code is admitted (S1 of oracle-limits).
+  writeEnvelope(repo, { feature, task: 'T1', command: 'true', surfaces: ['**'], attempts: 5, minutes: 30, lines: 400, at: 1 })
   return repo
 }
 // withRemote: origin/main exists, so a finished document on main releases the lock.
@@ -77,7 +79,7 @@ describe('surface-guard: a locked oracle', () => {
     denied(guard(lockedRepo(), 'Write', { file_path: PATH_, content: 'x\n' }), /locked oracle/)
   })
   test('another path stays allowed, and so does the oracle when its lock is released', () => {
-    // Main thread: the unfinished feature denies inline writes (config-surface S4); a writer over src/a.js is not blocked by the lock.
+    // Main thread: code is never written inline (oracle-limits S1); a writer over src/a.js is not blocked by the lock.
     const repo = lockedRepo()
     denied(guard(repo, 'Write', { file_path: 'src/a.js', content: 'x\n' }), /construct:worker/)
     const data = { CLAUDE_PLUGIN_DATA: scratchDir('odd-stops-writer-') }
@@ -85,7 +87,10 @@ describe('surface-guard: a locked oracle', () => {
     spawn([], { session_id: 's1', cwd: repo, tool_name: 'Agent', tool_input: { subagent_type: 'construct:worker', prompt: 'Spec: .vault/tasks/f.md, T1, S1\n\n## Allowed edit surfaces\nsrc/a.js\n\n## Verification\n- x\n', description: 'u' } })
     spawn(['start'], { session_id: 's1', agent_id: 'a1', agent_type: 'construct:worker' })
     silent(run(S('surface-guard.mjs'), { session_id: 's1', cwd: repo, agent_id: 'a1', tool_name: 'Write', tool_input: { file_path: 'src/a.js', content: 'x\n' } }, data))
-    silent(guard(released(), 'Write', { file_path: PATH_, content: 'x\n' }))
+    // A released lock no longer denies as a lock: the main thread is stopped only by the code rule.
+    const open = guard(released(), 'Write', { file_path: PATH_, content: 'x\n' })
+    denied(open, /is code/)
+    assert.doesNotMatch(open.reason, /locked oracle/)
   })
   test('fails open on bad input', () => {
     silent(run(S('surface-guard.mjs'), 'not json'))

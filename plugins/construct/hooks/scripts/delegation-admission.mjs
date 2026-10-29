@@ -4,16 +4,20 @@
 //     surfaces` section of narrow repository-relative entries, a `Spec:
 //     .vault/tasks/<f>.md, T<n>` line naming an existing regular file when an
 //     unfinished feature document exists, and surfaces that do not overlap those
-//     of a writer still open;
+//     of a writer still open, and, when that Spec task has an oracle envelope (envelope.mjs, stored by
+//     oracle-record.mjs), surfaces all inside the envelope's surfaces; a worker whose surfaces include code (not .vault/ or a
+//     doc, isFree in envelope.mjs) needs that envelope (S1 of .vault/tasks/oracle-limits.md);
 //   - construct:verifier needs a `Risk: item N` or `Risk: items 2, 5` line (1-6, the whole list valid);
 //   - a Workflow script (PreToolUse on Workflow) may launch only read-only agents: every agent() call
 //     names a literal agentType of the reader, lens, or judge kind, or the built-in Explore or Plan
 //     (a workflow's agent() never reaches PreToolUse on Agent, so the writer rules above cannot apply).
 // Other agents pass untouched, and an admitted launch prints nothing, so it never
 // conflicts with review-context.mjs (the hooks run in parallel; deny wins).
-// `stop` (SubagentStop) clears the stopped writer's record: it hashes the first
-// user row of agent_transcript_path (the subagent's prompt) and removes the record
-// with that hash. Records live under ${CLAUDE_PLUGIN_DATA}/delegation-admission/<session>/
+// `start` also records the first worker start of a task that has an envelope in the task state (startedAt, and baseTree: a
+// snapshot of the working tree that oracle-stop.mjs diffs against, kept per worker in state.workers); the record keeps the Spec feature and task for that.
+// `stop` (SubagentStop) closes the stopped writer's record: it hashes the first
+// user row of agent_transcript_path (the subagent's prompt) and marks the record
+// with that hash `stoppedAt` (it no longer counts for overlap; oracle-stop.mjs still reads it). Records live under ${CLAUDE_PLUGIN_DATA}/delegation-admission/<session>/
 // and stop counting for overlap after SUBAGENT_MAX_IDLE_MS (one hour), like subagent-count.mjs entries.
 // The check-then-record of open writers runs under an mkdir lock (withLock), so parallel
 // launches in one batch cannot both pass. Fails open on unreadable input, any internal
@@ -28,8 +32,10 @@ import { homedir } from 'node:os'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { activeDocuments, projectRoot } from './feature-state.mjs'
+import { freezeWorkingTree } from './git-tree.mjs'
+import { isFree } from './envelope.mjs'
 import { activeLocks } from './publication-gate.mjs'
-import { readOracles } from './review-store.mjs'
+import { readEnvelope, readOracles, readTaskState, writeTaskState } from './review-store.mjs'
 import { kindOf, namesOf, qualified } from './roles.mjs'
 import { dataDir, readInput, safeName, SUBAGENT_MAX_IDLE_MS } from './hook-io.mjs'
 
@@ -117,6 +123,17 @@ function namesFeatureDocument(prompt, root) {
     }
   }
   return false
+}
+
+// envelopeOf: the oracle envelope of the feature and task the prompt's Spec line names, or undefined.
+export function specOf(prompt) {
+  const spec = /^[ \t]*(?:[-*+][ \t]+)?Spec:[ \t]*`?(\.vault\/tasks\/[^\s,`()]+\.md)`?[^\n]*?\b(T\d+)\b/m.exec(prompt)
+  return spec ? { feature: spec[1], task: spec[2] } : undefined
+}
+
+function envelopeOf(prompt, root) {
+  const spec = specOf(prompt)
+  return spec ? (readEnvelope(root, spec.feature, spec.task) ?? undefined) : undefined
 }
 
 // The same "unfinished feature document" rule feature-state.mjs re-injects by.
@@ -236,6 +253,12 @@ export function surfaceContains(surface, path) {
   return match(pattern.split('/'), target.split('/'))
 }
 
+// otherSurfaces lists the edit surfaces of the other live writers of the session (their paths are not this writer's doing).
+// A writer that stopped at or after `since` still counts: what it wrote is in the diff of a worker that started before.
+export function otherSurfaces(session, root, agentId, since = Infinity) {
+  return openWriters(session, root, '', Date.now(), since).filter((entry) => entry.agent_id !== agentId).flatMap((entry) => entry.surfaces)
+}
+
 // writerRecord finds the started record of the subagent with this agent_id (undefined if none).
 export function writerRecord(session, agentId) {
   const dir = recordDir(session)
@@ -264,7 +287,7 @@ const promptKey = (text) => createHash('sha256').update(text.trim()).digest('hex
 // record of `key` is skipped: it is this same prompt's earlier launch, which never started.
 // shortcut: two identical prompts launched before either starts are both admitted (the same
 // task twice); telling that apart from a resend after a declined launch needs a launch id.
-function openWriters(session, root, key, now = Date.now()) {
+function openWriters(session, root, key, now = Date.now(), since = Infinity) {
   const dir = recordDir(session)
   let names
   try {
@@ -282,6 +305,7 @@ function openWriters(session, root, key, now = Date.now()) {
         if (entry.started !== true) rmSync(join(dir, name), { force: true })
         continue
       }
+      if (entry.stoppedAt !== undefined && !(entry.stoppedAt >= since)) continue
       if (entry.started === false && (name === key || now - Date.parse(entry.at) > START_GRACE_MS)) continue
       if (entry.root === root && Array.isArray(entry.surfaces)) live.push(entry)
     } catch {
@@ -291,13 +315,13 @@ function openWriters(session, root, key, now = Date.now()) {
   return live
 }
 
-function record(session, root, prompt, surfaces, type) {
+function record(session, root, prompt, surfaces, type, spec) {
   const dir = recordDir(session)
   mkdirSync(dir, { recursive: true })
   const key = promptKey(prompt)
   const temporary = join(dir, `.${key}.${process.pid}.tmp`)
   try {
-    writeFileSync(temporary, `${JSON.stringify({ root, surfaces, type, started: false, at: new Date().toISOString() })}\n`)
+    writeFileSync(temporary, `${JSON.stringify({ root, surfaces, type, spec, started: false, at: new Date().toISOString() })}\n`)
     renameSync(temporary, join(dir, key))
   } catch (error) {
     rmSync(temporary, { force: true })
@@ -583,6 +607,17 @@ function admit(input) {
     deny(`${type} needs a Spec line: no \`Spec:\` line in the prompt names an existing regular file under .vault/tasks/. ${SPEC_FORM}`)
     return
   }
+  const bounds = type === ORACLE ? undefined : envelopeOf(prompt, root)
+  const code = parsed.paths.filter((path) => !isFree(path))
+  if (type !== ORACLE && code.length > 0 && !bounds) {
+    deny(`${type} edit surfaces include code (${code.slice(0, 5).join(', ')}) and the Spec task has no oracle envelope. Code goes through construct:oracle first: it writes the failing test and declares the envelope (test command, surfaces, budget). A task with no deterministic test needs your approval: ask with AskUserQuestion naming the task in backticks (for example \`T2\`) with the options \`Exempt\` and \`Keep the oracle\`, then run \`construct-gate oracle exempt <feature-doc> <T#> -- <surface>...\` once from the main thread. A worker whose surfaces are only docs and .vault/ needs no envelope.`)
+    return
+  }
+  const outside = bounds && parsed.paths.filter((path) => !bounds.surfaces.some((surface) => surfaceContains(surface, path)))
+  if (outside?.length) {
+    deny(`${type} edit surfaces ${outside.join(', ')} are outside the oracle envelope of ${bounds.feature} (task ${bounds.task}), which allows ${bounds.surfaces.join(', ')}. Keep the surfaces inside the envelope; the oracle fixes it and a worker cannot change it.`)
+    return
+  }
   withLock(input.session_id, () => {
     const pairs = []
     for (const open of openWriters(input.session_id, root, promptKey(prompt))) {
@@ -594,7 +629,7 @@ function admit(input) {
       )
       return
     }
-    record(input.session_id, root, prompt, parsed.paths, type)
+    record(input.session_id, root, prompt, parsed.paths, type, bounds && specOf(prompt))
   })
 }
 
@@ -620,7 +655,17 @@ export function firstUserPrompt(file) {
 function clear(input) {
   if (typeof input.agent_transcript_path !== 'string' || input.agent_transcript_path === '') return
   const prompt = firstUserPrompt(input.agent_transcript_path)
-  if (prompt) rmSync(join(recordDir(input.session_id), promptKey(prompt)), { force: true })
+  if (!prompt) return
+  // The record stays, marked, so oracle-stop.mjs can tell a sibling's finished writes from this worker's; pruneState sweeps it.
+  const file = join(recordDir(input.session_id), promptKey(prompt))
+  try {
+    const entry = JSON.parse(readFileSync(file, 'utf8'))
+    const temporary = `${file}.${process.pid}.stop.tmp`
+    writeFileSync(temporary, `${JSON.stringify({ ...entry, stoppedAt: Date.now() })}\n`)
+    renameSync(temporary, file)
+  } catch {
+    // no readable record: nothing to mark
+  }
 }
 
 // start marks the oldest unstarted record of the agent type inside the grace as started. SubagentStart input
@@ -647,13 +692,28 @@ function start(input) {
     if (!oldest) return
     const temporary = join(dir, `.${oldest.name}.${process.pid}.start.tmp`)
     try {
+      const { root, spec } = oldest.entry
+      const baseTree = spec && readEnvelope(root, spec.feature, spec.task) ? freezeWorkingTree(root).candidateTree : undefined
       writeFileSync(temporary, `${JSON.stringify({ ...oldest.entry, started: true, agent_id: input.agent_id })}\n`)
       renameSync(temporary, join(dir, oldest.name))
+      startTask(oldest.entry, input.agent_id, baseTree)
     } catch (error) {
       rmSync(temporary, { force: true })
       throw error
     }
   })
+}
+
+// startTask records the first worker start of a task (S5 minutes, S6 baseline); later workers of the task keep it.
+// Each worker's own baseline goes to state.workers (the store, which agents cannot write), not to its admission record,
+// which admission's own SubagentStop may remove or mark before oracle-stop.mjs reads it.
+function startTask({ root, spec }, agentId, baseTree) {
+  const envelope = spec && readEnvelope(root, spec.feature, spec.task)
+  if (!envelope) return
+  // The budget is copied so surface-guard can enforce it from the state alone (the envelope is locked while the task runs).
+  const budget = { attempts: envelope.attempts, minutes: envelope.minutes }
+  const state = readTaskState(root, spec.feature, spec.task) ?? { attempts: 0, bestPass: null, startedAt: Date.now(), baseTree, budget }
+  writeTaskState(root, spec.feature, spec.task, { ...state, workers: { ...state.workers, [agentId]: { baseTree, startedAt: Date.now() } } })
 }
 
 function main() {

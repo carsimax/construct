@@ -5,6 +5,7 @@ import { existsSync, readdirSync, readFileSync, realpathSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, test } from 'node:test'
 import { makeRepo, scratchDir } from '../helpers/repo.mjs'
+import { writeEnvelope } from '../../plugins/construct/hooks/scripts/review-store.mjs'
 
 const PLUGIN = new URL('../../plugins/construct/', import.meta.url).pathname
 const ADMISSION = join(PLUGIN, 'hooks/scripts/delegation-admission.mjs')
@@ -22,9 +23,10 @@ const run = (script, args, input, e, raw) => {
   return { status: r.status, stdout: r.stdout, json }
 }
 const WORKER = 'construct:worker'
-const prompt = (...paths) => `Do it\n\n## Allowed edit surfaces\n${paths.join('\n')}\n\n## Verification\n- x\n`
+const prompt = (...paths) => `Spec: .vault/tasks/f.md, T1\nDo it\n\n## Allowed edit surfaces\n${paths.join('\n')}\n\n## Verification\n- x\n`
 // A launched and started worker with agent_id a1.
 function started(repo, ...paths) {
+  writeEnvelope(repo, { feature: '.vault/tasks/f.md', task: 'T1', command: 'true', surfaces: ['**'], attempts: 5, minutes: 30, lines: 400, at: 1 })
   const e = { CLAUDE_PLUGIN_DATA: scratchDir('odd-sg-data-') }
   run(ADMISSION, [], { session_id: 's1', cwd: repo, tool_name: 'Agent', tool_input: { subagent_type: WORKER, prompt: prompt(...paths), description: 'u' } }, e)
   run(ADMISSION, ['start'], { session_id: 's1', agent_id: 'a1', agent_type: WORKER }, e)
@@ -110,10 +112,6 @@ describe('surface-guard', () => {
     const repo = makeRepo({ 'src/a.js': 'a\n' })
     isAllowed(write(repo, started(repo, 'src/a.js'), join(repo, 'src/b.js'), { agent_id: 'other' }))
   })
-  test('the main thread writing a big file is denied pointing at construct:worker', () => {
-    const repo = makeRepo({ 'src/a.js': 'a\n' })
-    isDenied(write(repo, {}, join(repo, 'src/x.js'), { tool_input: { file_path: join(repo, 'src/x.js'), content: lines(151) } }), /src\/x\.js/, /151/, /150/, /construct:worker/)
-  })
   test('the main thread writing .vault/tasks/ is allowed', () => {
     const repo = makeRepo({ 'src/a.js': 'a\n' })
     isAllowed(write(repo, {}, join(repo, '.vault/tasks/f.md')))
@@ -145,53 +143,41 @@ describe('surface-guard', () => {
   })
 })
 
-// S5: the main thread edits small changes inline, up to the session inline limit (default 150, set by construct-limits in tests/limits/) changed lines per call.
+// S1 of oracle-limits: the main thread writes only under .vault/ and docs, whatever the size; code goes oracle, then worker.
 const lines = (n, tag = 'l') => Array.from({ length: n }, (_, i) => `${tag}${i}`).join('\n')
 const tool = (repo, tool_name, tool_input, env = {}) => run(GUARD, [], { session_id: 's1', cwd: repo, tool_name, tool_input }, env)
-const edit = (repo, old_string, new_string, extra = {}, env) => tool(repo, 'Edit', { file_path: join(repo, 'src/a.js'), old_string, new_string, ...extra }, env)
 
-describe('inline edit limit (S5)', () => {
-  const repo = makeRepo({ 'src/a.js': 'a\n', 'src/big.js': `${lines(75, 'x')}\n` })
-  test('Edit passes at exactly 150 lines and is denied at 151, naming count, limit, and worker', () => {
-    isAllowed(edit(repo, lines(150), lines(3, 'n')))
-    isAllowed(edit(repo, 'a', lines(150, 'n')))
-    isDenied(edit(repo, 'a', lines(151, 'n')), /151/, /150/, /construct:worker/)
-    isDenied(edit(repo, lines(151), 'a'), /151/)
+describe('main thread writes only docs and .vault (S1)', () => {
+  const repo = makeRepo({ 'src/a.js': 'a\n' })
+  const code = (name, input) => tool(repo, name, input)
+  test('a one-line code edit in any tool is denied, naming construct:oracle before construct:worker', () => {
+    const calls = [
+      ['Edit', { file_path: join(repo, 'src/a.js'), old_string: 'a', new_string: 'b' }],
+      ['Write', { file_path: join(repo, 'src/new.js'), content: 'x\n' }],
+      ['MultiEdit', { file_path: join(repo, 'src/a.js'), edits: [{ old_string: 'a', new_string: 'b' }] }],
+      ['NotebookEdit', { notebook_path: join(repo, 'n.ipynb'), new_source: 'x' }],
+    ]
+    for (const [name, input] of calls) {
+      const r = code(name, input)
+      isDenied(r, /construct:oracle/, /construct:worker/)
+      const reason = r.json.hookSpecificOutput.permissionDecisionReason
+      assert.ok(reason.indexOf('construct:oracle') < reason.indexOf('construct:worker'))
+    }
   })
-  test('Edit and MultiEdit do not count context lines kept unchanged', () => {
-    isAllowed(edit(repo, lines(160), `${lines(159)}\nchanged`))
-    isDenied(edit(repo, lines(160), `${lines(9)}\n${lines(151, 'n')}`), /151/)
-    isAllowed(tool(repo, 'MultiEdit', { file_path: join(repo, 'src/a.js'), edits: [{ old_string: lines(160), new_string: `${lines(159)}\nchanged` }] }))
+  test('docs and .vault/ are allowed at any size, nested too', () => {
+    for (const path of ['.vault/tasks/f.md', '.vault/specs/s.md', '.vault/notes/x.txt', 'README.md', 'docs/deep/guide.md', 'plugins/construct/README.md']) {
+      isAllowed(code('Write', { file_path: join(repo, path), content: lines(500) }))
+    }
   })
-  test('Edit with replace_all multiplies by the occurrences in the file', () => {
-    const r = makeRepo({ 'src/a.js': `${Array(76).fill('a').join('\n')}\n` })
-    isAllowed(edit(r, 'a', 'b\nc', { replace_all: false }))
-    isDenied(edit(r, 'a', 'b\nc', { replace_all: true }), /152/)
+  test('Markdown that is behavior (contract, skills, agents) is code', () => {
+    for (const path of ['plugins/construct/hooks/contract/session.md', 'plugins/construct/skills/workflow/SKILL.md', 'plugins/construct/agents/worker.md']) {
+      isDenied(code('Write', { file_path: join(repo, path), content: 'x\n' }), /construct:oracle/)
+    }
   })
-  test('MultiEdit sums its edits', () => {
-    const multi = (...edits) => tool(repo, 'MultiEdit', { file_path: join(repo, 'src/a.js'), edits })
-    isAllowed(multi({ old_string: 'a', new_string: lines(75) }, { old_string: 'b', new_string: lines(75) }))
-    isDenied(multi({ old_string: 'a', new_string: lines(75) }, { old_string: 'b', new_string: lines(76) }), /151/, /construct:worker/)
-  })
-  test('Write of a new file counts every line', () => {
-    const w = (n) => tool(repo, 'Write', { file_path: join(repo, 'src/new.js'), content: lines(n) })
-    isAllowed(w(150))
-    isDenied(w(151), /151/)
-  })
-  test('Write over an existing file counts lines added plus removed', () => {
-    const w = (content) => tool(repo, 'Write', { file_path: join(repo, 'src/big.js'), content })
-    isAllowed(w(`${lines(75, 'x')}\n`))
-    isAllowed(w(`${lines(75, 'x')}\n${lines(75, 'y')}\n`))
-    isAllowed(w(`${lines(75, 'y')}\n`))
-    isDenied(w(`${lines(76, 'y')}\n`), /151/)
-  })
-  test('NotebookEdit counts the lines of new_source', () => {
-    const nb = (n) => tool(repo, 'NotebookEdit', { notebook_path: join(repo, 'n.ipynb'), new_source: lines(n) })
-    isAllowed(nb(150))
-    isDenied(nb(151), /151/)
-  })
-  test('.vault/tasks/ is allowed at any size', () => {
-    isAllowed(tool(repo, 'Write', { file_path: join(repo, '.vault/tasks/f.md'), content: lines(500) }))
+  test('an unfinished feature document changes nothing: docs stay writable, code stays denied', () => {
+    const r = makeRepo({ 'src/a.js': 'a\n', '.vault/tasks/x.md': '# F\n\n## Tasks\n\n| ID | Specs | Task | Route | Risk | Status | Commit |\n|---|---|---|---|---|---|---|\n| T1 | S1 | Do | w | none | open | - |\n\n## Log\n' })
+    isAllowed(tool(r, 'Write', { file_path: join(r, 'README.md'), content: 'x\n' }))
+    isDenied(tool(r, 'Edit', { file_path: join(r, 'src/a.js'), old_string: 'a', new_string: 'b' }), /construct:oracle/)
   })
   test('a writer subagent keeps its surface rule regardless of size', () => {
     const r = makeRepo({ 'src/a.js': 'a\n' })

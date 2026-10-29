@@ -89,20 +89,26 @@ test('the session contract scales autonomy to the verifier and closes with check
   assert.ok(text.includes('Risk: item N (reason)') && text.includes('Risk: none'))
 })
 
-test('small work is inline up to the session inline limit and bigger edits go to the worker (S5)', () => {
+test('code goes oracle first and the oracle envelope replaces the fixed limits (S8)', () => {
   const text = context('session', SESSION).additionalContext
-  assert.ok(text.includes('Small work is done inline: each edit call changes up to the session inline limit (default 150, ceiling 500)'))
-  assert.ok(text.includes('Large work never edits inline'))
-  assert.ok(text.includes('construct-limits set inline=<N> cap=<N>'))
+  assert.ok(text.includes('Code goes oracle first: `construct:oracle` writes failing tests, locked by content hash, and declares an `## Envelope`'))
+  assert.ok(text.includes('ceilings 10, 60, 1500, defaults 5, 30, 400'))
+  assert.ok(text.includes('The main thread writes only `.vault/` and docs'))
+  assert.ok(text.includes('At a worker\'s stop the oracle command runs: green ends, red with budget left blocks the stop, spent budget stops it (hook)'))
+  assert.ok(text.includes('`construct-gate oracle exempt <doc> <T#> -- <surfaces>`'))
   assert.ok(!text.includes('routing defect'))
   const delegation = readFileSync(join(pluginRoot, 'skills/delegation/SKILL.md'), 'utf8')
-  assert.ok(delegation.includes('Small work is done inline'))
-  assert.ok(!delegation.includes('Every write to repository code, tests, or docs goes to `construct:worker`'))
+  assert.ok(delegation.includes('The parent writes only `.vault/` and docs'))
+  assert.ok(!delegation.includes('Small work is done inline'))
   const sizing = readFileSync(join(pluginRoot, 'skills/workflow/SKILL.md'), 'utf8')
-  assert.match(sizing, /- Small: done inline \(edits within the `construct-limits` limit/)
-  const grader = readFileSync(join(pluginRoot, 'evals/small-inline/graders/no-delegation.md'), 'utf8')
-  assert.match(grader, /tool: Agent\nmin: 0\nmax: 0/)
-  assert.doesNotMatch(grader, /arm: both/)
+  assert.match(sizing, /- Small: no commits unless asked; code takes a one-task feature document, then oracle/)
+})
+
+test('no contract, skill, agent, or user doc names a removed limit (S3, S8)', () => {
+  const removed = /construct-limits|limits-record|iteration-cap|failure-streak|inline limit|inline edit limit|150k|iteration cap/i
+  const files = ['hooks/contract/session.md', 'hooks/contract/subagent.md', ...readdirSync(join(pluginRoot, 'skills'), { recursive: true }).filter((f) => f.endsWith('.md')).map((f) => `skills/${f}`), ...readdirSync(join(pluginRoot, 'agents')).map((f) => `agents/${f}`)]
+  for (const f of files) assert.doesNotMatch(readFileSync(join(pluginRoot, f), 'utf8'), removed, f)
+  for (const f of ['CLAUDE.md', 'CONTRIBUTING.md']) assert.doesNotMatch(readFileSync(join(pluginRoot, '../..', f), 'utf8'), removed, f)
 })
 
 test('SubagentStart gives worker agents the subagent contract', () => {

@@ -3,10 +3,11 @@
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
-import { mkdirSync, readdirSync, readFileSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readdirSync, readFileSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, test } from 'node:test'
 import { makeRepo, scratchDir, write } from '../helpers/repo.mjs'
+import { writeEnvelope } from '../../plugins/construct/hooks/scripts/review-store.mjs'
 
 const PLUGIN = new URL('../../plugins/construct/', import.meta.url).pathname
 const SCRIPT = join(PLUGIN, 'hooks/scripts/delegation-admission.mjs')
@@ -37,8 +38,18 @@ function run(mode, input, e, raw) {
   return { status: r.status, stdout: r.stdout, json }
 }
 
-const launch = (repo, e, type, prompt, session = 's1') =>
+const rawLaunch = (repo, e, type, prompt, session = 's1') =>
   run(undefined, { session_id: session, cwd: repo, hook_event_name: 'PreToolUse', tool_name: 'Agent', tool_input: { subagent_type: type, prompt, description: 'unit' } }, e)
+
+// launch: a worker prompt with no Spec line gets one, and its task an envelope over every path, so the tests of the other
+// rules are not stopped by the oracle requirement (S1 of oracle-limits); rawLaunch sends the prompt as written.
+const launch = (repo, e, type, prompt, session = 's1') => {
+  if (/^(construct:)?worker$/.test(type) && !/^[ \t]*(?:[-*+][ \t]+)?Spec:/m.test(prompt)) {
+    writeEnvelope(repo, { feature: '.vault/tasks/feat.md', task: 'T1', command: 'true', surfaces: ['**'], attempts: 5, minutes: 30, lines: 400, at: 1 })
+    prompt = `Spec: .vault/tasks/feat.md, T1\n${prompt}`
+  }
+  return rawLaunch(repo, e, type, prompt, session)
+}
 
 const denied = (r, ...needles) => {
   assert.equal(r.status, 0)
@@ -55,6 +66,7 @@ const plain = () => makeRepo({ 'src/a.js': 'a\n' })
 const withFeature = (status) => {
   const repo = plain()
   write(repo, '.vault/tasks/feat.md', FEATURE(status))
+  writeEnvelope(repo, { feature: '.vault/tasks/feat.md', task: 'T1', command: 'true', surfaces: ['**'], attempts: 5, minutes: 30, lines: 400, at: 1 })
   return repo
 }
 const SPEC = 'Spec: .vault/tasks/feat.md, T1, S1\n'
@@ -98,15 +110,15 @@ describe('Spec line', () => {
     allowed(launch(withFeature('done'), env(), WORKER, surfaces('src/a.js')))
   })
   test('required when an unfinished document exists, with the expected form in the reason', () => {
-    denied(launch(withFeature(), env(), WORKER, surfaces('src/a.js')), /Spec: \.vault\/tasks\/<feature>\.md, T<n>/)
+    denied(rawLaunch(withFeature(), env(), WORKER, surfaces('src/a.js')), /Spec: \.vault\/tasks\/<feature>\.md, T<n>/)
   })
   test('a Spec line naming an existing regular file is allowed', () => {
     allowed(launch(withFeature(), env(), WORKER, SPEC + surfaces('src/a.js')))
     allowed(launch(withFeature(), env(), WORKER, `- Spec: \`.vault/tasks/feat.md\` (read to Log). Do T1; S1.\n${surfaces('src/a.js')}`))
   })
   test('a Spec line without a task id, or inside prose, is denied', () => {
-    denied(launch(withFeature(), env(), WORKER, `Spec: .vault/tasks/feat.md\n${surfaces('src/a.js')}`), /Spec:/)
-    denied(launch(withFeature(), env(), WORKER, `See Spec: .vault/tasks/feat.md, T1\n${surfaces('src/a.js')}`), /Spec:/)
+    denied(rawLaunch(withFeature(), env(), WORKER, `Spec: .vault/tasks/feat.md\n${surfaces('src/a.js')}`), /Spec:/)
+    denied(rawLaunch(withFeature(), env(), WORKER, `See Spec: .vault/tasks/feat.md, T1\n${surfaces('src/a.js')}`), /Spec:/)
   })
   test('a missing file, a directory, or a path outside .vault/tasks is denied', () => {
     const repo = withFeature()
@@ -293,7 +305,7 @@ describe('failure mode', () => {
     }
   })
   test('an unusable data directory fails open', () => {
-    const r = run(undefined, { session_id: 's', cwd: plain(), tool_name: 'Agent', tool_input: { subagent_type: WORKER, prompt: surfaces('a.js') } }, { CLAUDE_PLUGIN_DATA: '/dev/null/x' })
+    const r = run(undefined, { session_id: 's', cwd: plain(), tool_name: 'Agent', tool_input: { subagent_type: WORKER, prompt: surfaces('a.md') } }, { CLAUDE_PLUGIN_DATA: '/dev/null/x' })
     allowed(r)
   })
 })
@@ -340,7 +352,7 @@ describe('concurrent admission (L7 gap)', () => {
     for (let round = 0; round < 3; round++) {
       const repo = plain()
       const e = env()
-      const outs = await Promise.all(Array.from({ length: 8 }, (_, i) => launchAsync(repo, e, `${surfaces('src/a.js')}\nunit ${i}`)))
+      const outs = await Promise.all(Array.from({ length: 8 }, (_, i) => launchAsync(repo, e, `${surfaces('docs/a.md')}\nunit ${i}`)))
       assert.equal(outs.filter((o) => o === '').length, 1, `round ${round}: ${outs.map((o) => (o ? 'deny' : 'admit')).join(',')}`)
       assert.equal(readdirSync(join(e.CLAUDE_PLUGIN_DATA, 'delegation-admission', 'par')).filter((n) => !n.startsWith('.')).length, 1)
     }
@@ -374,7 +386,7 @@ describe('A5: the construct: prefix is optional', () => {
       denied(launch(plain(), env(), type, surfaces('src/a.js', '/etc/passwd')), /not a narrow repository-relative path/)
     })
     test(`${type} without the prefix needs the Spec line when a feature is open`, () => {
-      denied(launch(withFeature('pending'), env(), type, surfaces('src/a.js')), /Spec:/)
+      denied(rawLaunch(withFeature('pending'), env(), type, surfaces('src/a.js')), /Spec:/)
     })
     test(`${type} without the prefix is tracked for overlap`, () => {
       const repo = plain()
@@ -421,14 +433,14 @@ describe('start mode (F10)', () => {
     const repo = plain()
     const e = env()
     const file = join(scratchDir('odd-adm-b2-'), 'agent-b.jsonl')
-    const promptB = `${surfaces('src/a.js')}\nunit B`
+    const promptB = `${surfaces('docs/a.md')}\nunit B`
     writeFileSync(file, `${JSON.stringify({ type: 'user', message: { role: 'user', content: promptB } })}\n`)
-    allowed(launch(repo, e, WORKER, `${surfaces('src/a.js')}\nunit A`)) // declined by the host: never starts
+    allowed(rawLaunch(repo, e, WORKER, `${surfaces('docs/a.md')}\nunit A`)) // declined by the host: never starts
     age(e, 3)
-    allowed(launch(repo, e, WORKER, promptB))
+    allowed(rawLaunch(repo, e, WORKER, promptB))
     allowed(start(e))
     allowed(run('stop', { session_id: 's1', agent_id: 'b', agent_type: WORKER, hook_event_name: 'SubagentStop', agent_transcript_path: file }, e))
-    allowed(launch(repo, e, WORKER, `${surfaces('src/a.js')}\nunit D`))
+    allowed(rawLaunch(repo, e, WORKER, `${surfaces('docs/a.md')}\nunit D`))
   })
   test('resending the prompt of a launch that never started is not an overlap with itself', () => {
     const repo = plain()
@@ -480,5 +492,40 @@ describe('oracle admission', () => {
   })
   test('a worker with a glob is still admitted', () => {
     allowed(launch(withFeature('pending'), env(), WORKER, spec('tests/**/*.test.mjs')))
+  })
+})
+
+describe('envelope admission (S2 of oracle-limits)', () => {
+  const envelope = { feature: '.vault/tasks/feat.md', task: 'T1', command: 'node --test', surfaces: ['src/**', 'docs/a.md'], attempts: 5, minutes: 30, lines: 400, at: 1 }
+  const withEnvelope = () => {
+    const repo = withFeature('pending')
+    writeEnvelope(repo, envelope)
+    return repo
+  }
+  test('worker surfaces inside the envelope surfaces are admitted', () => {
+    allowed(launch(withEnvelope(), env(), WORKER, SPEC + surfaces('src/a.js', 'docs/a.md')))
+  })
+  test('a surface outside the envelope is denied, naming it', () => {
+    denied(launch(withEnvelope(), env(), WORKER, SPEC + surfaces('src/a.js', 'lib/b.js')), /envelope/, /lib\/b\.js/)
+  })
+  test('a code worker whose Spec task has no envelope is denied, naming the oracle and the exemption', () => {
+    const repo = withFeature('pending')
+    rmSync(join(repo, '.git/construct-review/envelopes'), { recursive: true, force: true })
+    denied(rawLaunch(repo, env(), WORKER, SPEC + surfaces('lib/b.js')), /construct:oracle/, /Exempt/, /lib\/b\.js/)
+    denied(rawLaunch(plain(), env(), WORKER, surfaces('lib/b.js')), /construct:oracle/)
+    denied(rawLaunch(withEnvelope(), env(), WORKER, 'Spec: .vault/tasks/feat.md, T2\n' + surfaces('lib/b.js')), /construct:oracle/)
+  })
+  test('a worker whose surfaces are only docs and .vault/ needs no envelope', () => {
+    const repo = plain()
+    allowed(rawLaunch(repo, env(), WORKER, surfaces('docs/guide.md', 'README.md', '.vault/specs/x.md', '.vault/**')))
+  })
+  test('Markdown that is behavior (contract, skills, agents) counts as code; a glob that can reach it too', () => {
+    for (const path of ['plugins/construct/skills/workflow/SKILL.md', 'plugins/construct/agents/worker.md', 'plugins/construct/hooks/contract/session.md', 'plugins/**/*.md', 'docs/*']) {
+      denied(rawLaunch(plain(), env(), WORKER, surfaces(path)), /construct:oracle/)
+    }
+    allowed(rawLaunch(plain(), env(), WORKER, surfaces('docs/*.md')))
+  })
+  test('an oracle launch needs no envelope', () => {
+    allowed(rawLaunch(withFeature('pending'), env(), 'construct:oracle', `${SPEC}${surfaces('tests/a.test.mjs')}`))
   })
 })

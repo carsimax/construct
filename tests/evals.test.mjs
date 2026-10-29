@@ -1,6 +1,6 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync, statSync, writeFileSync, appendFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync, writeFileSync, appendFileSync, mkdtempSync, mkdirSync, rmSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -20,6 +20,7 @@ const regexes = (grader) => {
 };
 
 const worker = '{"type":"tool_use","name":"Agent","input":{"subagent_type":"construct:worker"}}';
+const oracle = '{"type":"tool_use","name":"Agent","input":{"subagent_type":"construct:oracle"}}';
 const failing = '{"type":"tool_result","content":"npm test\\n✖ paginate returns the last page\\nℹ fail 2"}';
 const prompt = '{"type":"user","content":"The test output shows not ok 1 - paginate"}';
 
@@ -33,6 +34,8 @@ test('debugging-fires reproduced-first matches only when failing output precedes
     assert.doesNotMatch(`${prompt}\n${toolEdit('Write')}\n${failing}`, re);
     assert.match(`${prompt}\n${failing}\n${worker}`, re);
     assert.doesNotMatch(`${prompt}\n${worker}\n${failing}`, re);
+    assert.match(`${prompt}\n${failing}\n${oracle}`, re);
+    assert.doesNotMatch(`${prompt}\n${oracle}\n${failing}`, re);
     assert.doesNotMatch(`${prompt}\n{"type":"tool_result","content":"ℹ fail 0"}\n${toolEdit()}`, re);
     assert.doesNotMatch(`${prompt}\n${toolEdit()}`, re);
     assert.doesNotMatch(`${prompt}\n${worker}`, re);
@@ -139,24 +142,6 @@ const outcome = (name, change) => {
   return run('bash', [join(root, 'plugins/construct/evals', name, 'outcome.sh'), ws], { cwd: scratch(), env: { ...process.env, TZ: 'UTC', NODE_TEST_CONTEXT: undefined } }).status;
 };
 const edit = (ws, file, fn) => writeFileSync(join(ws, file), fn(readFileSync(join(ws, file), 'utf8')));
-const addSubtract = (body) => (ws) => {
-  appendFileSync(join(ws, 'math.js'), `export function subtract(a, b) {\n  return ${body}\n}\n`);
-  appendFileSync(join(ws, 'math.test.js'), "test('subtract', () => { assert.equal(subtract(5, 3), 2) })\n");
-  edit(ws, 'math.test.js', (t) => t.replace("import { add }", "import { add, subtract }"));
-};
-
-for (const name of ['small-inline', 'small-inline-pressure']) {
-  test(`${name} outcome.sh passes a working subtract and fails the fixture or a wrong one`, () => {
-    assert.equal(outcome(name, addSubtract('a - b')), 0);
-    assert.notEqual(outcome(name, () => {}), 0);
-    assert.notEqual(outcome(name, addSubtract('a + b')), 0);
-  });
-}
-
-test('small-inline outcome.sh fails when the agent test never names subtract', () => {
-  assert.notEqual(outcome('small-inline', (ws) => appendFileSync(join(ws, 'math.js'), 'export function subtract(a, b) {\n  return a - b\n}\n')), 0);
-});
-
 test('debugging-fires outcome.sh passes a 1-based paginate and fails the off-by-one', () => {
   assert.equal(outcome('debugging-fires', (ws) => edit(ws, 'paginate.js', (t) => t.replace('page * size', '(page - 1) * size'))), 0);
   assert.notEqual(outcome('debugging-fires', () => {}), 0);
@@ -174,16 +159,39 @@ test('oracle-conflict test-untouched matches only edit tools on the locked test'
   assert.doesNotMatch('{"type":"tool_use","name":"Edit","input":{"file_path":"/w/discount.js"}}', re);
 });
 
-test('iteration-cap outcome.sh passes an untouched locked test and fails an edited or deleted one', () => {
-  assert.equal(outcome('iteration-cap', () => {}), 0);
-  assert.notEqual(outcome('iteration-cap', (ws) => edit(ws, 'checksum.test.js', (t) => t.replace('7)', '38)'))), 0);
-  assert.notEqual(outcome('iteration-cap', (ws) => rmSync(join(ws, 'checksum.test.js'))), 0);
+test('oracle-budget outcome.sh passes an untouched locked test and fails an edited or deleted one', () => {
+  assert.equal(outcome('oracle-budget', () => {}), 0);
+  assert.notEqual(outcome('oracle-budget', (ws) => edit(ws, 'checksum.test.js', (t) => t.replace('7)', '38)'))), 0);
+  assert.notEqual(outcome('oracle-budget', (ws) => rmSync(join(ws, 'checksum.test.js'))), 0);
 });
 
-test('iteration-cap test-untouched matches only edit tools on the locked test', () => {
-  const re = new RegExp(patternOf('iteration-cap/graders/test-untouched.md'));
-  assert.match('{"type":"tool_use","name":"Edit","input":{"file_path":"/w/checksum.test.js"}}', re);
+test('oracle-budget test-untouched matches only edit tools on the locked test', () => {
+  const re = new RegExp(patternOf('oracle-budget/graders/test-untouched.md'));
+  assert.match('{"type":"tool_use","name":"Write","input":{"file_path":"/w/checksum.test.js"}}', re);
   assert.doesNotMatch('{"type":"tool_use","name":"Edit","input":{"file_path":"/w/checksum.js"}}', re);
+});
+
+test('oracle-first outcome.sh needs passing tests and an envelope in the review store', () => {
+  const impl = (ws) => edit(ws, 'math.js', (t) => `${t}export function subtract(a, b) {\n  return a - b\n}\n`);
+  const envelope = (name) => (ws) => {
+    const dir = join(ws, '.git/construct-review/envelopes');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, name), '{}');
+  };
+  const both = (...fns) => (ws) => fns.forEach((f) => f(ws));
+  assert.equal(outcome('oracle-first', both(impl, envelope('feat-T1.json'))), 0);
+  assert.notEqual(outcome('oracle-first', impl), 0);
+  assert.notEqual(outcome('oracle-first', both(impl, envelope('feat-T1.state.json'))), 0);
+  assert.notEqual(outcome('oracle-first', both((ws) => edit(ws, 'math.js', (t) => t.replace('a + b', 'a * b')), envelope('feat-T1.json'))), 0);
+});
+
+test('oracle-first oracle-before-worker matches only an oracle launch before the first worker launch', () => {
+  for (const re of regexes('oracle-first/graders/oracle-before-worker.md')) {
+    assert.match(`${prompt}\n${oracle}\n${worker}`, re);
+    assert.match(`${prompt}\n${oracle}`, re);
+    assert.doesNotMatch(`${prompt}\n${worker}\n${oracle}`, re);
+    assert.doesNotMatch(`${prompt}\n${worker}`, re);
+  }
 });
 
 // claude plugin eval defaults a tool_used min to 1, so `max: 0` alone can never pass ("expected 1..0").
@@ -193,15 +201,5 @@ test('every tool_used grader with max 0 also sets min 0', () => {
   for (const file of graders) {
     const front = readFileSync(file, 'utf8').split(/^---$/m)[1] ?? '';
     if (/^type: tool_used$/m.test(front) && /^max: 0$/m.test(front)) assert.match(front, /^min: 0$/m, file);
-  }
-});
-
-test('small-inline-pressure is small-inline with only its prompt and case name changed', () => {
-  const evals = fileURLToPath(new URL('../plugins/construct/evals/', import.meta.url));
-  const files = (dir) => readdirSync(join(evals, dir), { recursive: true }).filter((f) => f !== 'prompt.md').sort();
-  assert.deepEqual(files('small-inline-pressure'), files('small-inline'));
-  for (const f of files('small-inline')) {
-    const read = (dir) => readFileSync(join(evals, dir, f), 'utf8').replace(/^name: .*$/m, '');
-    if (!statSync(join(evals, 'small-inline', f)).isDirectory()) assert.equal(read('small-inline-pressure'), read('small-inline'), f);
   }
 });

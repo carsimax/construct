@@ -84,7 +84,7 @@ Open Claude Code in a git repository and make a request. Construct applies the s
 
 1. **Authorize.** Questions, reviews, and planning stay read-only. Files change only when you explicitly ask for a change.
 2. **Explore.** Claude reads the existing code first, in proportion to the task.
-3. **Size.** A task is small or large. Small work goes to one worker agent. Large work is tracked in `.vault/tasks/<feature>.md` (specs, tasks, log) before the first source write. An `S#` carrying `NEEDS CLARIFICATION: <question>` blocks its task from `done` (the publication gate denies it; at most 3 open per document), and finished `S#` are written to the living spec `.vault/specs/<feature>.md`.
+3. **Size.** A task is small or large. Small work needs no feature document; its code still goes oracle first, then to one worker agent. Large work is tracked in `.vault/tasks/<feature>.md` (specs, tasks, log) before the first source write. An `S#` carrying `NEEDS CLARIFICATION: <question>` blocks its task from `done` (the publication gate denies it; at most 3 open per document), and finished `S#` are written to the living spec `.vault/specs/<feature>.md`.
 4. **Implement test-first.** A worker writes a failing test, makes it pass, then refactors, inside the edit surfaces it was given.
 5. **Close with evidence.** One report: what was verified, what failed or was skipped, the next step, and a Risk line (`Risk: none` or `Risk: item N (reason)`).
 
@@ -113,21 +113,39 @@ claude plugin install construct@construct
 
 ## Configuration
 
-Construct has no `/config` options. Two limits are set per session by the orchestrator with `construct-limits` (the plugin's `bin/`, on the Bash PATH of a session); the user can also run it with `!`, but a subagent cannot run `set` (`command-guard` denies it; `show` is allowed). The command only validates and prints: the `limits-record.mjs` hook (`PreToolUse` on `Bash`) records the main thread's `set` in the plugin data directory and reports the active limits in its context, for `set` and `show` alike (a `set` whose write fails, such as an unwritable data directory, reports `set failed, nothing written: <error>` and the earlier limits stay active):
+Construct has no `/config` options and no session limits. The only autonomy limits are the ones each code task's oracle declares (see [The oracle envelope](#the-oracle-envelope)).
 
-```bash
-construct-limits set inline=300 cap=5   # either key alone is fine; the other keeps its earlier value
-construct-limits show                   # the hook reports the active limits (inline=300 cap=5) in its context
+### The oracle envelope
+
+Every code task goes oracle first. `construct:oracle` writes the failing acceptance tests (locked by content hash) and ends its reply with an `## Envelope` section; `oracle-record.mjs` stores it with the lock, keyed by feature and task, and a worker cannot change it:
+
+```
+## Envelope
+- Command: <shell command that runs the oracle tests>
+- Surfaces:
+  - <the worker's allowed edit surfaces, one path or narrow glob per line>
+- Attempts: <n>
+- Minutes: <n>
+- Lines: <n>
 ```
 
-| Limit | Default | Ceiling | Effect |
-|---|---|---|---|
-| `inline` | `150` | `500` | The most lines one Write, Edit, MultiEdit, or NotebookEdit call of the main thread may change; `surface-guard` sends bigger changes to `construct:worker`. `0` means the main thread writes only `.vault/tasks/` |
-| `cap` | `3` | `10` | Deny a Bash command after it failed this many times in a row for one agent (a passing run resets its count; the main thread counts as one), so the agent stops and reports what it tried, the failure, and its hypothesis instead of looping, and never edits the test to pass. A subagent's count ends when it stops; the main thread's resets on your next prompt. `0` turns the cap off |
+Each budget is clamped to a fixed ceiling in code and a missing one takes the default:
 
-A value over its ceiling is clamped; invalid input (not a whole number, an unknown key) exits non-zero and the hook records nothing. The limits belong to the session that set them and are not saved per project.
+| Budget | Default | Ceiling |
+|---|---|---|
+| Attempts | `5` | `10` |
+| Minutes | `30` | `60` |
+| Lines (changed) | `400` | `1500` |
 
-**Tracked work is never edited inline.** While a `.vault/tasks/*.md` feature document has an unfinished task, `surface-guard` denies every main-thread write outside `.vault/tasks/`, whatever `inline` says, and names `construct:worker`; writers keep their allowed edit surfaces. With every task done, the `inline` limit applies again.
+What is enforced (hooks fail open on internal errors, and the checks are a discipline layer inside Claude Code, not a security boundary):
+
+- **The main thread writes only `.vault/` and docs** (a `*.md` file outside `plugins/construct/hooks/contract/`, `skills/`, and `agents/`, which are behavior). `surface-guard` denies every other write, whatever its size, naming `construct:oracle` then `construct:worker`.
+- **A code worker needs its task's envelope.** `delegation-admission` denies a `construct:worker` launch whose surfaces include code when its `Spec:` task has no envelope, or whose surfaces are not inside the envelope's. A worker whose surfaces are only docs and `.vault/` needs none.
+- **The oracle decides when the worker stops.** At a worker's stop, `oracle-stop.mjs` runs the envelope command (bounded by the remaining minutes, at most 300 seconds). Green allows the stop. Red with budget left blocks it with the failing output, so the worker keeps going. A spent budget allows the stop, `surface-guard` denies that worker's writes, and the orchestrator reports the failure to you.
+- **Attempts count progress.** An attempt is one failed oracle run (at a stop, or of the command itself in Bash); a run whose passing-test count rises above the best so far spends none. The budget is per task and shared by its workers; minutes count from the first worker start of the task.
+- **The envelope covers Bash writes.** At the stop, the diff since the task started must stay inside the envelope surfaces and its changed-line budget, whatever tool wrote it, or the stop is blocked naming the paths and counts. The diff is of the whole working tree, so a concurrent writer counts against the worker.
+
+**Code with no deterministic test** (an installer, `hooks.json`, a UI layout) needs your approval: the orchestrator asks with a question that names the task and its exact arguments in backticks, with the options `Exempt` and `Keep the oracle`. On `Exempt` it runs `construct-gate oracle exempt <feature-doc> <T#> -- <surface>...` once from the main thread; that records an envelope with the default budget and no test command. `command-guard` denies the command to a subagent and without that approval, and the command refuses a task that already has an envelope.
 
 ### Agents
 
@@ -254,21 +272,13 @@ The installer is opt-in and never runs on its own. It writes to the effective ho
 
 **Locked oracles.** While a lock is active (its feature document still has unfinished tasks on the remote-tracking default branch), `surface-guard` denies Write, Edit, MultiEdit, and NotebookEdit of a locked oracle to every agent and to the main thread, `delegation-admission` denies a writer whose surfaces cover one and an oracle launched over one, and `command-guard` denies `construct-gate oracle unlock` to every subagent and to the main thread unless the user's latest AskUserQuestion answer, recorded in the review store by a PostToolUse hook for a call a PreToolUse hook saw without pre-filled `answers`, chose `Unlock` (or `Unlock (Recommended)`) for a question naming that path in backticks (one unlock per answer; one live approval at a time; the unlock must be the whole command, one plain `construct-gate oracle unlock <path>` on an existing regular file with no symlink under the root; no record denies), and denies commands that write `refs/remotes/` locally (`git update-ref`, `git symbolic-ref`, `git remote set-head`, a `git fetch` refspec into it), as a discipline layer. Local edit stops trust the local remote-tracking ref; the publication gate verifies it against the remote URL recorded in the lock (one `git ls-remote`) before releasing a lock, and keeps the lock when the remote is unreachable, differs, or no URL was recorded. A new oracle run replaces a released lock. A symlink or directory surface is locked with a marker the gate always reports as changed (unlock it with `construct-gate oracle unlock`), and a corrupt lock record is skipped by the gate and shown by `oracle list`.
 
-**Command and surface guards.** Two more `PreToolUse` hooks fail open. `command-guard.mjs` on `Bash` denies commands that bypass the verifier (such as `git commit --no-verify` or `git config core.hooksPath <value>`) and commands nested past the parser depth cap, and never asks. `surface-guard.mjs` on `Write`, `Edit`, `MultiEdit`, and `NotebookEdit` keeps a writer inside its allowed edit surfaces, never lets a subagent write the plugin data directory, and lets the main thread write under `.vault/tasks/` freely and elsewhere only when one call changes at most the session's `inline` limit (default 150; see [Configuration](#configuration)), and not at all while a feature document has an unfinished task; those writes are denied and go to `construct:worker`. The Risk-line gate also blocks a turn that adds skipped, focused, or stub test markers. `failure-streak.mjs` on `PostToolUseFailure` tells the model to change strategy when one tool fails five times within ten minutes. `iteration-cap.mjs` counts failed Bash commands on `PostToolUseFailure` and denies, on `PreToolUse`, a command that already failed the session's `cap` times (default 3) for that agent; `SubagentStop` and `UserPromptSubmit` reset the counts. It fails open. `limits-record.mjs` on `Bash` records the limits the main thread's `construct-limits set` declares and reports the active ones for `set` and `show`; it never decides a permission and fails open.
+**Command and surface guards.** Two more `PreToolUse` hooks fail open. `command-guard.mjs` on `Bash` denies commands that bypass the verifier (such as `git commit --no-verify` or `git config core.hooksPath <value>`) and commands nested past the parser depth cap, and never asks. `surface-guard.mjs` on `Write`, `Edit`, `MultiEdit`, and `NotebookEdit` keeps a writer inside its allowed edit surfaces, never lets a subagent write the plugin data directory, lets the main thread write only `.vault/` and docs, and denies every write of a worker whose oracle budget is spent (see [The oracle envelope](#the-oracle-envelope)). The Risk-line gate also blocks a turn that adds skipped, focused, or stub test markers.
 
 An approval never authorizes delivery. Commit, push, pull request, and merge stay your decisions.
 
 ### Skill state
 
 `workflow`, `review`, and `delivery` open with a `## Current state` line that Claude Code runs when the skill loads (`hooks/scripts/skill-context.mjs <workflow|review|delivery>`): `workflow` shows the unfinished tasks of `.vault/tasks/*.md` first, then `git status --short` (at most 12 lines, with a count of the rest; read without taking the index lock); `review` shows the lenses the Risk cells of the feature documents changed on the branch require (`LENSES_BY_RISK`) and which of them approved HEAD; `delivery` shows the feature branch, the current sub-branch, and the local sub-branches merged or unmerged into it. The script is read-only (it never writes the review store), prints at most 1,500 characters, and always exits 0: any failure (not a repository, no default branch, unknown kind) prints one `(state unavailable: <reason>)` line, because a non-zero exit would abort the skill.
-
-### Delivery signals
-
-One deterministic check that used to be prompt-only (a port of gentle-shell's `context-backstop`).
-
-- **Context backstop** (`delivery-signals.mjs batch`, `PostToolBatch`, once per batch of tool calls, main thread only). When the latest assistant usage in the transcript (input, cache read, cache write, and output tokens) reaches 150,000 tokens, one notice asks you to delegate the next multi-step unit to `construct:worker`. It fires once per crossing: a later reading below the threshold (after compaction) re-arms it. The hook reads only the last 256 KB of `transcript_path`. The hook payload and transcript give no context window and the model id does not reveal it, so the window is treated as unknown and the absolute cap applies (as in gentle-shell, where an unknown window leaves the cap alone). The notice is advice, not a gate.
-
-The `PostToolBatch` signal fails open (no output, exit 0).
 
 ### Construct band (mod)
 
@@ -299,9 +309,8 @@ The mod draws one thing: a **band** above the prompt (the `AbovePrompt` render s
 | `plugins/construct/` | The plugin (manifest name `construct`) |
 | `plugins/construct/agents/` | The 11 role agents |
 | `plugins/construct/skills/` | Delivery and review skills (`delivery`, `review`, `debugging`, `constraints`, ...) |
-| `plugins/construct/hooks/` | `hooks.json`, the mod (`register.js`), its routing helpers, the status modules (`status/`), the band modules (`band/`), and the command hooks (`scripts/`: contract, feature state, the `shell-words` command reader over the vendored mvdan-sh parser (`hooks/vendor/`), delivery signals, publication gate, review store guard, command and surface guards, Risk line gate, subagent count, delegation admission, review context and capture) |
-| `plugins/construct/bin/construct-gate` | Installs, removes, or reports the git pre-push hook (`hooks/scripts/pre-push.mjs`) |
-| `plugins/construct/bin/construct-limits` | Validates and prints the session's inline edit limit and iteration cap; `hooks/scripts/limits-record.mjs` records them (`limits.mjs`) |
+| `plugins/construct/hooks/` | `hooks.json`, the mod (`register.js`), its routing helpers, the status modules (`status/`), the band modules (`band/`), and the command hooks (`scripts/`: contract, feature state, the `shell-words` command reader over the vendored mvdan-sh parser (`hooks/vendor/`), oracle envelope and stop, publication gate, review store guard, command and surface guards, Risk line gate, subagent count, delegation admission, review context and capture) |
+| `plugins/construct/bin/construct-gate` | Installs, removes, or reports the git pre-push hook (`hooks/scripts/pre-push.mjs`); `oracle list`, `oracle unlock <path>`, and `oracle exempt <feature-doc> <T#> -- <surface>...` (see [The oracle envelope](#the-oracle-envelope)) |
 | `plugins/construct/hooks/contract/` | Session and subagent contract texts injected by hooks |
 | `plugins/construct/evals/` | Behavior eval cases run by `claude plugin eval` (`scripts/eval.sh` also writes `summary.json` with ritual and outcome pass rates, cost, duration, and turns, and keeps the run dirs under /private/tmp; `scripts/probe-review.sh` is the live check for the review behavior; `scripts/eval.sh` leaves the `review-fires` case out because the eval sandbox cannot run git (the macOS `xcrun` shim cannot write its cache) or the review skill's context command (denied in don't-ask mode); recorded results are in [docs/evals/results.md](docs/evals/results.md)) |
 | `plugins/construct/tests/` | Mod tests run by `claude plugin test` |
@@ -314,9 +323,9 @@ The mod draws one thing: a **band** above the prompt (the `AbovePrompt` render s
 
 Feedback and bug reports go in [issues](https://github.com/carsimax/construct/issues/new/choose). Setup, checks, and pull request rules are in [CONTRIBUTING.md](CONTRIBUTING.md); vulnerabilities are reported privately as described in [SECURITY.md](SECURITY.md).
 
-## Upgrading to 8.0
+## Upgrading to the oracle envelope
 
-The main thread now makes small edits inline: each edit call may change up to the inline limit (default 150); bigger ones go to `construct:worker`. The 7.x rule (the main thread writes only `odd/tasks/`) is the inline limit `0`. The evals `small-delegated*` were renamed `small-inline*`, and `scripts/eval.sh` now writes `summary.json` with outcome and cost.
+The fixed autonomy limits are gone: the inline edit limit (150, ceiling 500), the iteration cap (3, ceiling 10), the five-failure strategy note, the 150k-token context note, and the `construct-limits` command with its recording hook. Every code task now goes oracle first and the oracle's envelope sets the limits (see [The oracle envelope](#the-oracle-envelope)); the main thread writes only `.vault/` and docs. Safety guards (publication gate, `--no-verify` and hooks-path denies, review store, oracle locks, plugin data directory) are unchanged. See [CHANGELOG.md](CHANGELOG.md).
 
 ## Upgrading to 7.0
 
@@ -369,7 +378,6 @@ Changes in 9.0.0: the built-in `construct-memory` CLI and `memory` MCP server ar
 Changes in 8.7.0:
 
 - New option `slice_lines` (default `1500`, was a fixed 400): the commit-slice budget of authored changed lines.
-- The inline edit limit now defaults to `150` (was `20`).
 
 Earlier 8.x releases are in [CHANGELOG.md](CHANGELOG.md); older ones follow.
 

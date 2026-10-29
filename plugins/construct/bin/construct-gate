@@ -5,13 +5,14 @@ import { chmodSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const USAGE = `usage: construct-gate <install|uninstall|status|oracle list|oracle unlock <path>>   (run inside a repository)
+const USAGE = `usage: construct-gate <install|uninstall|status|oracle list|oracle unlock <path>|oracle exempt <feature-doc> <T#> -- <surface>...>   (run inside a repository)
 
   install     write a pre-push hook into the repository's hooks directory (core.hooksPath is honored); refuses a hook that is not Construct's
   uninstall   remove the pre-push hook if it is Construct's
   status      print whether the hook is installed and which pre-push.mjs it runs
   oracle list           list the locked oracles: path, feature, task, active or released, and whether the file matches its recorded blob (a corrupt record is listed by file name)
-  oracle unlock <path>  remove the lock of that path (or of a corrupt record, by the file name that list shows); only you run this, agents are denied`
+  oracle unlock <path>  remove the lock of that path (or of a corrupt record, by the file name that list shows); only you run this, agents are denied
+  oracle exempt <feature-doc> <T#> -- <surface>...  record an envelope with the default budget and no test command for a task that has no deterministic test; it runs only after you answer Exempt to a question naming these exact arguments in backticks, and refuses a task that already has an envelope`
 
 const MARKER = '# construct-gate: Construct pre-push hook'
 const RECORDED = /^recorded='(.*)'$/m
@@ -79,8 +80,8 @@ function warnings({ root, common, file }) {
   return [`construct-gate: warning: ${dir} is outside this repository's git directory, so the hook applies to every repository using it; uninstall removes it for all.`]
 }
 
-// oracle: `list` and `unlock <path>` over the oracle locks of the current repository (S5 of .vault/tasks/oracle-separation.md).
-async function oracle(sub, path) {
+// oracle: `list`, `unlock <path>` and `exempt <feature-doc> <T#> -- <surface>...` (S1 of .vault/tasks/oracle-limits.md) over the oracle locks of the current repository (S5 of .vault/tasks/oracle-separation.md).
+async function oracle(sub, path, ...rest) {
   const top = git('rev-parse', '--show-toplevel')
   if (top.status !== 0) throw new Error('not inside a git repository')
   const root = top.stdout.trim()
@@ -113,7 +114,20 @@ async function oracle(sub, path) {
     if (!removeOracle(root, path)) throw new Error(`no oracle lock for ${path} (construct-gate oracle list shows them)`)
     return lock ? `unlocked ${path} (locked for ${lock.feature}, ${lock.task})` : `unlocked ${path} (a corrupt record)`
   }
-  if (sub !== 'list') throw new Error('usage: construct-gate oracle <list|unlock <path>>')
+  if (sub === 'exempt') {
+    const [feature, task, dashes, ...surfaces] = [path, ...rest]
+    if (!feature || !/^T\d+$/.test(task ?? '') || dashes !== '--' || surfaces.length === 0) throw new Error('usage: construct-gate oracle exempt <feature-doc> <T#> -- <surface>...')
+    if (!/^\.vault\/tasks\/[^/]+\.md$/.test(feature) || lstatSync(join(root, feature), { throwIfNoEntry: false })?.isFile() !== true) throw new Error(`${feature} is not a feature document under .vault/tasks/`)
+    if (!new RegExp(`^\\|\\s*${task}\\s*\\|`, 'm').test(readFileSync(join(root, feature), 'utf8'))) throw new Error(`${feature} has no task ${task}`)
+    const bad = surfaces.find((p) => isAbsolute(p) || p.split('/').includes('..') || /[*?[\]{}]/.test(p))
+    if (bad) throw new Error(`surface ${bad} must be a repository-relative path with no glob`)
+    const { readEnvelope, writeEnvelope } = await import('../hooks/scripts/review-store.mjs')
+    if (readEnvelope(root, feature, task)) throw new Error(`${task} of ${feature} already has an envelope`)
+    const { DEFAULTS } = await import('../hooks/scripts/envelope.mjs')
+    writeEnvelope(root, { feature, task, command: null, surfaces, ...DEFAULTS, exempt: true, at: Date.now() })
+    return `exempted ${task} of ${feature}: default budget (${DEFAULTS.attempts} attempts, ${DEFAULTS.minutes} min, ${DEFAULTS.lines} lines), no test command, surfaces ${surfaces.join(', ')}`
+  }
+  if (sub !== 'list') throw new Error('usage: construct-gate oracle <list|unlock <path>|exempt <feature-doc> <T#> -- <surface>...>')
   const entries = oracleEntries(root)
   if (entries.length === 0) return 'no oracle locks'
   const { activeLocks } = await import('../hooks/scripts/publication-gate.mjs')

@@ -115,32 +115,6 @@
         ]
       },
       {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node",
-            "args": [
-              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/iteration-cap.mjs"
-            ],
-            "timeout": 10
-          }
-        ]
-      },
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node",
-            "args": [
-              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/limits-record.mjs"
-            ],
-            "timeout": 10
-          }
-        ]
-      },
-      {
         "matcher": "Write|Edit|MultiEdit|NotebookEdit",
         "hooks": [
           {
@@ -214,7 +188,9 @@
             "timeout": 10
           }
         ]
-      },
+      }
+    ],
+    "PostToolUseFailure": [
       {
         "matcher": "Bash",
         "hooks": [
@@ -222,44 +198,8 @@
             "type": "command",
             "command": "node",
             "args": [
-              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/iteration-cap.mjs"
-            ],
-            "timeout": 10
-          }
-        ]
-      }
-    ],
-    "PostToolBatch": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node",
-            "args": [
-              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/delivery-signals.mjs",
-              "batch"
-            ],
-            "timeout": 10
-          }
-        ]
-      }
-    ],
-    "PostToolUseFailure": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node",
-            "args": [
-              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/failure-streak.mjs"
-            ],
-            "timeout": 10
-          },
-          {
-            "type": "command",
-            "command": "node",
-            "args": [
-              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/iteration-cap.mjs"
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/oracle-stop.mjs",
+              "bash"
             ],
             "timeout": 10
           }
@@ -294,14 +234,16 @@
         ]
       },
       {
+        "matcher": "^construct:worker$",
         "hooks": [
           {
             "type": "command",
             "command": "node",
             "args": [
-              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/iteration-cap.mjs"
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/oracle-stop.mjs",
+              "stop"
             ],
-            "timeout": 10
+            "timeout": 330
           }
         ]
       },
@@ -358,14 +300,6 @@
               "mark"
             ],
             "timeout": 30
-          },
-          {
-            "type": "command",
-            "command": "node",
-            "args": [
-              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/iteration-cap.mjs"
-            ],
-            "timeout": 10
           }
         ]
       }

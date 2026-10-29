@@ -39,7 +39,7 @@ Close with `## Key Learnings:`.
 ```markdown
 Spec: .vault/tasks/<feature>.md, T<n> (covers S<n>)
 
-Write the acceptance tests for S<n> from the spec text alone. Show them failing against the baseline. Do not implement.
+Write the acceptance tests for S<n> from the spec text alone. Show them failing against the baseline, then declare the `## Envelope` (command, worker surfaces, attempts, minutes, lines). Do not implement.
 
 ## Allowed edit surfaces
 <exact-test-file-path>

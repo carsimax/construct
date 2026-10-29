@@ -1,6 +1,6 @@
 ---
-description: A reported failing test gets reproduced before any fix, and the fix, inline or delegated, is guarded by that test.
-expected_outcome: The failure is reproduced with npm test before the first edit or worker launch, the debugging skill is loaded, and paginate.js is fixed with the test reported failing then passing.
+description: A reported failing test gets reproduced before any fix, and the fix goes through the oracle and a worker, guarded by that test.
+expected_outcome: The failure is reproduced with npm test before the first oracle launch, worker launch, or edit, the debugging skill is loaded, and paginate.js is fixed by a worker after the oracle (no inline fix) with the test reported failing then passing.
 max_turns: 25
 timeout_seconds: 600
 allowed_tools: [Read, Glob, Grep, Skill, Agent, TodoWrite, Bash, Edit, Write]

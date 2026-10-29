@@ -7,6 +7,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, test } from 'node:test'
 import { makeRepo, scratchDir, write } from '../helpers/repo.mjs'
+import { writeEnvelope } from '../../plugins/construct/hooks/scripts/review-store.mjs'
 
 const PLUGIN = new URL('../../plugins/construct/', import.meta.url).pathname
 const HOOK = join(PLUGIN, 'hooks/scripts/delegation-admission.mjs')
@@ -25,6 +26,8 @@ function template(name) {
 function launch(type, prompt) {
   const repo = makeRepo({ 'src/a.js': 'a\n' })
   write(repo, '.vault/tasks/feat.md', '# F\n\n## Tasks\n\n| ID | Specs | Task | Route | Risk | Status | Commit |\n|---|---|---|---|---|---|---|\n| T1 | S1 | Do | w | none | pending | - |\n\n## Log\n')
+  // A worker on code needs its task's oracle envelope (S1 of oracle-limits).
+  writeEnvelope(repo, { feature: '.vault/tasks/feat.md', task: 'T1', command: 'true', surfaces: ['**'], attempts: 5, minutes: 30, lines: 400, at: 1 })
   const input = { session_id: 's', cwd: repo, tool_name: 'Agent', tool_input: { subagent_type: type, prompt } }
   const r = spawnSync('node', [HOOK], { input: JSON.stringify(input), encoding: 'utf8', env: { ...process.env, CLAUDE_PLUGIN_DATA: scratchDir('odd-tpl-') } })
   return r.stdout ? JSON.parse(r.stdout).hookSpecificOutput.permissionDecisionReason : ''
