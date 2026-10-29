@@ -21,7 +21,7 @@ claude --plugin-dir ./plugins/construct
 
 The repository follows its own workflow, Agent Driven Development (ADD).
 
-- **Small changes** (understood, no high-risk item, resumable from the request plus `git diff`) need no tracking document.
+- **Small changes** (understood, no high-risk item, resumable from the request plus `git diff`) need no tracking document. Code of any size still goes oracle first: `construct:oracle` writes the locked tests and the `## Envelope` that bounds the worker (the main thread writes only `.vault/` and docs).
 - **Large changes** are tracked in `.vault/tasks/<feature>.md`: specs (`S#`), tasks (`T#`), and a log. Tests and comments reference spec ids such as `S6`.
 - **Test-first.** Write a failing test for the rule, watch it fail, make it pass, then refactor. Never weaken a check to get to green.
 - **Risk line.** Every code change closes with `Risk: none` or `Risk: item N (reason)`. The six high-risk items are in `plugins/construct/hooks/contract/session.md`.
@@ -48,12 +48,10 @@ The behavior evals are optional. They spend real usage, because each run is an i
 
 ```bash
 scripts/eval.sh                          # all cases
-scripts/eval.sh --case small-inline   # one case
+scripts/eval.sh --case large-tracked   # one case
 ```
 
-The `small-inline-pressure` case copies the `small-inline` fixture and graders (edit both; `tests/evals.test.mjs` checks they match) with a prompt that pushes against the rules through urgency; `claude plugin eval` runs a no-plugin baseline arm by default, and `scripts/eval.sh` keeps it on.
-
-`scripts/eval.sh` runs each case in an isolated `claude -p` session. It may grant only the commands the eval cases need.
+`claude plugin eval` runs a no-plugin baseline arm by default, and `scripts/eval.sh` keeps it on. `scripts/eval.sh` runs each case in an isolated `claude -p` session. It may grant only the commands the eval cases need.
 
 `scripts/probe-review.sh [--runs N]` is the live check for the review behavior, which the eval sandbox cannot run: it runs the case's fixture and prompt in one headless `claude -p` session with only this repository's plugin and exits non-zero unless `construct:review-risk` is launched before any `git push`. It spends real usage (one sonnet session of up to 20 turns per run).
 
@@ -71,9 +69,10 @@ Many tests cross-check text against code, so a change in one place usually needs
 | A regex eval grader | The case's `case.yaml` and its grader file; `tests/evals.test.mjs` pins what each regex grader matches and rejects |
 | `skill-context.mjs` or the `## Current state` line of `workflow`, `review`, or `delivery` | The `!` line and `allowed-tools` entry in all three skills, the `Skill state` section of `README.md`; `tests/skill-context/` and `tests/skills.test.mjs` check them. The script must always exit 0 and stay under 1,500 characters |
 | A skill (add or remove) | `EXPECTED` in `tests/skills.test.mjs`; relative links inside skills must resolve |
-| A contract text | Every construct component it names must exist. The injected session text stays at or under 8,000 characters (`tests/contract.test.mjs`). `hooks/contract/session.md` is near 7,000 characters injected, so measure with `node plugins/construct/hooks/scripts/contract.mjs session </dev/null | wc -c` and rewrite text in place instead of appending |
+| A contract text | Every construct component it names must exist. The injected session text stays at or under 8,000 characters (`tests/contract.test.mjs`). `hooks/contract/session.md` is near 8,000 characters injected, so measure with `node plugins/construct/hooks/scripts/contract.mjs session </dev/null | wc -c` and rewrite text in place instead of appending |
 | A command, option, or message | Its help text and `README.md`, together |
 | The lens mapping (`LENSES_BY_RISK` in `hooks/scripts/review-lenses.mjs`) | The table in `skills/review/SKILL.md`; `tests/skills.test.mjs` compares them |
+| The oracle envelope (`hooks/scripts/envelope.mjs`: ceilings, defaults, `isFree`), `oracle-stop.mjs`, or `construct-gate oracle exempt` | The oracle and worker agents, the session and subagent contracts, `skills/delegation/`, `skills/workflow/references/testing.md`, and the oracle-envelope section of `README.md`; `tests/contract.test.mjs` and `tests/oracle/` check them |
 | A hook | Register it in exec form (`command: "node"`, `args: [...]`); tests check this |
 | Agent routing | Construct agents run on their frontmatter model and effort; only the built-in `general-purpose` gets defaults (`BUILTIN_DEFAULTS` in `roles.mjs`, applied by `plugins/construct/hooks/routing.js`) |
 

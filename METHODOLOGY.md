@@ -19,25 +19,25 @@ The user's words are the spec. Each requirement (`S#`) quotes a Log entry verbat
 
 ### 2. Proportional ceremony
 
-Process scales with the work, judged on two axes. State: a change that can be resumed from the request plus `git diff` is done inline; one that cannot gets a feature document. Risk: risky work also gets acceptance tests before implementation, whatever its size. Review size is capped separately, because attention, not the agent, is the limit: a reviewable unit (a commit) stays near 400 changed lines. Going past a limit is allowed when the reason is written down (`Exceeds: <limit> — <why>`) where a hook can see it.
+Process scales with the work, judged on two axes. State: a change that can be resumed from the request plus `git diff` needs no feature document; one that cannot gets one. Code of any size gets acceptance tests before implementation, written by the oracle. Review size is capped separately, because attention, not the agent, is the limit: a reviewable unit (a commit) stays near 400 changed lines. Going past a limit is allowed when the reason is written down (`Exceeds: <limit> — <why>`) where a hook can see it.
 
 - **Why:** the main criticism of spec-driven tools is one heavy workflow for every task size; lines measure review attention, not lost state or risk.
 - **Taken from:** ODD resume test, Kiro Quick Spec, BMAD scale-adaptive flow, Spec Kit Complexity Tracking.
-- **Evidence:** reviewers find fewer defects past about 200–400 lines (SmartBear/Cisco, vendor, 2006); small batches amplify AI's benefit (DORA); agent success falls with task length (METR). The inline limit (150 lines) is a user choice with no external source.
-- **Construct today:** the inline limit (150 lines) is enforced by a hook; there are no line budgets for pull requests or commits: large work lives on a feature branch, split by work unit into local sub-branches, with one final pull request; the resume test and `Size:` line are prompt rules; the commit-size target and `Exceeds:` do not exist.
+- **Evidence:** reviewers find fewer defects past about 200–400 lines (SmartBear/Cisco, vendor, 2006); small batches amplify AI's benefit (DORA); agent success falls with task length (METR).
+- **Construct today:** there is no fixed inline limit: the main thread writes only `.vault/` and docs (enforced by a hook), and the oracle of each code task declares a changed-line budget for its worker (default 400, ceiling 1500, checked at the worker's stop, whatever tool wrote); there are no line budgets for pull requests or commits: large work lives on a feature branch, split by work unit into local sub-branches, with one final pull request; the resume test and `Size:` line are prompt rules; the commit-size target and `Exceeds:` do not exist.
 
 ### 3. Autonomy proportional to verification
 
-With a strong check (deterministic, runnable now, not written or loosened in the same loop), the agent may loop until it passes, up to three failed runs; then it stops and reports. With a weak check, it takes one small step and stops. With no check, it says what would make the work checkable instead of proceeding. Where a strong check exists, the failing test comes first, and the loop never edits it to pass.
+With a strong check (deterministic, runnable now, not written or loosened in the same loop), the agent may loop until it passes, within a budget the oracle declares for the task (attempts, minutes, changed lines); then it stops and reports. With a weak check, it takes one small step and stops. With no check, it says what would make the work checkable instead of proceeding. Where a strong check exists, the failing test comes first, and the loop never edits it to pass.
 
 - **Why:** this rule adapts as models improve: a better verifier earns more autonomy. An uncapped loop with no exit is where agents cheat.
 - **Taken from:** ODD, the Ralph loop's back pressure, TDD Guard, Kent Beck's augmented coding, Anthropic's "give Claude a check to run".
-- **Evidence:** measured. Agents cheated on 76% of tasks where spec and tests conflict, retries raised cheating, and an explicit "flag it" exit cut it from 54% to 9% (ImpossibleBench). The cap of three is a judgment, not a measured optimum.
-- **Construct today:** the workflow skill defines a strong check, and the `iteration-cap` hook denies the next run of a Bash command after the declared cap of consecutive failed runs of it (default 3, set per session with `construct-limits`, 0 turns it off), counted per agent and reset when a subagent stops or the user sends a prompt, with a message to stop and report. A changed command string is a new check, so the cap is a discipline layer, not a boundary. Test-first is self-reported; `failure-streak` adds a note after five failures.
+- **Evidence:** measured. Agents cheated on 76% of tasks where spec and tests conflict, retries raised cheating, and an explicit "flag it" exit cut it from 54% to 9% (ImpossibleBench). The default budget (5 attempts, 30 minutes, 400 lines) and its ceilings (10, 60, 1500) are judgments, not measured optima.
+- **Construct today:** the workflow skill defines a strong check. For code the oracle is that check and its `## Envelope` is the bound: at a worker's stop a hook runs the envelope command, so a red oracle with budget left blocks the stop and the worker continues, and a spent budget (attempts or minutes, per task) stops it and the orchestrator reports; a rise in passing tests does not spend an attempt, so attempts count progress, not command text. A hook also blocks a stop whose diff leaves the envelope surfaces or exceeds its line budget. Code with no deterministic test needs a user-approved exemption (default budget, no command). Test-first is self-reported. This is a discipline layer against a same-user agent, not a boundary: the diff is of the whole working tree (a concurrent writer counts against the worker), state updates are not locked, and the hooks fail open.
 
 ### 4. Independent oracles, one writer, clean reviewers
 
-One agent writes. Others read, test, and review. For risky work, acceptance tests are written from the specs by someone other than the writer, fail before the change, and the writer cannot edit them, only flag one it believes contradicts the specs. Reviewers see the change and the specs, not the writer's reasoning; findings outside the specs become follow-ups, not new scope.
+One agent writes. Others read, test, and review. For code, acceptance tests are written from the specs by someone other than the writer, fail before the change, and the writer cannot edit them, only flag one it believes contradicts the specs. Reviewers see the change and the specs, not the writer's reasoning; findings outside the specs become follow-ups, not new scope.
 
 - **Why:** writers grading their own work is the weakest form of verification, and agents rewrite tests to pass.
 - **Taken from:** TDFlow, AgentCoder, Cognition, Anthropic, the MAST failure study, ODD lenses and blind dual review.
@@ -76,7 +76,7 @@ Every principle has at least one behavior eval that grades the outcome, not only
 | `T#` | A task that serves one or more `S#`; disposable |
 | Feature document | `.vault/tasks/<feature>.md`: specs, tasks, and log for one change |
 | Living spec | The merged requirements of finished work, kept after its feature document closes |
-| Resume test | Can someone continue this from the request plus `git diff` alone? If yes, it is done inline |
+| Resume test | Can someone continue this from the request plus `git diff` alone? If yes, it needs no feature document |
 | Strong check | Deterministic, runnable now, and not written or loosened in the loop that must pass it |
 | Risk line | `Risk: item N (reason)` or `Risk: none`, over six fixed categories |
 | Risk floor | The minimum risk that signals in the diff set; the agent may only raise it |

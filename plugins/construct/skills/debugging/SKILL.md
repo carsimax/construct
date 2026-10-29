@@ -20,7 +20,7 @@ Load this before diagnosing a failing test, broken build, error or stack trace, 
 - Fix the cause where it lives. Never suppress the error, skip or delete a test, loosen an assertion, or widen a type.
 - One change at a time. A hypothesis that fails twice is dropped and the next one is stated.
 - A product question ("what should this do?") stops the work and goes to the user.
-- After repeated failures of one tool, the failure-streak note asks for a change of approach; take it instead of retrying.
+- After repeated failures of one tool, change approach instead of retrying it.
 
 ## Order
 
@@ -28,7 +28,7 @@ Load this before diagnosing a failing test, broken build, error or stack trace, 
 2. Preserve the evidence.
 3. Reproduce by running the failing command yourself, and read the output. A fix proposed from pasted output alone is not allowed.
 4. Localize the failing layer, then reduce to the smallest input that still fails. A regression gets `git bisect run <the reproduction>`.
-5. Fix. A small fix (each edit call within the inline limit, and no feature document unfinished) you make yourself after reproducing, with the reproduction as its RED test. A bigger fix goes to `construct:worker`, with that RED test and its edit surfaces named.
+5. Fix. A fix to code goes oracle first: the reproduction is the RED test (`construct:oracle` locks it and declares the envelope), then `construct:worker` fixes inside it; the main thread writes only `.vault/` and docs. A docs-only fix you make yourself.
 6. Guard (hard step). Whoever fixed it shows the reproduction test failing before the fix and passing after it, each as `<command>: <observed result>`; a worker report without the failing run goes back. An existing failing test already is the guard: keep it unchanged and report it. Otherwise add one.
 7. Verify end to end: the full suite and the build, then the original scenario. High-risk work (Risk item) also gets the `construct:verifier`.
 8. Close. Remove temporary instrumentation and any logged secret before reporting. Save the root cause with `mem_save` as `bugfix` only if it passes the memory bar (a trap a future engineer would get wrong). Resume paused work only now.

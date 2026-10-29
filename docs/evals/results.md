@@ -2,6 +2,8 @@
 
 Behavior evals from `scripts/eval.sh` (`claude plugin eval`, Sonnet, each run an isolated `claude -p`). Every case runs twice per run: with the plugin and without it. A case's score is the share of its graders that pass; Δ is the with-plugin score minus the without-plugin score. Ritual pass counts runs where every ritual grader passed; outcome pass counts runs where the case's `outcome.sh` passed.
 
+The cases `iteration-cap`, `small-inline`, and `small-inline-pressure` were removed with the oracle envelope (their premise, a fixed iteration cap and small inline code edits, no longer exists); their rows below are historical.
+
 One run per case is noise: a case can move from 0 to 1 between runs. Treat single-run tables as a smoke test and claim a change only from three or more runs.
 
 ## 2026-10-28 · 12.0.2 baseline (main 36559fd)
