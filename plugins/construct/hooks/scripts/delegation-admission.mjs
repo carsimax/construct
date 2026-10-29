@@ -14,10 +14,10 @@
 // Other agents pass untouched, and an admitted launch prints nothing, so it never
 // conflicts with review-context.mjs (the hooks run in parallel; deny wins).
 // `start` also records the first worker start of a task that has an envelope in the task state (startedAt, and baseTree: a
-// snapshot of the working tree that oracle-stop.mjs diffs against); the record keeps the Spec feature and task for that.
-// `stop` (SubagentStop) clears the stopped writer's record: it hashes the first
-// user row of agent_transcript_path (the subagent's prompt) and removes the record
-// with that hash. Records live under ${CLAUDE_PLUGIN_DATA}/delegation-admission/<session>/
+// snapshot of the working tree that oracle-stop.mjs diffs against, kept per worker in state.workers); the record keeps the Spec feature and task for that.
+// `stop` (SubagentStop) closes the stopped writer's record: it hashes the first
+// user row of agent_transcript_path (the subagent's prompt) and marks the record
+// with that hash `stoppedAt` (it no longer counts for overlap; oracle-stop.mjs still reads it). Records live under ${CLAUDE_PLUGIN_DATA}/delegation-admission/<session>/
 // and stop counting for overlap after SUBAGENT_MAX_IDLE_MS (one hour), like subagent-count.mjs entries.
 // The check-then-record of open writers runs under an mkdir lock (withLock), so parallel
 // launches in one batch cannot both pass. Fails open on unreadable input, any internal
@@ -254,8 +254,9 @@ export function surfaceContains(surface, path) {
 }
 
 // otherSurfaces lists the edit surfaces of the other live writers of the session (their paths are not this writer's doing).
-export function otherSurfaces(session, root, agentId) {
-  return openWriters(session, root, '').filter((entry) => entry.agent_id !== agentId).flatMap((entry) => entry.surfaces)
+// A writer that stopped at or after `since` still counts: what it wrote is in the diff of a worker that started before.
+export function otherSurfaces(session, root, agentId, since = Infinity) {
+  return openWriters(session, root, '', Date.now(), since).filter((entry) => entry.agent_id !== agentId).flatMap((entry) => entry.surfaces)
 }
 
 // writerRecord finds the started record of the subagent with this agent_id (undefined if none).
@@ -286,7 +287,7 @@ const promptKey = (text) => createHash('sha256').update(text.trim()).digest('hex
 // record of `key` is skipped: it is this same prompt's earlier launch, which never started.
 // shortcut: two identical prompts launched before either starts are both admitted (the same
 // task twice); telling that apart from a resend after a declined launch needs a launch id.
-function openWriters(session, root, key, now = Date.now()) {
+function openWriters(session, root, key, now = Date.now(), since = Infinity) {
   const dir = recordDir(session)
   let names
   try {
@@ -304,6 +305,7 @@ function openWriters(session, root, key, now = Date.now()) {
         if (entry.started !== true) rmSync(join(dir, name), { force: true })
         continue
       }
+      if (entry.stoppedAt !== undefined && !(entry.stoppedAt >= since)) continue
       if (entry.started === false && (name === key || now - Date.parse(entry.at) > START_GRACE_MS)) continue
       if (entry.root === root && Array.isArray(entry.surfaces)) live.push(entry)
     } catch {
@@ -653,7 +655,17 @@ export function firstUserPrompt(file) {
 function clear(input) {
   if (typeof input.agent_transcript_path !== 'string' || input.agent_transcript_path === '') return
   const prompt = firstUserPrompt(input.agent_transcript_path)
-  if (prompt) rmSync(join(recordDir(input.session_id), promptKey(prompt)), { force: true })
+  if (!prompt) return
+  // The record stays, marked, so oracle-stop.mjs can tell a sibling's finished writes from this worker's; pruneState sweeps it.
+  const file = join(recordDir(input.session_id), promptKey(prompt))
+  try {
+    const entry = JSON.parse(readFileSync(file, 'utf8'))
+    const temporary = `${file}.${process.pid}.stop.tmp`
+    writeFileSync(temporary, `${JSON.stringify({ ...entry, stoppedAt: Date.now() })}\n`)
+    renameSync(temporary, file)
+  } catch {
+    // no readable record: nothing to mark
+  }
 }
 
 // start marks the oldest unstarted record of the agent type inside the grace as started. SubagentStart input
@@ -682,9 +694,9 @@ function start(input) {
     try {
       const { root, spec } = oldest.entry
       const baseTree = spec && readEnvelope(root, spec.feature, spec.task) ? freezeWorkingTree(root).candidateTree : undefined
-      writeFileSync(temporary, `${JSON.stringify({ ...oldest.entry, started: true, agent_id: input.agent_id, baseTree })}\n`)
+      writeFileSync(temporary, `${JSON.stringify({ ...oldest.entry, started: true, agent_id: input.agent_id })}\n`)
       renameSync(temporary, join(dir, oldest.name))
-      startTask(oldest.entry, baseTree)
+      startTask(oldest.entry, input.agent_id, baseTree)
     } catch (error) {
       rmSync(temporary, { force: true })
       throw error
@@ -693,12 +705,15 @@ function start(input) {
 }
 
 // startTask records the first worker start of a task (S5 minutes, S6 baseline); later workers of the task keep it.
-function startTask({ root, spec }, baseTree) {
+// Each worker's own baseline goes to state.workers (the store, which agents cannot write), not to its admission record,
+// which admission's own SubagentStop may remove or mark before oracle-stop.mjs reads it.
+function startTask({ root, spec }, agentId, baseTree) {
   const envelope = spec && readEnvelope(root, spec.feature, spec.task)
-  if (!envelope || readTaskState(root, spec.feature, spec.task)) return
+  if (!envelope) return
   // The budget is copied so surface-guard can enforce it from the state alone (the envelope is locked while the task runs).
   const budget = { attempts: envelope.attempts, minutes: envelope.minutes }
-  writeTaskState(root, spec.feature, spec.task, { attempts: 0, bestPass: null, startedAt: Date.now(), baseTree, budget })
+  const state = readTaskState(root, spec.feature, spec.task) ?? { attempts: 0, bestPass: null, startedAt: Date.now(), baseTree, budget }
+  writeTaskState(root, spec.feature, spec.task, { ...state, workers: { ...state.workers, [agentId]: { baseTree, startedAt: Date.now() } } })
 }
 
 function main() {

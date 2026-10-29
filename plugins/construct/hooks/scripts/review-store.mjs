@@ -88,7 +88,7 @@ export function readEnvelope(root, feature, task) {
   }
 }
 
-// Task state (oracle-stop.mjs, delegation-admission.mjs start): { attempts, bestPass, startedAt, baseTree, budget: { attempts, minutes } } next to the envelope of the task,
+// Task state (oracle-stop.mjs, delegation-admission.mjs start): { attempts, bestPass, startedAt, baseTree, budget: { attempts, minutes }, workers: { <agent_id>: { baseTree, startedAt } } } next to the envelope of the task,
 // shared by every worker of it, so an agent cannot write it (the store is denied to them). Read-modify-write is not locked.
 // shortcut: two workers of one task stopping at the same instant may lose an attempt count; upgrade with a lock if real use shows it.
 const stateName = (feature, task) => envelopeName(feature, task).replace(/\.json$/, '.state.json')

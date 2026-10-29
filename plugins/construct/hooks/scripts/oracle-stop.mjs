@@ -2,9 +2,9 @@
 //   stop (SubagentStop on construct:worker): for a worker whose Spec task has an oracle envelope (envelope.mjs, stored by
 //     oracle-record.mjs) and a task state (delegation-admission.mjs start):
 //       - a spent budget (attempts or minutes, spentBudget) allows the stop with a message naming it, so the reply reports the failure;
-//       - the diff since this worker's start (the baseTree in its admission record, else the task state's, against a fresh snapshot
+//       - the diff since this worker's start (its baseTree in the task state's workers, else the task's, against a fresh snapshot
 //         of the working tree, whatever tool wrote it, docs and .vault/ excluded) must touch no path outside the envelope surfaces
-//         (paths inside another open writer's surfaces are that writer's) and stay inside the changed-line budget, counted over
+//         (paths inside the surfaces of another writer live at any time since this worker started are that writer's) and stay inside the changed-line budget, counted over
 //         the paths inside the envelope surfaces, else the stop is blocked naming the paths and counts, and one attempt is spent;
 //       - the envelope command, when it has one, runs at the repository root (timeout: the remaining minutes, at most 300 s):
 //         exit 0 allows the stop; a failure blocks with the tail of its output and what remains of the budget. A failed run
@@ -12,7 +12,8 @@
 //     A run that spends the last attempt, or the last minute, allows the stop instead of blocking.
 //   bash (PostToolUseFailure on Bash): a failed run of the envelope command by a worker spends one attempt, by the same rule.
 // Block = {"decision":"block","reason":...} on stdout, as review-capture.mjs does. Any internal error allows (fail open).
-// shortcut: a path written by the main thread, or by a writer outside every open record, still counts against this worker.
+// shortcut: a path written by the main thread, or by a writer that stopped before this worker started or never had a record, still counts
+//   against this worker, and a path inside a live writer's surfaces is excused even when this worker wrote it.
 // Usage: node oracle-stop.mjs stop|bash   (hook JSON on stdin)
 import { spawnSync } from 'node:child_process'
 import { realpathSync } from 'node:fs'
@@ -86,9 +87,10 @@ function stop(input) {
     else process.stdout.write(`${JSON.stringify({ decision: 'block', reason: `${reason}\n(${left(state, envelope, Date.now())})` })}\n`)
   }
   if (spent()) return say('systemMessage', `oracle-stop: ${spent()}; the stop is allowed. Report what is still failing.`)
-  const baseTree = writerRecord(input.session_id, input.agent_id)?.baseTree ?? state.baseTree
+  const mine = state.workers?.[input.agent_id]
+  const baseTree = mine?.baseTree ?? state.baseTree
   if (baseTree) {
-    const problem = diffProblem(root, baseTree, freezeWorkingTree(root).candidateTree, envelope, otherSurfaces(input.session_id, root, input.agent_id))
+    const problem = diffProblem(root, baseTree, freezeWorkingTree(root).candidateTree, envelope, otherSurfaces(input.session_id, root, input.agent_id, mine?.startedAt ?? state.startedAt))
     if (problem) return refuse(`Your diff breaks the oracle envelope: ${problem}. Revert it, or return needs_interaction.`, { ...state, attempts: state.attempts + 1 })
   }
   if (envelope.command === null) return

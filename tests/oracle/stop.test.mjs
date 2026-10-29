@@ -2,7 +2,7 @@
 // by progress, checks the diff against the envelope, and surface-guard hard-stops a worker whose budget is spent.
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, test } from 'node:test'
 import { makeRepo, scratchDir, write } from '../helpers/repo.mjs'
@@ -175,6 +175,52 @@ describe('oracle-stop at SubagentStop', () => {
     run(ADMISSION, [], { session_id: 's1', cwd: w.repo, tool_name: 'Agent', tool_input: { subagent_type: WORKER, prompt: prompt('src/c.js'), description: 'u' } }, w.env)
     run(ADMISSION, ['start'], { session_id: 's1', agent_id: 'a3', agent_type: WORKER, cwd: w.repo }, w.env)
     isAllowed(stop(w, { agent_id: 'a3' }))
+  })
+  describe('parallel workers of two tasks', () => {
+    const transcriptOf = (text) => {
+      const file = join(scratchDir('odd-stop-t-'), 't.jsonl')
+      writeFileSync(file, `${JSON.stringify({ type: 'user', message: { role: 'user', content: text } })}\n`)
+      return file
+    }
+    const bPrompt = prompt('lib/**').replace('T1', 'T2')
+    // A (a1, T1, src/**) is started; B (a2, T2, lib/**) starts after it.
+    const withB = () => {
+      const w = started({ command: 'true' })
+      writeEnvelope(w.repo, { feature: FEATURE, task: 'T2', command: 'true', surfaces: ['lib/**'], attempts: 3, minutes: 30, lines: 5, at: 1 })
+      run(ADMISSION, [], { session_id: 's1', cwd: w.repo, tool_name: 'Agent', tool_input: { subagent_type: WORKER, prompt: bPrompt, description: 'u' } }, w.env)
+      run(ADMISSION, ['start'], { session_id: 's1', agent_id: 'a2', agent_type: WORKER, cwd: w.repo }, w.env)
+      return w
+    }
+    const stopB = (w) => run(STOP, ['stop'], { session_id: 's1', agent_id: 'a2', agent_type: WORKER, cwd: w.repo, agent_transcript_path: transcriptOf(bPrompt) }, w.env)
+    const stateB = (w) => readTaskState(w.repo, FEATURE, 'T2')
+    test('a sibling that wrote and stopped before this worker stops is still not this worker\'s doing', () => {
+      const w = withB()
+      write(w.repo, 'src/a.js', 'x\n'.repeat(50))
+      const input = { session_id: 's1', agent_id: 'a1', agent_type: WORKER, cwd: w.repo, agent_transcript_path: transcript() }
+      isAllowed(run(STOP, ['stop'], input, w.env))
+      run(ADMISSION, ['stop'], input, w.env)
+      isAllowed(stopB(w))
+      assert.equal(stateB(w).attempts, 0)
+    })
+    test('the baseline survives the removal of the admission record', () => {
+      const w = started({ command: 'true', lines: 5 })
+      write(w.repo, 'src/a.js', 'x\n'.repeat(20)) // the first worker's lines
+      run(ADMISSION, [], { session_id: 's1', cwd: w.repo, tool_name: 'Agent', tool_input: { subagent_type: WORKER, prompt: prompt('src/c.js'), description: 'u' } }, w.env)
+      run(ADMISSION, ['start'], { session_id: 's1', agent_id: 'a3', agent_type: WORKER, cwd: w.repo }, w.env)
+      const t = transcriptOf(prompt('src/c.js'))
+      const dir = join(w.env.CLAUDE_PLUGIN_DATA, 'delegation-admission', 's1')
+      for (const name of readdirSync(dir)) rmSync(join(dir, name)) // admission's stop ran first
+      isAllowed(stop(w, { agent_id: 'a3', agent_transcript_path: t }))
+      assert.equal(state(w.repo).attempts, 0)
+    })
+    test('a path outside every writer\'s surfaces since the start still blocks', () => {
+      const w = withB()
+      write(w.repo, 'src/a.js', 'x\n')
+      run(ADMISSION, ['stop'], { session_id: 's1', agent_id: 'a1', agent_type: WORKER, cwd: w.repo, agent_transcript_path: transcript() }, w.env)
+      write(w.repo, 'other/c.js', 'x\n')
+      isBlocked(stopB(w), /other\/c\.js/)
+      assert.equal(stateB(w).attempts, 1)
+    })
   })
   test('a worker with no envelope, and other agent types, are untouched', () => {
     const w = started({ command: 'exit 1' })
