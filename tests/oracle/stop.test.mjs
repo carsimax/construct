@@ -158,6 +158,24 @@ describe('oracle-stop at SubagentStop', () => {
     run(ADMISSION, ['start'], { session_id: 's1', agent_id: 'a1', agent_type: WORKER, cwd: repo }, env)
     isAllowed(stop({ repo, env }))
   })
+  test('a path inside another open writer\'s surfaces is not this worker\'s doing and spends nothing', () => {
+    const w = started({ command: 'true' })
+    writeEnvelope(w.repo, { feature: FEATURE, task: 'T2', command: 'true', surfaces: ['lib/**'], attempts: 3, minutes: 30, lines: 400, at: 1 })
+    run(ADMISSION, [], { session_id: 's1', cwd: w.repo, tool_name: 'Agent', tool_input: { subagent_type: WORKER, prompt: prompt('lib/**').replace('T1', 'T2'), description: 'u' } }, w.env)
+    run(ADMISSION, ['start'], { session_id: 's1', agent_id: 'a2', agent_type: WORKER, cwd: w.repo }, w.env)
+    write(w.repo, 'lib/b.js', 'x\n'.repeat(900)) // a2's file, over a1's line budget
+    isAllowed(stop(w))
+    assert.equal(state(w.repo).attempts, 0)
+    write(w.repo, 'other/c.js', 'x\n') // nobody's surface
+    isBlocked(stop(w), /other\/c\.js/)
+  })
+  test('lines written before this worker started do not count, though the task started earlier', () => {
+    const w = started({ command: 'true', lines: 5 })
+    write(w.repo, 'src/a.js', 'x\n'.repeat(20)) // the first worker's lines
+    run(ADMISSION, [], { session_id: 's1', cwd: w.repo, tool_name: 'Agent', tool_input: { subagent_type: WORKER, prompt: prompt('src/c.js'), description: 'u' } }, w.env)
+    run(ADMISSION, ['start'], { session_id: 's1', agent_id: 'a3', agent_type: WORKER, cwd: w.repo }, w.env)
+    isAllowed(stop(w, { agent_id: 'a3' }))
+  })
   test('a worker with no envelope, and other agent types, are untouched', () => {
     const w = started({ command: 'exit 1' })
     isAllowed(stop(w, { agent_type: 'construct:explorer' }))

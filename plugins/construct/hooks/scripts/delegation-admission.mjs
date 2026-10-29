@@ -253,6 +253,11 @@ export function surfaceContains(surface, path) {
   return match(pattern.split('/'), target.split('/'))
 }
 
+// otherSurfaces lists the edit surfaces of the other live writers of the session (their paths are not this writer's doing).
+export function otherSurfaces(session, root, agentId) {
+  return openWriters(session, root, '').filter((entry) => entry.agent_id !== agentId).flatMap((entry) => entry.surfaces)
+}
+
 // writerRecord finds the started record of the subagent with this agent_id (undefined if none).
 export function writerRecord(session, agentId) {
   const dir = recordDir(session)
@@ -675,9 +680,11 @@ function start(input) {
     if (!oldest) return
     const temporary = join(dir, `.${oldest.name}.${process.pid}.start.tmp`)
     try {
-      writeFileSync(temporary, `${JSON.stringify({ ...oldest.entry, started: true, agent_id: input.agent_id })}\n`)
+      const { root, spec } = oldest.entry
+      const baseTree = spec && readEnvelope(root, spec.feature, spec.task) ? freezeWorkingTree(root).candidateTree : undefined
+      writeFileSync(temporary, `${JSON.stringify({ ...oldest.entry, started: true, agent_id: input.agent_id, baseTree })}\n`)
       renameSync(temporary, join(dir, oldest.name))
-      startTask(oldest.entry)
+      startTask(oldest.entry, baseTree)
     } catch (error) {
       rmSync(temporary, { force: true })
       throw error
@@ -686,12 +693,12 @@ function start(input) {
 }
 
 // startTask records the first worker start of a task (S5 minutes, S6 baseline); later workers of the task keep it.
-function startTask({ root, spec }) {
+function startTask({ root, spec }, baseTree) {
   const envelope = spec && readEnvelope(root, spec.feature, spec.task)
   if (!envelope || readTaskState(root, spec.feature, spec.task)) return
   // The budget is copied so surface-guard can enforce it from the state alone (the envelope is locked while the task runs).
   const budget = { attempts: envelope.attempts, minutes: envelope.minutes }
-  writeTaskState(root, spec.feature, spec.task, { attempts: 0, bestPass: null, startedAt: Date.now(), baseTree: freezeWorkingTree(root).candidateTree, budget })
+  writeTaskState(root, spec.feature, spec.task, { attempts: 0, bestPass: null, startedAt: Date.now(), baseTree, budget })
 }
 
 function main() {
