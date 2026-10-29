@@ -35,6 +35,15 @@ export function parseEnvelope(reply) {
   return { command, surfaces: [...new Set(surfaces)], attempts: budget(fields.attempts, 'attempts'), minutes: budget(fields.minutes, 'minutes'), lines: budget(fields.lines, 'lines') }
 }
 
+// spentBudget names the budget of a task that is used up (attempts or minutes, S5 of .vault/tasks/oracle-limits.md), or returns null.
+// A spent budget is a hard stop: surface-guard.mjs denies a worker's writes and oracle-stop.mjs lets its stop through.
+export function spentBudget(state, envelope, now = Date.now()) {
+  if (!state) return null
+  if (state.attempts >= envelope.attempts) return `the ${envelope.attempts} attempts of the oracle envelope are spent`
+  if (now - state.startedAt > envelope.minutes * 60_000) return `the ${envelope.minutes} minutes of the oracle envelope are spent`
+  return null
+}
+
 // Docs: a `*.md` file outside the Markdown that is behavior (the contracts, the skills, the agents). A glob counts as a doc only
 // when its literal prefix cannot reach those directories. The main thread writes docs and `.vault/` freely, and a worker whose
 // surfaces are all docs or `.vault/` needs no oracle envelope (S1 of .vault/tasks/oracle-limits.md).

@@ -5,7 +5,7 @@ import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, test } from 'node:test'
 import { makeRepo, scratchDir, write } from '../helpers/repo.mjs'
-import { readEnvelope, readOracles } from '../../plugins/construct/hooks/scripts/review-store.mjs'
+import { readEnvelope, readTaskState, writeTaskState, readOracles } from '../../plugins/construct/hooks/scripts/review-store.mjs'
 
 const HOOK = new URL('../../plugins/construct/hooks/scripts/oracle-record.mjs', import.meta.url).pathname
 const FEATURE = '.vault/tasks/feat.md'
@@ -50,6 +50,13 @@ describe('oracle-record envelope', () => {
     stop(repo, envelope(7)) // the oracle wrote no test file: no lock
     stop(repo, envelope(9))
     assert.equal(readEnvelope(repo, FEATURE, 'T1').attempts, 9)
+  })
+  test('a replaced envelope starts the task with no spent budget', () => {
+    const repo = makeRepo({})
+    stop(repo, envelope(7))
+    writeTaskState(repo, FEATURE, 'T1', { attempts: 7, bestPass: 0, startedAt: Date.now(), baseTree: null, budget: { attempts: 7, minutes: 20 } })
+    stop(repo, envelope(9))
+    assert.equal(readTaskState(repo, FEATURE, 'T1'), null)
   })
   test('a reply without an envelope, or another agent type, stores nothing', () => {
     const repo = makeRepo({})

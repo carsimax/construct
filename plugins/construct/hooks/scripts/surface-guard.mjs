@@ -3,6 +3,8 @@
 // (agent_id present) may only write inside the `## Allowed edit surfaces` recorded at its launch
 // by delegation-admission.mjs; the main thread may write only under .vault/ and docs (isFree in envelope.mjs, S1 of
 // .vault/tasks/oracle-limits.md), whatever the size: code goes through construct:oracle, then construct:worker.
+// A worker whose task budget is spent (attempts or minutes of its oracle envelope, spentBudget) is denied every write (S5 of
+// .vault/tasks/oracle-limits.md).
 // A subagent never writes under the plugin data dir (dataDir: writer records and guard state). Other paths outside the
 // git work tree, a cwd outside a repository, a subagent with no record, and any internal error pass (fail open, no output).
 // shortcut: the record is paired to its agent by same-type FIFO at SubagentStart, so two
@@ -13,10 +15,10 @@ import { realpathSync } from 'node:fs'
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { surfaceContains, writerRecord } from './delegation-admission.mjs'
 import { repositoryRoot } from './git-tree.mjs'
-import { isFree } from './envelope.mjs'
+import { isFree, spentBudget } from './envelope.mjs'
 import { dataDir, readInput } from './hook-io.mjs'
 import { activeLocks } from './publication-gate.mjs'
-import { hasOracleFiles, readOracles } from './review-store.mjs'
+import { hasOracleFiles, readOracles, readTaskState } from './review-store.mjs'
 
 // real resolves symlinks in the deepest existing ancestor and appends the rest.
 function real(path) {
@@ -65,6 +67,13 @@ function main() {
   }
   if (subagent) {
     const entry = writerRecord(input.session_id, input.agent_id)
+    const spec = entry?.spec
+    const state = spec && readTaskState(root, spec.feature, spec.task)
+    const spent = state?.budget && spentBudget(state, state.budget)
+    if (spent) {
+      deny(`surface-guard: ${spent}, so every write is denied. Stop and report the state to the orchestrator: what passes, what fails, and what is left.`)
+      return
+    }
     if (!entry || entry.surfaces.some((surface) => surfaceContains(surface, rel))) return
     deny(`surface-guard: ${rel} is outside your allowed edit surfaces (${entry.surfaces.join(', ')}). Write only inside them, or return needs_interaction naming the path you need.`)
   } else if (!isFree(rel)) {

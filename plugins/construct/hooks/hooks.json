@@ -190,6 +190,22 @@
         ]
       }
     ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/oracle-stop.mjs",
+              "bash"
+            ],
+            "timeout": 10
+          }
+        ]
+      }
+    ],
     "SubagentStop": [
       {
         "hooks": [
@@ -214,6 +230,20 @@
               "stop"
             ],
             "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "^construct:worker$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/oracle-stop.mjs",
+              "stop"
+            ],
+            "timeout": 330
           }
         ]
       },

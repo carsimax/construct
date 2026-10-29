@@ -70,14 +70,38 @@ export const writeOracle = (root, record) => atomicWrite(oracleFile(root, record
 
 // Oracle envelopes (oracle-record.mjs): one record per feature document and task, { feature, task, command, surfaces, attempts,
 // minutes, lines, at }, in the envelopes/ area (an exemption the user approved has command null and exempt true, see construct-gate oracle exempt). oracle-record.mjs replaces one only when no lock of that task is active.
-const envelopeFile = (root, feature, task) => join(storeDir(root), 'envelopes', `${createHash('sha256').update(feature).digest('hex')}-${task}.json`)
-export const writeEnvelope = (root, record) => atomicWrite(envelopeFile(root, record.feature, record.task), `${JSON.stringify(record)}\n`)
+const envelopeName = (feature, task) => `${createHash('sha256').update(feature).digest('hex')}-${task}.json`
+const envelopeFile = (root, feature, task) => join(storeDir(root), 'envelopes', envelopeName(feature, task))
+// A new envelope starts its task afresh: the state of the one it replaces (spent attempts, start, baseline) is dropped.
+export function writeEnvelope(root, record) {
+  atomicWrite(envelopeFile(root, record.feature, record.task), `${JSON.stringify(record)}\n`)
+  rmSync(stateFile(root, record.feature, record.task), { force: true })
+}
 
 // readEnvelope returns the envelope of a task, or null when there is none or the record is unreadable.
 export function readEnvelope(root, feature, task) {
   try {
     const record = readJson(envelopeFile(root, feature, task))
     return (typeof record?.command === 'string' || (record?.exempt === true && record.command === null)) && Array.isArray(record.surfaces) ? record : null
+  } catch {
+    return null
+  }
+}
+
+// Task state (oracle-stop.mjs, delegation-admission.mjs start): { attempts, bestPass, startedAt, baseTree, budget: { attempts, minutes } } next to the envelope of the task,
+// shared by every worker of it, so an agent cannot write it (the store is denied to them). Read-modify-write is not locked.
+// shortcut: two workers of one task stopping at the same instant may lose an attempt count; upgrade with a lock if real use shows it.
+const stateName = (feature, task) => envelopeName(feature, task).replace(/\.json$/, '.state.json')
+const stateFile = (root, feature, task) => join(storeDir(root), 'envelopes', stateName(feature, task))
+export const writeTaskState = (root, feature, task, state) => atomicWrite(stateFile(root, feature, task), `${JSON.stringify(state)}\n`)
+
+// readTaskState returns the state of a task, or null when there is none or the record is unreadable.
+// A plain `.git` directory is read without asking git, as hasOracleFiles does, so surface-guard stays cheap.
+export function readTaskState(root, feature, task) {
+  try {
+    const plain = statSync(join(root, '.git')).isDirectory()
+    const state = readJson(plain ? join(storeAt('.git', root), 'envelopes', stateName(feature, task)) : stateFile(root, feature, task))
+    return typeof state?.attempts === 'number' && typeof state.startedAt === 'number' ? state : null
   } catch {
     return null
   }

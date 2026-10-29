@@ -13,6 +13,8 @@
 //     (a workflow's agent() never reaches PreToolUse on Agent, so the writer rules above cannot apply).
 // Other agents pass untouched, and an admitted launch prints nothing, so it never
 // conflicts with review-context.mjs (the hooks run in parallel; deny wins).
+// `start` also records the first worker start of a task that has an envelope in the task state (startedAt, and baseTree: a
+// snapshot of the working tree that oracle-stop.mjs diffs against); the record keeps the Spec feature and task for that.
 // `stop` (SubagentStop) clears the stopped writer's record: it hashes the first
 // user row of agent_transcript_path (the subagent's prompt) and removes the record
 // with that hash. Records live under ${CLAUDE_PLUGIN_DATA}/delegation-admission/<session>/
@@ -30,9 +32,10 @@ import { homedir } from 'node:os'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { activeDocuments, projectRoot } from './feature-state.mjs'
+import { freezeWorkingTree } from './git-tree.mjs'
 import { isFree } from './envelope.mjs'
 import { activeLocks } from './publication-gate.mjs'
-import { readEnvelope, readOracles } from './review-store.mjs'
+import { readEnvelope, readOracles, readTaskState, writeTaskState } from './review-store.mjs'
 import { kindOf, namesOf, qualified } from './roles.mjs'
 import { dataDir, readInput, safeName, SUBAGENT_MAX_IDLE_MS } from './hook-io.mjs'
 
@@ -123,9 +126,14 @@ function namesFeatureDocument(prompt, root) {
 }
 
 // envelopeOf: the oracle envelope of the feature and task the prompt's Spec line names, or undefined.
-function envelopeOf(prompt, root) {
+export function specOf(prompt) {
   const spec = /^[ \t]*(?:[-*+][ \t]+)?Spec:[ \t]*`?(\.vault\/tasks\/[^\s,`()]+\.md)`?[^\n]*?\b(T\d+)\b/m.exec(prompt)
-  return spec ? (readEnvelope(root, spec[1], spec[2]) ?? undefined) : undefined
+  return spec ? { feature: spec[1], task: spec[2] } : undefined
+}
+
+function envelopeOf(prompt, root) {
+  const spec = specOf(prompt)
+  return spec ? (readEnvelope(root, spec.feature, spec.task) ?? undefined) : undefined
 }
 
 // The same "unfinished feature document" rule feature-state.mjs re-injects by.
@@ -300,13 +308,13 @@ function openWriters(session, root, key, now = Date.now()) {
   return live
 }
 
-function record(session, root, prompt, surfaces, type) {
+function record(session, root, prompt, surfaces, type, spec) {
   const dir = recordDir(session)
   mkdirSync(dir, { recursive: true })
   const key = promptKey(prompt)
   const temporary = join(dir, `.${key}.${process.pid}.tmp`)
   try {
-    writeFileSync(temporary, `${JSON.stringify({ root, surfaces, type, started: false, at: new Date().toISOString() })}\n`)
+    writeFileSync(temporary, `${JSON.stringify({ root, surfaces, type, spec, started: false, at: new Date().toISOString() })}\n`)
     renameSync(temporary, join(dir, key))
   } catch (error) {
     rmSync(temporary, { force: true })
@@ -614,7 +622,7 @@ function admit(input) {
       )
       return
     }
-    record(input.session_id, root, prompt, parsed.paths, type)
+    record(input.session_id, root, prompt, parsed.paths, type, bounds && specOf(prompt))
   })
 }
 
@@ -669,11 +677,21 @@ function start(input) {
     try {
       writeFileSync(temporary, `${JSON.stringify({ ...oldest.entry, started: true, agent_id: input.agent_id })}\n`)
       renameSync(temporary, join(dir, oldest.name))
+      startTask(oldest.entry)
     } catch (error) {
       rmSync(temporary, { force: true })
       throw error
     }
   })
+}
+
+// startTask records the first worker start of a task (S5 minutes, S6 baseline); later workers of the task keep it.
+function startTask({ root, spec }) {
+  const envelope = spec && readEnvelope(root, spec.feature, spec.task)
+  if (!envelope || readTaskState(root, spec.feature, spec.task)) return
+  // The budget is copied so surface-guard can enforce it from the state alone (the envelope is locked while the task runs).
+  const budget = { attempts: envelope.attempts, minutes: envelope.minutes }
+  writeTaskState(root, spec.feature, spec.task, { attempts: 0, bestPass: null, startedAt: Date.now(), baseTree: freezeWorkingTree(root).candidateTree, budget })
 }
 
 function main() {
