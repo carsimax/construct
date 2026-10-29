@@ -30,7 +30,7 @@ Objective: phases 1 and 2 of the L1 plan: remove forced human stops and per-chan
 | T2 | S3 | `.vault/exempt-paths` allowlist at the default-branch tip | worker | 2 | done | 2cd2ecb |
 | T3 | S5 | One Bash hook process | worker | 2, 3 | done | 459fe3d |
 | T4 | S6 | Risk-line fingerprint from git status | worker | 3 | done | 29e9345 |
-| T5 | S2, S4, S7 | Docs, contract, skills, CHANGELOG | worker | 3 | open | |
+| T5 | S2, S4, S7 | Docs, contract, skills, CHANGELOG | worker | 3 | done | 7b422fa |
 
 ## Log
 
@@ -40,3 +40,4 @@ Objective: phases 1 and 2 of the L1 plan: remove forced human stops and per-chan
 - **L4 (2026-10-29):** T4 (29e9345): fingerprint from git status + lstat; 8 snapshot-implementation tests removed. RED confirmed afterwards (fingerprint tests against the old risk-line), GREEN 111/111. Known: a marker that predates the turn in a path dirty at mark and edited again can be reported.
 - **L5 (2026-10-29):** T1 (5039e8d): RED (context built from HEAD lacked the uncommitted patch), GREEN 79/79; end-to-end: approval on the working tree lets a same-content commit push, different content is denied. skill-context keeps reporting HEAD's tree (a working-tree approval shows as missing until the commit).
 - **L6 (2026-10-29):** T2 (2cd2ecb): RED 3/6, GREEN 6/6; full suite 1332 pass. The allowlist is read with git show <default branch>:.vault/exempt-paths (same trust model as the risk floor); the envelope gets source: allowlist and the joined commands.
+- **L7 (2026-10-29):** T5 (7b422fa): doc tests 92/92, full suite 1332/1332, mod 100/100, validate --strict (plugin and marketplace) passed. The worker dropped "Reads and answers stay with you." from the delegation skill to fit its budget; the parent restored it (the skill fits at 788 words). Converge: S1-S7 each map to a done task.
