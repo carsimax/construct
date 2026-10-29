@@ -122,6 +122,16 @@ describe('surface-guard', () => {
     const repo = makeRepo({ 'src/a.js': 'a\n' })
     isAllowed(write(repo, {}, join(scratchDir('odd-sg-out-'), 'x.js')))
   })
+  test('harness-audit S5: a subagent writing the plugin data dir is denied, with or without a record', () => {
+    const repo = makeRepo({ 'src/a.js': 'a\n' })
+    const e = started(repo, 'src/a.js')
+    for (const agent_id of ['a1', 'unknown']) isDenied(write(repo, e, join(e.CLAUDE_PLUGIN_DATA, 'limits', 's1.json'), { agent_id }), /plugin data directory/)
+  })
+  test('harness-audit S5: the main thread writing the plugin data dir is unchanged', () => {
+    const repo = makeRepo({ 'src/a.js': 'a\n' })
+    const e = { CLAUDE_PLUGIN_DATA: scratchDir('odd-sg-data-') }
+    isAllowed(write(repo, e, join(e.CLAUDE_PLUGIN_DATA, 'limits', 's1.json')))
+  })
   test('a cwd outside a git repository is allowed', () => {
     const dir = scratchDir('odd-sg-nogit-')
     isAllowed(write(dir, {}, join(dir, 'x.js')))

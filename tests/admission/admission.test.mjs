@@ -270,6 +270,21 @@ describe('stale records', () => {
   })
 })
 
+describe('harness-audit S6: a long writer keeps its record', () => {
+  test('a started record older than one hour stops blocking overlap but is not removed', () => {
+    const repo = plain()
+    const e = env()
+    allowed(launch(repo, e, WORKER, surfaces('src/a.js')))
+    allowed(run('start', { session_id: 's1', agent_id: 'a1', agent_type: WORKER }, e))
+    const dir = join(e.CLAUDE_PLUGIN_DATA, 'delegation-admission', 's1')
+    const [file] = readdirSync(dir)
+    const old = new Date(Date.now() - 3601 * 1000)
+    utimesSync(join(dir, file), old, old)
+    allowed(launch(repo, e, WORKER, surfaces('src/a.js', 'lib/b.js')))
+    assert.ok(readdirSync(dir).includes(file))
+  })
+})
+
 describe('failure mode', () => {
   test('unreadable or non-object input exits 0 silently', () => {
     for (const raw of ['', 'not json', 'null', '[]', '{"tool_name":"Agent"}']) {

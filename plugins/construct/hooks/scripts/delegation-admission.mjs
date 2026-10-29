@@ -14,7 +14,7 @@
 // `stop` (SubagentStop) clears the stopped writer's record: it hashes the first
 // user row of agent_transcript_path (the subagent's prompt) and removes the record
 // with that hash. Records live under ${CLAUDE_PLUGIN_DATA}/delegation-admission/<session>/
-// and expire after SUBAGENT_MAX_IDLE_MS (one hour), like subagent-count.mjs entries.
+// and stop counting for overlap after SUBAGENT_MAX_IDLE_MS (one hour), like subagent-count.mjs entries.
 // The check-then-record of open writers runs under an mkdir lock (withLock), so parallel
 // launches in one batch cannot both pass. Fails open on unreadable input, any internal
 // error, or a lock that cannot be taken.
@@ -258,7 +258,9 @@ const qualify = (type) => (typeof type === 'string' && !type.includes(':') ? `co
 const promptKey = (text) => createHash('sha256').update(text.trim()).digest('hex')
 
 // openWriters lists the live records of the session in this repository; a stale
-// record (older than SUBAGENT_MAX_IDLE_MS, a crashed writer) is removed. The unstarted
+// record (older than SUBAGENT_MAX_IDLE_MS) no longer counts for overlap (a crashed writer). A stale
+// unstarted record is removed; a stale started one stays, so surface-guard still confines a long writer
+// until its SubagentStop or pruneState. The unstarted
 // record of `key` is skipped: it is this same prompt's earlier launch, which never started.
 // shortcut: two identical prompts launched before either starts are both admitted (the same
 // task twice); telling that apart from a resend after a declined launch needs a launch id.
@@ -274,11 +276,12 @@ function openWriters(session, root, key, now = Date.now()) {
   for (const name of names) {
     if (name.startsWith('.')) continue
     try {
-      if (now - statSync(join(dir, name)).mtimeMs > SUBAGENT_MAX_IDLE_MS) {
-        rmSync(join(dir, name), { force: true })
+      const stale = now - statSync(join(dir, name)).mtimeMs > SUBAGENT_MAX_IDLE_MS
+      const entry = JSON.parse(readFileSync(join(dir, name), 'utf8'))
+      if (stale) {
+        if (entry.started !== true) rmSync(join(dir, name), { force: true })
         continue
       }
-      const entry = JSON.parse(readFileSync(join(dir, name), 'utf8'))
       if (entry.started === false && (name === key || now - Date.parse(entry.at) > START_GRACE_MS)) continue
       if (entry.root === root && Array.isArray(entry.surfaces)) live.push(entry)
     } catch {

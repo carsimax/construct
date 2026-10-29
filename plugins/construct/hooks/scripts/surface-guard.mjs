@@ -5,8 +5,9 @@
 // elsewhere only a call that changes at most the session's inline limit (limits.mjs, set with
 // construct-limits; default 150, 0 means .vault/tasks/ only), and sends bigger changes to construct:worker.
 // While a feature document has an unfinished task (activeDocuments) the main thread writes only .vault/tasks/ (S4 of
-// .vault/tasks/config-surface.md). Paths outside the git work tree, a cwd outside a repository, a subagent
-// with no record, and any internal error pass (fail open, no output).
+// .vault/tasks/config-surface.md). A subagent never writes under the plugin data dir (dataDir: limits,
+// iteration-cap counts, writer records). Other paths outside the git work tree, a cwd outside a repository,
+// a subagent with no record, and any internal error pass (fail open, no output).
 // shortcut: the record is paired to its agent by same-type FIFO at SubagentStart, so two
 // same-type launches in flight may swap surfaces; Bash writes (sed -i, redirects) are not covered.
 // Upgrade both if the host adds the prompt to SubagentStart or real use shows bypasses.
@@ -16,7 +17,7 @@ import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { activeDocuments, projectRoot } from './feature-state.mjs'
 import { surfaceContains, writerRecord } from './delegation-admission.mjs'
 import { repositoryRoot } from './git-tree.mjs'
-import { readInput } from './hook-io.mjs'
+import { dataDir, readInput } from './hook-io.mjs'
 import { readLimits } from './limits.mjs'
 import { activeLocks } from './publication-gate.mjs'
 import { hasOracleFiles, readOracles } from './review-store.mjs'
@@ -70,6 +71,13 @@ function main() {
   if (!input || typeof input.cwd !== 'string' || input.cwd === '' || !/^(Write|Edit|MultiEdit|NotebookEdit)$/.test(input.tool_name)) return
   const path = input.tool_input?.file_path ?? input.tool_input?.notebook_path
   if (typeof path !== 'string' || path === '') return
+  const subagent = typeof input.agent_id === 'string' && input.agent_id !== ''
+  // The plugin data dir holds the limits, the iteration-cap counts, and the writer records the guards read.
+  const data = relative(real(dataDir()), real(resolve(input.cwd, path)))
+  if (subagent && !(data === '..' || data.startsWith('../') || isAbsolute(data))) {
+    deny(`surface-guard: ${path} is in the plugin data directory, which holds the session limits and guard state; a subagent never writes it. Ask the orchestrator instead.`)
+    return
+  }
   const root = real(repositoryRoot(input.cwd))
   const rel = relative(root, real(resolve(input.cwd, path)))
   if (rel === '' || rel === '..' || rel.startsWith('../') || isAbsolute(rel)) return
@@ -92,7 +100,7 @@ function main() {
     deny(`surface-guard: ${rel} is a locked oracle for ${lock.feature} (task ${lock.task}). Do not edit it: return \`oracle_conflict\` (path, test, spec) to the user, or ask them to unlock it with \`construct-gate oracle unlock ${rel}\`.`)
     return
   }
-  if (typeof input.agent_id === 'string' && input.agent_id !== '') {
+  if (subagent) {
     const entry = writerRecord(input.session_id, input.agent_id)
     if (!entry || entry.surfaces.some((surface) => surfaceContains(surface, rel))) return
     deny(`surface-guard: ${rel} is outside your allowed edit surfaces (${entry.surfaces.join(', ')}). Write only inside them, or return needs_interaction naming the path you need.`)
