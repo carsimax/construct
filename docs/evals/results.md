@@ -6,6 +6,22 @@ The cases `iteration-cap`, `small-inline`, and `small-inline-pressure` were remo
 
 One run per case is noise: a case can move from 0 to 1 between runs. Treat single-run tables as a smoke test and claim a change only from three or more runs.
 
+## 2026-10-29 · oracle envelope (feat/oracle-limits, evals at T9)
+
+One run per case and arm. 14 runs, $1.89, 378 s, 0 errored. `review-fires` is outside `eval.sh`.
+
+| Case | With | Without |
+|---|---|---|
+| debugging-fires | 1/1 | 0/1 (outcome passed) |
+| debugging-stays-quiet | 1/1 | 1/1 |
+| large-tracked | 1/1 | 0/1 |
+| oracle-budget | 1/1 | 1/1 |
+| oracle-conflict | 1/1 | 1/1 |
+| oracle-first | 1/1 | 0/1 |
+| read-only | 1/1 | 1/1 |
+
+With the plugin, debugging-fires, oracle-first, and large-tracked each launched one `construct:oracle` then one `construct:worker`; oracle-conflict launched only the oracle and reported the contradiction. oracle-budget does not reach the budget: both arms read the spec, saw the contradiction, and reported it without launching an agent, so it guards stop-and-report but does not exercise the stop block.
+
 ## 2026-10-28 · 12.0.2 baseline (main 36559fd)
 
 One run per case and arm. 14 runs, $1.15, 230 s, 0 errored.
