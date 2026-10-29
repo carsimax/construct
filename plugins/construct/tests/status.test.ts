@@ -153,3 +153,8 @@ test('activeWork reads a Tasks table under ### Tasks or ## Tasks (phase 2)', asy
   }
   expect(activeWork([{ name: 'f.md', mtimeMs: 1, text: ['# f', '', '### Tasks', '', '## Other', ...table].join('\n') }])).toBe(null)
 })
+
+test('harness-audit S7: activeWork counts a short row as open', async () => {
+  const text = ['# f', '', '## Tasks', '', '| ID | Specs | Task | Status |', '|---|---|---|---|', '| T1 | S1 | a | done |', '| T2 | S2 | cut', '', '## Log'].join('\n')
+  expect(activeWork([{ name: 'f.md', mtimeMs: 1, text }])?.open).toBe(1)
+})

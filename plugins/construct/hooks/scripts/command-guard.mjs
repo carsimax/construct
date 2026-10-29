@@ -1,7 +1,7 @@
 // Command guard (PreToolUse on Bash). Denies commands that bypass a verifier, in the main thread and in
 // subagents. It never asks: destructive commands (rm -rf, force push, reset --hard, ...) give no output.
 //   - deny: `git commit --no-verify` / `-n`, `--no-verify` on push, merge, rebase, am and
-//     cherry-pick, `--no-gpg-sign`, and `git -c core.hooksPath=...` on any subcommand;
+//     cherry-pick, `--no-gpg-sign`, `git -c core.hooksPath=...` on any subcommand, and `git config core.hooksPath <value>`;
 //   - deny also: `construct-gate oracle unlock`, except when it is the whole command (one plain `construct-gate oracle unlock <path>`, no
 //     separator, redirection, expansion, or wrapper) on an existing regular file with no symlink under the root, in the main thread right
 //     after the user answered an AskUserQuestion with `Unlock` for a question naming that path in backticks (recorded in the review store by unlock-approval.mjs; one unlock per answer; see unlockApproved);
@@ -11,7 +11,7 @@
 //     or a bare assignment, even with no `git` in that statement.
 // Commands are found by the shell parser in shell-words.mjs (`sh -c`, `eval`, `env -S`, wrappers,
 // `$(...)`, backticks, heredoc bodies and here-strings fed to a shell), so compounds and `git -C dir`
-// are covered. Text the parser rejects is denied: bash can run the part before a syntax error. Unreadable input or any other error: no output (fail open).
+// are covered. Text the parser rejects, or commands nested past MAX_DEPTH, is denied: bash can run the part before a syntax error. Unreadable input or any other error: no output (fail open).
 // Long options match as git does: any prefix at least as long as the minimum in `abbr` calls.
 // shortcut: git aliases, interpreter one-liners, brace expansion, and variable-built commands are
 // not caught. Upgrade if one of them shows up in real use.
@@ -86,6 +86,11 @@ function gitHit(args, words = []) {
   if (sub === undefined) return null
   const { long, short, pos } = parse(args.slice(i + 1), sub === 'commit' ? 'uS' : '')
   if (abbr(long, '--no-gpg-sign', 6)) return hit('deny', `git ${sub} --no-gpg-sign skips signing. Sign the commit or fix the signing setup instead of bypassing it.`)
+  // `git config [scope] core.hooksPath <value>` (or `git config set ...`) persists the bypass; reading or unsetting the key stays allowed.
+  const key = pos.findIndex((p) => /^core\.hookspath$/i.test(p))
+  if (sub === 'config' && key !== -1 && key < pos.length - 1 && ![...long].some((f) => /^--(get|unset)/.test(f))) {
+    return hit('deny', 'git config core.hooksPath <value> replaces the repository hooks. Fix the failing hook instead of bypassing it.')
+  }
   if (NO_VERIFY.has(sub) && (abbr(long, '--no-verify', 7) || (sub === 'commit' && short.has('n')))) {
     return hit('deny', `git ${sub} --no-verify skips the hooks. Fix the failing hook instead of bypassing it.`)
   }
@@ -168,7 +173,7 @@ let subagent = false
 // substitutions and heredoc expansions, and the lines a command runs as a string are read again.
 // Throws ShellParseError for text that is not valid shell.
 function hitsIn(command, depth = 0) {
-  if (depth > MAX_DEPTH) return []
+  if (depth > MAX_DEPTH) throw new ShellParseError(`commands nest more than ${MAX_DEPTH} levels deep`)
   const found = []
   const nested = (line) => found.push(...hitsIn(line, depth + 1))
   const commands = splitCommands(command)

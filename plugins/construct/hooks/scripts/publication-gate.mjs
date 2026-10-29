@@ -25,7 +25,7 @@
 // `git -C DIR`, and a preceding `cd DIR`. A directory with a variable or substitution other than ~
 // or $HOME cannot be checked: it is denied. A dry run and a branch deletion publish no work, so they
 // are not gated. `gh pr new` and `gh release new` are aliases of `create`.
-// shortcut: a heuristic parser; git aliases, interpreter one-liners, xargs, variable-built commands,
+// shortcut: a heuristic parser; git aliases, interpreter one-liners, variable-built commands,
 // --git-dir/GIT_DIR, a spoofed origin/HEAD, deleted or moved feature documents, and store paths
 // built indirectly are not caught. Upgrade if one of them shows up in real use.
 // Usage: node publication-gate.mjs   (hook JSON on stdin)
@@ -64,12 +64,13 @@ function changeDir(where, name, args) {
   return resolveDir(where, target)
 }
 
-// option reads `--name value`, `--name=value`, or a short `-N value`; null when absent.
+// option reads `--name value`, `--name=value`, or a short `-N value` / `-Nvalue` (gh parses with pflag); null when absent.
 function optionValue(args, ...names) {
   for (let i = 0; i < args.length; i++) {
     for (const name of names) {
       if (args[i] === name) return args[i + 1] ?? null
       if (name.startsWith('--') && args[i].startsWith(`${name}=`)) return args[i].slice(name.length + 1)
+      if (!name.startsWith('--') && args[i].startsWith(name)) return args[i].slice(name.length)
     }
   }
   return null
@@ -129,7 +130,7 @@ function ghPublication(args, cwd) {
 // runs as a string (`sh -c`, `eval`, `env -S`, a here-string or heredoc fed to a shell) are read again.
 // Throws ShellParseError for text that is not valid shell.
 function findPublications(command, cwd, depth = 0) {
-  if (depth > MAX_DEPTH) return []
+  if (depth > MAX_DEPTH) throw new ShellParseError(`commands nest more than ${MAX_DEPTH} levels deep`)
   const found = []
   const nested = (line, at) => found.push(...findPublications(line, at, depth + 1))
   const commands = splitCommands(command)

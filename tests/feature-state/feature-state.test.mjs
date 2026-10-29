@@ -161,6 +161,14 @@ test('a malformed table yields no output and exit 0', () => {
   assert.equal(run(repo).stdout, '')
 })
 
+test('harness-audit S7: a short row counts as unfinished and keeps the document active', () => {
+  const repo = makeRepo()
+  write(repo, '.vault/tasks/a.md', '# A\n\n## Tasks\n\n| ID | Specs | Task | Route | Risk | Status | Commit |\n|---|---|---|---|---|---|---|\n| T1 | S1 | first | worker | none | done | abc |\n| T2 | S2 | cut short\n\n## Log\n')
+  const text = context(run(repo))
+  assert.match(text, /T2 — cut short/)
+  assert.doesNotMatch(text, /T1 —/)
+})
+
 test('an .vault/tasks directory without markdown files yields no output', () => {
   const repo = makeRepo()
   mkdirSync(join(repo, '.vault/tasks'), { recursive: true })

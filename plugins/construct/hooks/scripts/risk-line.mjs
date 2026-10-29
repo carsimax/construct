@@ -113,7 +113,7 @@ async function main() {
     if (!record || record.blocked === true) return
   }
 
-  const { repositoryRoot, freezeWorkingTree, git, headCommit, atomicWrite } = await import('./git-tree.mjs')
+  const { repositoryRoot, freezeWorkingTree, git, headCommit, atomicWrite, DIFF_BUDGET_MS } = await import('./git-tree.mjs')
 
   let root
   try {
@@ -162,7 +162,7 @@ async function main() {
   const current = { ...rest, ...keep }
   if (notice || retried) write(current)
   if (record.tree === candidateTree) return notify()
-  const paths = git(root, ['diff', '--no-renames', '--name-only', '-z', record.tree, candidateTree])
+  const paths = git(root, ['diff', '--no-renames', '--name-only', '-z', record.tree, candidateTree], { timeout: DIFF_BUDGET_MS })
     .toString('utf8')
     .split('\0')
     .filter((path) => path !== '' && !path.startsWith('.vault/tasks/'))
@@ -170,7 +170,7 @@ async function main() {
   const riskMissing = !RISK_LINE.test(input.last_assistant_message)
   let hits = []
   try {
-    hits = markerHits(git(root, ['-c', 'core.quotepath=off', 'diff', '-U0', record.tree, candidateTree]).toString('utf8'))
+    hits = markerHits(git(root, ['-c', 'core.quotepath=off', 'diff', '-U0', record.tree, candidateTree], { timeout: DIFF_BUDGET_MS }).toString('utf8'))
   } catch {
     // Fail open on the marker scan.
   }

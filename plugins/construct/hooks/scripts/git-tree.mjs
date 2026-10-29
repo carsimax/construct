@@ -12,6 +12,8 @@ const DEFAULT_OUTPUT_LIMIT = 64 << 20
 export const SNAPSHOT_BUDGET_MS = Number(process.env.CONSTRUCT_SNAPSHOT_BUDGET_MS) || 5000
 // The index-seeded or HEAD-seeded fallback's `add -A` is bounded too; past it the GitError (timedOut) propagates and the hook fails open.
 export const FALLBACK_BUDGET_MS = 20000
+// Each of the two diffs the Risk-line check runs after the snapshot; the Stop hook timeout in hooks.json covers all three.
+export const DIFF_BUDGET_MS = 3000
 
 class GitError extends Error {
   constructor(message, { status = null, stderr = '' } = {}) {

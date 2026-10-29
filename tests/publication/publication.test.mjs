@@ -610,6 +610,8 @@ describe('the published refs are judged, not HEAD', () => {
     'gh pr create --head feat',
     'gh pr create --head=feat',
     'gh pr create -H someone:feat',
+    'gh pr create -Hfeat',
+    'gh pr create -Hsomeone:feat',
     'git push --all origin',
     'git push --mirror origin',
     'git push --tags origin',
@@ -1048,5 +1050,15 @@ describe('hardening S4(c): a marker written in inline code is not an open clarif
     const r = push('NEEDS CLARIFICATION: which port?')
     assert.equal(r.decision, 'deny', r.stdout)
     assert.match(r.reason, /still needs clarification: which port\?/)
+  })
+})
+
+describe('harness-audit S3: nesting past the depth cap', () => {
+  const shellQuote = (t) => `'${t.replace(/'/g, `'\\''`)}'`
+  const nest = (command, layers) => Array.from({ length: layers }).reduce((c) => `sh -c ${shellQuote(c)}`, command)
+  test('a push nested six layers deep is denied', () => {
+    const r = hook(nest('git push origin feat', 6), featureRepo('2'))
+    assert.match(r.stdout, /"permissionDecision":"deny"/)
+    assert.match(r.stdout, /nest more than 4 levels/)
   })
 })

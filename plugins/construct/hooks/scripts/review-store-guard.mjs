@@ -5,7 +5,8 @@
 // `review-capture.mjs`, `review-context.mjs`, `unlock-approval.mjs`, or `oracle-record.mjs` (directly or as the script of node, bun, deno, or a
 // shell) or names `construct-review`, once quotes, backslashes, and brackets are removed. Commands
 // that only name the hook files as data (grep, git diff, cat, a commit message) pass. A heuristic
-// guard: it fails open on unreadable input, and denies a command the shell parser rejects.
+// guard: it fails open on unreadable input, and denies a command the shell parser rejects or that nests
+// shell layers more than 4 deep.
 // shortcut: a name built indirectly (variables, concatenation, base64), a glob spelling
 // (`construct-revie?`, `con*-review`), or a run through an interpreter's own code (`node -e`) is
 // not seen; upgrade if that shows up in real use.
@@ -26,7 +27,7 @@ const plain = (text) => text.replace(/["'\\\[\]]/g, '').toLowerCase()
 // substitutions; nested command lines (sh -c, eval, here-strings and heredocs fed to a shell) are
 // read again. Throws ShellParseError for text that is not valid shell.
 function runsReviewHook(command, depth = 0) {
-  if (depth > 4) return false
+  if (depth > 4) throw new ShellParseError('commands nest more than 4 levels deep')
   const commands = splitCommands(command)
   const scripts = heredocScripts(commands)
   return commands.some((tokens) => {
