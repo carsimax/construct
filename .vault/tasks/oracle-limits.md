@@ -33,8 +33,8 @@ Objective: the oracle becomes the only source of autonomy limits. Every code tas
 | ID | Specs | Task | Route | Risk | Status | Commit |
 |---|---|---|---|---|---|---|
 | T1 | S2 | Envelope in the oracle reply, recorded with the lock, clamped to ceilings; admission checks worker surfaces against it | worker | 2, 3 | done | 665482a |
-| T2 | S1 | Oracle mandatory: main thread writes only docs and .vault; worker admission needs an envelope for code | worker | 2, 3 | open | |
-| T3 | S3, S7 | Remove inline limit, iteration cap, failure-streak, backstop, construct-limits; safety tests stay green | worker | 3 | open | |
+| T2 | S1 | Oracle mandatory: main thread writes only docs and .vault; worker admission needs an envelope for code | worker | 2, 3 | done | 4822d56 |
+| T3 | S3, S7 | Remove inline limit, iteration cap, failure-streak, backstop, construct-limits; safety tests stay green | worker | 3 | done | 4822d56 |
 | T4 | S4, S5 | SubagentStop runs the oracle; progress-based attempts and minutes per task | worker | 3, 4 | open | |
 | T5 | S6 | Diff check against the envelope at stop | worker | 2 | open | |
 | T6 | S8 | Docs, contracts, skills, agents, CHANGELOG | worker | 3 | open | |
@@ -46,3 +46,4 @@ Objective: the oracle becomes the only source of autonomy limits. Every code tas
 - **L3 (2026-10-29):** Menu answers: "Oráculo obligatorio (recomendado) — Toda tarea de código pasa por el oráculo, así siempre hay límites y siempre los fija él; sin oráculo solo se permiten docs y .vault"; "Sí, se mantienen (recomendado) — Solo se quitan los límites de autonomía; publicación, --no-verify, hooksPath, review store, bloqueo del oráculo y data dir siguen igual".
 - **L4 (2026-10-29):** Menu answers: "10 intentos, 60 min, 1500 líneas (recomendado) — Defectos: 5 intentos, 30 min, 400 líneas"; "Sí, sigue trabajando (recomendado) — Es lo que lo hace autónomo: no para hasta verde o presupuesto agotado"; "Excepción aprobada por ti (recomendado) — El oráculo devuelve needs_interaction, tú apruebas en un menú y la tarea corre con la envolvente por defecto sin comando".
 - **L5 (2026-10-29):** T1 (665482a): RED (missing envelope.mjs, writeEnvelope, readEnvelope), GREEN node --test 'tests/**/*.test.mjs': 1351 pass; claude plugin test: 100 pass. Envelope kept while an active lock of the task exists.
+- **L6 (2026-10-29):** T2+T3 (4822d56): one commit (both rewrite surface-guard). Exemption built as `construct-gate oracle exempt <doc> <T#> -- <surfaces>` after an `Exempt` menu answer. RED confirmed afterwards: the new tests run against 665482a give 14 failures; GREEN node --test: 1259 pass (removed-limit tests deleted), claude plugin test: 100 pass. Prose for T6 listed by the worker; evals iteration-cap, small-inline, small-inline-pressure need a decision in T6.
