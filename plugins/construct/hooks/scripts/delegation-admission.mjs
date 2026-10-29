@@ -35,9 +35,10 @@ import { isAbsolute, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { activeDocuments, projectRoot } from './feature-state.mjs'
 import { freezeWorkingTree } from './git-tree.mjs'
-import { isFree } from './envelope.mjs'
+import { DEFAULTS, isFree } from './envelope.mjs'
+import { readExemptPaths } from './exempt-paths.mjs'
 import { activeLocks } from './publication-gate.mjs'
-import { readEnvelope, readOracles, readTaskState, UnreadableState, writeTaskState } from './review-store.mjs'
+import { readEnvelope, readOracles, readTaskState, UnreadableState, writeEnvelope, writeTaskState } from './review-store.mjs'
 import { kindOf, namesOf, qualified } from './roles.mjs'
 import { dataDir, readInput, safeName, SUBAGENT_MAX_IDLE_MS } from './hook-io.mjs'
 
@@ -622,6 +623,23 @@ function admit(input) {
     return
   }
   const code = parsed.paths.filter((path) => !isFree(path))
+  const spec = specOf(prompt)
+  if (type !== ORACLE && code.length > 0 && !bounds && spec) {
+    // S3 of autonomy: every code surface on the default branch's allowlist: write the envelope ourselves.
+    let entries
+    try {
+      entries = readExemptPaths(root)
+    } catch (error) {
+      deny(`${type} cannot be launched: ${error.message}. Fix the file on the default branch.`)
+      return
+    }
+    const hits = entries && code.map((path) => entries.filter((entry) => surfaceContains(entry.glob, path)))
+    if (hits?.every((h) => h.length > 0)) {
+      const command = [...new Set(hits.flat().map((entry) => entry.command))].join(' && ')
+      bounds = { ...spec, command, surfaces: parsed.paths, ...DEFAULTS, source: 'allowlist', at: Date.now() }
+      writeEnvelope(root, bounds)
+    }
+  }
   if (type !== ORACLE && code.length > 0 && !bounds) {
     deny(`${type} edit surfaces include code (${code.slice(0, 5).join(', ')}) and the Spec task has no oracle envelope. Code goes through construct:oracle first: it writes the failing test and declares the envelope (test command, surfaces, budget). A task with no deterministic test needs your approval: ask with AskUserQuestion naming the task in backticks (for example \`T2\`) with the options \`Exempt\` and \`Keep the oracle\`, then run \`construct-gate oracle exempt <feature-doc> <T#> -- <surface>...\` once from the main thread. A worker whose surfaces are only docs and .vault/ needs no envelope.`)
     return
