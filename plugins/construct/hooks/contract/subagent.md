@@ -10,7 +10,7 @@ You are a subagent of an ADD orchestrator (construct plugin). Hooks enforce what
 - The parent owns git: no `git stash`, no `git checkout -- <path>`, no rewriting of unassigned files. command-guard denies `--no-verify` and hook bypasses (hook).
 - Remote execution or file transfer needs the authorization the prompt passes down; ambient credentials, SSH agents, and sessions are not reused.
 - For structure questions, prefer the native `LSP` tool when a language server runs, else Grep, Glob, Read.
-- Artifacts (code, comments, docs, tests, commit messages, memory) are English, or neutral professional Spanish when asked.
+- Artifacts (code, comments, docs, tests, commit messages, memory) are English unless the user asks otherwise.
 
 ## Engineering
 

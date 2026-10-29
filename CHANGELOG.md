@@ -4,6 +4,20 @@ Notable changes per release. Versions follow [Semantic Versioning](https://semve
 
 ## Unreleased
 
+### Fixed
+
+- `command-guard` denies `git config core.hooksPath <value>` (any scope flag, `--add`, `--replace-all`, any key case) like `git -c core.hooksPath=...`; reading the key stays allowed.
+- `publication-gate` reads an attached short option such as `gh pr create -Hbranch` like `-H branch`.
+- A command nested past the parser depth cap is denied by `publication-gate`, `command-guard`, and `review-store-guard` instead of allowed.
+- `surface-guard` denies a subagent's writes under the plugin data directory.
+- `delegation-admission`'s hourly sweep no longer deletes a started writer's record: past one hour it stops counting for overlap, but `surface-guard` still confines that writer until it stops.
+- A Tasks row with fewer cells than the header counts as unfinished in `feature-state` and the band, so a cut-off row no longer drops the document.
+- The band clears a stale "waiting on you" when the next tool call starts after a denied ask.
+- `pruneStore` expires `pending/` records when `verdicts/` does not exist.
+- `install.sh` prints a `construct-install:` failure line when `claude --version` fails or prints nothing.
+- The Risk-line Stop hook bounds its two git diffs (3 s each) and its timeout rises from 30 s to 40 s, so it finishes inside the budget instead of being killed silently.
+- Docs: `CLAUDE.md` names `oracle` as a writer and lists `oracle-record`, `unlock-approval`, and `delivery-signals`; the README Skills row lists all eight skills; `subagent.md` shares the session contract's language rule.
+
 ## 14.0.0
 
 - Breaking: the `inline_edit_max_lines` and `iteration_cap` options are removed, and saved values have no effect. The orchestrator sets the limits per session with the new `construct-limits set inline=<N> cap=<N>` (defaults 150 and 3, ceilings 500 and 10; `show` prints them). While a feature document has an unfinished task, `surface-guard` denies every main-thread write outside `.vault/tasks/` and names `construct:worker`. Subagents cannot run `construct-limits set` (`command-guard` denies it; `show` stays allowed), and the plugin now has no `userConfig`. The new `limits-record` hook (`PreToolUse` on `Bash`) records the main thread's `construct-limits set` in the plugin data directory and reports the active limits in its context (`set` and `show`); the limits live in that one directory, so `readLimits` and `pruneState` no longer touch the temp fallback directory, and the CLI only validates and prints.
