@@ -72,8 +72,8 @@ Many tests cross-check text against code, so a change in one place usually needs
 | A contract text | Every construct component it names must exist. The injected session text stays at or under 8,000 characters (`tests/contract.test.mjs`). `hooks/contract/session.md` is near 8,000 characters injected, so measure with `node plugins/construct/hooks/scripts/contract.mjs session </dev/null | wc -c` and rewrite text in place instead of appending |
 | A command, option, or message | Its help text and `README.md`, together |
 | The lens mapping (`LENSES_BY_RISK` in `hooks/scripts/review-lenses.mjs`) | The table in `skills/review/SKILL.md`; `tests/skills.test.mjs` compares them |
-| The oracle envelope (`hooks/scripts/envelope.mjs`: ceilings, defaults, `isFree`), `oracle-stop.mjs`, or `construct-gate oracle exempt` | The oracle and worker agents, the session and subagent contracts, `skills/delegation/`, `skills/workflow/references/testing.md`, and the oracle-envelope section of `README.md`; `tests/contract.test.mjs` and `tests/oracle/` check them |
-| A hook | Register it in exec form (`command: "node"`, `args: [...]`); tests check this |
+| The oracle envelope (`hooks/scripts/envelope.mjs`: ceilings, defaults, `isFree`), `oracle-stop.mjs`, `exempt-paths.mjs` (the `.vault/exempt-paths` allowlist), or `construct-gate oracle exempt` | The oracle and worker agents, the session and subagent contracts, `skills/delegation/`, `skills/workflow/references/testing.md`, and the oracle-envelope section of `README.md`; `tests/contract.test.mjs` and `tests/oracle/` check them |
+| A hook | Register it in exec form (`command: "node"`, `args: [...]`); tests check this. Bash guards run through the single `bash-guard.mjs` entry, so a new Bash guard joins it rather than adding a registration |
 | Agent routing | Construct agents run on their frontmatter model and effort; only the built-in `general-purpose` gets defaults (`BUILTIN_DEFAULTS` in `roles.mjs`, applied by `plugins/construct/hooks/routing.js`) |
 
 ## Branches and pull requests

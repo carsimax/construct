@@ -101,7 +101,7 @@ test('code goes oracle first and the oracle envelope replaces the fixed limits (
   assert.ok(delegation.includes('The parent writes only `.vault/` and docs'))
   assert.ok(!delegation.includes('Small work is done inline'))
   const sizing = readFileSync(join(pluginRoot, 'skills/workflow/SKILL.md'), 'utf8')
-  assert.match(sizing, /- Small: no commits unless asked; code takes a one-task feature document, then oracle/)
+  assert.match(sizing, /- Small: no commits unless asked; code takes the \[one-task template\]\(references\/feature-document\.md#one-task-template\), then oracle/)
 })
 
 test('no contract, skill, agent, or user doc names a removed limit (S3, S8)', () => {
