@@ -13,6 +13,8 @@ const INSTALLER = new URL('../../install.sh', import.meta.url).pathname
 
 const STUBS = {
   claude: `
+if [ "$1" = "--version" ] && [ -n "$STUB_CLAUDE_VERSION_FAIL" ]; then exit 1; fi
+if [ "$1" = "--version" ] && [ -n "$STUB_CLAUDE_VERSION_EMPTY" ]; then exit 0; fi
 if [ "$1" = "--version" ]; then echo "\${STUB_CLAUDE_VERSION:-2.1.304} (Claude Code)"; exit 0; fi
 case "$1 $2 $3" in
   "plugin marketplace list") cat "$STUB_STATE/marketplaces" 2>/dev/null; exit 0 ;;
@@ -247,6 +249,15 @@ test('preflight stops before any change when a requirement is missing or too old
     assert.match(run.stderr, pattern, label)
     assert.deepEqual(run.calls.filter((c) => !/--version/.test(c)), [], `${label}: nothing ran`)
     assert.equal(existsSync(settingsPath(box)), false, `${label}: no settings written`)
+  }
+})
+
+test('an unreadable Claude Code version stops the preflight with a construct-install line (S11)', () => {
+  for (const env of [{ STUB_CLAUDE_VERSION_FAIL: '1' }, { STUB_CLAUDE_VERSION_EMPTY: '1' }]) {
+    const run = install(sandbox(), [], env)
+    assert.notEqual(run.status, 0)
+    assert.match(run.stderr, /construct-install: could not read the Claude Code version; run: claude --version/)
+    assert.doesNotMatch(run.stderr, /is too old/)
   }
 })
 

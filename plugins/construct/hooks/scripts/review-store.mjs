@@ -212,7 +212,13 @@ export function pruneStore(root) {
   try {
     const store = storeDir(root)
     const cutoff = Date.now() - MAX_AGE_MS
-    const dirs = [join(store, 'pending'), ...readdirSync(join(store, 'verdicts')).map((subject) => join(store, 'verdicts', subject))]
+    let subjects = []
+    try {
+      subjects = readdirSync(join(store, 'verdicts'))
+    } catch {
+      // No verdicts yet; pending/ still expires.
+    }
+    const dirs = [join(store, 'pending'), ...subjects.map((subject) => join(store, 'verdicts', subject))]
     for (const dir of dirs) {
       try {
         // Read before the files go (removing one touches the directory); a directory another capture just made is new, so it stays.

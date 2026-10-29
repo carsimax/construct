@@ -4,11 +4,11 @@
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, readdirSync, utimesSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { applyFiles, commitAll, git, makeRepo, scratchDir } from '../helpers/repo.mjs'
 import { requiredLenses } from '../../plugins/construct/hooks/scripts/review-lenses.mjs'
-import { readVerdicts, subjectHash, writeOracle, writeVerdict } from '../../plugins/construct/hooks/scripts/review-store.mjs'
+import { pruneStore, readVerdicts, subjectHash, writeOracle, writeVerdict } from '../../plugins/construct/hooks/scripts/review-store.mjs'
 
 const PLUGIN = new URL('../../plugins/construct/', import.meta.url).pathname
 const CONTEXT_HOOK = join(PLUGIN, 'hooks/scripts/review-context.mjs')
@@ -299,6 +299,19 @@ describe('capture hook', () => {
     assert.ok(!existsSync(join(store, 'verdicts', 'oldsubject')))
     assert.ok(existsSync(join(store, 'verdicts', 'newsubject')))
     assert.ok(existsSync(join(store, 'pending', `review-risk.${binding.subject_hash}.json`)))
+  })
+
+  test('pending records still expire when verdicts/ does not exist (S9)', () => {
+    const repo = reviewed()
+    const pending = join(repo, '.git', 'construct-review', 'pending')
+    mkdirSync(pending, { recursive: true })
+    rmSync(join(repo, '.git', 'construct-review', 'verdicts'), { recursive: true, force: true })
+    const old = join(pending, 'review-risk.old.json')
+    writeFileSync(old, '{}')
+    const past = new Date(Date.now() - 31 * 24 * 3600 * 1000)
+    utimesSync(old, past, past)
+    pruneStore(repo)
+    assert.ok(!existsSync(old))
   })
 
   test('an invalid result blocks with the validator message', () => {

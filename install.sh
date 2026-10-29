@@ -76,7 +76,8 @@ check_writable() {
 preflight() {
   has claude || fail "Claude Code (claude) is not on the PATH. Install it from https://claude.com/claude-code"
   local version
-  version=$(run claude --version | awk '{print $1}')
+  version=$(run claude --version | awk '{print $1}') || version=
+  [ -n "$version" ] || fail "could not read the Claude Code version; run: claude --version"
   version_ge "$version" "$MIN_CLAUDE" || fail "Claude Code $version is too old; Construct needs $MIN_CLAUDE or later. Run: claude update"
   has node || fail "Node.js $MIN_NODE or later is required (node is not on the PATH). See https://nodejs.org"
   version=$(run node -p 'process.versions.node')
