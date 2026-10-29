@@ -5,7 +5,8 @@
 //     .vault/tasks/<f>.md, T<n>` line naming an existing regular file when an
 //     unfinished feature document exists, and surfaces that do not overlap those
 //     of a writer still open, and, when that Spec task has an oracle envelope (envelope.mjs, stored by
-//     oracle-record.mjs), surfaces all inside the envelope's surfaces (a task with no envelope is unchanged);
+//     oracle-record.mjs), surfaces all inside the envelope's surfaces; a worker whose surfaces include code (not .vault/ or a
+//     doc, isFree in envelope.mjs) needs that envelope (S1 of .vault/tasks/oracle-limits.md);
 //   - construct:verifier needs a `Risk: item N` or `Risk: items 2, 5` line (1-6, the whole list valid);
 //   - a Workflow script (PreToolUse on Workflow) may launch only read-only agents: every agent() call
 //     names a literal agentType of the reader, lens, or judge kind, or the built-in Explore or Plan
@@ -29,6 +30,7 @@ import { homedir } from 'node:os'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { activeDocuments, projectRoot } from './feature-state.mjs'
+import { isFree } from './envelope.mjs'
 import { activeLocks } from './publication-gate.mjs'
 import { readEnvelope, readOracles } from './review-store.mjs'
 import { kindOf, namesOf, qualified } from './roles.mjs'
@@ -591,6 +593,11 @@ function admit(input) {
     return
   }
   const bounds = type === ORACLE ? undefined : envelopeOf(prompt, root)
+  const code = parsed.paths.filter((path) => !isFree(path))
+  if (type !== ORACLE && code.length > 0 && !bounds) {
+    deny(`${type} edit surfaces include code (${code.slice(0, 5).join(', ')}) and the Spec task has no oracle envelope. Code goes through construct:oracle first: it writes the failing test and declares the envelope (test command, surfaces, budget). A task with no deterministic test needs your approval: ask with AskUserQuestion naming the task in backticks (for example \`T2\`) with the options \`Exempt\` and \`Keep the oracle\`, then run \`construct-gate oracle exempt <feature-doc> <T#> -- <surface>...\` once from the main thread. A worker whose surfaces are only docs and .vault/ needs no envelope.`)
+    return
+  }
   const outside = bounds && parsed.paths.filter((path) => !bounds.surfaces.some((surface) => surfaceContains(surface, path)))
   if (outside?.length) {
     deny(`${type} edit surfaces ${outside.join(', ')} are outside the oracle envelope of ${bounds.feature} (task ${bounds.task}), which allows ${bounds.surfaces.join(', ')}. Keep the surfaces inside the envelope; the oracle fixes it and a worker cannot change it.`)

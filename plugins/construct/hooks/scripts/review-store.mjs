@@ -69,7 +69,7 @@ const oracleFile = (root, path) => join(storeDir(root), 'oracles', `${createHash
 export const writeOracle = (root, record) => atomicWrite(oracleFile(root, record.path), `${JSON.stringify(record)}\n`)
 
 // Oracle envelopes (oracle-record.mjs): one record per feature document and task, { feature, task, command, surfaces, attempts,
-// minutes, lines, at }, in the envelopes/ area. oracle-record.mjs replaces one only when no lock of that task is active.
+// minutes, lines, at }, in the envelopes/ area (an exemption the user approved has command null and exempt true, see construct-gate oracle exempt). oracle-record.mjs replaces one only when no lock of that task is active.
 const envelopeFile = (root, feature, task) => join(storeDir(root), 'envelopes', `${createHash('sha256').update(feature).digest('hex')}-${task}.json`)
 export const writeEnvelope = (root, record) => atomicWrite(envelopeFile(root, record.feature, record.task), `${JSON.stringify(record)}\n`)
 
@@ -77,7 +77,7 @@ export const writeEnvelope = (root, record) => atomicWrite(envelopeFile(root, re
 export function readEnvelope(root, feature, task) {
   try {
     const record = readJson(envelopeFile(root, feature, task))
-    return typeof record?.command === 'string' && Array.isArray(record.surfaces) ? record : null
+    return (typeof record?.command === 'string' || (record?.exempt === true && record.command === null)) && Array.isArray(record.surfaces) ? record : null
   } catch {
     return null
   }

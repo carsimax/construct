@@ -365,15 +365,15 @@ describe('audit fixes', () => {
   test('mark prunes state older than the prune age and keeps fresh state', () => {
     const repo = makeRepo({ 'src/a.js': 'export const a = 1\n' })
     const e = env()
-    const dir = join(e.CLAUDE_PLUGIN_DATA, 'delivery-signals')
+    const dir = join(e.CLAUDE_PLUGIN_DATA, 'subagent-count')
     mkdirSync(dir, { recursive: true })
-    writeFileSync(join(dir, 'old.backstop'), 'x')
-    writeFileSync(join(dir, 'fresh.backstop'), 'x')
+    writeFileSync(join(dir, 'old.state'), 'x')
+    writeFileSync(join(dir, 'fresh.state'), 'x')
     const old = new Date(Date.now() - 8 * 24 * 3600 * 1000)
-    utimesSync(join(dir, 'old.backstop'), old, old)
+    utimesSync(join(dir, 'old.state'), old, old)
     silent(run('mark', repo, e))
-    assert.equal(existsSync(join(dir, 'old.backstop')), false)
-    assert.equal(existsSync(join(dir, 'fresh.backstop')), true)
+    assert.equal(existsSync(join(dir, 'old.state')), false)
+    assert.equal(existsSync(join(dir, 'fresh.state')), true)
   })
 
   test('check with a Risk line fails open when git fails', () => {

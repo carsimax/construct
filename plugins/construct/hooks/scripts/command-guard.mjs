@@ -5,7 +5,9 @@
 //   - deny also: `construct-gate oracle unlock`, except when it is the whole command (one plain `construct-gate oracle unlock <path>`, no
 //     separator, redirection, expansion, or wrapper) on an existing regular file with no symlink under the root, in the main thread right
 //     after the user answered an AskUserQuestion with `Unlock` for a question naming that path in backticks (recorded in the review store by unlock-approval.mjs; one unlock per answer; see unlockApproved);
-//   - deny also: `construct-limits set` from a subagent (hook input has `agent_id`); only the main thread declares session limits;
+//   - deny also: `construct-gate oracle exempt <feature-doc> <T#> -- <surface>...` (S1 of .vault/tasks/oracle-limits.md), except when it is the whole
+//     command, in the main thread right after the user answered an AskUserQuestion with `Exempt` for a question that puts
+//     `<feature-doc> <T#> -- <surface>...` in backticks, once (same record and one-answer rule as `Unlock`; see exemptApproved);
 //   - deny also: a statement that sets `GIT_CONFIG_PARAMETERS` or `GIT_CONFIG_KEY_<n>` to
 //     core.hooksPath through `export`, `declare` or `typeset` (any flags), `readonly`, `local`,
 //     or a bare assignment, even with no `git` in that statement.
@@ -20,7 +22,6 @@ import { lstatSync, realpathSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { repositoryRoot } from './git-tree.mjs'
 import { readInput } from './hook-io.mjs'
-import { isLimits } from './limits.mjs'
 import { lockPath, takeApproval } from './review-store.mjs'
 import { GIT_VALUE_FLAGS, heredocScripts, nestedLines, parsesAsShell, SHELLS, ShellParseError, splitCommands } from './shell-words.mjs'
 
@@ -160,14 +161,30 @@ function unlockApproved(input, paths) {
   }
 }
 
+const EXEMPT_REASON = 'construct-gate oracle exempt gives a task with no deterministic test the default envelope and no test command, and only the user may approve it. Ask them with AskUserQuestion: a question that puts `<feature-doc> <T#> -- <surface>...` in backticks (once; the exact arguments of the command) and says why no test can run, with the options `Exempt` and `Keep the oracle`; on `Exempt` run that command from the main thread, once, as the whole command. A subagent never exempts: it returns `needs_interaction`.'
+
+// exemptApproved: like unlockApproved, for the latest answer `Exempt` to a question quoting exactly the command's arguments.
+function exemptApproved(input, doc, task, surfaces) {
+  try {
+    if (input.agent_id || typeof input.cwd !== 'string' || typeof input.session_id !== 'string' || input.session_id === '') return false
+    const root = repositoryRoot(input.cwd)
+    const same = (q) => quoted(q)?.trim().replace(/\s+/g, ' ') === `${doc} ${task} -- ${surfaces}`
+    return plainFile(root, doc) && takeApproval(root, (a) => a.session_id === input.session_id && Object.entries(a.answers).some(([q, v]) => same(q) && [v].flat().some((l) => typeof l === 'string' && /^exempt(\s+\(recommended\))?$/i.test(l.trim())))) !== null
+  } catch {
+    return false
+  }
+}
+
 // The only unlock that may be approved is the whole command: one plain `construct-gate oracle unlock <path>` (optionally run by `node`),
 // words made of literal characters only. Anything else (a separator, redirection, subshell, expansion, assignment, wrapper, quote) is denied.
 const LONE_UNLOCK = /^(?:node )?(?:[\w.@%+=:,/-]*\/)?construct-gate oracle unlock ([\w.@%+:,/][\w.@%+=:,/-]*)$/
 const lonePath = (command) => LONE_UNLOCK.exec(command.trim().replace(/ +/g, ' '))?.[1] ?? null
 
+const WORD = '[\\w.@%+:,/][\\w.@%+=:,/-]*'
+const LONE_EXEMPT = new RegExp(`^(?:node )?(?:[\\w.@%+=:,/-]*\\/)?construct-gate oracle exempt (${WORD}) (T\\d+) -- (${WORD}(?: ${WORD})*)$`)
+const loneExempt = (command) => LONE_EXEMPT.exec(command.trim().replace(/ +/g, ' ')) ?? null
+
 const isGate = (word) => /(^|\/)construct-gate$/.test(word ?? '')
-const LIMITS_REASON = 'only the main thread declares session limits: a subagent cannot run construct-limits set. `construct-limits show` is allowed; ask the orchestrator to change a limit.'
-let subagent = false
 
 // hitsIn returns every hit of a command line; splitCommands finds the commands nested in
 // substitutions and heredoc expansions, and the lines a command runs as a string are read again.
@@ -191,7 +208,8 @@ function hitsIn(command, depth = 0) {
     // Any word with basename construct-gate counts, so node flags, env, command, xargs and npx wrappers are caught; `node -e` importing review-store cannot be seen in text (discipline layer).
     const at = words.findIndex((w, i) => isGate(w) && words[i + 1] === 'oracle' && words[i + 2] === 'unlock')
     if (at !== -1) found.push({ ...hit('deny', UNLOCK_REASON), unlock: true })
-    if (subagent && words.some((w, i) => isLimits(w) && words[i + 1] === 'set')) found.push(hit('deny', LIMITS_REASON))
+    const exempt = words.findIndex((w, i) => isGate(w) && words[i + 1] === 'oracle' && words[i + 2] === 'exempt')
+    if (exempt !== -1) found.push({ ...hit('deny', EXEMPT_REASON), exempt: true })
     if (h) found.push(h)
   }
   return found
@@ -201,10 +219,12 @@ try {
   const input = readInput()
   const command = input?.tool_input?.command
   if (input?.tool_name === 'Bash' && typeof command === 'string' && command !== '') {
-    subagent = Boolean(input.agent_id)
     let found = hitsIn(command)
     const unlocks = found.filter((h) => 'unlock' in h)
     if (unlocks.length === 1 && lonePath(command) !== null && unlockApproved(input, [lonePath(command)])) found = found.filter((h) => !('unlock' in h))
+    const exempts = found.filter((h) => 'exempt' in h)
+    const lone = loneExempt(command)
+    if (exempts.length === 1 && lone && exemptApproved(input, lone[1], lone[2], lone[3])) found = found.filter((h) => !('exempt' in h))
     const chosen = found[0]
     if (chosen) process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: chosen.decision, permissionDecisionReason: chosen.reason } })}\n`)
   }

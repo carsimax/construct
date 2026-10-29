@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, symlinkSync, writeFil
 import { join } from 'node:path'
 import { describe, test } from 'node:test'
 import { git, makeRepo, scratchDir } from '../helpers/repo.mjs'
-import { UNLOCKABLE, writeOracle } from '../../plugins/construct/hooks/scripts/review-store.mjs'
+import { UNLOCKABLE, writeEnvelope, writeOracle } from '../../plugins/construct/hooks/scripts/review-store.mjs'
 
 const S = (name) => new URL(`../../plugins/construct/hooks/scripts/${name}`, import.meta.url).pathname
 const DOC = '# F\n\n## Tasks\n\n| ID | Specs | Task | Route | Risk | Status | Commit |\n|---|---|---|---|---|---|---|\n| T1 | S1 | work | worker | none | pending | - |\n\n## Log\n'
@@ -27,7 +27,12 @@ const writer = (repo, surface) => {
   run(S('delegation-admission.mjs'), ['start'], { session_id: 's1', agent_id: 'a1', agent_type: 'construct:worker' }, env)
   return { env, extra: { agent_id: 'a1' } }
 }
-const repoWith = () => makeRepo({ 'tests/a.test.mjs': 'one\n', '.vault/tasks/f.md': DOC, 'src/a.js': 'a\n' })
+// The task has an envelope over every path, so a worker on code is admitted (S1 of oracle-limits).
+const repoWith = () => {
+  const repo = makeRepo({ 'tests/a.test.mjs': 'one\n', '.vault/tasks/f.md': DOC, 'src/a.js': 'a\n' })
+  writeEnvelope(repo, { feature: '.vault/tasks/f.md', task: 'T1', command: 'true', surfaces: ['**'], attempts: 5, minutes: 30, lines: 400, at: 1 })
+  return repo
+}
 
 describe('delegation-admission: an oracle over an equivalent spelling of a locked path', () => {
   const launch = (repo, surface) => run(S('delegation-admission.mjs'), [], { session_id: 's1', cwd: repo, hook_event_name: 'PreToolUse', tool_name: 'Agent', tool_input: { subagent_type: 'construct:oracle', prompt: `Spec: .vault/tasks/g.md, T1\n## Allowed edit surfaces\n${surface}\n`, description: 'u' } })

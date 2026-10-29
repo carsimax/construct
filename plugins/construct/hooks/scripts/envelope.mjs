@@ -34,3 +34,13 @@ export function parseEnvelope(reply) {
   if (!command || surfaces.length === 0) return null
   return { command, surfaces: [...new Set(surfaces)], attempts: budget(fields.attempts, 'attempts'), minutes: budget(fields.minutes, 'minutes'), lines: budget(fields.lines, 'lines') }
 }
+
+// Docs: a `*.md` file outside the Markdown that is behavior (the contracts, the skills, the agents). A glob counts as a doc only
+// when its literal prefix cannot reach those directories. The main thread writes docs and `.vault/` freely, and a worker whose
+// surfaces are all docs or `.vault/` needs no oracle envelope (S1 of .vault/tasks/oracle-limits.md).
+const BEHAVIOR_DIRS = ['plugins/construct/hooks/contract/', 'plugins/construct/skills/', 'plugins/construct/agents/']
+export function isDoc(path) {
+  const glob = path.search(/[*?[\]{}]/)
+  return path.endsWith('.md') && !BEHAVIOR_DIRS.some((dir) => path.startsWith(dir) || (glob !== -1 && dir.startsWith(path.slice(0, glob))))
+}
+export const isFree = (path) => path.startsWith('.vault/') || isDoc(path)
