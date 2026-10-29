@@ -1,7 +1,7 @@
 // S2 of .vault/tasks/oracle-limits.md: oracle-record stores the envelope of the oracle's reply in the review store.
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { writeFileSync } from 'node:fs'
+import { readdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, test } from 'node:test'
 import { makeRepo, scratchDir, write } from '../helpers/repo.mjs'
@@ -12,9 +12,9 @@ const FEATURE = '.vault/tasks/feat.md'
 const prompt = (...paths) => `Write the tests.\n\nSpec: ${FEATURE}, T1 (covers S2)\n\n## Allowed edit surfaces\n${paths.join('\n')}\n`
 const envelope = (attempts) => `Done.\n\n## Envelope\n- Command: node --test tests/a.test.mjs\n- Surfaces:\n  - src/a.js\n- Attempts: ${attempts}\n- Minutes: 20\n- Lines: 300\n`
 
-function stop(repo, reply, { type = 'construct:oracle', asTranscript = false } = {}) {
+function stop(repo, reply, { type = 'construct:oracle', asTranscript = false, paths = ['tests/a.test.mjs'] } = {}) {
   const file = join(scratchDir('odd-env-'), 't.jsonl')
-  const rows = [{ type: 'user', message: { role: 'user', content: prompt('tests/a.test.mjs') } }]
+  const rows = [{ type: 'user', message: { role: 'user', content: prompt(...paths) } }]
   if (asTranscript) rows.push({ type: 'assistant', message: { content: [{ type: 'text', text: reply }] } })
   writeFileSync(file, rows.map((r) => `${JSON.stringify(r)}\n`).join(''))
   const input = { session_id: 's1', agent_id: 'a1', agent_type: type, cwd: repo, hook_event_name: 'SubagentStop', agent_transcript_path: file, ...(asTranscript ? {} : { last_assistant_message: reply }) }
@@ -57,6 +57,18 @@ describe('oracle-record envelope', () => {
     writeTaskState(repo, FEATURE, 'T1', { attempts: 7, bestPass: 0, startedAt: Date.now(), baseTree: null, budget: { attempts: 7, minutes: 20 } })
     stop(repo, envelope(9))
     assert.equal(readTaskState(repo, FEATURE, 'T1'), null)
+  })
+  test('an unreadable envelope is replaced by the next oracle, which still locks its tests', () => {
+    const repo = makeRepo({})
+    write(repo, 'tests/a.test.mjs', 'a\n')
+    stop(repo, envelope(7), { paths: ['tests/a.test.mjs'] })
+    const dir = join(repo, '.git', 'construct-review', 'envelopes')
+    const [name] = readdirSync(dir).filter((n) => !n.endsWith('.state.json'))
+    writeFileSync(join(dir, name), '{not json')
+    write(repo, 'tests/b.test.mjs', 'b\n')
+    stop(repo, envelope(9), { paths: ['tests/a.test.mjs', 'tests/b.test.mjs'] })
+    assert.equal(readEnvelope(repo, FEATURE, 'T1').attempts, 9)
+    assert.ok(readOracles(repo).some((o) => o.path === 'tests/b.test.mjs'))
   })
   test('a reply without an envelope, or another agent type, stores nothing', () => {
     const repo = makeRepo({})

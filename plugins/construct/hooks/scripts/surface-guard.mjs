@@ -5,8 +5,11 @@
 // .vault/tasks/oracle-limits.md), whatever the size: code goes through construct:oracle, then construct:worker.
 // A worker whose task budget is spent (attempts or minutes of its oracle envelope, spentBudget) is denied every write (S5 of
 // .vault/tasks/oracle-limits.md).
+// Fail closed (S3 of .vault/tasks/guarantees.md), naming the file: a subagent's write is denied when an oracle lock record exists but is
+// unreadable, when the task envelope or state of its Spec exists but is unreadable, or when it has no readable writer record
+// and a file of the session's admission directory does not parse.
 // A subagent never writes under the plugin data dir (dataDir: writer records and guard state). Other paths outside the
-// git work tree, a cwd outside a repository, a subagent with no record, and any internal error pass (fail open, no output).
+// git work tree, a cwd outside a repository, a subagent with no record, and any other internal error pass (fail open, no output).
 // shortcut: the record is paired to its agent by same-type FIFO at SubagentStart, so two
 // same-type launches in flight may swap surfaces; Bash writes (sed -i, redirects) are not covered.
 // Upgrade both if the host adds the prompt to SubagentStart or real use shows bypasses.
@@ -18,7 +21,7 @@ import { repositoryRoot } from './git-tree.mjs'
 import { isFree, spentBudget } from './envelope.mjs'
 import { dataDir, readInput } from './hook-io.mjs'
 import { activeLocks } from './publication-gate.mjs'
-import { hasOracleFiles, readOracles, readTaskState } from './review-store.mjs'
+import { hasOracleFiles, oracleEntries, readEnvelope, readOracles, readTaskState, UnreadableState } from './review-store.mjs'
 
 // real resolves symlinks in the deepest existing ancestor and appends the rest.
 function real(path) {
@@ -60,15 +63,29 @@ function main() {
       // No lock readable: continue with the rest of the guard.
     }
   }
+  const broken = subagent && hasOracleFiles(root) && oracleEntries(root).find((e) => !e.record)
+  if (broken) {
+    deny(`surface-guard: the oracle lock record ${broken.file} exists but is unreadable, so no lock can be trusted and every subagent write is denied. Ask the user to inspect or remove it (\`construct-gate oracle unlock ${broken.name}\`).`)
+    return
+  }
   const lock = locks.find((l) => [l.path, relative(root, real(join(root, l.path)))].some((p) => under(rel, p) || under(raw, p)))
   if (lock) {
     deny(`surface-guard: ${rel} is a locked oracle for ${lock.feature} (task ${lock.task}). Do not edit it: return \`oracle_conflict\` (path, test, spec) to the user, or ask them to unlock it with \`construct-gate oracle unlock ${rel}\`.`)
     return
   }
   if (subagent) {
-    const entry = writerRecord(input.session_id, input.agent_id)
-    const spec = entry?.spec
-    const state = spec && readTaskState(root, spec.feature, spec.task)
+    let entry
+    let state
+    try {
+      entry = writerRecord(input.session_id, input.agent_id)
+      const spec = entry?.spec
+      if (spec) readEnvelope(root, spec.feature, spec.task)
+      state = spec && readTaskState(root, spec.feature, spec.task)
+    } catch (error) {
+      if (!(error instanceof UnreadableState)) throw error
+      deny(`surface-guard: ${error.message}, so your writes are denied. Stop and report it to the orchestrator.`)
+      return
+    }
     const spent = state?.budget && spentBudget(state, state.budget)
     if (spent) {
       deny(`surface-guard: ${spent}, so every write is denied. Stop and report the state to the orchestrator: what passes, what fails, and what is left.`)

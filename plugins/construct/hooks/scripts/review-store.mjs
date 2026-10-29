@@ -22,6 +22,28 @@ const pendingFile = (root, lens, subject) => join(storeDir(root), 'pending', `${
 const verdictFile = (root, subject, lens) => join(storeDir(root), 'verdicts', subject, `${lens}.json`)
 const readJson = (file) => JSON.parse(readFileSync(file, 'utf8'))
 
+// UnreadableState: a store file that exists but cannot be read or parsed, or has the wrong shape. A missing file is not one (readers return null).
+export class UnreadableState extends Error {
+  constructor(file, why) {
+    super(`${file} exists but is unreadable (${why})`)
+    this.name = 'UnreadableState'
+    this.file = file
+  }
+}
+
+// readRecord: the parsed file when `valid(record)`, null when the file is missing; throws UnreadableState otherwise.
+function readRecord(file, valid) {
+  let record
+  try {
+    record = readJson(file)
+  } catch (error) {
+    if (error?.code === 'ENOENT') return null
+    throw new UnreadableState(file, error?.message ?? String(error))
+  }
+  if (!valid(record)) throw new UnreadableState(file, 'wrong shape')
+  return record
+}
+
 export const writePending = (root, record) => atomicWrite(pendingFile(root, record.lens, record.subject_hash), `${JSON.stringify(record)}\n`)
 export const clearPending = (root, record) => rmSync(pendingFile(root, record.lens, record.subject_hash), { force: true })
 
@@ -71,6 +93,15 @@ export const writeOracle = (root, record) => atomicWrite(oracleFile(root, record
 // Oracle envelopes (oracle-record.mjs): one record per feature document and task, { feature, task, command, surfaces, attempts,
 // minutes, lines, at }, in the envelopes/ area (an exemption the user approved has command null and exempt true, see construct-gate oracle exempt). oracle-record.mjs replaces one only when no lock of that task is active.
 const envelopeName = (feature, task) => `${createHash('sha256').update(feature).digest('hex')}-${task}.json`
+// A plain `.git` directory is read without asking git, as hasOracleFiles does, so surface-guard stays cheap.
+function readStore(root) {
+  try {
+    if (statSync(join(root, '.git')).isDirectory()) return storeAt('.git', root)
+  } catch {
+    // No .git entry at the root: ask git.
+  }
+  return storeDir(root)
+}
 const envelopeFile = (root, feature, task) => join(storeDir(root), 'envelopes', envelopeName(feature, task))
 // A new envelope starts its task afresh: the state of the one it replaces (spent attempts, start, baseline) is dropped.
 export function writeEnvelope(root, record) {
@@ -78,15 +109,9 @@ export function writeEnvelope(root, record) {
   rmSync(stateFile(root, record.feature, record.task), { force: true })
 }
 
-// readEnvelope returns the envelope of a task, or null when there is none or the record is unreadable.
-export function readEnvelope(root, feature, task) {
-  try {
-    const record = readJson(envelopeFile(root, feature, task))
-    return (typeof record?.command === 'string' || (record?.exempt === true && record.command === null)) && Array.isArray(record.surfaces) ? record : null
-  } catch {
-    return null
-  }
-}
+// readEnvelope returns the envelope of a task, or null when there is none; an unreadable record throws UnreadableState.
+export const readEnvelope = (root, feature, task) =>
+  readRecord(join(readStore(root), 'envelopes', envelopeName(feature, task)), (r) => (typeof r?.command === 'string' || (r?.exempt === true && r.command === null)) && Array.isArray(r.surfaces))
 
 // Task state (oracle-stop.mjs, delegation-admission.mjs start): { attempts, bestPass, startedAt, baseTree, budget: { attempts, minutes }, workers: { <agent_id>: { baseTree, startedAt } } } next to the envelope of the task,
 // shared by every worker of it, so an agent cannot write it (the store is denied to them). Read-modify-write is not locked.
@@ -95,19 +120,11 @@ const stateName = (feature, task) => envelopeName(feature, task).replace(/\.json
 const stateFile = (root, feature, task) => join(storeDir(root), 'envelopes', stateName(feature, task))
 export const writeTaskState = (root, feature, task, state) => atomicWrite(stateFile(root, feature, task), `${JSON.stringify(state)}\n`)
 
-// readTaskState returns the state of a task, or null when there is none or the record is unreadable.
-// A plain `.git` directory is read without asking git, as hasOracleFiles does, so surface-guard stays cheap.
-export function readTaskState(root, feature, task) {
-  try {
-    const plain = statSync(join(root, '.git')).isDirectory()
-    const state = readJson(plain ? join(storeAt('.git', root), 'envelopes', stateName(feature, task)) : stateFile(root, feature, task))
-    return typeof state?.attempts === 'number' && typeof state.startedAt === 'number' ? state : null
-  } catch {
-    return null
-  }
-}
+// readTaskState returns the state of a task, or null when there is none; an unreadable record throws UnreadableState.
+export const readTaskState = (root, feature, task) =>
+  readRecord(join(readStore(root), 'envelopes', stateName(feature, task)), (s) => typeof s?.attempts === 'number' && typeof s.startedAt === 'number')
 
-// oracleEntries lists every file of the oracles/ area as { name, record }; record is null when the file is unreadable or not a lock.
+// oracleEntries lists every file of the oracles/ area as { name, file, record }; record is null when the file is unreadable or not a lock.
 export function oracleEntries(root) {
   const dir = join(storeDir(root), 'oracles')
   const entries = []
@@ -125,7 +142,7 @@ export function oracleEntries(root) {
     } catch {
       // Unreadable record: not a lock.
     }
-    entries.push({ name, record })
+    entries.push({ name, file: join(dir, name), record })
   }
   return entries
 }

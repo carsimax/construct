@@ -16,7 +16,8 @@
 //     hash of the merge-base tree and the ref tree (review-store.mjs). A rejected subject stays
 //     rejected. A required lens without approval: deny, naming the lenses, the `Review subject:` line, and the construct:review skill;
 //   - a locked oracle (oracle-record.mjs) must be unchanged at the ref unless its feature document is finished on the default
-//     branch: a changed or missing one denies; no oracle is ever required;
+//     branch: a changed or missing one denies; no oracle is ever required; a lock record that exists but cannot be read denies,
+//     naming the file;
 //   - an error while deciding denies with its reason, including one thrown after the command was
 //     found to be a publication. Only unreadable hook input, a command that is no publication, and a
 //     directory that is no git repository pass. The hook entry sets onFailure: "block" as well.
@@ -38,7 +39,7 @@ import { openClarifications, specIds, unfinishedRows } from './feature-state.mjs
 import { git, repositoryRoot } from './git-tree.mjs'
 import { readInput } from './hook-io.mjs'
 import { requiredLenses } from './review-lenses.mjs'
-import { pruneStore, readOracles, readVerdicts, subjectHash, UNLOCKABLE } from './review-store.mjs'
+import { oracleEntries, pruneStore, readOracles, readVerdicts, subjectHash, UNLOCKABLE } from './review-store.mjs'
 import { GIT_VALUE_FLAGS, heredocScripts, nestedLines, parsesAsShell, SHELLS, ShellParseError, splitCommands } from './shell-words.mjs'
 
 const MAX_DEPTH = 4
@@ -328,7 +329,7 @@ const remoteTip = (root, release, url) => {
 // that carries the oracle (the path exists there, or its history ever had the locked blob at that path); a lock whose blob is
 // UNLOCKABLE (a symlink or directory surface) is always reported changed. Returns the denial text, or null.
 function oracleDenial(root, sha) {
-  const changed = []
+  const changed = oracleEntries(root).filter((e) => !e.record).map((e) => `${e.file} (an unreadable lock record)`)
   for (const lock of activeLocks(root, { verifyRemote: true })) {
     if (lock.blob === UNLOCKABLE) {
       // Only a ref that carries the path (present at the ref, or touched by its history) is denied.

@@ -179,11 +179,12 @@ describe('oracle-record: released locks and unlockable surfaces', () => {
 })
 
 describe('publication-gate: record faults and bounded work', () => {
-  test('a corrupt lock record is skipped: it does not deny every publication', () => {
+  test('a corrupt lock record denies publishing naming the file (S3 of guarantees); it is not a lock', () => {
     const repo = lockedRepo()
-    writeFileSync(join(oraclesDir(repo), readdirSync(oraclesDir(repo))[0]), '{not json')
+    const name = readdirSync(oraclesDir(repo))[0]
+    writeFileSync(join(oraclesDir(repo), name), '{not json')
     featBranch(repo)
-    silent(push(repo))
+    denied(push(repo), new RegExp(name.replace('.', '\\.')))
     assert.deepEqual(readOracles(repo), [])
   })
   test('a valid record whose git probe errors still denies', () => {
