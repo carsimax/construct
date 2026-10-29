@@ -14,8 +14,8 @@ Objective: phase 3 of the L1 plan: make "works well and as autonomous as possibl
 
 | ID | Specs | Task | Route | Risk | Status | Commit |
 |---|---|---|---|---|---|---|
-| T1 | S1, S2 | Summary metrics and the CLAUDE.md arm in eval.sh and eval-summary.mjs | worker | 6 | open | |
-| T2 | S3 | Four realistic cases with hidden acceptance tests | worker | 6 | open | |
+| T1 | S1, S2 | Summary metrics and the CLAUDE.md arm in eval.sh and eval-summary.mjs | worker | 6 | done | 0384f89 |
+| T2 | S3 | Four realistic cases with hidden acceptance tests | worker | 6 | done | 920aadc |
 | T3 | S4 | Guard corpus test | worker | 2 | open | |
 | T4 | S5 | Pilot, cost projection, full run, results | parent | 6 | open | |
 
@@ -23,3 +23,5 @@ Objective: phase 3 of the L1 plan: make "works well and as autonomous as possibl
 
 - **L1 (2026-10-29):** "ahora quiero que explores todo el proyecto y des opinion sincera y propongas cambios reales, la idea es que funcione bien y lo mas autonomo posible". Menu answer: "3. Medir — Evals con 3 brazos, 7 casos realistas, corpus de guardas; cuesta uso real (~$150-1.500)". The proposal: arms no plugin, a 40-line CLAUDE.md, Construct; metrics completion without a human, false completion, cost, false denials; no design change without its eval diff.
 - **L2 (2026-10-29):** Scope cut from the explorer's plan: the resume-after-/clear case and the Risk-2 lens-recall case need multi-session runs and the review hooks, which the eval sandbox cannot run (review-fires is already excluded from eval.sh); the ambiguous-spec case cannot be answered in a non-interactive run. Seven cases means the four new ones plus debugging-fires, large-tracked, and read-only.
+- **L3 (2026-10-29):** T2 (920aadc): multi-file-feature, two-cause-bug, hidden-contradiction, quiet-oneline; outcome.sh checked against reference solutions (7 pass); graders unchecked until a live run. oracle-budget is removed once T1 lands (tests/evals.test.mjs is T1's surface).
+- **L4 (2026-10-29):** T1 (): noHumanRate and falseCompletionRate, the claudemd arm via scripts/claudemd/make-variants.sh; RED 6/19, GREEN 19/19, full 1320/1320. The claims-done lookup assumes graders: [{name, passed}] in aggregate-result.json; the pilot (T4) checks it on a real run. oracle-budget removed (replaced by hidden-contradiction).
