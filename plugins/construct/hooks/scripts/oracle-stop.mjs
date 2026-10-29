@@ -12,7 +12,7 @@
 //       - an envelope with no recorded baseline (neither this worker's nor the task's: the start snapshot is missing) refuses the
 //         same way instead of skipping the diff check (S2 of .vault/tasks/guarantees.md);
 //     A run that spends the last attempt, or the last minute, allows the stop instead of blocking.
-//     An envelope or task state that exists but is unreadable (UnreadableState) blocks the stop naming the file (S3 of guarantees).
+//     An envelope or task state that exists but is unreadable (UnreadableState) allows the stop with a message naming the file (a block could never end); surface-guard keeps the writes denied (S3 of guarantees).
 //   bash (PostToolUseFailure on Bash): a failed run of the envelope command by a worker spends one attempt, by the same rule.
 // Block = {"decision":"block","reason":...} on stdout, as review-capture.mjs does. Any other internal error allows (fail open), and the bash mode never prints.
 // shortcut: a path written by the main thread, or by a writer that stopped before this worker started or never had a record, still counts
@@ -124,7 +124,8 @@ function main() {
       stop(input)
     } catch (error) {
       if (!(error instanceof UnreadableState)) throw error
-      process.stdout.write(`${JSON.stringify({ decision: 'block', reason: `oracle-stop: ${error.message}, so the oracle cannot judge this stop. Return needs_interaction naming the file.` })}\n`)
+      // Allowed, not blocked: no attempt can be recorded, so a block could never end; surface-guard keeps denying the worker's writes.
+      process.stdout.write(`${JSON.stringify({ systemMessage: `oracle-stop: ${error.message}, so the oracle cannot judge this stop; the stop is allowed and the worker's writes stay denied. Report the file to the user.` })}\n`)
     }
   }
 }

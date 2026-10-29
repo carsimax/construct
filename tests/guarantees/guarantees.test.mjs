@@ -128,11 +128,14 @@ describe('S3: unreadable envelope or task state', () => {
       writeFileSync(file, content)
       denied(write(w), escape(file))
     })
-    test(`${name}: the stop is blocked naming the file`, () => {
+    test(`${name}: the stop is allowed with a message naming the file, so the worker cannot loop`, () => {
       const w = setup()
       const file = pick(w.repo)
       writeFileSync(file, content)
-      blocked(stop(w), escape(file))
+      const r = stop(w)
+      const out = JSON.parse(r.stdout)
+      assert.equal(out.decision, undefined)
+      assert.match(out.systemMessage, escape(file))
     })
   }
   test("a missing envelope and state keep today's meaning: the stop is not checked", () => {
