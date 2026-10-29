@@ -23,6 +23,23 @@ Objective: <one sentence>. Branch: <branch>. Baseline: <commit>. Test runner: <c
 - **L1 (<date>):** "<the request, verbatim>"
 ```
 
+## One-task template
+
+Small code work (the oracle and the worker need a `Spec:` line) takes this, filled in before the first write; the content is five lines (header line, `S1`, the `T1` row, `L1`), the headings and the table header are fixed:
+
+```markdown
+# <Name>
+Objective: <one sentence>. Branch: <branch>. Baseline: <commit>. Test runner: <command>.
+## Specs
+- **S1 — <name>.** "<the request, verbatim>"
+## Tasks
+| ID | Specs | Task | Route | Risk | Status | Commit |
+|---|---|---|---|---|---|---|
+| T1 | S1 | <task> | worker | <Risk> | pending | — |
+## Log
+- **L1 (<date>):** "<the request, verbatim>"
+```
+
 ## Rules
 
 - Specs quote the user verbatim, mark every assumption, and add nothing unrequested. Given/When/Then is optional.

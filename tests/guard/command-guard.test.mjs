@@ -254,14 +254,10 @@ describe('harness-audit S3: nesting past the depth cap', () => {
 })
 
 describe('registration (S5)', () => {
-  test('hooks.json registers command-guard on Bash in exec form, failing open', async () => {
+  test('hooks.json has no entry of its own for command-guard: bash-guard runs it on Bash', async () => {
     const { readFileSync } = await import('node:fs')
     const hooks = JSON.parse(readFileSync(join(HOOK, '../../hooks.json'), 'utf8')).hooks
-    const group = hooks.PreToolUse.find((g) => g.hooks.some((h) => h.args?.[0].endsWith('command-guard.mjs')))
-    assert.ok(group)
-    assert.equal(group.matcher, 'Bash')
-    const entry = group.hooks.find((h) => h.args?.[0].endsWith('command-guard.mjs'))
-    assert.deepEqual(entry, { type: 'command', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/hooks/scripts/command-guard.mjs'], timeout: 10 })
-    assert.equal(entry.onFailure, undefined)
+    assert.ok(!hooks.PreToolUse.some((g) => g.hooks.some((h) => h.args?.[0].endsWith('command-guard.mjs'))))
+    assert.ok(hooks.PreToolUse.some((g) => g.matcher === 'Bash' && g.hooks.some((h) => h.args?.[0].endsWith('bash-guard.mjs'))))
   })
 })

@@ -30,7 +30,7 @@ Load this before diagnosing a failing test, broken build, error or stack trace, 
 4. Localize the failing layer, then reduce to the smallest input that still fails. A regression gets `git bisect run <the reproduction>`.
 5. Fix. A fix to code goes oracle first: the reproduction is the RED test (`construct:oracle` locks it and declares the envelope), then `construct:worker` fixes inside it; the main thread writes only `.vault/` and docs. A docs-only fix you make yourself.
 6. Guard (hard step). Whoever fixed it shows the reproduction test failing before the fix and passing after it, each as `<command>: <observed result>`; a worker report without the failing run goes back. An existing failing test already is the guard: keep it unchanged and report it. Otherwise add one.
-7. Verify end to end: the full suite and the build, then the original scenario. High-risk work (Risk item) also gets the `construct:verifier`.
+7. Verify end to end: the full suite and the build, then the original scenario. Work whose Risk names item 1, 2, or 5 also gets the `construct:verifier`.
 8. Close. Remove temporary instrumentation and any logged secret before reporting. Save the root cause with `mem_save` as `bugfix` only if it passes the memory bar (a trap a future engineer would get wrong). Resume paused work only now.
 
 ## Report

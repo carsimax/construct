@@ -4,6 +4,18 @@ Notable changes per release. Versions follow [Semantic Versioning](https://semve
 
 ## Unreleased
 
+### Changed
+
+- Review (S1): lenses review a snapshot of the working tree, so no commit is needed; a later commit with the same content keeps the approval.
+- One verifier rule (S4): `construct:verifier` runs once per pull request, only when a task's Risk names item 1, 2, or 5; items 3, 4, and 6 rely on the oracle and the lenses.
+- One Bash hook (S5): `bash-guard.mjs` is the single `PreToolUse` entry on Bash and applies the review-store guard, the command guard, and the publication gate in order.
+- `risk-line.mjs` (S6) compares a git-status fingerprint instead of hashing the whole tree.
+- Docs (S2, S7): the feature-document reference carries a one-task template for small code work; the session contract, skills, README, and CLAUDE.md describe S1-S6.
+
+### Added
+
+- `.vault/exempt-paths` (S3): lines `<glob> -- <command>`, read only from the default branch; paths matching every entry run with no oracle and no `Exempt` menu.
+
 ## 15.0.1
 
 ### Fixed

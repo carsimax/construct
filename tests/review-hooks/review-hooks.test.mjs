@@ -505,13 +505,13 @@ describe('spec-aware context', () => {
   }
   const lock = (repo, path, feature = FEATURE) => writeOracle(repo, { path, blob: 'a'.repeat(40), feature, task: 'T1', at: Date.now() })
 
-  test('a changed feature document adds its Specs section, read from HEAD, with the follow-up rule', () => {
+  test('a changed feature document adds its Specs section, read from the working tree, with the follow-up rule', () => {
     const repo = withDoc(doc('- **S1** first spec'))
     writeFileSync(join(repo, FEATURE), doc('- **S1** working tree edit'))
     const prompt = contextOf(repo, 'construct:review-risk')
     assert.match(prompt, /\.vault\/tasks\/f\.md/)
-    assert.match(prompt, /\*\*S1\*\* first spec/)
-    assert.doesNotMatch(prompt, /working tree edit/)
+    assert.match(prompt, /\*\*S1\*\* working tree edit/)
+    assert.doesNotMatch(prompt, /first spec\n/)
     assert.match(prompt, /outside them is a follow-up, not a blocker/)
   })
 

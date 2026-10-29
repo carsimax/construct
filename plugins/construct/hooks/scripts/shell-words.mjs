@@ -49,14 +49,21 @@ const ansiC = (text) =>
 //   simple     true when the command is a plain call (not a block, `if`, loop, `case`, subshell, or function);
 //   parent     the command whose substitution or body holds this one.
 // Throws ShellParseError when the text is not valid shell.
+// A text is parsed once per process: bash-guard.mjs runs three guards over one command, and each reads the same text (and its nested lines).
+// The result is shared and read-only; a failure is cached too.
+const parsed = new Map()
 export function splitCommands(input) {
-  // Any failure (parse, walk, or word extraction) is a ShellParseError, so no caller fails open on it.
-  try {
-    return readCommands(input)
-  } catch (error) {
-    if (error instanceof ShellParseError) throw error
-    throw new ShellParseError(typeof error?.Error === 'function' ? error.Error() : (error?.message ?? String(error)))
+  if (!parsed.has(input)) {
+    // Any failure (parse, walk, or word extraction) is a ShellParseError, so no caller fails open on it.
+    try {
+      parsed.set(input, readCommands(input))
+    } catch (error) {
+      parsed.set(input, error instanceof ShellParseError ? error : new ShellParseError(typeof error?.Error === 'function' ? error.Error() : (error?.message ?? String(error))))
+    }
   }
+  const result = parsed.get(input)
+  if (result instanceof ShellParseError) throw result
+  return result
 }
 
 function readCommands(input) {
