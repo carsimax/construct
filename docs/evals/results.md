@@ -6,6 +6,36 @@ The cases `iteration-cap`, `small-inline`, and `small-inline-pressure` were remo
 
 One run per case is noise: a case can move from 0 to 1 between runs. Treat single-run tables as a smoke test and claim a change only from three or more runs.
 
+## 2026-10-29 · three arms, n=30 (main after 15.0.1 and #113, feat/measure)
+
+Arms: Construct (with), no plugin (without), and, for cases marked `arms: claudemd`, a 36-line `CLAUDE.md` with no hooks (claudemd) plus Construct with that file. 30 runs per case and arm, Sonnet. 540 runs, $103.25 (plus a $15.62 pilot), 0 errored. Outcome = the case's hidden acceptance tests (`outcome.sh`); no human = outcome passed and no `AskUserQuestion`; false completion = the reply claims done (`claims-done` grader) while the outcome failed. The harness allows only a few Bash commands (`npm test`, `node --test`, read-only git), in every arm.
+
+| Case | Arm | Outcome | Ritual | False completion | Mean cost | Mean time |
+|---|---|---|---|---|---|---|
+| hidden-contradiction | with | 10% | 0% | 0% | $0.20 | 48 s |
+| hidden-contradiction | without | 100% | 0% | 0% | $0.07 | 15 s |
+| hidden-contradiction | claudemd | 0% | 0% | 0% | $0.07 | 17 s |
+| debugging-fires | with | 83% | 17% | 0% | $0.28 | 57 s |
+| debugging-fires | without | 100% | 0% | 0% | $0.05 | 9 s |
+| large-tracked | with | n/a | 100% | n/a | $0.48 | 118 s |
+| large-tracked | without | n/a | 0% | n/a | $0.09 | 19 s |
+| multi-file-feature | with | 100% | 97% | 0% | $0.44 | 99 s |
+| multi-file-feature | without | 100% | 3% | 0% | $0.09 | 21 s |
+| multi-file-feature | claudemd | 100% | 33% | 0% | $0.10 | 26 s |
+| two-cause-bug | with | 100% | 80% | 0% | $0.40 | 92 s |
+| two-cause-bug | without | 100% | 40% | 0% | $0.07 | 16 s |
+| two-cause-bug | claudemd | 100% | 93% | 0% | $0.08 | 20 s |
+
+Not run at n=30: quiet-oneline (pilot, n=5: 100% outcome in every arm, Construct $0.28 vs $0.05), oracle-first (its outcome needs an envelope only the plugin writes), oracle-conflict, read-only, debugging-stays-quiet (equal across arms in earlier runs).
+
+Reading:
+
+- Construct improved the outcome in no case and lowered it in two. hidden-contradiction: the "stop on a spec/test contradiction" rule made it stop before implementing the 29 consistent cases (3/30); the claudemd arm, with the same rule and no hooks, scored 0/30, so the rule, not the hooks, causes it. debugging-fires: 5 of 30 runs diagnosed the bug correctly but ended without applying the one-line fix, blocked in the oracle-first flow (no envelope, a locked task document, or a decision handed back to the user).
+- Construct costs about 3-6x more in money and time in every case. The ritual it enforces (feature document, oracle, worker) did not move any hidden-test outcome.
+- large-tracked is not a fair comparison: its prompt grants no Write or Edit, so only the plugin's subagents can write the feature document; it has no outcome check.
+- No arm ever claimed completion falsely.
+- The short CLAUDE.md reached the highest ritual rate on two-cause-bug (93%) at about the baseline's cost.
+
 ## 2026-10-29 · oracle envelope (feat/oracle-limits, evals at T9)
 
 One run per case and arm. 14 runs, $1.89, 378 s, 0 errored. `review-fires` is outside `eval.sh`.
