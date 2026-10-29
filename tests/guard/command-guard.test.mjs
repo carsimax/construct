@@ -224,6 +224,35 @@ describe('allowed', () => {
   })
 })
 
+describe('harness-audit S1: persistent hooks path', () => {
+  expect('deny', [
+    'git config core.hooksPath /dev/null',
+    'git config --global core.hookspath /tmp/x',
+    'git config --local --replace-all CORE.HOOKSPATH .',
+    'git -C repo config --add core.hooksPath x',
+    'git config set core.hooksPath x',
+  ])
+  silent(['git config core.hooksPath', 'git config --get core.hooksPath', 'git config user.name me', 'git config --unset core.hooksPath'])
+})
+
+// shellQuote wraps text in single quotes for one more `sh -c` layer.
+const shellQuote = (s) => `'${s.replace(/'/g, `'\\''`)}'`
+const nest = (command, layers) => Array.from({ length: layers }).reduce((c) => `sh -c ${shellQuote(c)}`, command)
+
+describe('harness-audit S3: nesting past the depth cap', () => {
+  test('a bypass nested six layers deep is denied', () => {
+    const r = run(nest('git commit -n -m x', 6))
+    assert.equal(r.decision, 'deny', r.stdout)
+    assert.match(r.reason, /^command-guard: .*nest/)
+  })
+  test('a harmless command nested six layers deep is denied too', () => {
+    assert.equal(run(nest('ls', 6)).decision, 'deny')
+  })
+  test('a harmless command nested three layers deep stays silent', () => {
+    assert.equal(run(nest('ls', 3)).stdout, '')
+  })
+})
+
 describe('construct-limits set (S3)', () => {
   const as = (command, agent_id) => run(command, { input: JSON.stringify({ session_id: 's1', cwd: process.cwd(), hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command }, ...(agent_id ? { agent_id } : {}) }) })
   for (const command of ['construct-limits set inline=300', '/opt/p/bin/construct-limits set cap=5']) {

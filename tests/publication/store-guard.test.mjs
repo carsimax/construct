@@ -113,3 +113,14 @@ describe('review-store-guard', () => {
     silent(hook('Read', { file_path: join(store, 'x') }, repo))
   })
 })
+
+describe('harness-audit S3: nesting past the depth cap', () => {
+  const shellQuote = (t) => `'${t.replace(/'/g, `'\\''`)}'`
+  const nest = (command, layers) => Array.from({ length: layers }).reduce((c) => `sh -c ${shellQuote(c)}`, command)
+  test('a review hook run nested six layers deep is denied', () => {
+    const r = hook('Bash', { command: nest('node review-capture.mjs', 6) }, repo)
+    assert.equal(r.decision, 'deny', r.stdout)
+    assert.match(r.reason, /nest more than 4 levels/)
+  })
+  test('three layers of a harmless command pass', () => silent(hook('Bash', { command: nest('ls', 3) }, repo)))
+})
