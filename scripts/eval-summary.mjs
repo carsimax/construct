@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 // Usage: eval-summary.mjs <aggregate-result.json> [outcomes.json]
 // Writes summary.json next to the aggregate file and prints a Markdown table.
-// outcomes.json has the aggregate's shape: { cases: [{ name, arms: { with: [{ passed, error? }], without: [...] } }] }.
+// outcomes.json has the aggregate's shape: { cases: [{ name, arms: { with: [{ passed, askedHuman?, error? }], without: [...] } }] }.
+// askedHuman: the run's trace has an AskUserQuestion tool use. claims-done comes from the aggregate run's graders array
+// ([{ name, passed }]). A checked run with an error (no trace or workspace) is errored: it joins neither new rate.
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
@@ -28,6 +30,13 @@ const sum = (values) => values.reduce((a, b) => a + b, 0);
 const mean = (values) => (values.length ? sum(values) / values.length : null);
 const rate = (runs) => (runs.length ? runs.filter((r) => r.passed === true).length / runs.length : null);
 
+const claimsDone = (run) => run?.graders?.find?.((g) => g.name === 'claims-done')?.passed === true;
+// Share of the traced (non-errored) checked runs for which `test(checked, run)` holds.
+const share = (runs, checked, test) => {
+  const ok = checked.map((c, i) => [c, runs[i]]).filter(([c]) => c && c.error == null);
+  return ok.length ? ok.filter(([c, r]) => test(c, r)).length / ok.length : null;
+};
+
 const rows = [];
 const totals = { runs: 0, costUsd: 0, judgeCostUsd: 0, durationSeconds: 0 };
 for (const c of aggregate.cases) {
@@ -39,10 +48,12 @@ for (const c of aggregate.cases) {
     const checked = outcomes.cases?.find((o) => o.name === c.name)?.arms?.[arm] ?? [];
     rows.push({
       case: c.name,
-      arm,
+      arm: arm === 'without' && c.name.endsWith('--claudemd') ? 'claudemd' : arm,
       runs: runs.length,
       ritualPassRate: rate(runs),
       outcomePassRate: rate(checked),
+      noHumanRate: share(runs, checked, (o) => o.passed === true && o.askedHuman === false),
+      falseCompletionRate: share(runs, checked, (o, r) => o.passed !== true && claimsDone(r)),
       meanScore: mean(nums(runs, 'score')),
       meanCostUsd: mean(nums(runs, 'costUsd')),
       meanDurationSeconds: mean(nums(runs, 'durationSeconds')),
@@ -61,11 +72,11 @@ writeFileSync(join(dirname(aggregateFile), 'summary.json'), `${JSON.stringify({ 
 const cell = (value, format) => (value === null ? '' : format(value));
 const pct = (v) => `${Math.round(v * 100)}%`;
 const lines = [
-  '| case | arm | runs | ritual pass | outcome pass | mean score | mean cost USD | mean duration s | mean turns | errored |',
-  '|---|---|---|---|---|---|---|---|---|---|',
+  '| case | arm | runs | ritual pass | outcome pass | no human | false completion | mean score | mean cost USD | mean duration s | mean turns | errored |',
+  '|---|---|---|---|---|---|---|---|---|---|---|---|',
   ...rows.map((r) => `| ${[
     r.case, r.arm, r.runs,
-    cell(r.ritualPassRate, pct), cell(r.outcomePassRate, pct),
+    cell(r.ritualPassRate, pct), cell(r.outcomePassRate, pct), cell(r.noHumanRate, pct), cell(r.falseCompletionRate, pct),
     cell(r.meanScore, (v) => v.toFixed(2)), cell(r.meanCostUsd, (v) => v.toFixed(4)),
     cell(r.meanDurationSeconds, (v) => v.toFixed(1)), cell(r.meanTurns, (v) => v.toFixed(1)),
     r.erroredRuns,
