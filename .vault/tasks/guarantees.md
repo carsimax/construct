@@ -20,10 +20,11 @@ Objective: phase 0 of the L1 plan: the guarantees of 15.0 no longer turn off sil
 | ID | Specs | Task | Route | Risk | Status | Commit |
 |---|---|---|---|---|---|---|
 | T1 | S1 | README version, install URLs, and a version-consistency test | worker | 5 | done | 437fa29 |
-| T2 | S2, S3 | Started-first, 30 s start timeout, missing baseline blocks; unreadable state denies | worker | 2 | open | |
+| T2 | S2, S3 | Started-first, 30 s start timeout, missing baseline blocks; unreadable state denies | worker | 2 | done | 0d1ed36 |
 
 ## Log
 
 - **L1 (2026-10-29):** "ahora quiero que explores todo el proyecto y des opinion sincera y propongas cambios reales, la idea es que funcione bien y lo mas autonomo posible". The user chose all four phases in the menu: "0. Bugs (15.0.1) — README a v15, worker sin control tras timeout, estado ilegible = denegar", "1. Autonomía", "2. Simplificar", "3. Medir". Phase 0 proposal quoted in S1-S3: "README a v15 + un test que compare su versión con plugin.json", "Marcar iniciado antes de la foto, timeout 30 s, y si falta baseTree con envolvente el stop bloquea", "Estado, lock o envolvente ilegibles → denegar nombrando el archivo".
 - **L2 (2026-10-29):** Confirmed before writing: README.md:4,39,57,368 name 12.0.0 while plugin.json is 15.0.0; hooks.json SubagentStart timeout is 10 s while delegation-admission.mjs:696 snapshots (up to ~25 s) before writing `started: true`; oracle-stop.mjs:91 skips the diff when no baseline exists.
 - **L3 (2026-10-29):** T1 (437fa29): RED (badge assertion), GREEN tests/version + tests/install 41/41. CONTRIBUTING Releases gains the README step.
+- **L4 (2026-10-29):** T2 (0d1ed36): RED 18/22 failing, GREEN 22/22; parent fix: oracle-record replaces an unreadable envelope and still locks (RED then GREEN). node --test: 1311 pass; claude plugin test: 100 pass; validate --strict passed. Decision: a corrupt file in the session's admission dir denies writes of any subagent without a readable record.
