@@ -41,7 +41,8 @@ function scanTasks(markdown) {
   const tasks = []
   for (i += 2; i < lines.length && lines[i].trim().startsWith('|'); i++) {
     const cells = splitRow(lines[i])
-    if (cells.length < header.length) return null
+    // A short row (a cut-off line) reads its missing cells as empty, so its task counts as unfinished.
+    while (cells.length < header.length) cells.push('')
     // An unescaped `|` in the task cell shifts the columns: join the surplus cells into it.
     const extra = cells.length - header.length
     if (extra > 0) cells.splice(titleCol, extra + 1, cells.slice(titleCol, titleCol + extra + 1).join('|'))
