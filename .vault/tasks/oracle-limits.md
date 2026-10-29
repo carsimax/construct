@@ -38,7 +38,7 @@ Objective: the oracle becomes the only source of autonomy limits. Every code tas
 | T3 | S3, S7 | Remove inline limit, iteration cap, failure-streak, backstop, construct-limits; safety tests stay green | worker | 3 | done | 4822d56 |
 | T4 | S4, S5 | SubagentStop runs the oracle; progress-based attempts and minutes per task | worker | 3, 4 | done | e049373 |
 | T5 | S6 | Diff check against the envelope at stop | worker | 2 | done | e049373 |
-| T6 | S8 | Docs, contracts, skills, agents, CHANGELOG | worker | 3 | open | |
+| T6 | S8 | Docs, contracts, skills, agents, CHANGELOG | worker | 3 | done | ecc0b01 |
 
 ## Log
 
@@ -50,3 +50,4 @@ Objective: the oracle becomes the only source of autonomy limits. Every code tas
 - **L6 (2026-10-29):** T2+T3 (4822d56): one commit (both rewrite surface-guard). Exemption built as `construct-gate oracle exempt <doc> <T#> -- <surfaces>` after an `Exempt` menu answer. RED confirmed afterwards: the new tests run against 665482a give 14 failures; GREEN node --test: 1259 pass (removed-limit tests deleted), claude plugin test: 100 pass. Prose for T6 listed by the worker; evals iteration-cap, small-inline, small-inline-pressure need a decision in T6.
 - **L7 (2026-10-29):** Delivery: one PR for the feature (CONTRIBUTING: large work goes out as one pull request, no line budget); the slice counter is mostly deletions (1869 of 2426 lines).
 - **L8 (2026-10-29):** T4+T5 (e049373): new oracle-stop.mjs (SubagentStop stop, PostToolUseFailure bash), task state next to the envelope, baseTree at the first worker start, surface-guard hard stop. RED 22/24 failing, GREEN 24/24. Parent fix: a replaced envelope drops the old task state (RED then GREEN). node --test: 1284 pass; claude plugin test: 100 pass; validate --strict passed. Shortcuts: whole-tree diff counts concurrent writers; unlocked state updates.
+- **L9 (2026-10-29):** T6 (ecc0b01): contracts, skills, agents, README, CLAUDE, CONTRIBUTING, METHODOLOGY, CHANGELOG (Breaking); evals iteration-cap, small-inline, small-inline-pressure removed by the parent (the worker's git rm was refused by the safety layer). node --test: 1278 pass; claude plugin test: 100 pass; validate --strict passed. Converge: S1-S8 each map to a done task; gap kept as follow-up: no eval covers the oracle-first path or the stop block. Version bump is the release PR.
