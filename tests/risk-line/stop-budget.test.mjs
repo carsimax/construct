@@ -12,7 +12,9 @@ test('the Stop hook timeout covers the snapshot and both git diffs', () => {
   assert.ok(entry.timeout * 1000 >= SNAPSHOT_BUDGET_MS + FALLBACK_BUDGET_MS + 2 * DIFF_BUDGET_MS + 5000, 'five seconds of slack for node and the small git calls')
 })
 
-test('risk-line bounds both diffs with the diff budget', () => {
+test('risk-line bounds the status and the diff with the diff budget', () => {
   const source = readFileSync(`${PLUGIN}hooks/scripts/risk-line.mjs`, 'utf8')
-  assert.equal(source.match(/timeout: DIFF_BUDGET_MS/g)?.length, 2)
+  assert.equal(source.match(/fingerprint\(git, root, DIFF_BUDGET_MS\)/g)?.length, 2)
+  assert.match(source, /'--untracked-files=all'\], \{ timeout \}/)
+  assert.equal(source.match(/timeout: DIFF_BUDGET_MS/g)?.length, 1)
 })

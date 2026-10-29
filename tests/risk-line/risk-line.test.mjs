@@ -53,119 +53,6 @@ describe('registration', () => {
   })
 })
 
-describe('snapshot budget', () => {
-  const slow = (e) => ({ ...e, CONSTRUCT_SNAPSHOT_BUDGET_MS: '1' })
-  const record = (e) => JSON.parse(readFileSync(join(e.CLAUDE_PLUGIN_DATA, 'risk-line', 's1.json'), 'utf8'))
-
-  test('a degraded snapshot is remembered in the record and announced once', () => {
-    const repo = makeRepo({ 'src/a.js': 'export const a = 1\n' })
-    const e = slow(env())
-    const mark = run('mark', repo, e)
-    assert.equal(mark.status, 0)
-    assert.match(mark.json.systemMessage, /time budget/)
-    assert.equal(mark.json.decision, undefined)
-    assert.equal(record(e).slow, realpathSync(repo))
-    silent(run('mark', repo, e, { extra: { prompt_id: 'p2' } }))
-    applyFiles(repo, { 'src/a.js': 'export const a = 2\n' })
-    const r = check(repo, e, 'Done.')
-    assert.equal(r.json.decision, 'block')
-    assert.equal(r.json.systemMessage, undefined)
-  })
-
-  test('the check path announces a degradation the mark did not see, and does not change the block', () => {
-    const { repo, e } = changed()
-    const r = check(repo, slow(e), 'Done.')
-    assert.equal(r.json.decision, 'block')
-    assert.match(r.json.systemMessage, /time budget/)
-    assert.equal(record(e).noticed, true)
-  })
-
-  // Rewrites the record's slow_at (or removes it) to stand for time passing.
-  const setSlowAt = (e, slowAt) => {
-    const file = join(e.CLAUDE_PLUGIN_DATA, 'risk-line', 's1.json')
-    const r = record(e)
-    if (slowAt === undefined) delete r.slow_at
-    else r.slow_at = slowAt
-    writeFileSync(file, JSON.stringify(r))
-  }
-  const HOUR = 3600 * 1000
-
-  test('a slow repository retries the full hash after the window and clears slow on success', () => {
-    const repo = makeRepo({ 'src/a.js': 'export const a = 1\n' })
-    const e = slow(env())
-    run('mark', repo, e)
-    assert.equal(typeof record(e).slow_at, 'number')
-    setSlowAt(e, Date.now() - 2 * HOUR)
-    const r = run('mark', repo, { ...e, CONSTRUCT_SNAPSHOT_BUDGET_MS: '60000' }, { extra: { prompt_id: 'p2' } })
-    assert.equal(r.stdout, '')
-    assert.equal(record(e).slow, undefined)
-    assert.equal(record(e).slow_at, undefined)
-    assert.equal(record(e).noticed, true)
-  })
-
-  test('a slow repository inside the window does not retry and keeps slow_at', () => {
-    const repo = makeRepo({ 'src/a.js': 'export const a = 1\n' })
-    const e = slow(env())
-    run('mark', repo, e)
-    const recent = Date.now() - 1000
-    setSlowAt(e, recent)
-    silent(run('mark', repo, { ...e, CONSTRUCT_SNAPSHOT_BUDGET_MS: '60000' }, { extra: { prompt_id: 'p2' } }))
-    assert.equal(record(e).slow, realpathSync(repo))
-    assert.equal(record(e).slow_at, recent)
-  })
-
-  test('a retry that is still slow refreshes slow_at and does not announce again', () => {
-    const repo = makeRepo({ 'src/a.js': 'export const a = 1\n' })
-    const e = slow(env())
-    run('mark', repo, e)
-    const old = Date.now() - 2 * HOUR
-    setSlowAt(e, old)
-    silent(run('mark', repo, e, { extra: { prompt_id: 'p2' } }))
-    assert.equal(record(e).slow, realpathSync(repo))
-    assert.ok(record(e).slow_at > old + HOUR)
-  })
-
-  test('a 12.0.2 record with slow and no slow_at retries', () => {
-    const repo = makeRepo({ 'src/a.js': 'export const a = 1\n' })
-    const e = slow(env())
-    run('mark', repo, e)
-    setSlowAt(e, undefined)
-    silent(run('mark', repo, { ...e, CONSTRUCT_SNAPSHOT_BUDGET_MS: '60000' }, { extra: { prompt_id: 'p2' } }))
-    assert.equal(record(e).slow, undefined)
-  })
-
-  test('the check path clears slow after a successful retry', () => {
-    const { repo, e } = changed()
-    const s = slow(e)
-    check(repo, s, 'Risk: none')
-    setSlowAt(e, Date.now() - 2 * HOUR)
-    // blocked is spent by the first check; a fresh mark resets nothing here, so write the record the check reads
-    const file = join(e.CLAUDE_PLUGIN_DATA, 'risk-line', 's1.json')
-    writeFileSync(file, JSON.stringify({ ...record(e), blocked: false }))
-    check(repo, { ...e, CONSTRUCT_SNAPSHOT_BUDGET_MS: '60000' }, 'Risk: none')
-    assert.equal(record(e).slow, undefined)
-  })
-
-  test('a repository remembered as slow skips the full hash', () => {
-    const repo = makeRepo({ 'src/a.js': 'export const a = 1\n' })
-    // The rewrite's ctime only differs when it crosses a second boundary; ignore ctime so the stat cache always matches.
-    git(repo, 'config', 'core.trustctime', 'false')
-    const second = Math.floor(Date.now() / 1000) - 100
-    utimesSync(join(repo, 'src/a.js'), second, second)
-    git(repo, 'update-index', '--refresh')
-    utimesSync(join(repo, '.git', 'index'), second + 50, second + 50)
-    const e = slow(env())
-    run('mark', repo, e)
-    const first = record(e).tree
-    // a same-size rewrite with a restored mtime: only the full hash sees it, and the slow repository skips that
-    writeFileSync(join(repo, 'src/a.js'), 'export const a = 2\n')
-    utimesSync(join(repo, 'src/a.js'), second, second)
-    const r = run('mark', repo, { ...e, CONSTRUCT_SNAPSHOT_BUDGET_MS: '60000' }, { extra: { prompt_id: 'p2' } })
-    assert.equal(r.stdout, '')
-    assert.equal(record(e).tree, first)
-  })
-})
-
 describe('check', () => {
   test('blocks a change outside .vault/tasks without a Risk line', () => {
     const { repo, e } = changed()
@@ -297,13 +184,23 @@ describe('check', () => {
 })
 
 describe('mark', () => {
-  test('prints nothing and records the tree', () => {
+  test('prints nothing and records a fingerprint of the listed paths', () => {
     const repo = makeRepo({ 'src/a.js': 'x\n' })
     const e = env()
     const r = run('mark', repo, e)
     silent(r)
-    assert.match(readFileSync(join(e.CLAUDE_PLUGIN_DATA, 'risk-line', 's1.json'), 'utf8'), /"tree":"[0-9a-f]{40,}"/)
-    assert.equal(JSON.parse(readFileSync(join(e.CLAUDE_PLUGIN_DATA, 'risk-line', 's1.json'), 'utf8')).root, realpathSync(repo))
+    const record = JSON.parse(readFileSync(join(e.CLAUDE_PLUGIN_DATA, 'risk-line', 's1.json'), 'utf8'))
+    assert.equal(record.root, realpathSync(repo))
+    assert.deepEqual(record.fp, {})
+  })
+
+  test('a dirty path is recorded with its status, size and mtime', () => {
+    const repo = makeRepo({ 'src/a.js': 'x\n' })
+    applyFiles(repo, { 'src/a.js': 'xyz\n' })
+    const e = env()
+    silent(run('mark', repo, e))
+    const record = JSON.parse(readFileSync(join(e.CLAUDE_PLUGIN_DATA, 'risk-line', 's1.json'), 'utf8'))
+    assert.match(record.fp['src/a.js'], /^ M 4 \d/)
   })
 })
 
@@ -340,15 +237,15 @@ describe('mark across repeated UserPromptSubmit', () => {
     silent(check(repo, e, 'Done.'))
   })
 
-  test('a repeated prompt_id returns before freezing the working tree', () => {
+  test('a repeated prompt_id leaves the record untouched', () => {
     const repo = makeRepo({ 'src/a.js': 'export const a = 1\n' })
     const e = env()
     silent(mark(repo, e, 'p1'))
     applyFiles(repo, { 'src/new.js': 'export const unique = 123456\n' })
-    const objects = () => execFileSync('git', ['count-objects', '-v'], { cwd: repo, encoding: 'utf8' })
-    const before = objects()
+    const file = join(e.CLAUDE_PLUGIN_DATA, 'risk-line', 's1.json')
+    const before = readFileSync(file, 'utf8')
     silent(mark(repo, e, 'p1'))
-    assert.equal(objects(), before)
+    assert.equal(readFileSync(file, 'utf8'), before)
   })
 
   test('without a prompt_id every mark re-marks, as before', () => {
@@ -499,5 +396,80 @@ describe('verifier-weakening markers (S2)', () => {
     assert.match(r.json.reason, /Risk: none/)
     assert.match(r.json.reason, /a\.test\.js:1/)
     silent(check(repo, e, 'Done.'))
+  })
+})
+
+describe('fingerprint (S6)', () => {
+  const tick = (repo, path) => {
+    const t = new Date(Date.now() + 5000)
+    utimesSync(join(repo, path), t, t)
+  }
+
+  test('a path edited between mark and check is reported', () => {
+    const { repo, e } = changed()
+    assert.match(check(repo, e, 'Done.').json.reason, /src\/a\.js/)
+  })
+
+  test('a path already dirty at mark and edited again (size) is reported', () => {
+    const repo = makeRepo({ 'src/a.js': 'export const a = 1\n' })
+    applyFiles(repo, { 'src/a.js': 'export const a = 2\n' })
+    const e = env()
+    silent(run('mark', repo, e))
+    applyFiles(repo, { 'src/a.js': 'export const a = 22\n' })
+    assert.match(check(repo, e, 'Done.').json.reason, /src\/a\.js/)
+  })
+
+  test('a path already dirty at mark and rewritten with the same size and a new mtime is reported', () => {
+    const repo = makeRepo({ 'src/a.js': 'export const a = 1\n' })
+    applyFiles(repo, { 'src/a.js': 'export const a = 2\n' })
+    const e = env()
+    silent(run('mark', repo, e))
+    applyFiles(repo, { 'src/a.js': 'export const a = 3\n' })
+    tick(repo, 'src/a.js')
+    assert.match(check(repo, e, 'Done.').json.reason, /src\/a\.js/)
+  })
+
+  test('an untouched dirty path is not reported', () => {
+    const repo = makeRepo({ 'src/a.js': 'export const a = 1\n' })
+    applyFiles(repo, { 'src/a.js': 'export const a = 2\n', 'src/n.js': 'export const n = 1\n' })
+    const e = env()
+    silent(run('mark', repo, e))
+    silent(check(repo, e, 'Done.'))
+  })
+
+  test('a new untracked file is reported, and a marker in it is scanned', () => {
+    const repo = makeRepo({ 'src/a.js': 'export const a = 1\n' })
+    const e = env()
+    silent(run('mark', repo, e))
+    applyFiles(repo, { 'src/new.test.js': 'it.skip(1)\n' })
+    const r = check(repo, e, 'Done.\nRisk: none')
+    assert.equal(r.json.decision, 'block')
+    assert.match(r.json.reason, /new\.test\.js:1/)
+  })
+
+  test('a path deleted after the mark is reported', () => {
+    const repo = makeRepo({ 'src/a.js': 'export const a = 1\n' })
+    const e = env()
+    silent(run('mark', repo, e))
+    git(repo, 'rm', '-q', 'src/a.js')
+    assert.match(check(repo, e, 'Done.').json.reason, /src\/a\.js/)
+  })
+
+  test('an old record with a tree and no fingerprint blocks nothing', () => {
+    const { repo, e } = changed()
+    const file = join(e.CLAUDE_PLUGIN_DATA, 'risk-line', 's1.json')
+    const { root, blocked } = JSON.parse(readFileSync(file, 'utf8'))
+    writeFileSync(file, JSON.stringify({ root, tree: 'a'.repeat(40), blocked }))
+    silent(check(repo, e, 'Done.'))
+  })
+
+  test('a repeated prompt_id re-marks an old record that has no fingerprint', () => {
+    const repo = makeRepo({ 'src/a.js': 'export const a = 1\n' })
+    const e = env()
+    const file = join(e.CLAUDE_PLUGIN_DATA, 'risk-line', 's1.json')
+    mkdirSync(join(e.CLAUDE_PLUGIN_DATA, 'risk-line'), { recursive: true })
+    writeFileSync(file, JSON.stringify({ root: realpathSync(repo), tree: 'a'.repeat(40), blocked: false, prompt_id: 'p1' }))
+    silent(run('mark', repo, e, { extra: { prompt_id: 'p1' } }))
+    assert.deepEqual(JSON.parse(readFileSync(file, 'utf8')).fp, {})
   })
 })

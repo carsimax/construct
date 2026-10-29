@@ -1,13 +1,16 @@
-// Risk line gate. `mark` (UserPromptSubmit) records the working-state tree at the
-// start of a turn (kept across repeated events of the same prompt_id) and prints nothing, because stdout would enter the model's
-// context. `check` (Stop) blocks the stop once per turn when paths outside
-// .vault/tasks/ changed and the final message has no Risk line. It fails open: any
-// error, and every uncertain state, means no output and exit 0. When the full hash of a repository
-// runs out of its time budget, the record remembers it (`slow`) so later calls skip the full hash, and
-// the user gets one `systemMessage` per session (`noticed`).
-// The marker scan flags weakened-verifier markers and TODO comments, whole-line or trailing after code.
+// Risk line gate. `mark` (UserPromptSubmit) records a fingerprint of the working state at the
+// start of a turn (kept across repeated events of the same prompt_id) and prints nothing, because stdout
+// would enter the model's context. The fingerprint is `git status --porcelain=v1 -z --untracked-files=all`
+// plus the size and mtime of each listed path (a missing path is recorded as deleted), so no file is hashed.
+// `check` (Stop) blocks the stop once per turn when paths outside .vault/tasks/ changed (entries that
+// differ between the mark and now, or exist in only one) and the final message has no Risk line, or
+// when the changed paths add a skipped, focused, or stub test marker or a TODO comment (whole-line or
+// trailing after code; `git diff` over the changed paths only, untracked files read directly).
+// It fails open: any error, and every uncertain state (an old record with `tree` and no
+// fingerprint included), means no output and exit 0.
+// shortcut: a same-size rewrite with a restored mtime of a path already dirty at the mark is missed, upgrade by hashing the listed paths if it bites.
 // Usage: node risk-line.mjs mark|check   (hook JSON on stdin)
-import { mkdirSync, readFileSync, realpathSync } from 'node:fs'
+import { lstatSync, mkdirSync, readFileSync, realpathSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { dataDir, hasOpenSubagents, pruneState, readInput, safeName } from './hook-io.mjs'
@@ -34,24 +37,30 @@ const TODO = /^\s*(?:\/\/|#|\/\*|\*|--)\s*TODO\b|\S\s+(?:\/\/|#)\s*TODO\b/
 // whitespace or `(`; the space after the colon is optional.
 const RISK_LINE = /^[ \t]*(?:(?:[-*+]|\d+[.)])[ \t]+)?[*_`]*Risk[*_`]*:[*_`]*[ \t]*[*_`]*(?:none|items? [1-6](?:,[ \t]*[1-6])*)[*_`]*(?=$|\s|\()/m
 
-const NOTICE =
-  'Construct: this repository is too large to hash fully within the time budget, so the Risk-line gate now trusts the git index stat cache and can miss a same-size rewrite whose mtime was restored.'
+// A path whose marker scan reads the file (untracked) is skipped above this size.
+const MAX_SCAN_BYTES = 1024 * 1024
 
-// A repository marked slow skips the full hash for this long, then the next snapshot tries it again.
-const SLOW_RETRY_MS = 60 * 60 * 1000
-
-// snapshot freezes the working tree, going straight to the index-seeded one for a repository the record
-// marked slow until SLOW_RETRY_MS passed (a record without slow_at, from 12.0.2, is due), and returns the
-// record fields to keep, the notice to show (once per session) and whether a retry ran.
-function snapshot(freezeWorkingTree, root, record, now = Date.now()) {
-  const slow = record?.slow === root
-  const retry = slow && !(now - record.slow_at < SLOW_RETRY_MS)
-  const frozen = freezeWorkingTree(root, { indexSeeded: slow && !retry })
-  const noticed = record?.noticed === true
-  const other = record?.slow && !slow ? { slow: record.slow, ...(record.slow_at ? { slow_at: record.slow_at } : {}) } : {}
-  const slowKeep = frozen.degraded ? { slow: root, slow_at: retry || !slow ? now : record.slow_at } : other
-  const keep = { ...slowKeep, ...(frozen.degraded || noticed ? { noticed: true } : {}) }
-  return { frozen, keep, notice: frozen.degraded && !noticed ? NOTICE : null, retried: retry }
+// fingerprint maps each path git status lists to `<XY> <size> <mtimeMs>` (`<XY> deleted` when it is gone).
+// A rename or copy lists its source too, so both ends count as changed.
+function fingerprint(git, root, timeout) {
+  const out = git(root, ['status', '--porcelain=v1', '-z', '--untracked-files=all'], { timeout }).toString('utf8').split('\0')
+  const map = {}
+  const stat = (path, code) => {
+    try {
+      const st = lstatSync(join(root, path))
+      map[path] = `${code} ${st.size} ${st.mtimeMs}`
+    } catch {
+      map[path] = `${code} deleted`
+    }
+  }
+  for (let i = 0; i < out.length; i++) {
+    const entry = out[i]
+    if (entry.length < 4) continue
+    const code = entry.slice(0, 2)
+    stat(entry.slice(3), code)
+    if (/[RC]/.test(code)) stat(out[++i] ?? '', `${code}<`)
+  }
+  return map
 }
 
 const recordFile = (session) => {
@@ -69,7 +78,7 @@ function readRecord(file) {
     throw error
   }
   const parsed = JSON.parse(text)
-  if (typeof parsed?.tree !== 'string') throw new Error('unexpected record file')
+  if (parsed === null || typeof parsed !== 'object') throw new Error('unexpected record file')
   return parsed
 }
 
@@ -96,6 +105,19 @@ function markerHits(diff) {
   return hits
 }
 
+// untrackedDiff renders an untracked text file as an all-added -U0 diff, so markerHits reads it like a tracked one.
+function untrackedDiff(root, path) {
+  try {
+    const st = lstatSync(join(root, path))
+    if (!st.isFile() || st.size > MAX_SCAN_BYTES) return ''
+    const text = readFileSync(join(root, path), 'utf8')
+    if (text.includes('\0')) return ''
+    return `+++ b/${path}\n@@ -0,0 +1 @@\n${text.split('\n').map((l) => `+${l}`).join('\n')}\n`
+  } catch {
+    return ''
+  }
+}
+
 async function main() {
   const mode = process.argv[2]
   const input = readInput()
@@ -113,7 +135,7 @@ async function main() {
     if (!record || record.blocked === true) return
   }
 
-  const { repositoryRoot, freezeWorkingTree, git, headCommit, atomicWrite, DIFF_BUDGET_MS } = await import('./git-tree.mjs')
+  const { repositoryRoot, git, headCommit, atomicWrite, DIFF_BUDGET_MS } = await import('./git-tree.mjs')
 
   let root
   try {
@@ -143,41 +165,31 @@ async function main() {
     } catch {
       // A corrupt record is replaced.
     }
-    if (promptId && previous && previous.root === root && previous.prompt_id === promptId) return
-    const { frozen, keep, notice } = snapshot(freezeWorkingTree, root, previous)
-    write({ root, tree: frozen.candidateTree, blocked: false, ...keep, ...(promptId ? { prompt_id: promptId } : {}) })
-    if (notice) process.stdout.write(`${JSON.stringify({ systemMessage: notice })}\n`)
+    if (promptId && previous && previous.fp && previous.root === root && previous.prompt_id === promptId) return
+    write({ root, fp: fingerprint(git, root, DIFF_BUDGET_MS), blocked: false, ...(promptId ? { prompt_id: promptId } : {}) })
     return
   }
 
-  const { frozen, keep, notice, retried } = snapshot(freezeWorkingTree, root, record)
-  const { candidateTree } = frozen
-  const notify = () => {
-    if (notice) process.stdout.write(`${JSON.stringify({ systemMessage: notice })}\n`)
-  }
-  // A record from another repository, or an old one without a root, is not this turn's.
-  if (record.root !== root) return
-  // slow and slow_at come only from keep, so a successful retry clears them in every later write.
-  const { slow: _slow, slow_at: _slowAt, ...rest } = record
-  const current = { ...rest, ...keep }
-  if (notice || retried) write(current)
-  if (record.tree === candidateTree) return notify()
-  const paths = git(root, ['diff', '--no-renames', '--name-only', '-z', record.tree, candidateTree], { timeout: DIFF_BUDGET_MS })
-    .toString('utf8')
-    .split('\0')
-    .filter((path) => path !== '' && !path.startsWith('.vault/tasks/'))
-  if (paths.length === 0) return notify()
+  // A record from another repository, an old one without a root, or one from before the fingerprint (`tree`) is not this turn's.
+  if (record.root !== root || !record.fp) return
+  const now = fingerprint(git, root, DIFF_BUDGET_MS)
+  const changed = [...new Set([...Object.keys(record.fp), ...Object.keys(now)])].filter((path) => record.fp[path] !== now[path])
+  const paths = changed.filter((path) => path !== '' && !path.startsWith('.vault/tasks/'))
+  if (paths.length === 0) return
   const riskMissing = !RISK_LINE.test(input.last_assistant_message)
   let hits = []
   try {
-    hits = markerHits(git(root, ['-c', 'core.quotepath=off', 'diff', '-U0', record.tree, candidateTree], { timeout: DIFF_BUDGET_MS }).toString('utf8'))
+    const untracked = paths.filter((path) => now[path]?.startsWith('?? '))
+    const tracked = paths.filter((path) => !untracked.includes(path)).slice(0, 500)
+    const diff = tracked.length === 0 ? '' : git(root, ['--literal-pathspecs', '-c', 'core.quotepath=off', 'diff', '-U0', 'HEAD', '--', ...tracked], { timeout: DIFF_BUDGET_MS }).toString('utf8')
+    hits = markerHits(diff + untracked.map((path) => untrackedDiff(root, path)).join(''))
   } catch {
     // Fail open on the marker scan.
   }
-  if (!riskMissing && hits.length === 0) return notify()
+  if (!riskMissing && hits.length === 0) return
 
   // One block per turn: the next Stop of this turn finds the record spent.
-  write({ ...current, blocked: true })
+  write({ ...record, blocked: true })
   const list = (items) => items.slice(0, MAX_PATHS).join(', ') + (items.length > MAX_PATHS ? `, and ${items.length - MAX_PATHS} more` : '')
   const reasons = []
   if (riskMissing) {
@@ -190,7 +202,7 @@ async function main() {
     reasons.push(`Verifier-weakening marker added: ${list(hits)}. Remove the marker, or explain in the final message why it must stay.`)
   }
   const reason = reasons.join(' ')
-  process.stdout.write(`${JSON.stringify({ decision: 'block', reason, ...(notice ? { systemMessage: notice } : {}) })}\n`)
+  process.stdout.write(`${JSON.stringify({ decision: 'block', reason })}\n`)
 }
 
 // Run only as a script.
