@@ -2,7 +2,7 @@
 name: review
 user-invocable: false
 allowed-tools: Bash(node "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/skill-context.mjs" *)
-description: "Mandatory outside review of high-risk work units, by lens agents the hooks feed and record, plus the dual blind review on request. Trigger: a unit whose Risk names an item is committed and ready to publish, the publication gate denied a push, PR, or release, or the user asks for a review, a dual review, or an adversarial review."
+description: "Mandatory outside review of high-risk work units, by lens agents the hooks feed and record, plus the dual blind review on request. Trigger: a unit whose Risk names an item is ready to publish, the publication gate denied a push, PR, or release, or the user asks for a review, a dual review, or an adversarial review."
 license: MIT
 metadata:
   author: Construct
@@ -15,7 +15,7 @@ metadata:
 
 ## When
 
-Run this when a unit whose Risk names an item is committed and ready, when `publication-gate` blocked a `git push`, `gh pr create`, or `gh release create`, and also whenever the user requests one. A unit with Risk `none` is not reviewed unless the user asks. For a dual or adversarial review of a concrete target, or a check of a plan or claim, see [dual review](references/dual-review.md); it replaces the lens review for that target, never both.
+Run this when a unit whose Risk names an item is ready, when `publication-gate` blocked a `git push`, `gh pr create`, or `gh release create`, and also whenever the user requests one. A unit with Risk `none` is not reviewed unless the user asks. For a dual or adversarial review of a concrete target, or a check of a plan or claim, see [dual review](references/dual-review.md); it replaces the lens review for that target, never both.
 
 ## Which lenses
 
@@ -34,7 +34,7 @@ The required lenses are the union of the rows for every Risk item in the feature
 
 ## Run it
 
-1. Commit, and run the project's formatters first. A new commit is a new subject, so review after the last commit; the head under review is always `HEAD`.
+1. Run the project's formatters first, then review; no commit is needed. The head under review is a snapshot of the working tree (tracked and untracked, not ignored), so any later edit is a new subject. A commit with exactly the reviewed content keeps the approval.
 2. Find the base: the merge-base of `HEAD` with the default branch. The gate's denial prints it.
 3. Launch every required lens in parallel with the `Agent` tool. Each prompt holds exactly one line, `Review subject: <base>`, and nothing else is needed.
 4. Wait for all of them, read each verdict, and fix what a lens rejected (see Verdicts).

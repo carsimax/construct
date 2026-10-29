@@ -1,6 +1,6 @@
 // PreToolUse hook on Agent: a construct:review-* lens gets its whole context
 // from here, so the orchestrator never pastes evidence. The prompt names the
-// subject with one line, `Review subject: <base>` (the head is HEAD). The hook builds the binding, name-status, numstat, per-path
+// subject with one line, `Review subject: <base>` (the head is a snapshot of the working tree, committed or not). The hook builds the binding, name-status, numstat, per-path
 // patches (a deleted path, or a pinned vendored file whose blob hash matches, is listed with a marker, not its content; plus the
 // security checklist for review-risk) from the two trees, replaces the
 // prompt with it, and records the pending lens for review-capture.mjs. A review
@@ -9,7 +9,7 @@
 // Usage: node review-context.mjs   (hook JSON on stdin)
 import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
-import { git, repositoryRoot } from './git-tree.mjs'
+import { freezeWorkingTree, git, repositoryRoot } from './git-tree.mjs'
 import { readInput } from './hook-io.mjs'
 import { lensOf } from './roles.mjs'
 import { activeLocks } from './publication-gate.mjs'
@@ -66,15 +66,15 @@ function locksSection(root, manifest) {
   return `ODD_REVIEW_LOCKS_BEGIN\nLocked oracles touched by this diff: a change to a locked oracle is a finding:\n${rows.join('\n')}\nODD_REVIEW_LOCKS_END\n`
 }
 
-async function buildContext(root, lens, base, head) {
+async function buildContext(root, lens, base) {
   const baseTree = out(root, ['rev-parse', '--verify', `${base}^{tree}`]).trim()
-  const headTree = out(root, ['rev-parse', '--verify', `${head}^{tree}`]).trim()
+  const headTree = freezeWorkingTree(root).candidateTree
   const subject = subjectHash(baseTree, headTree)
   const records = out(root, ['diff', '--name-status', '-z', ...DIFF_FLAGS, baseTree, headTree, '--']).split('\0')
   const nameStatus = []
   for (let i = 0; i + 1 < records.length; i += 2) nameStatus.push({ status: records[i], path: records[i + 1] })
   const manifest = nameStatus.map((entry) => entry.path)
-  if (manifest.length === 0) throw new Error(`${base} and ${head} have the same tree: nothing to review`)
+  if (manifest.length === 0) throw new Error(`${base} and the working tree have the same tree: nothing to review`)
   const numstat = out(root, ['diff', '--numstat', '-z', ...DIFF_FLAGS, baseTree, headTree, '--'])
     .split('\0')
     .filter(Boolean)
@@ -121,24 +121,22 @@ async function main() {
   if (!lens) return
   const agent = toolInput.subagent_type
   const base = SUBJECT_LINE.exec(toolInput.prompt)?.[1]
-  const head = 'HEAD'
   if (base?.includes('..')) {
     deny(`${agent} was given a range (${base}): the \`<base>..<head>\` form was removed. Review the whole branch from the merge-base with the default branch, with one line \`${FORM}\`.`)
     return
   }
   if (!base || base.startsWith('-')) {
-    deny(`${agent} needs its subject: put one line \`${FORM}\` in the prompt (the head is HEAD), and this hook injects the evidence.`)
+    deny(`${agent} needs its subject: put one line \`${FORM}\` in the prompt (the head is the working tree), and this hook injects the evidence.`)
     return
   }
   try {
     const root = repositoryRoot(input.cwd)
     git(root, ['rev-parse', '--verify', '-q', `${base}^{commit}`])
-    git(root, ['rev-parse', '--verify', '-q', `${head}^{commit}`])
-    const { text, subject, manifest, baseTree, headTree } = await buildContext(root, lens, base, head)
+    const { text, subject, manifest, baseTree, headTree } = await buildContext(root, lens, base)
     writePending(root, { lens, subject_hash: subject, base_tree: baseTree, head_tree: headTree, manifest, session_id: input.session_id, attempts: 0, at: Date.now() })
     decide('allow', { permissionDecisionReason: `construct: injected the review context for ${lens}`, updatedInput: { ...toolInput, prompt: text } })
   } catch (error) {
-    deny(`${agent} could not be prepared: ${error.message}. Use \`${FORM}\` naming a ref that resolves in this repository, with at least one commit on HEAD.`)
+    deny(`${agent} could not be prepared: ${error.message}. Use \`${FORM}\` naming a ref that resolves in this repository, in a repository with at least one commit.`)
   }
 }
 
