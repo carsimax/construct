@@ -16,6 +16,15 @@ Notable changes per release. Versions follow [Semantic Versioning](https://semve
 
 - `.vault/exempt-paths` (S3): lines `<glob> -- <command>`, read only from the default branch; paths matching every entry run with no oracle and no `Exempt` menu.
 
+## 15.0.1
+
+### Fixed
+
+- A worker is confined from its start: `delegation-admission` records it as started before taking the start snapshot, and that SubagentStart hook's timeout rises from 10 s to 30 s. Before, a slow snapshot on a large repository let the host kill the hook, leaving the worker with no record, so `surface-guard` allowed every write and `oracle-stop` checked nothing.
+- A worker with an envelope and no start snapshot is blocked at its stop (spending an attempt), instead of skipping the diff check.
+- An envelope, task state, oracle lock, or writer record that exists but cannot be read denies the worker launch, its writes, and publication, naming the file, instead of counting as absent. An unreadable task state allows the stop with a message, since no attempt could be recorded. `oracle-record` replaces an unreadable envelope and still locks its tests.
+- The README badge, install URLs, and current version named 12.0.0; a test now pins them to `plugin.json`, and the release steps include the README.
+
 ## 15.0.0
 
 ### Breaking
