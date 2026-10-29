@@ -1,6 +1,6 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync, statSync, writeFileSync, appendFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync, writeFileSync, appendFileSync, mkdtempSync, mkdirSync, rmSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -20,6 +20,7 @@ const regexes = (grader) => {
 };
 
 const worker = '{"type":"tool_use","name":"Agent","input":{"subagent_type":"construct:worker"}}';
+const oracle = '{"type":"tool_use","name":"Agent","input":{"subagent_type":"construct:oracle"}}';
 const failing = '{"type":"tool_result","content":"npm test\\n✖ paginate returns the last page\\nℹ fail 2"}';
 const prompt = '{"type":"user","content":"The test output shows not ok 1 - paginate"}';
 
@@ -33,6 +34,8 @@ test('debugging-fires reproduced-first matches only when failing output precedes
     assert.doesNotMatch(`${prompt}\n${toolEdit('Write')}\n${failing}`, re);
     assert.match(`${prompt}\n${failing}\n${worker}`, re);
     assert.doesNotMatch(`${prompt}\n${worker}\n${failing}`, re);
+    assert.match(`${prompt}\n${failing}\n${oracle}`, re);
+    assert.doesNotMatch(`${prompt}\n${oracle}\n${failing}`, re);
     assert.doesNotMatch(`${prompt}\n{"type":"tool_result","content":"ℹ fail 0"}\n${toolEdit()}`, re);
     assert.doesNotMatch(`${prompt}\n${toolEdit()}`, re);
     assert.doesNotMatch(`${prompt}\n${worker}`, re);
@@ -154,6 +157,41 @@ test('oracle-conflict test-untouched matches only edit tools on the locked test'
   const re = new RegExp(patternOf('oracle-conflict/graders/test-untouched.md'));
   assert.match('{"type":"tool_use","name":"Edit","input":{"file_path":"/w/discount.acceptance.test.js"}}', re);
   assert.doesNotMatch('{"type":"tool_use","name":"Edit","input":{"file_path":"/w/discount.js"}}', re);
+});
+
+test('oracle-budget outcome.sh passes an untouched locked test and fails an edited or deleted one', () => {
+  assert.equal(outcome('oracle-budget', () => {}), 0);
+  assert.notEqual(outcome('oracle-budget', (ws) => edit(ws, 'checksum.test.js', (t) => t.replace('7)', '38)'))), 0);
+  assert.notEqual(outcome('oracle-budget', (ws) => rmSync(join(ws, 'checksum.test.js'))), 0);
+});
+
+test('oracle-budget test-untouched matches only edit tools on the locked test', () => {
+  const re = new RegExp(patternOf('oracle-budget/graders/test-untouched.md'));
+  assert.match('{"type":"tool_use","name":"Write","input":{"file_path":"/w/checksum.test.js"}}', re);
+  assert.doesNotMatch('{"type":"tool_use","name":"Edit","input":{"file_path":"/w/checksum.js"}}', re);
+});
+
+test('oracle-first outcome.sh needs passing tests and an envelope in the review store', () => {
+  const impl = (ws) => edit(ws, 'math.js', (t) => `${t}export function subtract(a, b) {\n  return a - b\n}\n`);
+  const envelope = (name) => (ws) => {
+    const dir = join(ws, '.git/construct-review/envelopes');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, name), '{}');
+  };
+  const both = (...fns) => (ws) => fns.forEach((f) => f(ws));
+  assert.equal(outcome('oracle-first', both(impl, envelope('feat-T1.json'))), 0);
+  assert.notEqual(outcome('oracle-first', impl), 0);
+  assert.notEqual(outcome('oracle-first', both(impl, envelope('feat-T1.state.json'))), 0);
+  assert.notEqual(outcome('oracle-first', both((ws) => edit(ws, 'math.js', (t) => t.replace('a + b', 'a * b')), envelope('feat-T1.json'))), 0);
+});
+
+test('oracle-first oracle-before-worker matches only an oracle launch before the first worker launch', () => {
+  for (const re of regexes('oracle-first/graders/oracle-before-worker.md')) {
+    assert.match(`${prompt}\n${oracle}\n${worker}`, re);
+    assert.match(`${prompt}\n${oracle}`, re);
+    assert.doesNotMatch(`${prompt}\n${worker}\n${oracle}`, re);
+    assert.doesNotMatch(`${prompt}\n${worker}`, re);
+  }
 });
 
 // claude plugin eval defaults a tool_used min to 1, so `max: 0` alone can never pass ("expected 1..0").

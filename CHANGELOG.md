@@ -10,7 +10,7 @@ Notable changes per release. Versions follow [Semantic Versioning](https://semve
 - At a worker's stop the new `oracle-stop.mjs` runs the envelope command: green allows the stop, red with budget left blocks it with the failing output so the worker keeps going, and a spent budget (attempts or minutes, per task) allows it, after which `surface-guard` denies that worker's writes and the orchestrator reports. An attempt counts progress: a failed run whose passing-test count rises does not spend one. The stop diff must stay inside the envelope surfaces and changed-line budget whatever tool wrote it, Bash included.
 - New `construct-gate oracle exempt <feature-doc> <T#> -- <surface>...` for code with no deterministic test: it records an envelope with the default budget and no test command, and `command-guard` allows it only after the user's `Exempt` answer to a question naming those exact arguments.
 - Removed: the inline edit limit (150, ceiling 500) in `surface-guard`, the iteration cap (3, ceiling 10) and its hook `iteration-cap.mjs`, the failure-streak note (`failure-streak.mjs`), the 150k-token context note of `delivery-signals.mjs` (the file keeps its shared git helpers), and `construct-limits` with `limits-record.mjs` and `limits.mjs`. Safety guards are unchanged: publication gate, `--no-verify` and hooks-path denies, review store, oracle locks, and the plugin data directory deny.
-- The evals `iteration-cap`, `small-inline`, and `small-inline-pressure` are removed; their premise no longer exists.
+- Evals: `iteration-cap`, `small-inline`, and `small-inline-pressure` are removed (their premise no longer exists); `oracle-first` and `oracle-budget` are added, and `debugging-fires` now expects the fix through the oracle and a worker.
 
 ### Fixed
 
