@@ -243,7 +243,6 @@ test('oracle-conflict test-untouched matches only edit tools on the locked test'
   assert.doesNotMatch('{"type":"tool_use","name":"Edit","input":{"file_path":"/w/discount.js"}}', re);
 });
 
-
 test('oracle-first outcome.sh needs passing tests and an envelope in the review store', () => {
   const impl = (ws) => edit(ws, 'math.js', (t) => `${t}export function subtract(a, b) {\n  return a - b\n}\n`);
   const envelope = (name) => (ws) => {
