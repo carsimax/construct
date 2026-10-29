@@ -442,13 +442,13 @@ test('an installed construct at another version warns and names the update comma
   writeFileSync(join(box.state, 'plugins'), PLUGIN_LIST('2.1.0'))
   const run = install(box)
   assert.equal(run.status, 0, run.stderr)
-  assert.match(run.stderr, /construct@construct 2\.1\.0 is installed.*14\.0\.0.*claude plugin update construct@construct/)
+  assert.match(run.stderr, /construct@construct 2\.1\.0 is installed.*15\.0\.0.*claude plugin update construct@construct/)
   assert.match(run.stdout, /Warnings:/)
   assert.ok(!run.calls.some((c) => /^claude plugin (install|update)/.test(c)), 'the install is never modified')
 })
 
 test('an installed construct at this version, a newer one, or with no readable version, gets the plain skip', () => {
-  for (const version of ['14.0.0', '14.1.0', '']) {
+  for (const version of ['15.0.0', '15.1.0', '']) {
     const box = sandbox()
     writeFileSync(join(box.state, 'plugins'), PLUGIN_LIST(version))
     const run = install(box)
