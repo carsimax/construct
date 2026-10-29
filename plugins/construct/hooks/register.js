@@ -228,9 +228,10 @@ export function register(on) {
   }).catch(($, e, next) => next(e))
 
   // A tool call. The call stays open while a question or a plan waits on the human (S8b), so
-  // AskUserQuestion and ExitPlanMode block the band until it returns; any settled call clears a block.
+  // AskUserQuestion and ExitPlanMode block the band until it returns; any other call clears a block when it
+  // starts, since a denied ask never gets a call of its own.
   on('tool.call', async ($, e, next) => {
-    if (isBlockingTool(e.tool)) await feed($, onBlocked)
+    await feed($, isBlockingTool(e.tool) ? onBlocked : onUnblocked)
     try {
       return await next(e)
     } finally {

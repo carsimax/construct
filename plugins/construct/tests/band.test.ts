@@ -235,6 +235,22 @@ test('a tool.call after an ask settles it: the band is no longer blocked', async
   expect(await status()).not.toContain('◆ waiting')
 })
 
+test('harness-audit S8: a call after a denied ask clears the block when it starts', async ($, on) => {
+  let release = () => {}
+  const held = new Promise<void>((r) => (release = r))
+  await start($, on, { decision: askingGate, hold: () => held })
+  await checkAsk($, { tool: 'Bash', input: { command: 'rm x' }, tool_use_id: 'tu-1' })
+  await settle()
+  const status = await reader($)
+  expect(await status()).toContain('◆ waiting on you')
+  // The ask was denied: tu-1 never runs. The next call is read while it is still running.
+  const running = $.tool.call({ tool: 'Bash', command: 'sleep 9', tool_use_id: 'tu-2' } as any)
+  await settle()
+  expect(await status()).not.toContain('◆ waiting')
+  release()
+  await running
+})
+
 test('the band draws no Client element and no rail', async ($, on) => {
   await start($, on)
   await $.turn.start({ text: 'go', turnId: 't3' })
