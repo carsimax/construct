@@ -461,7 +461,7 @@ describe('start mode (F10)', () => {
     const hooks = JSON.parse(readFileSync(join(PLUGIN, 'hooks/hooks.json'), 'utf8')).hooks
     const script = '${CLAUDE_PLUGIN_ROOT}/hooks/scripts/delegation-admission.mjs'
     const entry = hooks.SubagentStart.flatMap((g) => g.hooks).find((h) => h.args?.[0] === script)
-    assert.deepEqual(entry, { type: 'command', command: 'node', args: [script, 'start'], timeout: 10 })
+    assert.deepEqual(entry, { type: 'command', command: 'node', args: [script, 'start'], timeout: 30 })
   })
 })
 

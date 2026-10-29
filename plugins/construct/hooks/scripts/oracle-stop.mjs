@@ -9,9 +9,12 @@
 //       - the envelope command, when it has one, runs at the repository root (timeout: the remaining minutes, at most 300 s):
 //         exit 0 allows the stop; a failure blocks with the tail of its output and what remains of the budget. A failed run
 //         spends one attempt unless its passing-test count rose above the best so far (S5: progress, not command text).
+//       - an envelope with no recorded baseline (neither this worker's nor the task's: the start snapshot is missing) refuses the
+//         same way instead of skipping the diff check (S2 of .vault/tasks/guarantees.md);
 //     A run that spends the last attempt, or the last minute, allows the stop instead of blocking.
+//     An envelope or task state that exists but is unreadable (UnreadableState) blocks the stop naming the file (S3 of guarantees).
 //   bash (PostToolUseFailure on Bash): a failed run of the envelope command by a worker spends one attempt, by the same rule.
-// Block = {"decision":"block","reason":...} on stdout, as review-capture.mjs does. Any internal error allows (fail open).
+// Block = {"decision":"block","reason":...} on stdout, as review-capture.mjs does. Any other internal error allows (fail open), and the bash mode never prints.
 // shortcut: a path written by the main thread, or by a writer that stopped before this worker started or never had a record, still counts
 //   against this worker, and a path inside a live writer's surfaces is excused even when this worker wrote it.
 // Usage: node oracle-stop.mjs stop|bash   (hook JSON on stdin)
@@ -23,7 +26,7 @@ import { isFree, spentBudget } from './envelope.mjs'
 import { freezeWorkingTree, git, repositoryRoot } from './git-tree.mjs'
 import { readInput } from './hook-io.mjs'
 import { qualified } from './roles.mjs'
-import { readEnvelope, readTaskState, writeTaskState } from './review-store.mjs'
+import { readEnvelope, readTaskState, UnreadableState, writeTaskState } from './review-store.mjs'
 
 const MAX_RUN_MS = 300_000
 const PASS = [/ℹ pass (\d+)/, /^# pass (\d+)/m, /(\d+) passed/, /(\d+) passing/]
@@ -89,10 +92,9 @@ function stop(input) {
   if (spent()) return say('systemMessage', `oracle-stop: ${spent()}; the stop is allowed. Report what is still failing.`)
   const mine = state.workers?.[input.agent_id]
   const baseTree = mine?.baseTree ?? state.baseTree
-  if (baseTree) {
-    const problem = diffProblem(root, baseTree, freezeWorkingTree(root).candidateTree, envelope, otherSurfaces(input.session_id, root, input.agent_id, mine?.startedAt ?? state.startedAt))
-    if (problem) return refuse(`Your diff breaks the oracle envelope: ${problem}. Revert it, or return needs_interaction.`, { ...state, attempts: state.attempts + 1 })
-  }
+  if (!baseTree) return refuse('The start snapshot of this task is missing, so your diff cannot be checked against the oracle envelope. Return needs_interaction to the orchestrator.', { ...state, attempts: state.attempts + 1 })
+  const problem = diffProblem(root, baseTree, freezeWorkingTree(root).candidateTree, envelope, otherSurfaces(input.session_id, root, input.agent_id, mine?.startedAt ?? state.startedAt))
+  if (problem) return refuse(`Your diff breaks the oracle envelope: ${problem}. Revert it, or return needs_interaction.`, { ...state, attempts: state.attempts + 1 })
   if (envelope.command === null) return
   const remaining = envelope.minutes * 60_000 - (now - state.startedAt)
   const run = spawnSync('sh', ['-c', envelope.command], { cwd: root, encoding: 'utf8', timeout: Math.min(remaining, MAX_RUN_MS), maxBuffer: 10 << 20 })
@@ -117,7 +119,14 @@ function main() {
   const input = readInput()
   if (!input || typeof input.cwd !== 'string') return
   if (process.argv[2] === 'bash') bash(input)
-  else if (input.agent_type === qualified('worker')) stop(input)
+  else if (input.agent_type === qualified('worker')) {
+    try {
+      stop(input)
+    } catch (error) {
+      if (!(error instanceof UnreadableState)) throw error
+      process.stdout.write(`${JSON.stringify({ decision: 'block', reason: `oracle-stop: ${error.message}, so the oracle cannot judge this stop. Return needs_interaction naming the file.` })}\n`)
+    }
+  }
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === realpathSync(process.argv[1])) {

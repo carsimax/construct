@@ -13,7 +13,8 @@
 //     (a workflow's agent() never reaches PreToolUse on Agent, so the writer rules above cannot apply).
 // Other agents pass untouched, and an admitted launch prints nothing, so it never
 // conflicts with review-context.mjs (the hooks run in parallel; deny wins).
-// `start` also records the first worker start of a task that has an envelope in the task state (startedAt, and baseTree: a
+// `start` writes the record `started: true` with the agent_id first (the host may kill the hook, 30 s, during the snapshot), then
+// records the first worker start of a task that has an envelope in the task state (startedAt, and baseTree: a
 // snapshot of the working tree that oracle-stop.mjs diffs against, kept per worker in state.workers); the record keeps the Spec feature and task for that.
 // `stop` (SubagentStop) closes the stopped writer's record: it hashes the first
 // user row of agent_transcript_path (the subagent's prompt) and marks the record
@@ -21,7 +22,8 @@
 // and stop counting for overlap after SUBAGENT_MAX_IDLE_MS (one hour), like subagent-count.mjs entries.
 // The check-then-record of open writers runs under an mkdir lock (withLock), so parallel
 // launches in one batch cannot both pass. Fails open on unreadable input, any internal
-// error, or a lock that cannot be taken.
+// error, or a lock that cannot be taken; it fails closed (S3 of .vault/tasks/guarantees.md) for a worker whose Spec task has an
+// envelope or task state that exists but cannot be read: the launch is denied naming the file.
 // Ported from gentle-shell lib/bounded-writer-admission.ts, lib/verifier-admission.ts
 // and lib/writer-surfaces.ts; the Spec rule is adapted (see S2 of .vault/tasks/gentle-parity.md).
 // adapted from gentle-shell (https://github.com/Gentleman-Programming/gentle-shell), MIT, Copyright (c) 2025 Mario Zechner, see LICENSE-gentle-shell
@@ -35,7 +37,7 @@ import { activeDocuments, projectRoot } from './feature-state.mjs'
 import { freezeWorkingTree } from './git-tree.mjs'
 import { isFree } from './envelope.mjs'
 import { activeLocks } from './publication-gate.mjs'
-import { readEnvelope, readOracles, readTaskState, writeTaskState } from './review-store.mjs'
+import { readEnvelope, readOracles, readTaskState, UnreadableState, writeTaskState } from './review-store.mjs'
 import { kindOf, namesOf, qualified } from './roles.mjs'
 import { dataDir, readInput, safeName, SUBAGENT_MAX_IDLE_MS } from './hook-io.mjs'
 
@@ -259,18 +261,21 @@ export function otherSurfaces(session, root, agentId, since = Infinity) {
   return openWriters(session, root, '', Date.now(), since).filter((entry) => entry.agent_id !== agentId).flatMap((entry) => entry.surfaces)
 }
 
-// writerRecord finds the started record of the subagent with this agent_id (undefined if none).
+// writerRecord finds the started record of the subagent with this agent_id (undefined if none); when none is readable and a file
+// of the directory does not parse, it throws UnreadableState naming that file (the missing record may be the one that is broken).
 export function writerRecord(session, agentId) {
   const dir = recordDir(session)
+  let broken
   for (const name of readdirSync(dir)) {
     if (name.startsWith('.')) continue
     try {
       const entry = JSON.parse(readFileSync(join(dir, name), 'utf8'))
       if (entry.agent_id === agentId && Array.isArray(entry.surfaces)) return entry
-    } catch {
-      // unreadable record: ignore it
+    } catch (error) {
+      broken ??= new UnreadableState(join(dir, name), error?.message ?? String(error))
     }
   }
+  if (broken) throw broken
   return undefined
 }
 
@@ -607,7 +612,15 @@ function admit(input) {
     deny(`${type} needs a Spec line: no \`Spec:\` line in the prompt names an existing regular file under .vault/tasks/. ${SPEC_FORM}`)
     return
   }
-  const bounds = type === ORACLE ? undefined : envelopeOf(prompt, root)
+  let bounds
+  try {
+    bounds = type === ORACLE ? undefined : envelopeOf(prompt, root)
+    if (bounds) readTaskState(root, bounds.feature, bounds.task)
+  } catch (error) {
+    if (!(error instanceof UnreadableState)) throw error
+    deny(`${type} cannot be launched: ${error.message}. The oracle envelope and task state decide what this worker may do; ask the user to inspect or remove the file, or re-run construct:oracle for the task.`)
+    return
+  }
   const code = parsed.paths.filter((path) => !isFree(path))
   if (type !== ORACLE && code.length > 0 && !bounds) {
     deny(`${type} edit surfaces include code (${code.slice(0, 5).join(', ')}) and the Spec task has no oracle envelope. Code goes through construct:oracle first: it writes the failing test and declares the envelope (test command, surfaces, budget). A task with no deterministic test needs your approval: ask with AskUserQuestion naming the task in backticks (for example \`T2\`) with the options \`Exempt\` and \`Keep the oracle\`, then run \`construct-gate oracle exempt <feature-doc> <T#> -- <surface>...\` once from the main thread. A worker whose surfaces are only docs and .vault/ needs no envelope.`)
@@ -693,9 +706,10 @@ function start(input) {
     const temporary = join(dir, `.${oldest.name}.${process.pid}.start.tmp`)
     try {
       const { root, spec } = oldest.entry
-      const baseTree = spec && readEnvelope(root, spec.feature, spec.task) ? freezeWorkingTree(root).candidateTree : undefined
+      // Started first: the host may kill this hook during the snapshot, and surface-guard confines by the started record.
       writeFileSync(temporary, `${JSON.stringify({ ...oldest.entry, started: true, agent_id: input.agent_id })}\n`)
       renameSync(temporary, join(dir, oldest.name))
+      const baseTree = spec && readEnvelope(root, spec.feature, spec.task) ? freezeWorkingTree(root).candidateTree : undefined
       startTask(oldest.entry, input.agent_id, baseTree)
     } catch (error) {
       rmSync(temporary, { force: true })

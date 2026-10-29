@@ -17,7 +17,7 @@ import { git, repositoryRoot } from './git-tree.mjs'
 import { readInput } from './hook-io.mjs'
 import { qualified } from './roles.mjs'
 import { activeLocks } from './publication-gate.mjs'
-import { UNLOCKABLE, readEnvelope, writeEnvelope, writeOracle } from './review-store.mjs'
+import { UNLOCKABLE, UnreadableState, readEnvelope, writeEnvelope, writeOracle } from './review-store.mjs'
 
 const SPEC = /^[ \t]*(?:[-*+][ \t]+)?Spec:[ \t]*`?(\.vault\/tasks\/[^\s,`()]+\.md)`?[^\n]*?\b(T\d+)\b/m
 
@@ -49,7 +49,13 @@ function main() {
   const active = activeLocks(root)
   const locked = new Set(active.map((o) => o.path))
   const envelope = parseEnvelope(replyOf(input))
-  const kept = active.some((o) => o.feature === spec[1] && o.task === spec[2]) && readEnvelope(root, spec[1], spec[2])
+  let kept = false
+  try {
+    kept = active.some((o) => o.feature === spec[1] && o.task === spec[2]) && readEnvelope(root, spec[1], spec[2])
+  } catch (error) {
+    // An unreadable envelope is replaced by this oracle's, so the task gets a readable one and the locks below still run.
+    if (!(error instanceof UnreadableState)) throw error
+  }
   if (envelope && !kept) writeEnvelope(root, { feature: spec[1], task: spec[2], ...envelope, at: Date.now() })
   for (const path of paths) {
     if (locked.has(path)) continue
