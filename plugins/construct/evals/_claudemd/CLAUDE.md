@@ -16,8 +16,8 @@ These rules apply to every task in this repository.
 - Never claim a check passed that you did not run.
 - A locked test (an acceptance test the task marks as locked) is never edited, deleted, skipped, or weakened.
   Change the code instead.
-- If a spec and a test contradict each other, or a test cannot pass as written, stop.
-  Report the contradiction and leave the test as it is.
+- If a spec and a test contradict each other, or a test cannot pass as written, implement everything consistent with the specs and leave the test as it is.
+  Then report the contradiction, naming the failing case.
 
 ## Scope
 
