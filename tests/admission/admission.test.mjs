@@ -490,6 +490,12 @@ describe('oracle admission', () => {
     mkdirSync(join(repo, 'tests/dir'), { recursive: true })
     denied(launch(repo, env(), ORACLE, spec('tests/dir')), /directory|file/)
   })
+  test('an oracle surface that is free (the feature document, a doc) is denied, naming it; test files are admitted', () => {
+    const repo = withFeature('pending')
+    denied(launch(repo, env(), ORACLE, spec('tests/a.test.mjs', '.vault/tasks/f.md')), /\.vault\/tasks\/f\.md/, /only test files/)
+    denied(launch(repo, env(), ORACLE, spec('docs/guide.md')), /docs\/guide\.md/)
+    allowed(launch(repo, env(), ORACLE, spec('tests/a.test.mjs')))
+  })
   test('a worker with a glob is still admitted', () => {
     allowed(launch(withFeature('pending'), env(), WORKER, spec('tests/**/*.test.mjs')))
   })

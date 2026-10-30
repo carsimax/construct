@@ -11,6 +11,7 @@
 //   - a Workflow script (PreToolUse on Workflow) may launch only read-only agents: every agent() call
 //     names a literal agentType of the reader, lens, or judge kind, or the built-in Explore or Plan
 //     (a workflow's agent() never reaches PreToolUse on Agent, so the writer rules above cannot apply).
+//   - construct:oracle may not list a free path (isFree: .vault/ or a doc) among its surfaces: only test files;
 // Other agents pass untouched, and an admitted launch prints nothing, so it never
 // conflicts with review-context.mjs (the hooks run in parallel; deny wins).
 // `start` writes the record `started: true` with the agent_id first (the host may kill the hook, 30 s, during the snapshot), then
@@ -585,6 +586,11 @@ function admit(input) {
     deny(`${type} edit surfaces must be exact file paths, with no glob (any of * ? [ ] { }), because each is locked by its content hash when the oracle stops. List every test file by its full path.`)
     return
   }
+  const freePaths = type === ORACLE ? parsed.paths.filter((path) => isFree(path)) : []
+  if (freePaths.length) {
+    deny(`${type} edit surfaces include free paths (${freePaths.slice(0, 5).join(', ')}): the oracle lists only test files, each locked by its content hash; the feature document and docs are never oracle surfaces.`)
+    return
+  }
   const cwd = typeof input.cwd === 'string' && input.cwd ? input.cwd : process.cwd()
   const root = projectRoot(cwd)
   // The oracle record hook reads the Spec line, so an oracle needs one whether or not a feature document is unfinished.
@@ -641,7 +647,7 @@ function admit(input) {
     }
   }
   if (type !== ORACLE && code.length > 0 && !bounds) {
-    deny(`${type} edit surfaces include code (${code.slice(0, 5).join(', ')}) and the Spec task has no oracle envelope. Code goes through construct:oracle first: it writes the failing test and declares the envelope (test command, surfaces, budget). A task with no deterministic test needs your approval: ask with AskUserQuestion naming the task in backticks (for example \`T2\`) with the options \`Exempt\` and \`Keep the oracle\`, then run \`construct-gate oracle exempt <feature-doc> <T#> -- <surface>...\` once from the main thread. A worker whose surfaces are only docs and .vault/ needs no envelope.`)
+    deny(`${type} edit surfaces include code (${code.slice(0, 5).join(', ')}) and the Spec task has no oracle envelope. Code goes through construct:oracle first: it writes the failing test and declares the envelope (test command, surfaces, budget); an existing failing test can be the oracle's surface, unchanged. A task with no deterministic test needs your approval: ask with AskUserQuestion naming the task in backticks (for example \`T2\`) with the options \`Exempt\` and \`Keep the oracle\`, then run \`construct-gate oracle exempt <feature-doc> <T#> -- <surface>...\` once from the main thread. A worker whose surfaces are only docs and .vault/ needs no envelope.`)
     return
   }
   const outside = bounds && parsed.paths.filter((path) => !bounds.surfaces.some((surface) => surfaceContains(surface, path)))
