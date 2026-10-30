@@ -1,0 +1,18 @@
+# Documented as NOT caught (the `shortcut:` lists in the guard headers). Reported by the test, never failing it.
+# git aliases
+git -c alias.ci='commit --no-verify' ci -m x
+# interpreter one-liners
+node -e "require('child_process').execSync('git commit --no-verify -m x')"
+python3 -c "import os; os.system('git commit -n -m x')"
+perl -e 'system("git commit --no-verify -m x")'
+# variable-built commands
+c=commit; git $c --no-verify -m x
+f=--no-verify; git commit $f -m x
+g=git; $g push origin feat
+# brace expansion
+git commit --no-{verify} -m x
+# review store names built indirectly or by glob
+node -e "require('fs').writeFileSync('.git/' + 'construct-' + 'review/v.json', '{}')"
+cp /tmp/v.json .git/construct-revie?/v.json
+cp /tmp/v.json .git/con*-review/v.json
+# publication via git dir override

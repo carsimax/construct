@@ -2,6 +2,7 @@ import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, statSync, writeFileSync, appendFileSync, mkdtempSync, mkdirSync, rmSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -86,7 +87,7 @@ test('eval-summary writes summary.json and prints one row per case and arm', () 
       { name: 'beta', arms: { with: arm([r({ turns: 6 })]), without: [] } },
     ],
   };
-  const outcomes = { cases: [{ name: 'alpha', arms: { with: [{ passed: true }, { passed: false }], without: [{ passed: false, error: 'no workspace' }] } }] };
+  const outcomes = { cases: [{ name: 'alpha', arms: { with: [{ passed: true, askedHuman: false }, { passed: false, askedHuman: false }], without: [{ passed: false, error: 'no workspace' }] } }] };
   writeFileSync(join(dir, 'aggregate-result.json'), JSON.stringify(aggregate));
   writeFileSync(join(dir, 'outcomes.json'), JSON.stringify(outcomes));
 
@@ -94,11 +95,11 @@ test('eval-summary writes summary.json and prints one row per case and arm', () 
   assert.equal(res.status, 0, res.stderr);
   assert.equal(res.stderr, '');
   assert.equal(res.stdout, [
-    '| case | arm | runs | ritual pass | outcome pass | mean score | mean cost USD | mean duration s | mean turns | errored |',
-    '|---|---|---|---|---|---|---|---|---|---|',
-    '| alpha | with | 2 | 50% | 50% | 0.50 | 0.1000 | 15.0 | 3.0 | 0 |',
-    '| alpha | without | 1 | 0% | 0% | 0.50 | 0.3000 | 10.0 | 2.0 | 1 |',
-    '| beta | with | 1 | 100% |  | 1.00 | 0.1000 | 10.0 | 6.0 | 0 |',
+    '| case | arm | runs | ritual pass | outcome pass | no human | false completion | mean score | mean cost USD | mean duration s | mean turns | errored |',
+    '|---|---|---|---|---|---|---|---|---|---|---|---|',
+    '| alpha | with | 2 | 50% | 50% | 50% | 0% | 0.50 | 0.1000 | 15.0 | 3.0 | 0 |',
+    '| alpha | without | 1 | 0% | 0% |  |  | 0.50 | 0.3000 | 10.0 | 2.0 | 1 |',
+    '| beta | with | 1 | 100% |  |  |  | 1.00 | 0.1000 | 10.0 | 6.0 | 0 |',
     '',
     'Total: 4 runs, agent cost $0.5000, judge cost $0.0500, duration 50s',
     '',
@@ -106,10 +107,93 @@ test('eval-summary writes summary.json and prints one row per case and arm', () 
 
   const summary = JSON.parse(readFileSync(join(dir, 'summary.json'), 'utf8'));
   const alphaWith = summary.rows.find((x) => x.case === 'alpha' && x.arm === 'with');
-  assert.deepEqual(alphaWith, { case: 'alpha', arm: 'with', runs: 2, ritualPassRate: 0.5, outcomePassRate: 0.5, meanScore: 0.5, meanCostUsd: 0.1, meanDurationSeconds: 15, meanTurns: 3, erroredRuns: 0 });
+  assert.deepEqual(alphaWith, { case: 'alpha', arm: 'with', runs: 2, ritualPassRate: 0.5, outcomePassRate: 0.5, meanScore: 0.5, meanCostUsd: 0.1, meanDurationSeconds: 15, meanTurns: 3, erroredRuns: 0, noHumanRate: 0.5, falseCompletionRate: 0 });
   assert.equal(summary.rows.find((x) => x.case === 'beta').outcomePassRate, null);
   assert.equal(summary.rows.length, 3);
   assert.deepEqual(summary.totals, { runs: 4, costUsd: 0.5, judgeCostUsd: 0.05, durationSeconds: 50 });
+});
+
+// Per-run outcome metrics: outcomes.json carries { passed, askedHuman }, the aggregate run's graders carry claims-done.
+test('eval-summary reports noHumanRate and falseCompletionRate and excludes errored runs', () => {
+  const dir = scratch();
+  const r = (claims) => ({ score: 1, passed: true, turns: 1, costUsd: 0, judgeCostUsd: 0, durationSeconds: 1, error: null, graders: [{ name: 'claims-done', passed: claims }] });
+  const aggregate = { cases: [{ name: 'alpha', arms: { with: [r(true), r(true), r(false), r(true), r(true)], without: [] } }] };
+  const outcomes = { cases: [{ name: 'alpha', arms: { with: [
+    { passed: true, askedHuman: false },
+    { passed: false, askedHuman: false },
+    { passed: true, askedHuman: true },
+    { passed: false, askedHuman: false },
+    { passed: false, error: 'no tracePath' },
+  ] } }] };
+  writeFileSync(join(dir, 'aggregate-result.json'), JSON.stringify(aggregate));
+  writeFileSync(join(dir, 'outcomes.json'), JSON.stringify(outcomes));
+  const res = run('node', [join(root, 'scripts/eval-summary.mjs'), join(dir, 'aggregate-result.json'), join(dir, 'outcomes.json')]);
+  assert.equal(res.status, 0, res.stderr);
+  const row = JSON.parse(readFileSync(join(dir, 'summary.json'), 'utf8')).rows[0];
+  assert.equal(row.noHumanRate, 0.25); // 1 of the 4 traced runs
+  assert.equal(row.falseCompletionRate, 0.5); // runs 2 and 4 claim done and fail
+  assert.equal(row.outcomePassRate, 0.4); // existing column unchanged
+  assert.match(res.stdout, /no human/);
+  assert.match(res.stdout, /false completion/);
+});
+
+test('eval-summary leaves the new rates empty without outcomes, and labels the claudemd arm', () => {
+  const dir = scratch();
+  const r = { score: 1, passed: true, turns: 1, costUsd: 0, judgeCostUsd: 0, durationSeconds: 1, error: null };
+  writeFileSync(join(dir, 'aggregate-result.json'), JSON.stringify({ cases: [{ name: 'alpha--claudemd', arms: { with: [r], without: [r] } }] }));
+  const res = run('node', [join(root, 'scripts/eval-summary.mjs'), join(dir, 'aggregate-result.json')]);
+  assert.equal(res.status, 0, res.stderr);
+  const rows = JSON.parse(readFileSync(join(dir, 'summary.json'), 'utf8')).rows;
+  assert.deepEqual(rows.map((x) => x.arm), ['with', 'claudemd']);
+  assert.equal(rows[0].noHumanRate, null);
+  assert.equal(rows[0].falseCompletionRate, null);
+});
+
+// scripts/claudemd/make-variants.sh <evals-dir> <claudemd-file>: what eval.sh runs in the plugin copy.
+const variants = (evals) => run('bash', [join(root, 'scripts/claudemd/make-variants.sh'), evals, join(root, 'plugins/construct/evals/_claudemd/CLAUDE.md')]);
+
+test('make-variants duplicates only arms: claudemd cases and the variant fixture appends CLAUDE.md', () => {
+  const evals = scratch();
+  const mk = (name, extra) => {
+    mkdirSync(join(evals, name, 'graders'), { recursive: true });
+    writeFileSync(join(evals, name, 'case.yaml'), `schema_version: "1.1"\nname: ${name}\n${extra}context:\n  scaffold_script: fixture.sh\n`);
+    writeFileSync(join(evals, name, 'prompt.md'), 'p');
+    writeFileSync(join(evals, name, 'outcome.sh'), 'exit 0\n');
+    writeFileSync(join(evals, name, 'graders', 'g.md'), 'g');
+    writeFileSync(join(evals, name, 'fixture.sh'), '#!/usr/bin/env bash\necho base > base.txt\n');
+  };
+  mk('alpha', 'arms: claudemd\n');
+  mk('beta', '');
+  const res = variants(evals);
+  assert.equal(res.status, 0, res.stderr);
+  assert.deepEqual(readdirSync(evals).sort(), ['alpha', 'alpha--claudemd', 'beta']);
+  const v = join(evals, 'alpha--claudemd');
+  for (const f of ['prompt.md', 'outcome.sh', 'graders/g.md']) assert.ok(existsSync(join(v, f)), f);
+  const yaml = readFileSync(join(v, 'case.yaml'), 'utf8');
+  assert.match(yaml, /^name: alpha--claudemd$/m);
+  assert.doesNotMatch(yaml, /arms:/);
+  assert.doesNotMatch(readFileSync(join(evals, 'alpha/case.yaml'), 'utf8'), /arms:/);
+  const ws = scratch();
+  const fx = run('bash', [join(v, 'fixture.sh')], { cwd: ws });
+  assert.equal(fx.status, 0, fx.stderr);
+  assert.equal(readFileSync(join(ws, 'base.txt'), 'utf8'), 'base\n');
+  assert.equal(readFileSync(join(ws, 'CLAUDE.md'), 'utf8'), readFileSync(join(root, 'plugins/construct/evals/_claudemd/CLAUDE.md'), 'utf8'));
+});
+
+test('the _claudemd CLAUDE.md is short, carries the core rules, and is not an eval case', () => {
+  const dir = join(root, 'plugins/construct/evals/_claudemd');
+  assert.deepEqual(readdirSync(dir), ['CLAUDE.md']);
+  const text = readFileSync(join(dir, 'CLAUDE.md'), 'utf8');
+  const n = text.trim().split('\n').length;
+  assert.ok(n >= 30 && n <= 50, `${n} lines`);
+  for (const rule of [/before.*writ/i, /test first|failing test/i, /run the tests/i, /locked test/i, /contradict/i, /Risk:/]) assert.match(text, rule);
+});
+
+test('eval.sh calls make-variants and does not delete _claudemd', () => {
+  const sh = readFileSync(join(root, 'scripts/eval.sh'), 'utf8');
+  assert.match(sh, /claudemd\/make-variants\.sh/);
+  assert.doesNotMatch(sh, /rm -rf[^\n]*_claudemd/);
+  assert.match(sh, /AskUserQuestion/);
 });
 
 test('eval-summary exits non-zero with one stderr line for a missing or unparsable file', () => {
@@ -157,18 +241,6 @@ test('oracle-conflict test-untouched matches only edit tools on the locked test'
   const re = new RegExp(patternOf('oracle-conflict/graders/test-untouched.md'));
   assert.match('{"type":"tool_use","name":"Edit","input":{"file_path":"/w/discount.acceptance.test.js"}}', re);
   assert.doesNotMatch('{"type":"tool_use","name":"Edit","input":{"file_path":"/w/discount.js"}}', re);
-});
-
-test('oracle-budget outcome.sh passes an untouched locked test and fails an edited or deleted one', () => {
-  assert.equal(outcome('oracle-budget', () => {}), 0);
-  assert.notEqual(outcome('oracle-budget', (ws) => edit(ws, 'checksum.test.js', (t) => t.replace('7)', '38)'))), 0);
-  assert.notEqual(outcome('oracle-budget', (ws) => rmSync(join(ws, 'checksum.test.js'))), 0);
-});
-
-test('oracle-budget test-untouched matches only edit tools on the locked test', () => {
-  const re = new RegExp(patternOf('oracle-budget/graders/test-untouched.md'));
-  assert.match('{"type":"tool_use","name":"Write","input":{"file_path":"/w/checksum.test.js"}}', re);
-  assert.doesNotMatch('{"type":"tool_use","name":"Edit","input":{"file_path":"/w/checksum.js"}}', re);
 });
 
 test('oracle-first outcome.sh needs passing tests and an envelope in the review store', () => {

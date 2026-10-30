@@ -1,0 +1,2 @@
+# Legitimate commands the guards deny on purpose (documented): review-store-guard denies any command naming construct-review.
+git commit -m "chore: mention construct-review in notes"

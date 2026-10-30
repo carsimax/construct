@@ -15,6 +15,9 @@ rm -rf "$plugin_copy/evals/results"
 # review-fires cannot run in the eval sandbox (its git shim cannot write its cache and the review
 # skill's `!` line is denied), so it stays out of the suite; scripts/probe-review.sh reuses its fixture and prompt.
 rm -rf "$plugin_copy/evals/review-fires"
+# A case with `arms: claudemd` also runs as <case>--claudemd, its fixture writing evals/_claudemd/CLAUDE.md.
+# _claudemd holds no case.yaml or prompt.md, so the harness does not treat it as a case.
+bash "$repo_root/scripts/claudemd/make-variants.sh" "$plugin_copy/evals" "$plugin_copy/evals/_claudemd/CLAUDE.md"
 
 cd "$plugin_copy"
 status=0
@@ -37,7 +40,7 @@ const { dirname, join } = require('node:path');
 const { tmpdir } = require('node:os');
 const [aggregateFile, evalsDir] = process.argv.slice(2);
 const checkRun = (script, tracePath) => {
-  if (!tracePath) return { passed: false, error: 'no tracePath' };
+  if (!tracePath || !existsSync(tracePath)) return { passed: false, error: 'no trace' };
   const kept = dirname(dirname(tracePath));
   const workspace = join(kept, 'sealed/home/cwd');
   try { chmodSync(kept, 0o700); chmodSync(join(kept, 'sealed'), 0o700); } catch {}
@@ -45,7 +48,9 @@ const checkRun = (script, tracePath) => {
   const cwd = mkdtempSync(join(tmpdir(), 'outcome-'));
   const res = spawnSync('bash', [script, workspace], { cwd, encoding: 'utf8' });
   rmSync(cwd, { recursive: true, force: true });
-  return { passed: res.status === 0 };
+  // The trace is JSONL; a run that used AskUserQuestion needed a human.
+  const askedHuman = /"name":\s*"AskUserQuestion"/.test(readFileSync(tracePath, 'utf8'));
+  return { passed: res.status === 0, askedHuman };
 };
 const cases = [];
 for (const c of JSON.parse(readFileSync(aggregateFile, 'utf8')).cases) {
