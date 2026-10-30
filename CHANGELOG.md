@@ -4,6 +4,8 @@ Notable changes per release. Versions follow [Semantic Versioning](https://semve
 
 ## Unreleased
 
+## 15.1.0
+
 ### Changed
 
 - Review (S1): lenses review a snapshot of the working tree, so no commit is needed; a later commit with the same content keeps the approval.
@@ -11,6 +13,14 @@ Notable changes per release. Versions follow [Semantic Versioning](https://semve
 - One Bash hook (S5): `bash-guard.mjs` is the single `PreToolUse` entry on Bash and applies the review-store guard, the command guard, and the publication gate in order.
 - `risk-line.mjs` (S6) compares a git-status fingerprint instead of hashing the whole tree.
 - Docs (S2, S7): the feature-document reference carries a one-task template for small code work; the session contract, skills, README, and CLAUDE.md describe S1-S6.
+- Contradictions do not stop the consistent work: the oracle, the worker, the subagent contract, and the eval CLAUDE.md say to implement everything consistent with the specs, leave the locked test unchanged, then report the contradiction (`oracle_conflict` for a worker).
+- An existing failing test can be the oracle: the oracle lists that test file unchanged as its surface, reports it RED, and declares the envelope; the worker's admission denial says the same.
+- Evals: three arms (Construct, no plugin, a short CLAUDE.md), hidden acceptance tests (`outcome.sh`), no-human and false-completion rates, a `claims-done` grader, and a deterministic corpus of legitimate and bypass commands through `bash-guard`. Results are in `docs/evals/results.md`.
+
+### Fixed
+
+- `delegation-admission` denies a `construct:oracle` launch whose allowed edit surfaces include `.vault/` or a doc, naming the paths: the oracle lists only test files. Before, an oracle could lock the feature document and `surface-guard` then denied every edit of it.
+- The claudemd eval variant appends to the original `fixture.sh` instead of wrapping it, so an `outcome.sh` that reads the locked files from `fixture.sh` sees them; the claudemd outcome of hidden-contradiction was always 0% before.
 
 ### Added
 
