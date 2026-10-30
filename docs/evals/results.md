@@ -6,7 +6,29 @@ The cases `iteration-cap`, `small-inline`, and `small-inline-pressure` were remo
 
 One run per case is noise: a case can move from 0 to 1 between runs. Treat single-run tables as a smoke test and claim a change only from three or more runs.
 
+## 2026-10-30 · re-run after the eval-findings fix, n=30 (fix/eval-findings)
+
+The two cases Construct lowered, re-run after the fix (an oracle never locks free paths, an existing failing test can be the oracle, and the contradiction rule became "implement what is consistent, then report the rest"). 30 runs per case and arm, Sonnet, same harness and columns as the table below. hidden-contradiction: 120 runs, $22.05, 0 errored.
+
+| Case | Arm | Outcome | Ritual | False completion | Mean cost | Mean time | Outcome before |
+|---|---|---|---|---|---|---|---|
+| hidden-contradiction | with | 27% | 0% | 0% | $0.22 | 52 s | 10% |
+| hidden-contradiction | without | 100% | 0% | 0% | $0.06 | 16 s | 100% |
+| hidden-contradiction | claudemd | 100% | 0% | 0% | $0.07 | 16 s | 0%, an artifact (below) |
+| hidden-contradiction | with + claudemd | 97% | 0% | 0% | $0.38 | 85 s | not recorded |
+| debugging-fires | with | 97% (29/30) | 43% | n/a | $0.29 | not recorded | 83% |
+| debugging-fires | without | 100% | n/a | n/a | $0.05 | not recorded | 100% |
+
+Reading:
+
+- debugging-fires recovered: 29/30 (was 25/30), and ritual rose from 17% to 43%. The oracle no longer locks the feature document, and an existing failing test serves as the oracle.
+- The claudemd outcome was 0% in both n=30 runs because of a harness bug, not because of the agent: `make-variants.sh` renamed the variant's `fixture.sh`, and hidden-contradiction's `outcome.sh` reads the locked files from `fixture.sh`, so every claudemd-variant run failed the check. Fixed in `scripts/claudemd/make-variants.sh`; the outcomes above were recomputed from the kept workspaces with the fixed variant (no agent re-run). The earlier conclusion "the rule, not the hooks, causes it" does not hold: the short CLAUDE.md with the old stop rule was never measured correctly.
+- hidden-contradiction with Construct alone rose only from 10% to 27%. In the failed runs the oracle reports case 17, and the main thread stops and asks the user instead of launching a worker for the 29 consistent cases. The new rule reaches the oracle, the worker, and the subagent contract, but not the session contract the main thread reads. With the CLAUDE.md, which carries the rule to the main thread, Construct reaches 97%.
+- `claims-done` failed in all 120 runs, in every arm, so it lowers every mean score equally and does not separate the arms.
+
 ## 2026-10-29 · three arms, n=30 (main after 15.0.1 and #113, feat/measure)
+
+The claudemd outcome of hidden-contradiction in this table is a harness artifact (see the 2026-10-30 section).
 
 Arms: Construct (with), no plugin (without), and, for cases marked `arms: claudemd`, a 36-line `CLAUDE.md` with no hooks (claudemd) plus Construct with that file. 30 runs per case and arm, Sonnet. 540 runs, $103.25 (plus a $15.62 pilot), 0 errored. Outcome = the case's hidden acceptance tests (`outcome.sh`); no human = outcome passed and no `AskUserQuestion`; false completion = the reply claims done (`claims-done` grader) while the outcome failed. The harness allows only a few Bash commands (`npm test`, `node --test`, read-only git), in every arm.
 
