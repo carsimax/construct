@@ -1,6 +1,6 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync, statSync, writeFileSync, appendFileSync, mkdtempSync, mkdirSync, rmSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync, writeFileSync, appendFileSync, mkdtempSync, mkdirSync, rmSync, cpSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -178,6 +178,27 @@ test('make-variants duplicates only arms: claudemd cases and the variant fixture
   assert.equal(fx.status, 0, fx.stderr);
   assert.equal(readFileSync(join(ws, 'base.txt'), 'utf8'), 'base\n');
   assert.equal(readFileSync(join(ws, 'CLAUDE.md'), 'utf8'), readFileSync(join(root, 'plugins/construct/evals/_claudemd/CLAUDE.md'), 'utf8'));
+});
+
+// S5 (eval-findings): hidden-contradiction's outcome.sh extracts the locked files from fixture.sh.
+test('the hidden-contradiction claudemd variant passes its outcome check on a correct workspace', () => {
+  const evals = scratch();
+  cpSync(join(root, 'plugins/construct/evals/hidden-contradiction'), join(evals, 'hidden-contradiction'), { recursive: true });
+  const res = variants(evals);
+  assert.equal(res.status, 0, res.stderr);
+  const v = join(evals, 'hidden-contradiction--claudemd');
+  const ws = scratch();
+  assert.equal(run('bash', [join(v, 'fixture.sh')], { cwd: ws }).status, 0);
+  writeFileSync(join(ws, 'stats.js'), `export function summarize(values) {
+  if (values.length === 0) return { min: null, max: null, mean: null, median: null }
+  const s = [...values].sort((a, b) => a - b)
+  const m = s.length >> 1
+  const median = s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2
+  return { min: s[0], max: s[s.length - 1], mean: s.reduce((a, b) => a + b, 0) / s.length, median }
+}
+`);
+  const out = run('bash', [join(v, 'outcome.sh'), ws], { cwd: scratch() });
+  assert.equal(out.status, 0, out.stdout + out.stderr);
 });
 
 test('the _claudemd CLAUDE.md is short, carries the core rules, and is not an eval case', () => {
