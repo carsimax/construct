@@ -408,7 +408,7 @@ describe('ranges, deleted paths, and verdict records (T8)', () => {
     assert.match(prompt, /export const c = 1/)
   })
 
-  const PINNED = 'plugins/construct/hooks/vendor/mvdan-sh.cjs'
+  const PINNED = 'plugins/construct/hooks/vendor/sh-syntax/lib/sync/index.cjs'
   const OMITTED = /content omitted: it matches the sha256 pinned in review-context\.mjs/
   const vendorCase = (files) => {
     const repo = makeRepo({ 'src/a.js': 'export const a = 1\n' })
@@ -419,9 +419,9 @@ describe('ranges, deleted paths, and verdict records (T8)', () => {
   }
 
   test('the allowlisted vendored file with the pinned content stays in the manifest, its content is omitted', () => {
-    const { r, prompt } = vendorCase({ [PINNED]: readFileSync(join(PLUGIN, 'hooks/vendor/mvdan-sh.cjs'), 'utf8') })
+    const { r, prompt } = vendorCase({ [PINNED]: readFileSync(join(PLUGIN, 'hooks/vendor/sh-syntax/lib/sync/index.cjs'), 'utf8') })
     assert.ok(bindingOf(r).artifact_subject.changed_path_manifest.includes(PINNED))
-    assert.match(prompt, /^A\tplugins\/construct\/hooks\/vendor\/mvdan-sh\.cjs$/m)
+    assert.match(prompt, /^A\tplugins\/construct\/hooks\/vendor\/sh-syntax\/lib\/sync\/index\.cjs$/m)
     assert.match(prompt, OMITTED)
     assert.doesNotMatch(prompt, /^\+\/\*\*|^diff --git a\/plugins\/construct\/hooks\/vendor/m)
     assert.match(prompt, /export const a = 2/)

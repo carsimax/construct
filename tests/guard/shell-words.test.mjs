@@ -15,6 +15,13 @@ test('a backslash-newline joins before tokenizing, and stays inside a word when 
   assert.deepEqual(splitCommands("echo 'a\\\nb'").map((w) => w.map((x) => x.t)), [['echo', 'a\\\nb']])
 })
 
+test('keeps valid Bash syntax that the old GopherJS parser lost', () => {
+  assert.deepEqual(splitCommands('echo $foo#bar').map((w) => w.map((x) => x.t)), [['echo', '$foo#bar']])
+  assert.deepEqual(splitCommands('echo ${x@k}').map((w) => w.map((x) => x.t)), [['echo', '${x@k}']])
+  assert.deepEqual(splitCommands('declare {a,b}_c=value').map((w) => w.map((x) => x.t)), [['declare', '{a,b}_c=value']])
+  assert.deepEqual(splitCommands('echo ${args[cmd,#]}').map((w) => w.map((x) => x.t)), [['echo', '${args[cmd,#]}']])
+})
+
 test('xargs unwraps to its command: -i, -l and -e take no separate value, -J, -n and -S do', () => {
   const head = (line) => { const { name, args } = nestedLines(splitCommands(line)[0].map((x) => x.t)); return [name, ...args].join(' ') }
   assert.equal(head('xargs -i rm -rf {}'), 'rm -rf {}')

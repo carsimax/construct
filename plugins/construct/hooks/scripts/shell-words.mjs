@@ -1,6 +1,6 @@
 // Shell parsing and command unwrapping for the publication gate, the command guard, and the review
-// store guard. The shell grammar is read by mvdan-sh 0.10.1 (mvdan/sh compiled with GopherJS,
-// BSD-3-Clause, vendored unmodified as ../vendor/mvdan-sh.cjs, see LICENSE-mvdan-sh), so a command
+// store guard. The shell grammar is read by sh-syntax 0.8.4 (mvdan/sh v3.14.1 compiled to standard
+// Go WASM, MIT, vendored unmodified as ../vendor/sh-syntax, see its LICENSE), so a command
 // hidden inside `$( )`, `case`, a heredoc, `${a:-'})'}`, or a quoted spelling is found as bash finds it.
 // Text the parser rejects throws ShellParseError: bash can still run the part before a syntax
 // error, so the callers deny it instead of guessing.
@@ -15,14 +15,9 @@ export const GIT_VALUE_FLAGS = new Set(['-C', '-c', '--git-dir', '--work-tree', 
 
 export class ShellParseError extends Error {}
 
-// The 1.5 MB parser loads (about 25 ms) on the first parse only.
+// The 3.8 MB parser loads on the first parse only.
 let syntax
-const parser = () => (syntax ??= createRequire(import.meta.url)('../vendor/mvdan-sh.cjs').syntax)
-
-// Operator numbers of mvdan-sh 0.10.1; the vendored file is pinned by hash in tests/band-license.test.mjs.
-const HDOC = new Set([61, 62]) // <<  <<-
-const HERE_STRING = 63 // <<<
-const PIPES = new Set([12, 13]) // |  |&
+const parser = () => (syntax ??= createRequire(import.meta.url)('../vendor/sh-syntax/lib/sync/index.cjs'))
 
 // ANSI-C quoting: $'\x67it' is the word git.
 const ANSI = { a: '\x07', b: '\b', e: '\x1b', E: '\x1b', f: '\f', n: '\n', r: '\r', t: '\t', v: '\v', '\\': '\\', "'": "'", '"': '"', '?': '?' }
@@ -68,63 +63,67 @@ export function splitCommands(input) {
 
 function readCommands(input) {
   const sh = parser()
-  const file = sh.NewParser().Parse(input, '')
+  const file = sh.parse(input)
   const bytes = Buffer.from(input) // node offsets are UTF-8 byte offsets
-  const raw = (node) => bytes.subarray(node.Pos().Offset(), node.End().Offset()).toString()
+  const raw = (node) => bytes.subarray(node.start, node.end).toString()
   const part = (p, quoted) => {
-    switch (sh.NodeType(p)) {
-      case 'Lit': return quoted ? p.Value.replace(/\\([$`"\\])|\\\n/g, (_, c) => c ?? '') : p.Value.replace(/\\([\s\S])/g, (_, c) => (c === '\n' ? '' : c))
-      case 'SglQuoted': return p.Dollar ? ansiC(p.Value) : p.Value
-      case 'DblQuoted': return p.Parts.map((q) => part(q, true)).join('')
+    switch (p.type) {
+      case 'Lit': return quoted ? p.value.replace(/\\([$`"\\])|\\\n/g, (_, c) => c ?? '') : p.value.replace(/\\([\s\S])/g, (_, c) => (c === '\n' ? '' : c))
+      case 'SglQuoted': return p.dollar ? ansiC(p.value) : p.value
+      case 'DblQuoted': return p.parts.map((q) => part(q, true)).join('')
       default: return raw(p)
     }
   }
-  const text = (word) => word.Parts.map((p) => part(p, false)).join('')
+  const text = (word) => word.parts.map((p) => part(p, false)).join('')
   const word = (w, extra) => ({ t: text(w), r: false, h: false, s: raw(w), ...extra })
   const assign = (a) => {
-    if (a.Array) return { t: raw(a), r: false, h: false, s: raw(a) }
-    if (a.Name === null) return word(a.Value) // a declare flag: `-x`
-    const value = a.Value === null ? '' : text(a.Value)
-    return { t: `${a.Name.Value}${a.Append ? '+' : ''}${a.Naked ? '' : '='}${value}`, r: false, h: false, s: raw(a) }
+    if (a.array) return { t: raw(a), r: false, h: false, s: raw(a) }
+    if (a.name === null) return word(a.value) // a declare flag: `-x`
+    const value = a.value === null ? '' : text(a.value)
+    return { t: `${a.name.value}${a.append ? '+' : ''}${a.naked ? '' : '='}${value}`, r: false, h: false, s: raw(a) }
   }
   const commands = []
   const stack = []
   const stmts = [] // the enclosing Stmt commands, innermost last
+  const PIPES = new Set([sh.BinCmdOperator.Pipe, sh.BinCmdOperator.PipeAll])
   let parens = ''
   let pipeline = null
   let pipeDepth = 0
-  sh.Walk(file, (node) => {
-    if (node === null) {
+  sh.walk(file, {
+    enter(node) {
+      const type = node.type
+      stack.push(type === 'BinaryCmd' && PIPES.has(node.op) ? 'Pipe' : type)
+      if (type === 'Subshell' || type === 'CmdSubst' || type === 'ProcSubst') parens += '('
+      else if (type === 'BinaryCmd' && PIPES.has(node.op)) {
+        if (pipeDepth++ === 0) pipeline = {}
+      } else if (type === 'Stmt') {
+        const words = []
+        const cmdType = node.cmd === null ? null : node.cmd.type
+        if (cmdType === 'CallExpr') words.push(...node.cmd.assigns.map(assign), ...node.cmd.args.map((w) => word(w)))
+        else if (cmdType === 'DeclClause') {
+          const name = node.cmd.variant?.value ?? ''
+          words.push({ t: name, r: false, h: false, s: name }, ...node.cmd.args.map(assign))
+        }
+        const heredocs = []
+        for (const redir of node.redirs) {
+          if (redir.hdoc) heredocs.push(redir.hdoc.parts.every((p) => p.type === 'Lit') ? redir.hdoc.parts.map((p) => p.value).join('') : raw(redir.hdoc).replace(/\n?[ \t]*[^\n]*$/, '\n'))
+          if (redir.op === sh.RedirOperator.WordHdoc) words.push(word(redir.word, { h: true }))
+          else words.push(word(redir.word, { r: true }))
+        }
+        Object.assign(words, { parens: words.length > 0 ? parens : '', heredocs, pipeline, simple: cmdType === 'CallExpr', parent: stmts.at(-1) ?? null })
+        stmts.push(words)
+        if (words.length > 0) {
+          parens = ''
+          commands.push(words)
+        }
+      }
+    },
+    exit(node) {
       const type = stack.pop()
       if (type === 'Stmt') stmts.pop()
       if (type === 'Subshell' || type === 'CmdSubst' || type === 'ProcSubst') parens += ')'
       else if (type === 'Pipe' && --pipeDepth === 0) pipeline = null
-      return true
     }
-    const type = sh.NodeType(node)
-    stack.push(type === 'BinaryCmd' && PIPES.has(node.Op) ? 'Pipe' : type)
-    if (type === 'Subshell' || type === 'CmdSubst' || type === 'ProcSubst') parens += '('
-    else if (type === 'BinaryCmd' && PIPES.has(node.Op)) {
-      if (pipeDepth++ === 0) pipeline = {}
-    } else if (type === 'Stmt') {
-      const words = []
-      const cmdType = node.Cmd === null ? null : sh.NodeType(node.Cmd)
-      if (cmdType === 'CallExpr') words.push(...node.Cmd.Assigns.map(assign), ...node.Cmd.Args.map((w) => word(w)))
-      else if (cmdType === 'DeclClause') words.push({ t: node.Cmd.Variant.Value, r: false, h: false, s: node.Cmd.Variant.Value }, ...node.Cmd.Args.map(assign))
-      const heredocs = []
-      for (const redir of node.Redirs) {
-        if (redir.Hdoc) heredocs.push(redir.Hdoc.Parts.every((p) => sh.NodeType(p) === 'Lit') ? redir.Hdoc.Parts.map((p) => p.Value).join('') : raw(redir.Hdoc).replace(/\n?[ \t]*[^\n]*$/, '\n'))
-        if (redir.Op === HERE_STRING) words.push(word(redir.Word, { h: true }))
-        else words.push(word(redir.Word, { r: true }))
-      }
-      Object.assign(words, { parens: words.length > 0 ? parens : '', heredocs, pipeline, simple: cmdType === 'CallExpr', parent: stmts.at(-1) ?? null })
-      stmts.push(words)
-      if (words.length > 0) {
-        parens = ''
-        commands.push(words)
-      }
-    }
-    return true
   })
   return commands
 }

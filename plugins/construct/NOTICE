@@ -15,9 +15,12 @@ Vendored code
 Third-party code copied unmodified into the plugin. Its license is in its LICENSE file
 (tests/band-license.test.mjs checks the file, its hash, and the license).
 
-- mvdan-sh 0.10.1 (https://github.com/mvdan/sh, compiled with GopherJS; npm package
-  mvdan-sh), BSD-3-Clause, Copyright (c) 2016, Daniel Marti: hooks/vendor/mvdan-sh.cjs,
-  the shell parser behind hooks/scripts/shell-words.mjs. See LICENSE-mvdan-sh.
+- sh-syntax 0.8.4 (https://github.com/un-ts/sh-syntax; npm package sh-syntax),
+  MIT, Copyright (c) 2021 UnTS: hooks/vendor/sh-syntax/ (lib/sync/index.cjs, lib/internal-DMYtV5Lf.cjs,
+  vendors/wasm_exec.cjs, main.wasm), the shell parser behind
+  hooks/scripts/shell-words.mjs. See LICENSE-sh-syntax.
+- mvdan/sh v3.14.1, compiled to WASM by sh-syntax, BSD-3-Clause, Copyright (c) 2016,
+  Daniel Marti: embedded in hooks/vendor/sh-syntax/main.wasm. See LICENSE-mvdan-sh.
 
 The projects that gave Construct ideas, with no text or code copied, are credited
 in the README.
